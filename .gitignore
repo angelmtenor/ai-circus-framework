@@ -1,0 +1,47 @@
+# Environments / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+coverage.xml
+coverage.json
+.coverage
+
+# uv
+uv.lock.bak
+
+# Node / React
+node_modules/
+dist/
+.vite/
+
+# Data & model artifacts (live in MinIO, not git)
+scenarios/**/data/
+scenarios/**/model/
+**/data/*.parquet
+**/model/*.joblib
+
+# Infra runtime state
+infra/postgres/data/
+infra/qdrant/storage/
+infra/minio/data/
+infra/logto/data/
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Build artifacts
+project.zip
+dist/
+build/

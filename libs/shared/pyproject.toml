@@ -1,0 +1,34 @@
+# Shared library consumed by every ai-circus-framework service as a local uv path
+# dependency (e.g. `ai-circus-shared = { path = "../../libs/shared" }`). Not a
+# standalone cookiecutter-generated service — plain internal package.
+[project]
+name = "ai-circus-shared"
+version = "0.1.0"
+description = "Shared auth, storage, and entitlement helpers for ai-circus-framework services."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.11.4",
+    "PyYAML>=6.0.2",
+    "httpx>=0.28.1",
+    "boto3>=1.35.0",
+    "PyJWT[crypto]>=2.9.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_circus_shared"]
+
+[dependency-groups]
+dev = ["pytest>=8.3.5", "ruff>=0.11.8"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["A", "B", "C4", "E", "F", "I", "N", "RUF", "SIM", "UP", "W"]

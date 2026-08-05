@@ -1,0 +1,261 @@
+# ai-circus-framework — full platform.
+#
+# Layout: infra (identity, storage, ingress) first, then backend services
+# (services/*), then the two UIs. Every HTTP service other than Traefik itself
+# publishes no host port — Traefik is the single entrypoint, which maps 1:1 onto a
+# Kubernetes Ingress when this platform moves there (see README "Kubernetes path").
+#
+# App services (platform-registry, etl-*, training, prediction, llm-gateway,
+# assistant, rag-agent, ui-streamlit, ui-react) are appended here as they're built
+# (see the build order in the project plan) — this file currently wires the infra
+# layer: postgres, logto, qdrant, minio, traefik.
+
+name: ai-circus-framework
+
+networks:
+  ai-circus:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  qdrant-storage:
+  minio-data:
+
+services:
+  # ── Ingress ─────────────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:latest
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=ai-circus-framework_ai-circus"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true" # local dev only — put behind auth or disable before any real deployment
+    environment:
+      # Pin the Docker client API version Traefik's provider negotiates with — some
+      # Docker Engine builds reject the client's default fallback version.
+      DOCKER_API_VERSION: "1.41"
+    ports:
+      - "${TRAEFIK_HTTP_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [ai-circus]
+
+  # ── Identity (Logto: hosted+branded sign-in, Organizations = tenants, roles) ──
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
+    ports:
+      # Not HTTP, so not routed through Traefik — published for local (non-docker)
+      # dev of services like platform-registry, and ad-hoc `psql` access.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    networks: [ai-circus]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  logto:
+    image: svhd/logto:latest
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe; npm start"]
+    environment:
+      TRUST_PROXY_HEADER: ${LOGTO_TRUST_PROXY_HEADER:-1}
+      DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/logto
+      ENDPOINT: http://logto.localhost
+      ADMIN_ENDPOINT: http://admin.logto.localhost
+      ENDPOINT_COOKIE_SECRET: ${LOGTO_ENDPOINT_COOKIE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.logto.rule=Host(`logto.localhost`)"
+      - "traefik.http.routers.logto.entrypoints=web"
+      - "traefik.http.routers.logto.service=logto"
+      - "traefik.http.services.logto.loadbalancer.server.port=3001"
+      - "traefik.http.routers.logto-admin.rule=Host(`admin.logto.localhost`)"
+      - "traefik.http.routers.logto-admin.entrypoints=web"
+      - "traefik.http.routers.logto-admin.service=logto-admin"
+      - "traefik.http.services.logto-admin.loadbalancer.server.port=3002"
+
+  # ── Vector store (conversational_rag scenarios; one collection per tenant) ────
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qdrant.rule=Host(`qdrant.localhost`)"
+      - "traefik.http.routers.qdrant.entrypoints=web"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+
+  # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio-api.rule=Host(`minio.localhost`)"
+      - "traefik.http.routers.minio-api.entrypoints=web"
+      - "traefik.http.routers.minio-api.service=minio-api"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+      - "traefik.http.routers.minio-console.rule=Host(`console.minio.localhost`)"
+      - "traefik.http.routers.minio-console.entrypoints=web"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+
+  # ── Backend services (each generated via `scripts/new_service.sh`) ────────────
+  platform-registry:
+    build:
+      context: .
+      dockerfile: services/platform-registry/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      LOG_LEVEL: INFO
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
+      # bind mount here (unlike MinIO for datasets/models) keeps edits live without
+      # a rebuild.
+      - ./scenarios:/app/scenarios:ro
+    ports:
+      # Not routed through Traefik (see below) — published only so services running
+      # outside Docker (local, non-container dev) can still reach it.
+      - "127.0.0.1:${PLATFORM_REGISTRY_PORT:-8010}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ai-circus]
+    # Not exposed through Traefik — only other backend services on the docker
+    # network call its entitlement-check API (see AGENTS.md).
+
+  # One-shot job: `docker compose up --build etl-tabular` (see `make pipeline`).
+  etl-tabular:
+    build:
+      context: .
+      dockerfile: services/etl-tabular/Dockerfile
+    profiles: ["pipeline"]
+    environment:
+      APP_ENVIRONMENT: docker
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+    networks: [ai-circus]
+
+  # Long-running: serves POST /predict for the churn scenario, across every tenant.
+  prediction:
+    build:
+      context: .
+      dockerfile: services/prediction/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
+      # Logto is configured; see prediction/settings.yaml.
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+      platform-registry:
+        condition: service_started
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prediction.rule=Host(`prediction.localhost`)"
+      - "traefik.http.routers.prediction.entrypoints=web"
+      - "traefik.http.services.prediction.loadbalancer.server.port=8000"
+
+  # Long-running: OpenAI-compatible LiteLLM proxy — model routing + master-key auth
+  # (persistent spend-tracking not enabled yet, see llm-gateway/litellm_config.yaml).
+  llm-gateway:
+    build:
+      context: .
+      dockerfile: services/llm-gateway/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.llm-gateway.rule=Host(`llm-gateway.localhost`)"
+      - "traefik.http.routers.llm-gateway.entrypoints=web"
+      - "traefik.http.services.llm-gateway.loadbalancer.server.port=4000"
+
+  # Long-running: chat-over-tabular-data for the churn scenario, grounded in the
+  # trained model's metadata, answered via llm-gateway.
+  assistant:
+    build:
+      context: .
+      dockerfile: services/assistant/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+      platform-registry:
+        condition: service_started
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.assistant.rule=Host(`assistant.localhost`)"
+      - "traefik.http.routers.assistant.entrypoints=web"
+      - "traefik.http.services.assistant.loadbalancer.server.port=8000"
+
+  # One-shot job: `docker compose --profile pipeline up --build training` (after etl-tabular).
+  training:
+    build:
+      context: .
+      dockerfile: services/training/Dockerfile
+    profiles: ["pipeline"]
+    environment:
+      APP_ENVIRONMENT: docker
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+    networks: [ai-circus]

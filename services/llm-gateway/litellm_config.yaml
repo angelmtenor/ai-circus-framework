@@ -1,0 +1,28 @@
+# litellm_config.yaml — model routing for the LiteLLM proxy (llm-gateway).
+# Author: ai-circus-framework contributors
+#
+# Add/remove model_list entries to change what's available through the gateway's
+# OpenAI-compatible API — every consumer (assistant, rag-agent, ui-react/CopilotKit)
+# calls a `model_name` from this list, never a provider SDK directly. Provider API
+# keys are read from the real environment via the `os.environ/<NAME>` syntax — see
+# settings.yaml for which vars to set in .env.
+
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GOOGLE_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Persistent spend-tracking (general_settings.database_url) is deliberately NOT
+  # enabled: it requires litellm's `prisma` Python client, which needs a Node.js-based
+  # `prisma generate` codegen step at build time that this image doesn't run. The
+  # proxy still routes models and enforces the master key without it — a documented
+  # follow-up (see root README "Reserved for later") to add the full prisma toolchain
+  # if persistent spend history becomes a requirement.

@@ -1,0 +1,114 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# platform-registry owns the `platform` Postgres schema (tenants/scenarios/entitlements)
+# and seeds it from ../../scenarios/*.yaml at startup. It is NOT exposed through Traefik —
+# only other backend services on the docker network call its entitlement-check API.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_HOST
+    description: "Postgres hostname (docker service name in-container, localhost for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PORT
+    description: "Postgres port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_DB
+    description: "Postgres database name for the platform schema"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_USER
+    description: "Postgres user"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PASSWORD
+    description: "Postgres password"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml) to seed from"
+    type: string
+    mandatory: true
+    secret: false
+
+  # Only needed for the `platform-registry-sync-entitlements` tool (pull-sync of
+  # Logto Organization role assignments into the local entitlements table) — the
+  # main API can run without these being set.
+  - name: LOGTO_ENDPOINT
+    description: "Logto's public endpoint, e.g. http://logto.localhost (used only by the entitlement sync tool)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_M2M_APP_ID
+    description: "Machine-to-machine application ID for calling Logto's Management API (sync tool only)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_M2M_APP_SECRET
+    description: "Machine-to-machine application secret for calling Logto's Management API (sync tool only)"
+    type: string
+    mandatory: false
+    secret: true
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "platform"
+    # Must match POSTGRES_USER in the repo root .env; override here (or via env var)
+    # if you change it there.
+    POSTGRES_USER: "ai_circus"
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    POSTGRES_HOST: "localhost"
+    SCENARIOS_DIR: "../../scenarios"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    POSTGRES_HOST: "postgres"
+    SCENARIOS_DIR: "/app/scenarios"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

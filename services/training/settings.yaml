@@ -1,0 +1,85 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# training is a one-shot job (not a long-running server): it loads a tabular_ml
+# scenario's normalized parquet from MinIO (written by etl-tabular), trains/selects a
+# model per the scenario's Green Code candidate policy, builds a SHAP explainer, and
+# writes both back to MinIO for the `prediction` service to load.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIO_SLUG
+    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this run trains"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ORG_ID
+    description: "Tenant (Logto Organization id) whose dataset this run trains on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ENDPOINT
+    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ACCESS_KEY
+    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_SECRET_KEY
+    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    SCENARIO_SLUG: "churn"
+    ORG_ID: "demo"
+    MINIO_ACCESS_KEY: "ai_circus"
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    MINIO_ENDPOINT: "http://minio.localhost"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    MINIO_ENDPOINT: "http://minio:9000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

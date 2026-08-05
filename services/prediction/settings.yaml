@@ -1,0 +1,131 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# prediction is a long-running FastAPI service serving POST /predict for a single
+# tabular_ml scenario, across every tenant (the model/explainer are loaded per-org,
+# cached in memory, from MinIO). Validates the caller's Logto token and checks the
+# entitlement via platform-registry before serving — unless AUTH_DISABLED (dev only).
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIO_SLUG
+    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this instance serves predictions for"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ENDPOINT
+    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ACCESS_KEY
+    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_SECRET_KEY
+    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: AUTH_DISABLED
+    description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DEV_ORG_ID
+    description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LOGTO_ISSUER
+    description: "Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_JWKS_URL
+    description: "Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_API_RESOURCE_INDICATOR
+    description: "Expected token audience — the API resource registered in Logto for this platform's backend"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    SCENARIO_SLUG: "churn"
+    MINIO_ACCESS_KEY: "ai_circus"
+    DEV_ORG_ID: "demo"
+    # AUTH_DISABLED deliberately has NO default here: putting one in this profile
+    # block would always win over a real AUTH_DISABLED environment variable at
+    # runtime (pydantic-settings gives explicit constructor kwargs, which is what
+    # these profile overrides become, priority over the actual process env). Since
+    # AUTH_DISABLED must stay live-overridable (docker-compose passes it through as
+    # ${AUTH_DISABLED:-false}), it's mandatory with no default — set it in your own
+    # .env for local (non-docker) dev.
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    MINIO_ENDPOINT: "http://minio.localhost"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    MINIO_ENDPOINT: "http://minio:9000"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

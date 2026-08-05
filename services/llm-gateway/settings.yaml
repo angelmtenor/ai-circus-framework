@@ -1,0 +1,84 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# llm-gateway wraps the real LiteLLM proxy (litellm[proxy]) — an OpenAI-compatible,
+# provider-agnostic gateway. app.py validates config, then execs the `litellm` CLI
+# against litellm_config.yaml; it isn't a custom FastAPI app like the other services
+# (see litellm_config.yaml for model routing and why persistent spend-tracking isn't
+# enabled yet).
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the LiteLLM proxy listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LITELLM_CONFIG_PATH
+    description: "Path to litellm_config.yaml (model routing / general settings)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LITELLM_MASTER_KEY
+    description: "Master API key callers must present to the gateway (Bearer token)"
+    type: string
+    mandatory: true
+    secret: true
+
+  # Referenced by litellm_config.yaml via `os.environ/<NAME>` — read directly by the
+  # litellm process, not by this service's own code. Declared here for discoverability
+  # (`make setup`/.env.example) even though EnvConfig never reads them itself.
+  - name: OPENAI_API_KEY
+    description: "OpenAI API key (only needed if litellm_config.yaml routes to an openai/* model)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: GOOGLE_API_KEY
+    description: "Google API key (only needed if litellm_config.yaml routes to a gemini/* model)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: AZURE_OPENAI_API_KEY
+    description: "Azure OpenAI API key (only needed if litellm_config.yaml routes to an azure/* model)"
+    type: string
+    mandatory: false
+    secret: true
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "4000"
+    LITELLM_CONFIG_PATH: "litellm_config.yaml"
+
+  local: {}
+    # Local development overrides
+
+  docker: {}
+    # Running as a container inside docker-compose's `ai-circus` network.
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

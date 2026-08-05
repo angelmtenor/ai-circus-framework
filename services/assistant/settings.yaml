@@ -1,0 +1,147 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# assistant is a long-running FastAPI service serving POST /chat for a tabular_ml
+# scenario: chat-over-data grounded in the scenario's description and the trained
+# model's metadata (from MinIO), answered via llm-gateway — never a raw provider SDK
+# and never exec()'d code (see AGENTS.md).
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIO_SLUG
+    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this instance chats about"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ENDPOINT
+    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ACCESS_KEY
+    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_SECRET_KEY
+    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: LLM_GATEWAY_URL
+    description: "Base URL of the llm-gateway service's OpenAI-compatible API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LLM_GATEWAY_API_KEY
+    description: "API key presented to llm-gateway (its LITELLM_MASTER_KEY)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: LLM_MODEL
+    description: "Model name to request from llm-gateway (must be in its litellm_config.yaml model_list)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: AUTH_DISABLED
+    description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DEV_ORG_ID
+    description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LOGTO_ISSUER
+    description: "Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_JWKS_URL
+    description: "Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_API_RESOURCE_INDICATOR
+    description: "Expected token audience — the API resource registered in Logto for this platform's backend"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    SCENARIO_SLUG: "churn"
+    MINIO_ACCESS_KEY: "ai_circus"
+    LLM_MODEL: "gpt-4o-mini"
+    DEV_ORG_ID: "demo"
+    # AUTH_DISABLED deliberately has NO default here — see prediction/settings.yaml
+    # for why (a profile default would always beat docker-compose's real env var).
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    MINIO_ENDPOINT: "http://minio.localhost"
+    LLM_GATEWAY_URL: "http://llm-gateway.localhost"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    MINIO_ENDPOINT: "http://minio:9000"
+    LLM_GATEWAY_URL: "http://llm-gateway:4000"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

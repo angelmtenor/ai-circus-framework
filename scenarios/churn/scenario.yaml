@@ -1,0 +1,56 @@
+# Seed definition for the "churn" scenario — loaded into the `platform` Postgres
+# schema by services/platform-registry at bootstrap. Editing this file and re-seeding
+# is how a developer adds/changes a scenario; it is never read directly by any other
+# service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+
+slug: churn
+kind: tabular_ml
+title: "Customer Churn Prediction"
+description: >
+  Predicts bank customer churn risk from account/usage features, with SHAP-based
+  explainability and a chat assistant for asking follow-up questions about the data.
+role_required: "scenario:churn"
+icon: "📉"
+
+# Real, public dataset: https://www.kaggle.com/sonalidasgupta95/churn-prediction-of-bank-customers
+dataset:
+  bucket: "scenario-churn"
+  # MinIO key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/customer_churn.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/customer_churn.csv"
+  index_col: "CustomerId"
+  target: "Exited"
+  # Responsible AI: dropped before training regardless of predictive value —
+  # Gender for regulatory/ethical concerns, RowNumber/Surname as non-predictive identifiers.
+  protected_features_excluded: ["Gender", "RowNumber", "Surname"]
+  feature_columns:
+    - CreditScore
+    - Geography
+    - Age
+    - Tenure
+    - Balance
+    - NumOfProducts
+    - HasCrCard
+    - IsActiveMember
+    - EstimatedSalary
+
+model:
+  task_type: classification
+  # Green Code: candidates are evaluated smallest/fastest-first; a more complex model
+  # is only selected if it beats the simpler one by more than this margin.
+  candidates: ["logistic_regression", "random_forest"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

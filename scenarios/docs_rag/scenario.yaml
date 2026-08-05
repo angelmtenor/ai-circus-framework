@@ -1,0 +1,32 @@
+# Seed definition for the "docs_rag" scenario — conversational-only, no dashboard.
+# Loaded into the `platform` Postgres schema by services/platform-registry at bootstrap.
+
+slug: docs_rag
+kind: conversational_rag
+title: "Ask Your Documents"
+description: >
+  Agent-based RAG chatbot answering questions grounded in a previously vectorized
+  set of documents (policies, manuals, reports, ...).
+role_required: "scenario:docs_rag"
+icon: "💬"
+
+documents:
+  # Source documents uploaded/staged into MinIO at bootstrap; etl-vectorize reads them from there.
+  bucket: "scenario-docs-rag"
+  raw_prefix: "raw/"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 800
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+
+vector_store:
+  backend: qdrant
+  # One collection per tenant: "{collection_prefix}__{tenant_org_id}"
+  collection_prefix: "docs_rag"
+  top_k: 5
+
+services:
+  etl: etl-vectorize
+  agent: rag-agent

@@ -1,0 +1,198 @@
+# Project metadata and configuration for platform-registry
+# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+
+[project]
+name = "platform-registry"
+version = "0.1.0"
+description = "ai-circus-framework platform-registry service"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
+keywords = [
+    "python",
+    "packaging",
+    "template",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "ai-circus-shared",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "psutil>=7.0.0",
+    "psycopg[binary]>=3.3.4",
+    "py-cpuinfo>=9.0.0",
+    "pydantic>=2.11.4",
+    "pydantic-settings>=2.9.1",
+    "PyYAML>=6.0.2",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/ai-circus-framework/platform-registry"
+Repository = "https://github.com/ai-circus-framework/platform-registry"
+BugTracker = "https://github.com/ai-circus-framework/platform-registry/issues"
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.14",
+    "deptry>=0.23.0",
+    "packaging>=24.0",      # used directly by check_full_env.py
+    "pre-commit>=4.2.0",
+    "pyinstrument>=5.0.1",
+    "pyrefly>=0.53.0",       # replaces pyright
+    "python-dotenv>=1.0.1",  # used directly by check_full_env.py
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "rich>=13.7.0",          # optional pretty output for check_full_env.py
+    "ruff>=0.11.8",
+    "twine>=6.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Ruff
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+preview = true
+target-version = "py312"
+line-length = 120
+fix = true
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = [
+    "A",   # flake8-builtins
+    "ANN", # flake8-annotations
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "D",   # pydocstyle
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "PGH", # pygrep-hooks
+    "RUF", # ruff-specific rules
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    "T10", # flake8-debugger
+    "T20", # flake8-print
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+    "YTT", # flake8-2020
+]
+ignore = [
+    "any-type",  # Dynamically typed expressions
+    "unused-loop-control-variable",    # Unused loop variable
+    "function-call-in-default-argument",    # Function call in argument defaults
+    "undocumented-magic-method",    # Missing docstring in magic method
+    "incorrect-blank-line-before-class",    # Blank line before class docstring
+    "missing-blank-line-after-summary",    # Blank line between summary and description
+    "multi-line-summary-first-line",    # Multi-line docstring summary
+    "missing-terminal-punctuation",    # First line punctuation
+    "boolean-type-hint-positional-argument",  # Boolean flag in function
+    "boolean-default-value-positional-argument",  # Default Boolean flag
+    "logging-f-string",    # f-string in log
+    "too-many-arguments", # Too many arguments
+    "assert",    # Use of assert detected
+    "suspicious-subprocess-import",    # Subprocess Usage
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["undocumented-public-package", "unused-import"]
+"tests/**" = ["assert", "undocumented-public-function", "undocumented-public-module", "undocumented-public-package", "private-member-access", "useless-expression"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Pyrefly (replaces pyright)
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pyrefly]
+use-ignore-files = false
+project-includes = ["src"]
+project-excludes = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*venv/**/*",
+    "**/tests",
+]
+search-path = ["src", ".venv/lib/python3.12/site-packages"]
+python-platform = "linux"
+python-version = "3.12"
+python-interpreter-path = ".venv/bin/python3"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Pytest
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "7.0"
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+addopts = [
+    "--cov=src",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-report=json",
+    "--cov-report=term-missing",
+    "--cov-fail-under=0",
+    "-ra",
+    "-q",
+]
+testpaths = ["tests"]
+python_files = "test_*.py tests_*.py *_test.py"
+python_classes = "*Test Test* Describe*"
+python_functions = "test_* it_* should_* scenario_*"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Coverage
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.coverage.report]
+skip_empty = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Deptry
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.deptry.per_rule_ignores]
+# psycopg is never imported directly — SQLAlchemy loads it dynamically as the
+# "postgresql+psycopg://" DBAPI driver named in the connection string.
+DEP002 = ["psycopg"]
+
+[tool.uv.sources]
+ai-circus-shared = { path = "../../libs/shared" }
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Scripts
+# ──────────────────────────────────────────────────────────────────────────────
+[project.scripts]
+platform-registry-hello-world = "platform_registry.tools.hello_world:main"
+platform-registry-sync-entitlements = "platform_registry.tools.sync_logto_entitlements:main"
+platform-registry-generate-data-model = "platform_registry.core.config_generator:main"
+platform-registry-config-drift-check = "platform_registry.core.config_generator:check_env_drift"
+platform-registry-app = "platform_registry.app:main"

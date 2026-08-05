@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make check *)",
+      "Bash(make test *)",
+      "Bash(make qa *)",
+      "Bash(make run *)",
+      "Bash(uv sync *)",
+      "Bash(uv run pytest *)"
+    ]
+  }
+}
