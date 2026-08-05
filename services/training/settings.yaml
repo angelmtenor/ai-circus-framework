@@ -64,9 +64,11 @@ global_settings:
 environments:
   base:
     LOG_LEVEL: "INFO"
-    SCENARIO_SLUG: "churn"
     ORG_ID: "demo"
     MINIO_ACCESS_KEY: "ai_circus"
+    # SCENARIO_SLUG deliberately has NO default here — see etl-tabular/settings.yaml
+    # for why (a profile default would always beat a real per-instance env var).
+    # Set it in your own .env for local (non-docker) dev.
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

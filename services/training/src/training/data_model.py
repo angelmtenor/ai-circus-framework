@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,7 +42,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "cf3dfb29cadeb4eee0f96fb3646458c59cb045e96f3dfbd274ab36884e1a9578"
+_SOURCE_YAML_HASH = "af498101ea6b152ccd9e8d86b2559527b1fcc37290fc3aac4286dfe247e0ecbd"
 
 
 EnvConfig.model_rebuild()
@@ -77,12 +78,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

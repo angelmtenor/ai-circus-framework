@@ -1,0 +1,75 @@
+# Seed definition for the "mpm" scenario — loaded into the `platform` Postgres
+# schema by services/platform-registry at bootstrap. Editing this file and re-seeding
+# is how a developer adds/changes a scenario; it is never read directly by any other
+# service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# Ported from mlops_templates/mpm_scenario, a second tabular_ml scenario proving
+# etl-tabular/training/prediction/assistant are genuinely scenario-agnostic: this
+# dataset's schema (temperatures, rotational speed, torque, tool wear, machine type)
+# shares no column with churn's, and needs no code changes to those services.
+
+slug: mpm
+kind: tabular_ml
+title: "Machine Predictive Maintenance"
+description: >
+  Predicts industrial machine failure risk from sensor readings (temperature,
+  rotational speed, torque, tool wear) and machine type, with SHAP-based
+  explainability and a chat assistant for asking follow-up questions about the data.
+role_required: "scenario:mpm"
+icon: "⚙️"
+
+# Real, public dataset (AI4I 2020 Predictive Maintenance):
+# https://www.kaggle.com/datasets/lumierebatalong/mpm-with-f1-score-89-and-g-mean-89
+dataset:
+  bucket: "scenario-mpm"
+  # MinIO key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/mpm_data.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/mpm_data.csv"
+  index_col: "Product ID"
+  target: "Target"
+  # Responsible AI / leakage prevention: dropped before training regardless of
+  # predictive value — UDI is a non-predictive sequential row identifier, and
+  # "Failure Type" is a post-hoc label that would leak the target (it's only known
+  # once a failure has already occurred).
+  protected_features_excluded: ["UDI", "Failure Type"]
+  feature_columns:
+    - Air temperature [K]
+    - Process temperature [K]
+    - Rotational speed [rpm]
+    - Torque [Nm]
+    - Tool wear [min]
+    - Type
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max (AI4I 2020, 10000 rows).
+  feature_schema:
+    Air temperature [K]: {type: numeric, min: 295.0, max: 305.0, default: 300.0, step: 0.1}
+    Process temperature [K]: {type: numeric, min: 305.0, max: 314.0, default: 310.0, step: 0.1}
+    Rotational speed [rpm]: {type: numeric, min: 1150, max: 2900, default: 1500, step: 10}
+    Torque [Nm]: {type: numeric, min: 3.0, max: 77.0, default: 40.0, step: 0.5}
+    Tool wear [min]: {type: numeric, min: 0, max: 260, default: 108, step: 1}
+    Type: {type: categorical, options: ["L", "M", "H"], default: "M"}
+
+model:
+  task_type: classification
+  # Green Code: candidates are evaluated smallest/fastest-first; a more complex model
+  # is only selected if it beats the simpler one by more than this margin.
+  candidates: ["logistic_regression", "random_forest"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+
+# Dedicated compose instances (etl-tabular-mpm/training-mpm/prediction-mpm/
+# assistant-mpm) of the SAME generic images used by the churn scenario — proves the
+# pipeline is scenario-agnostic rather than needing a new service per scenario.
+services:
+  etl: etl-tabular-mpm
+  training: training-mpm
+  prediction: prediction-mpm
+  assistant: assistant-mpm

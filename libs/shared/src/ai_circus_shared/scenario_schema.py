@@ -8,10 +8,31 @@ metadata through platform-registry's API (see `entitlements.py`), not the filesy
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class NumericFeatureUI(BaseModel):
+    """Declarative UI hint for a numeric feature: a bounded slider/number input."""
+
+    type: Literal["numeric"] = "numeric"
+    min: float
+    max: float
+    default: float
+    step: float = 1.0
+
+
+class CategoricalFeatureUI(BaseModel):
+    """Declarative UI hint for a categorical feature: a fixed set of options."""
+
+    type: Literal["categorical"] = "categorical"
+    options: list[str]
+    default: str
+
+
+FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI, Field(discriminator="type")]
 
 
 class TabularDataset(BaseModel):
@@ -24,6 +45,9 @@ class TabularDataset(BaseModel):
     target: str
     protected_features_excluded: list[str] = []
     feature_columns: list[str]
+    # Drives both UIs' generic form renderer — keyed by `feature_columns` entries, in
+    # the same order, so neither UI needs any scenario-specific form code.
+    feature_schema: dict[str, FeatureUI]
 
 
 class TabularModel(BaseModel):

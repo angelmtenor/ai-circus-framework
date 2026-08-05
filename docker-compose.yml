@@ -155,6 +155,7 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "churn"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
@@ -171,6 +172,7 @@ services:
       dockerfile: services/prediction/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "churn"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
@@ -220,6 +222,7 @@ services:
       dockerfile: services/assistant/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "churn"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
@@ -251,6 +254,7 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "churn"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
@@ -260,6 +264,101 @@ services:
         condition: service_started
     networks: [ai-circus]
 
+  # mpm scenario: dedicated instances of the SAME generic etl-tabular/training/
+  # prediction/assistant images used by churn, parameterized by SCENARIO_SLUG alone —
+  # proves the pipeline is genuinely scenario-agnostic rather than needing new code
+  # per scenario. See scenarios/mpm/scenario.yaml's `services:` block.
+  etl-tabular-mpm:
+    build:
+      context: .
+      dockerfile: services/etl-tabular/Dockerfile
+    profiles: ["pipeline"]
+    environment:
+      APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "mpm"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+    networks: [ai-circus]
+
+  training-mpm:
+    build:
+      context: .
+      dockerfile: services/training/Dockerfile
+    profiles: ["pipeline"]
+    environment:
+      APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "mpm"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+    networks: [ai-circus]
+
+  prediction-mpm:
+    build:
+      context: .
+      dockerfile: services/prediction/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "mpm"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+      platform-registry:
+        condition: service_started
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prediction-mpm.rule=Host(`prediction-mpm.localhost`)"
+      - "traefik.http.routers.prediction-mpm.entrypoints=web"
+      - "traefik.http.services.prediction-mpm.loadbalancer.server.port=8000"
+
+  assistant-mpm:
+    build:
+      context: .
+      dockerfile: services/assistant/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "mpm"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      minio:
+        condition: service_started
+      platform-registry:
+        condition: service_started
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.assistant-mpm.rule=Host(`assistant-mpm.localhost`)"
+      - "traefik.http.routers.assistant-mpm.entrypoints=web"
+      - "traefik.http.services.assistant-mpm.loadbalancer.server.port=8000"
+
   # One-shot job: `docker compose --profile pipeline up --build etl-vectorize` (docs_rag scenario).
   etl-vectorize:
     build:
@@ -268,6 +367,7 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "docs_rag"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
@@ -287,6 +387,7 @@ services:
       dockerfile: services/rag-agent/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      SCENARIO_SLUG: "docs_rag"
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       LOGTO_ISSUER: ${LOGTO_ISSUER}

@@ -8,6 +8,7 @@ to render only the scenarios a tenant is entitled to.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -18,13 +19,27 @@ class EntitlementDeniedError(Exception):
 
 @dataclass(frozen=True)
 class ScenarioSummary:
-    """Scenario metadata as served by platform-registry (mirrors scenario.yaml)."""
+    """Scenario metadata as served by platform-registry (mirrors scenario.yaml).
+
+    `prediction_service`/`assistant_service`/`agent_service` are the compose service
+    names implementing this scenario — both UIs build request URLs from these
+    (`http://<service>.localhost`) instead of a single hardcoded global endpoint, since
+    multiple scenarios of the same kind can each run their own dedicated instance of
+    the same generic image (see docker-compose.yml, e.g. `prediction` vs
+    `prediction-mpm`). `feature_columns`/`feature_schema` drive both UIs' generic
+    tabular_ml form renderer — `None` for `conversational_rag` scenarios.
+    """
 
     slug: str
     kind: str
     title: str
     description: str
     icon: str
+    prediction_service: str | None = None
+    assistant_service: str | None = None
+    agent_service: str | None = None
+    feature_columns: list[str] | None = None
+    feature_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

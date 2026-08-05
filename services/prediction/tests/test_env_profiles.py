@@ -19,9 +19,10 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
-    # AUTH_DISABLED intentionally has no settings.yaml default (see settings.yaml) —
-    # it must come from a real env var so docker-compose's passthrough actually works.
+    # AUTH_DISABLED and SCENARIO_SLUG intentionally have no settings.yaml default (see
+    # settings.yaml) — they must come from real env vars.
     monkeypatch.setenv("AUTH_DISABLED", "false")
+    monkeypatch.setenv("SCENARIO_SLUG", "churn")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,3 +81,17 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
     config = get_env_config(env="local")
 
     assert config.MINIO_ENDPOINT == "http://minio.localhost"
+
+
+def test_scenario_slug_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SCENARIO_SLUG must come from the actual process env, not a settings.yaml default.
+
+    Regression test: a profile default here would always win over a per-instance
+    SCENARIO_SLUG env var, silently making every instance of this image serve the
+    same scenario.
+    """
+    monkeypatch.setenv("SCENARIO_SLUG", "mpm")
+
+    config = get_env_config()
+
+    assert config.SCENARIO_SLUG == "mpm"

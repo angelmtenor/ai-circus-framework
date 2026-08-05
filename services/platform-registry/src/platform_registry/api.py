@@ -9,6 +9,8 @@ this. Each of those services is responsible for validating the end user's Logto 
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -21,13 +23,23 @@ router = APIRouter()
 
 
 class ScenarioOut(BaseModel):
-    """Scenario metadata returned to callers (mirrors ai_circus_shared.ScenarioSummary)."""
+    """Scenario metadata returned to callers (mirrors ai_circus_shared.ScenarioSummary).
+
+    The `*_service` fields let a caller build a request URL by hostname convention
+    (`http://<service>.localhost`) for whichever compose instance implements this
+    particular scenario — see Scenario's docstring in core/models.py.
+    """
 
     slug: str
     kind: str
     title: str
     description: str
     icon: str
+    prediction_service: str | None = None
+    assistant_service: str | None = None
+    agent_service: str | None = None
+    feature_columns: list[str] | None = None
+    feature_schema: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 

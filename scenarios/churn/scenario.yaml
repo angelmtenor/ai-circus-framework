@@ -41,6 +41,20 @@ dataset:
     - IsActiveMember
     - EstimatedSalary
 
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # neither UI has any churn-specific form code; this is the only place these
+  # ranges/options/defaults are defined.
+  feature_schema:
+    CreditScore: {type: numeric, min: 300, max: 850, default: 650, step: 1}
+    Geography: {type: categorical, options: ["France", "Germany", "Spain"], default: "France"}
+    Age: {type: numeric, min: 18, max: 92, default: 40, step: 1}
+    Tenure: {type: numeric, min: 0, max: 10, default: 3, step: 1}
+    Balance: {type: numeric, min: 0, max: 300000, default: 50000, step: 1000}
+    NumOfProducts: {type: numeric, min: 1, max: 4, default: 2, step: 1}
+    HasCrCard: {type: categorical, options: ["0", "1"], default: "1"}
+    IsActiveMember: {type: categorical, options: ["0", "1"], default: "1"}
+    EstimatedSalary: {type: numeric, min: 0, max: 250000, default: 75000, step: 1000}
+
 model:
   task_type: classification
   # Green Code: candidates are evaluated smallest/fastest-first; a more complex model

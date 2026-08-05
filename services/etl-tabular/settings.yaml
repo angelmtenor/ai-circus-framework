@@ -63,9 +63,15 @@ global_settings:
 environments:
   base:
     LOG_LEVEL: "INFO"
-    SCENARIO_SLUG: "churn"
     ORG_ID: "demo"
     MINIO_ACCESS_KEY: "ai_circus"
+    # SCENARIO_SLUG deliberately has NO default here: a profile default would always
+    # win over docker-compose's per-instance SCENARIO_SLUG env var (pydantic-settings
+    # gives explicit constructor kwargs — which is what these profile overrides become
+    # — priority over the real process env), silently making every instance of this
+    # image process the same scenario regardless of its actual SCENARIO_SLUG override
+    # (see the AUTH_DISABLED comment in prediction/settings.yaml for the same pitfall).
+    # Set it in your own .env for local (non-docker) dev.
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

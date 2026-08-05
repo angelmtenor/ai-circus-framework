@@ -107,11 +107,11 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
-    SCENARIO_SLUG: "docs_rag"
     LLM_MODEL: "gpt-4o-mini"
     DEV_ORG_ID: "demo"
-    # AUTH_DISABLED deliberately has NO default here — see prediction/settings.yaml
-    # for why (a profile default would always beat docker-compose's real env var).
+    # SCENARIO_SLUG and AUTH_DISABLED deliberately have NO default here — see
+    # prediction/settings.yaml for why (a profile default would always beat a real
+    # per-instance/per-request env var).
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

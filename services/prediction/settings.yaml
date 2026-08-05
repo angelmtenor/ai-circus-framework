@@ -101,9 +101,11 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
-    SCENARIO_SLUG: "churn"
     MINIO_ACCESS_KEY: "ai_circus"
     DEV_ORG_ID: "demo"
+    # SCENARIO_SLUG deliberately has NO default here either — the same profile-vs-env
+    # precedence pitfall (see below) would make every instance of this image serve the
+    # same scenario regardless of its actual per-instance SCENARIO_SLUG override.
     # AUTH_DISABLED deliberately has NO default here: putting one in this profile
     # block would always win over a real AUTH_DISABLED environment variable at
     # runtime (pydantic-settings gives explicit constructor kwargs, which is what
