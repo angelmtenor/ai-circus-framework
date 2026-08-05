@@ -1,0 +1,93 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# etl-vectorize is a one-shot job (not a long-running server): it loads a
+# conversational_rag scenario's documents from MinIO (bootstrapping them from a
+# tracked sample_docs/ folder on first run), chunks + embeds them, and upserts the
+# result into a per-tenant Qdrant collection for rag-agent to query.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIO_SLUG
+    description: "Which conversational_rag scenario (scenarios/<slug>/scenario.yaml) this run processes"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ORG_ID
+    description: "Tenant (Logto Organization id) whose documents this run processes"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ENDPOINT
+    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_ACCESS_KEY
+    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MINIO_SECRET_KEY
+    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: QDRANT_URL
+    description: "Qdrant endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    SCENARIO_SLUG: "docs_rag"
+    ORG_ID: "demo"
+    MINIO_ACCESS_KEY: "ai_circus"
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    MINIO_ENDPOINT: "http://minio.localhost"
+    QDRANT_URL: "http://qdrant.localhost"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    MINIO_ENDPOINT: "http://minio:9000"
+    QDRANT_URL: "http://qdrant:6333"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

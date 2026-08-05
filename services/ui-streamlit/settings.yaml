@@ -1,0 +1,133 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# ui-streamlit is a Streamlit app: app.py validates config, then execs `streamlit run
+# streamlit_app.py` (the actual UI script Streamlit reruns on every interaction) —
+# same "validate then exec" pattern as llm-gateway. Scenario metadata/entitlements
+# come from platform-registry's API, never read from scenarios/*.yaml directly.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the Streamlit server listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PREDICTION_URL
+    description: "Base URL of the prediction service (churn scenario)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ASSISTANT_URL
+    description: "Base URL of the assistant service (churn scenario chat)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: RAG_AGENT_URL
+    description: "Base URL of the rag-agent service (docs_rag scenario)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DEV_MODE
+    description: "DEV ONLY: skip Logto login, pick a fake org/roles. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DEV_ORG_ID
+    description: "Org id used when DEV_MODE=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LOGTO_ISSUER
+    description: "Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless DEV_MODE=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_JWKS_URL
+    description: "Logto JWKS endpoint (required unless DEV_MODE=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_CLIENT_ID
+    description: "Logto application (client) id registered for this UI (required unless DEV_MODE=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_CLIENT_SECRET
+    description: "Logto application client secret (required unless DEV_MODE=true)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: LOGTO_REDIRECT_URI
+    description: "OIDC redirect URI registered in Logto for this UI, e.g. http://app.localhost/callback"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_API_RESOURCE_INDICATOR
+    description: "API resource indicator this UI requests access tokens for (the backend services' audience)"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8501"
+    DEV_ORG_ID: "demo"
+    # DEV_MODE deliberately has NO default here — see prediction/settings.yaml's
+    # AUTH_DISABLED comment for why (a profile default would always beat
+    # docker-compose's real env var passthrough).
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+    PREDICTION_URL: "http://prediction.localhost"
+    ASSISTANT_URL: "http://assistant.localhost"
+    RAG_AGENT_URL: "http://rag-agent.localhost"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+    PREDICTION_URL: "http://prediction:8000"
+    ASSISTANT_URL: "http://assistant:8000"
+    RAG_AGENT_URL: "http://rag-agent:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

@@ -63,6 +63,7 @@ class DocumentsConfig(BaseModel):
 
     bucket: str
     raw_prefix: str
+    seed_prefix: str
     chunking: DocumentChunking
     embedding: DocumentEmbedding
 

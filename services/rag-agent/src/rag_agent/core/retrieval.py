@@ -1,0 +1,49 @@
+"""
+- Title:    Retrieval over a tenant's vectorized documents
+- Author:   ai-circus-framework contributors
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ai_circus_shared.scenario_schema import VectorStoreConfig
+from qdrant_client import QdrantClient
+from sentence_transformers import SentenceTransformer
+
+
+@dataclass(frozen=True)
+class RetrievedChunk:
+    """One retrieved chunk: its text, source document, and similarity score."""
+
+    text: str
+    source: str
+    score: float
+
+
+def collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
+    """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}' (matches etl-vectorize)."""
+    return f"{vector_store.collection_prefix}__{org_id}"
+
+
+def retrieve(
+    qdrant: QdrantClient,
+    model: SentenceTransformer,
+    vector_store: VectorStoreConfig,
+    org_id: str,
+    query: str,
+) -> list[RetrievedChunk]:
+    """Embed the query and return the tenant's top-k most similar chunks."""
+    name = collection_name(vector_store, org_id)
+    if not qdrant.collection_exists(name):
+        return []
+
+    query_vector = [float(v) for v in model.encode(query, normalize_embeddings=True)]
+    results = qdrant.query_points(collection_name=name, query=query_vector, limit=vector_store.top_k).points
+
+    chunks = []
+    for r in results:
+        if r.payload is None:
+            continue
+        chunks.append(RetrievedChunk(text=r.payload["text"], source=r.payload["source"], score=r.score))
+    return chunks

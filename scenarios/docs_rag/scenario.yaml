@@ -14,6 +14,10 @@ documents:
   # Source documents uploaded/staged into MinIO at bootstrap; etl-vectorize reads them from there.
   bucket: "scenario-docs-rag"
   raw_prefix: "raw/"
+  # Tracked local folder (relative to this scenario's directory) etl-vectorize
+  # uploads to MinIO on first run if raw_prefix is empty for the tenant — demo
+  # bootstrap only, same pattern as churn/scenario.yaml's dataset.seed_file.
+  seed_prefix: "sample_docs"
   chunking:
     strategy: recursive_character
     chunk_size: 800
