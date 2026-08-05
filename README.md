@@ -59,8 +59,7 @@ backend service's API (what's allowed).
 ### Foundations chosen for future SaaS scale
 
 These are in place from day one — not deferred — because they're cheap to build correctly
-now and expensive to retrofit once single-tenant assumptions are baked in. See the project
-plan (`/home/amartinez3/.claude/plans/swirling-nibbling-cocoa.md`) for the full reasoning.
+now and expensive to retrofit once single-tenant assumptions are baked in.
 
 - **Tenancy**: Logto **Organizations** model tenants; roles are assigned per-organization.
 - **Object storage**: all datasets/models/documents live in **MinIO** (S3-compatible), never
@@ -126,6 +125,27 @@ service's directory while the infra containers stay up via `make up-infra`.
   this repo's build-context conventions. Then add it to `docker-compose.yml`.
 - **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`docs_rag` for the two
   kinds), re-run `platform-registry`'s seed step, and create the matching Logto role.
+
+## Testing & CI
+
+Every backend service is an independent `ai-circus-template` project with its own QA stack —
+from inside `services/<name>/`:
+
+```bash
+make check   # pre-commit (ruff, pyrefly, gitleaks, checkmake) + settings.yaml/data_model.py drift check + pytest
+```
+
+`make check-all` (from the repo root) runs this for every service in sequence. `ui-react` has
+its own `npm run build` (type-checks via `tsc -b` then builds via Vite).
+
+`.github/workflows/ci.yml` runs the same checks per service as a matrix job, builds `ui-react`,
+and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
+
+> Because every service shares this one git repository (rather than one repo per service, as
+> `ai-circus-template` assumes standalone), each service's `.pre-commit-config.yaml` is scoped
+> to its own `services/<name>/` subtree via a top-level `files:` filter — pre-commit always
+> executes hooks with the git root as `cwd`, so without this scoping `make qa` in any one
+> service would lint/reformat the entire monorepo instead of just itself.
 
 ## Kubernetes path (documented, not yet built)
 
