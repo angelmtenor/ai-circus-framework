@@ -2,6 +2,7 @@
 # Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
 # Update hooks: `uv run pre-commit autoupdate`
 
+files: ^services/assistant/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -26,19 +27,19 @@ repos:
     hooks:
       - id: ruff-check
         name: Ruff Check
-        entry: uv run ruff check --fix
+        entry: uv run --project services/assistant ruff check --fix
         language: system
         types: [python]
 
       - id: ruff-format
         name: Ruff Format
-        entry: uv run ruff format
+        entry: uv run --project services/assistant ruff format
         language: system
         types: [python]
 
       - id: pyrefly-check
         name: Pyrefly (type checking)
-        entry: uv run pyrefly check src
+        entry: uv run --project services/assistant pyrefly check services/assistant/src
         language: system
         pass_filenames: false
 

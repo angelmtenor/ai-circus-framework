@@ -95,4 +95,3 @@ run: ## Run the main application (app.py)
 
 hello-world: ## Run hello world demonstration tool
 	@uv run assistant-hello-world
-

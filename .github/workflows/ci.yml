@@ -1,0 +1,80 @@
+# Root CI: runs every generated service's own quality gate (`make check`, which
+# covers pre-commit/qa + tests) plus the two things a service-local workflow can't
+# check on its own — the React UI build and the compose file's overall validity.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  discover-services:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.list.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          services=$(for dir in services/*/; do basename "$dir"; done | jq -R -s -c 'split("\n")[:-1]')
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+
+  service-check:
+    needs: discover-services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover-services.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+        working-directory: services/${{ matrix.service }}
+
+      - name: Install dependencies (service + local libs/shared)
+        run: uv sync --locked
+        working-directory: services/${{ matrix.service }}
+
+      - name: Generate data model
+        run: make generate-data-model
+        working-directory: services/${{ matrix.service }}
+
+      - name: QA (pre-commit + config drift check)
+        run: make qa
+        working-directory: services/${{ matrix.service }}
+
+      - name: Run tests
+        run: make test
+        working-directory: services/${{ matrix.service }}
+
+  ui-react:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui-react/package-lock.json
+      - run: npm ci
+        working-directory: ui-react
+      - run: npm run build
+        working-directory: ui-react
+
+  compose-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
