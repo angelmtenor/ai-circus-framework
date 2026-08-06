@@ -71,29 +71,46 @@ def sample_rows(df: pd.DataFrame, columns: list[str], limit: int) -> DatasetSamp
     return DatasetSample(columns=columns, rows=rows, total_rows=total_rows)
 
 
-def _feature_importance(artifacts: ModelArtifacts) -> list[dict[str, Any]]:
-    """Aggregate the fitted estimator's importances from transformed (one-hot) names
-    back to the original feature they came from, ranked descending.
+def _aggregate_by_feature(
+    names: list[str], values: np.ndarray, feature_columns: list[str]
+) -> list[dict[str, Any]]:
+    """Aggregate per-transformed-(one-hot)-column values back to the original feature
+    they came from (e.g. `cat__Geography_France` -> `Geography`), summed and ranked
+    descending — shared by both the estimator-importance and SHAP importance paths.
     """
-    model = artifacts.pipeline.named_steps["model"]
-    names: list[str] = artifacts.metadata["transformed_feature_names"]
-    feature_columns: list[str] = artifacts.metadata["feature_columns"]
-
-    if hasattr(model, "feature_importances_"):
-        raw = np.abs(np.asarray(model.feature_importances_, dtype=float))
-    elif hasattr(model, "coef_"):
-        raw = np.abs(np.asarray(model.coef_, dtype=float)).reshape(-1)
-    else:
-        return []
-
     totals: dict[str, float] = {}
-    for name, value in zip(names, raw, strict=True):
+    for name, value in zip(names, values, strict=True):
         unprefixed = name.split("__", 1)[-1]
         original = next((f for f in feature_columns if unprefixed.startswith(f)), unprefixed)
         totals[original] = totals.get(original, 0.0) + float(value)
 
     ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
     return [{"feature": name, "importance": round(value, 4)} for name, value in ranked]
+
+
+def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: int) -> tuple[list[dict[str, Any]], int]:
+    """Dataset-wide global feature importance: mean(|SHAP value|) per feature over a
+    real sample of the dataset — a more principled "how much does this feature matter
+    overall" than a single estimator's built-in `.feature_importances_`/`.coef_`
+    (which e.g. LightGBM/RandomForest compute from split gain alone, ignoring the
+    actual value distribution), and consistent with the same SHAP explainer already
+    used for each individual prediction's contributions.
+    """
+    feature_columns: list[str] = artifacts.metadata["feature_columns"]
+    names: list[str] = artifacts.metadata["transformed_feature_names"]
+
+    x = df.loc[:, feature_columns]
+    if len(x) > sample_size:
+        idx = np.linspace(0, len(x) - 1, sample_size, dtype=int)
+        x = x.iloc[idx]
+
+    x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
+    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
+    if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
+        shap_values = shap_values[:, :, 1]
+
+    mean_abs = np.abs(shap_values).mean(axis=0)
+    return _aggregate_by_feature(names, mean_abs, feature_columns), len(x)
 
 
 @dataclass(frozen=True)
@@ -106,7 +123,6 @@ class EvaluationResult:
     target: str
     n: int
     metrics: dict[str, float]
-    feature_importance: list[dict[str, Any]]
     breakdown_feature: str | None
     breakdown: list[dict[str, Any]]
     actuals: list[float]
@@ -176,7 +192,6 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
         target=target,
         n=len(x_test),
         metrics=metrics,
-        feature_importance=_feature_importance(artifacts),
         breakdown_feature=breakdown_feature,
         breakdown=breakdown,
         actuals=[round(float(v), 4) for v in y_test.to_numpy(dtype=float)],

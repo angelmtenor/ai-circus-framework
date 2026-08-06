@@ -69,21 +69,32 @@ class BreakdownItemOut(BaseModel):
 
 class DatasetEvaluationOut(BaseModel):
     """Response body for GET /dataset/{scenario_slug}/evaluation — a held-out
-    evaluation of the deployed pipeline, ready to render as a metrics/feature-
-    importance/predicted-vs-actual dashboard.
+    evaluation of the deployed pipeline, ready to render as a metrics/predicted-vs-
+    actual dashboard. Feature importance lives separately (see
+    /dataset/{slug}/explainability) to avoid showing two different notions of
+    "importance" in the same place.
     """
 
     task_type: str
     target: str
     n: int
     metrics: dict[str, float]
-    feature_importance: list[FeatureImportanceOut]
     breakdown_feature: str | None
     breakdown: list[BreakdownItemOut]
     actuals: list[float]
     predictions: list[float]
     prediction_lower: list[float] | None = None
     prediction_upper: list[float] | None = None
+
+
+class DatasetExplainabilityOut(BaseModel):
+    """Response body for GET /dataset/{scenario_slug}/explainability — dataset-wide
+    global feature importance via mean(|SHAP value|), not a single estimator's
+    built-in importances (see core/dataset.py's shap_importance() docstring).
+    """
+
+    feature_importance: list[FeatureImportanceOut]
+    sample_size: int
 
 
 def _model_cache(request: Request) -> ModelCache:
@@ -177,11 +188,29 @@ def dataset_evaluation_endpoint(
         target=result.target,
         n=result.n,
         metrics=result.metrics,
-        feature_importance=[FeatureImportanceOut(**f) for f in result.feature_importance],
         breakdown_feature=result.breakdown_feature,
         breakdown=[BreakdownItemOut(**b) for b in result.breakdown],
         actuals=result.actuals,
         predictions=result.predictions,
         prediction_lower=result.prediction_lower,
         prediction_upper=result.prediction_upper,
+    )
+
+
+@router.get("/dataset/{scenario_slug}/explainability", response_model=DatasetExplainabilityOut)
+def dataset_explainability_endpoint(
+    limit: int = Query(default=200, ge=1, le=MAX_EVAL_ROWS),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> DatasetExplainabilityOut:
+    """Dataset-wide global SHAP feature importance for the caller's deployed pipeline."""
+    assert identity.org_id is not None
+    artifacts = model_cache.get(identity.org_id, definition.slug)
+    store = model_cache.store_for(definition.slug)
+    df = dataset_core.load_normalized(store, identity.org_id)
+    feature_importance, sample_size = dataset_core.shap_importance(artifacts, df, limit)
+    return DatasetExplainabilityOut(
+        feature_importance=[FeatureImportanceOut(**f) for f in feature_importance],
+        sample_size=sample_size,
     )
