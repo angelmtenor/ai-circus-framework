@@ -1,67 +1,92 @@
-"""Tests for the /chat FastAPI endpoint, with all dependencies overridden by fakes."""
+"""Tests for the /chat/{scenario_slug} FastAPI endpoint, with all dependencies
+overridden by fakes — including a fake tool-calling chat model, so these tests
+exercise the real agent loop (see core/agent.py) rather than mocking it away.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
-import pytest
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.scenario_schema import ChatConfig, VectorStoreConfig
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.outputs import ChatGeneration, ChatResult
 
-from rag_agent.api import _embedding_model, _llm_client, _llm_model, _qdrant, _vector_store, router
+from rag_agent.api import _embedders, _llm, _qdrant, _scenario_definition, router
 from rag_agent.core.identity import resolve_identity
 
 
-@pytest.fixture
-def fake_llm_client() -> MagicMock:
-    """A mock OpenAI client returning a fixed completion."""
-    client = MagicMock()
-    client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="The overdraft fee is $25."))]
-    )
-    return client
+class FakeToolCallingModel(BaseChatModel):
+    """A minimal fake chat model that supports tool binding and returns fixed responses in order."""
+
+    responses: list[AIMessage]
+    calls: int = 0
+
+    def bind_tools(self, tools: object, **kwargs: object) -> FakeToolCallingModel:
+        """Tool binding is a no-op here — the fake ignores the tool schema entirely."""
+        return self
+
+    def _generate(
+        self, messages: object, stop: object = None, run_manager: object = None, **kwargs: object
+    ) -> ChatResult:
+        """Return the next canned response in sequence."""
+        message = self.responses[self.calls]
+        self.calls += 1
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @property
+    def _llm_type(self) -> str:
+        """Identify this fake model type for LangChain's internals."""
+        return "fake-tool-calling-model"
 
 
-@pytest.fixture
-def client(fake_llm_client: MagicMock) -> Generator[TestClient]:
-    """A TestClient with identity/qdrant/embedding-model/llm-client dependencies overridden."""
+def _client_with(llm: FakeToolCallingModel) -> TestClient:
     app = FastAPI()
     app.include_router(router)
 
     fake_point = SimpleNamespace(
         payload={"text": "Overdraft fee is $25.", "source": "raw/account_policies.md"}, score=0.9
     )
+    fake_definition = SimpleNamespace(
+        slug="docs_rag",
+        vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+        chat=ChatConfig(context="Bank account policies and fees."),
+    )
 
     app.dependency_overrides[resolve_identity] = lambda: Identity(
         subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})
     )
+    app.dependency_overrides[_scenario_definition] = lambda: fake_definition
     app.dependency_overrides[_qdrant] = lambda: SimpleNamespace(
         collection_exists=lambda _name: True,
         query_points=lambda **_kwargs: SimpleNamespace(points=[fake_point]),
     )
-    app.dependency_overrides[_embedding_model] = lambda: SimpleNamespace(encode=lambda _q, **_kw: [0.1, 0.2])
-    app.dependency_overrides[_llm_client] = lambda: fake_llm_client
-    app.dependency_overrides[_llm_model] = lambda: "gpt-4o-mini"
-    from ai_circus_shared.scenario_schema import VectorStoreConfig
-
-    app.dependency_overrides[_vector_store] = lambda: VectorStoreConfig(
-        backend="qdrant", collection_prefix="docs_rag", top_k=3
-    )
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+    app.dependency_overrides[_embedders] = lambda: {"docs_rag": SimpleNamespace(encode=lambda _q, **_kw: [0.1, 0.2])}
+    app.dependency_overrides[_llm] = lambda: llm
+    return TestClient(app)
 
 
-def test_healthz(client: TestClient) -> None:
+def test_healthz() -> None:
     """/healthz reports ok."""
+    client = _client_with(FakeToolCallingModel(responses=[]))
     assert client.get("/healthz").json() == {"status": "ok"}
 
 
-def test_chat_returns_reply_and_sources(client: TestClient) -> None:
-    """POST /chat returns the completion's reply text plus the retrieved sources."""
-    response = client.post("/chat", json={"message": "what is the overdraft fee?"})
+def test_chat_calls_the_tool_for_an_in_domain_question_and_returns_sources() -> None:
+    """POST /chat/{scenario_slug} retrieves and returns sources for an in-domain question."""
+    tool_call = ToolCall(name="retrieve_docs", args={"query": "overdraft fee"}, id="call_1")
+    llm = FakeToolCallingModel(
+        responses=[
+            AIMessage(content="", tool_calls=[tool_call]),
+            AIMessage(content="The overdraft fee is $25."),
+        ]
+    )
+    client = _client_with(llm)
+
+    response = client.post("/chat/docs_rag", json={"message": "what is the overdraft fee?"})
 
     assert response.status_code == 200
     body = response.json()
@@ -69,19 +94,27 @@ def test_chat_returns_reply_and_sources(client: TestClient) -> None:
     assert body["sources"] == [{"source": "raw/account_policies.md", "score": 0.9}]
 
 
-def test_chat_forwards_history(client: TestClient, fake_llm_client: MagicMock) -> None:
-    """Prior conversation turns are forwarded to the completion call in order."""
-    response = client.post(
-        "/chat",
-        json={
-            "message": "and then?",
-            "history": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}],
-        },
-    )
+def test_chat_skips_the_tool_for_chitchat_and_returns_no_sources() -> None:
+    """POST /chat/{scenario_slug} answers chitchat directly, without retrieval."""
+    llm = FakeToolCallingModel(responses=[AIMessage(content="Hi there! How can I help?")])
+    client = _client_with(llm)
+
+    response = client.post("/chat/docs_rag", json={"message": "hi, how are you?"})
 
     assert response.status_code == 200
-    _, kwargs = fake_llm_client.chat.completions.create.call_args
-    assert kwargs["messages"][1:3] == [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hello"},
-    ]
+    body = response.json()
+    assert body["reply"] == "Hi there! How can I help?"
+    assert body["sources"] == []
+
+
+def test_chat_unknown_scenario_returns_404() -> None:
+    """A scenario_slug this instance doesn't serve 404s, distinct from an auth failure."""
+    app = FastAPI()
+    app.include_router(router)
+    app.state.definitions = {}  # exercises the real _scenario_definition lookup, not an override
+    app.dependency_overrides[resolve_identity] = lambda: Identity(subject="user-1", org_id="org-1", roles=frozenset())
+    client = TestClient(app)
+
+    response = client.post("/chat/does-not-exist", json={"message": "hi"})
+
+    assert response.status_code == 404

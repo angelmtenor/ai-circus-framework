@@ -33,8 +33,9 @@ class FakeEnvConfig:
         """Populate fixed, valid-looking configuration values."""
         self.HTTP_PORT = "8000"
         self.LOG_LEVEL = "DEBUG"
-        self.SCENARIO_SLUG = "docs_rag"
+        self.SCENARIOS = ""
         self.SCENARIOS_DIR = "/scenarios"
+        self.LLM_MODEL = "gpt-4o-mini"
         self.QDRANT_URL = "http://qdrant:6333"
         self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
         self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
@@ -88,8 +89,8 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert fake_logger.error_messages
 
 
-async def test_lifespan_sets_up_qdrant_model_and_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The lifespan handler loads the scenario's config and stashes clients on app.state."""
+async def test_lifespan_sets_up_qdrant_embedders_and_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lifespan handler resolves scenarios and stashes clients/embedders on app.state."""
 
     class FakeVectorStore:
         pass
@@ -108,30 +109,25 @@ async def test_lifespan_sets_up_qdrant_model_and_llm_client(monkeypatch: pytest.
     model_calls: list[str] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinition()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"docs_rag": FakeDefinition()})
     monkeypatch.setattr(app, "QdrantClient", lambda **kwargs: qdrant_calls.append(kwargs) or "fake-qdrant")
     monkeypatch.setattr(app, "SentenceTransformer", lambda name: model_calls.append(name) or "fake-model")
 
     async with app.lifespan(app.app):
         assert app.app.state.qdrant == "fake-qdrant"
-        assert app.app.state.embedding_model == "fake-model"
-        assert isinstance(app.app.state.vector_store, FakeVectorStore)
-        assert str(app.app.state.llm_client.base_url) == "http://llm-gateway:4000"
+        assert app.app.state.embedders == {"docs_rag": "fake-model"}
+        assert set(app.app.state.definitions) == {"docs_rag"}
+        assert app.app.state.llm.openai_api_base == "http://llm-gateway:4000"
 
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
     assert model_calls == ["fake-embedding-model"]
 
 
-async def test_lifespan_rejects_scenario_without_documents(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A scenario with no documents/vector_store config (wrong kind) fails startup loudly, not silently."""
-
-    class FakeDefinitionWithoutDocuments:
-        documents = None
-        vector_store = None
-
+async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty SCENARIOS resolution (no conversational_rag scenarios found at all) fails startup loudly."""
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinitionWithoutDocuments()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
-    with pytest.raises(RuntimeError, match="no documents/vector_store config"):
+    with pytest.raises(RuntimeError, match="No conversational_rag scenario matched"):
         async with app.lifespan(app.app):
             pass

@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,8 +30,8 @@ class EnvConfig(BaseSettings):
     )
     LOG_LEVEL: str = Field(description="Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     HTTP_PORT: str = Field(description="Port the FastAPI app listens on")
-    SCENARIO_SLUG: str = Field(
-        description="Which conversational_rag scenario (scenarios/<slug>/scenario.yaml) this instance serves"
+    SCENARIOS: str = Field(
+        description="Comma-separated conversational_rag scenario slugs this instance serves; empty = every scenario"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
     QDRANT_URL: str = Field(
@@ -46,6 +45,9 @@ class EnvConfig(BaseSettings):
     PLATFORM_REGISTRY_URL: str = Field(description="Base URL of the platform-registry service's entitlement-check API")
     AUTH_DISABLED: str = Field(
         description="DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    )
+    ADMIN_API_KEY: SecretStr = Field(
+        description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
     LOGTO_ISSUER: str | None = Field(
@@ -62,7 +64,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "0852a72e1de7759e9ba6aed9c8af12b1213c030e08318941abaf4d8398a25430"
+_SOURCE_YAML_HASH = "4e41d4d31f4ccb81f710ac59f2db96c40896af64a39b47216259b96ee9ec091a"
 
 
 EnvConfig.model_rebuild()
@@ -98,12 +100,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

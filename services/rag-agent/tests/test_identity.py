@@ -1,11 +1,17 @@
-"""Tests for the caller-identity resolution dependency (auth + entitlement check)."""
+"""Tests for rag-agent's core/identity.py — a thin FastAPI wrapper around
+ai_circus_shared.auth.resolve_caller_identity. Its own logic (AUTH_DISABLED bypass,
+ADMIN_API_KEY bypass, Logto validation, entitlement enforcement) is tested once,
+directly, in libs/shared/tests/test_auth.py — this file only covers what's specific
+to this wrapper: adapting SecretStr and translating domain exceptions to HTTPException.
+"""
 
 from __future__ import annotations
 
 import pytest
-from ai_circus_shared.auth import Identity, TokenValidationError
+from ai_circus_shared.auth import AuthSettingsAdapter, Identity, TokenValidationError
 from ai_circus_shared.entitlements import EntitlementDeniedError
 from fastapi import HTTPException
+from pydantic import SecretStr
 
 import rag_agent.core.identity as identity_module
 
@@ -13,83 +19,75 @@ import rag_agent.core.identity as identity_module
 class FakeConfig:
     """Minimal stand-in for EnvConfig, covering the fields resolve_identity() reads."""
 
-    def __init__(self, *, auth_disabled: str = "false") -> None:
+    def __init__(self) -> None:
         """Populate fixed configuration values for identity resolution tests."""
-        self.AUTH_DISABLED = auth_disabled
+        self.AUTH_DISABLED = "false"
         self.DEV_ORG_ID = "demo"
-        self.SCENARIO_SLUG = "docs_rag"
         self.LOGTO_ISSUER = "http://logto.localhost/oidc"
         self.LOGTO_API_RESOURCE_INDICATOR = "https://api.ai-circus-framework.local"
         self.LOGTO_JWKS_URL = "http://logto.localhost/oidc/jwks"
+        self.ADMIN_API_KEY = SecretStr("ai-circus-2026")
         self.PLATFORM_REGISTRY_URL = "http://platform-registry:8000"
 
 
-def test_auth_disabled_returns_fixed_dev_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """AUTH_DISABLED=true bypasses token validation entirely."""
-    monkeypatch.setattr(identity_module, "get_env_config", lambda: FakeConfig(auth_disabled="true"))
-    monkeypatch.setattr(identity_module.PlatformRegistryClient, "check_entitlement", lambda self, **_kwargs: None)
+def test_admin_api_key_is_unwrapped_from_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SecretStr ADMIN_API_KEY is passed to the shared function as a plain str."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
+    captured: dict[str, object] = {}
 
-    identity = identity_module.resolve_identity(authorization=None)
+    def fake_resolve(**kwargs: object) -> Identity:
+        captured.update(kwargs)
+        return Identity(subject="admin", org_id="admin", roles=frozenset())
 
-    assert identity.org_id == "demo"
-    assert identity.roles == frozenset({"scenario:docs_rag"})
+    monkeypatch.setattr(identity_module, "resolve_caller_identity", fake_resolve)
+
+    identity_module.resolve_identity(scenario_slug="docs_rag", authorization="Bearer ai-circus-2026")
+
+    settings = captured["settings"]
+    assert isinstance(settings, AuthSettingsAdapter)
+    assert settings.ADMIN_API_KEY == "ai-circus-2026"
+    assert captured["scenario_slug"] == "docs_rag"
 
 
-def test_missing_authorization_header_is_401(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No Authorization header (and auth enabled) is rejected before any token parsing."""
-    monkeypatch.setattr(identity_module, "get_env_config", lambda: FakeConfig())
+def test_token_validation_error_becomes_401(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TokenValidationError from the shared function is translated to a 401."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
+
+    def raise_invalid(**_kwargs: object) -> Identity:
+        raise TokenValidationError("bad token")
+
+    monkeypatch.setattr(identity_module, "resolve_caller_identity", raise_invalid)
 
     with pytest.raises(HTTPException) as exc_info:
-        identity_module.resolve_identity(authorization=None)
+        identity_module.resolve_identity(scenario_slug="docs_rag", authorization=None)
 
     assert exc_info.value.status_code == 401
 
 
-def test_invalid_token_is_401(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A token that fails validation is rejected with 401, not a raw exception."""
-    monkeypatch.setattr(identity_module, "get_env_config", lambda: FakeConfig())
+def test_entitlement_denied_becomes_403(monkeypatch: pytest.MonkeyPatch) -> None:
+    """EntitlementDeniedError from the shared function is translated to a 403."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
 
-    def raise_invalid(*_args: object, **_kwargs: object) -> Identity:
-        raise TokenValidationError("bad signature")
-
-    monkeypatch.setattr(identity_module, "validate_token", raise_invalid)
-
-    with pytest.raises(HTTPException) as exc_info:
-        identity_module.resolve_identity(authorization="Bearer bad-token")
-
-    assert exc_info.value.status_code == 401
-
-
-def test_entitlement_denied_is_403(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A validly authenticated caller whose org lacks the scenario entitlement gets 403."""
-    monkeypatch.setattr(identity_module, "get_env_config", lambda: FakeConfig())
-    monkeypatch.setattr(
-        identity_module,
-        "validate_token",
-        lambda *_a, **_kw: Identity(subject="user-1", org_id="org-1", roles=frozenset()),
-    )
-
-    def deny(self: object, **_kwargs: object) -> None:
+    def raise_denied(**_kwargs: object) -> Identity:
         raise EntitlementDeniedError("not entitled")
 
-    monkeypatch.setattr(identity_module.PlatformRegistryClient, "check_entitlement", deny)
+    monkeypatch.setattr(identity_module, "resolve_caller_identity", raise_denied)
 
     with pytest.raises(HTTPException) as exc_info:
-        identity_module.resolve_identity(authorization="Bearer good-token")
+        identity_module.resolve_identity(scenario_slug="docs_rag", authorization="Bearer good-token")
 
     assert exc_info.value.status_code == 403
 
 
 def test_entitled_caller_resolves_successfully(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A validly authenticated, entitled caller resolves to their identity."""
-    monkeypatch.setattr(identity_module, "get_env_config", lambda: FakeConfig())
+    """A successful resolution passes the identity straight through."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
     monkeypatch.setattr(
         identity_module,
-        "validate_token",
-        lambda *_a, **_kw: Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        "resolve_caller_identity",
+        lambda **_kw: Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
     )
-    monkeypatch.setattr(identity_module.PlatformRegistryClient, "check_entitlement", lambda self, **_kwargs: None)
 
-    identity = identity_module.resolve_identity(authorization="Bearer good-token")
+    identity = identity_module.resolve_identity(scenario_slug="docs_rag", authorization="Bearer good-token")
 
     assert identity.org_id == "org-1"
