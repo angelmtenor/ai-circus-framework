@@ -27,6 +27,8 @@ from ai_circus_shared.tabular_ml import (
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
     MODEL_PIPELINE_KEY,
+    MODEL_PIPELINE_LOWER_KEY,
+    MODEL_PIPELINE_UPPER_KEY,
     NORMALIZED_DATASET_KEY,
 )
 from pydantic import ValidationError
@@ -36,6 +38,7 @@ from training import get_env_config
 from training.core.logger import configure_logger, get_logger
 from training.core.training import (
     build_explainer,
+    fit_quantile_pipelines,
     select_best_candidate,
     split_features,
     train_candidate,
@@ -88,6 +91,17 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     joblib.dump(explainer, explainer_buffer, compress=True)
     store.put(config.ORG_ID, MODEL_EXPLAINER_KEY, explainer_buffer.getvalue())
 
+    has_intervals = definition.model.task_type == "regression"
+    if has_intervals:
+        pipeline_lower, pipeline_upper = fit_quantile_pipelines(numeric_features, categorical_features, x, y)
+        lower_buffer = io.BytesIO()
+        joblib.dump(pipeline_lower, lower_buffer, compress=True)
+        store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_buffer.getvalue())
+        upper_buffer = io.BytesIO()
+        joblib.dump(pipeline_upper, upper_buffer, compress=True)
+        store.put(config.ORG_ID, MODEL_PIPELINE_UPPER_KEY, upper_buffer.getvalue())
+        logger.success("90% prediction interval models trained for scenario={} org={}", slug, config.ORG_ID)
+
     metadata = {
         "scenario_slug": slug,
         "model_name": best.name,
@@ -97,6 +111,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "feature_columns": definition.dataset.feature_columns,
         "transformed_feature_names": transformed_feature_names(best.pipeline),
         "target": definition.dataset.target,
+        "has_intervals": has_intervals,
     }
     store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
 

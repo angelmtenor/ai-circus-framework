@@ -8,14 +8,18 @@ from __future__ import annotations
 import pandas as pd
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.scenario_schema import ScenarioDefinition
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from prediction.core import dataset as dataset_core
 from prediction.core.identity import resolve_identity
 from prediction.core.model_cache import ModelCache
 from prediction.core.predict import predict as run_predict
 
 router = APIRouter()
+
+MAX_SAMPLE_ROWS = 500
+MAX_EVAL_ROWS = 1000
 
 
 class PredictRequest(BaseModel):
@@ -27,16 +31,59 @@ class PredictRequest(BaseModel):
 class PredictionOut(BaseModel):
     """A single record's prediction (probability for classification, raw value for
     regression) and per-feature SHAP contributions.
+
+    `prediction_lower`/`prediction_upper` bound a 90% prediction interval — only set
+    for regression scenarios with trained quantile models.
     """
 
     prediction: float
     contributions: dict[str, float]
+    prediction_lower: float | None = None
+    prediction_upper: float | None = None
 
 
 class PredictResponse(BaseModel):
     """Response body for POST /predict/{scenario_slug}."""
 
     predictions: list[PredictionOut]
+
+
+class DatasetSampleOut(BaseModel):
+    """Response body for GET /dataset/{scenario_slug}/sample."""
+
+    columns: list[str]
+    rows: list[dict[str, object]]
+    total_rows: int
+
+
+class FeatureImportanceOut(BaseModel):
+    feature: str
+    importance: float
+
+
+class BreakdownItemOut(BaseModel):
+    category: str
+    score: float
+    n: int
+
+
+class DatasetEvaluationOut(BaseModel):
+    """Response body for GET /dataset/{scenario_slug}/evaluation — a held-out
+    evaluation of the deployed pipeline, ready to render as a metrics/feature-
+    importance/predicted-vs-actual dashboard.
+    """
+
+    task_type: str
+    target: str
+    n: int
+    metrics: dict[str, float]
+    feature_importance: list[FeatureImportanceOut]
+    breakdown_feature: str | None
+    breakdown: list[BreakdownItemOut]
+    actuals: list[float]
+    predictions: list[float]
+    prediction_lower: list[float] | None = None
+    prediction_upper: list[float] | None = None
 
 
 def _model_cache(request: Request) -> ModelCache:
@@ -78,5 +125,63 @@ def predict_endpoint(
     records = pd.DataFrame(body.records)
     predictions = run_predict(artifacts, records)
     return PredictResponse(
-        predictions=[PredictionOut(prediction=p.prediction, contributions=p.contributions) for p in predictions]
+        predictions=[
+            PredictionOut(
+                prediction=p.prediction,
+                contributions=p.contributions,
+                prediction_lower=p.prediction_lower,
+                prediction_upper=p.prediction_upper,
+            )
+            for p in predictions
+        ]
+    )
+
+
+@router.get("/dataset/{scenario_slug}/sample", response_model=DatasetSampleOut)
+def dataset_sample_endpoint(
+    limit: int = Query(default=100, ge=1, le=MAX_SAMPLE_ROWS),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> DatasetSampleOut:
+    """A real, evenly-spaced sample of the caller's tenant dataset (not the raw file —
+    the same cleaned/typed parquet training reads), for "explore the data" UIs.
+    """
+    assert identity.org_id is not None
+    assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
+    store = model_cache.store_for(definition.slug)
+    df = dataset_core.load_normalized(store, identity.org_id)
+    columns = [*definition.dataset.feature_columns, definition.dataset.target]
+    sample = dataset_core.sample_rows(df, columns, limit)
+    return DatasetSampleOut(columns=sample.columns, rows=sample.rows, total_rows=sample.total_rows)
+
+
+@router.get("/dataset/{scenario_slug}/evaluation", response_model=DatasetEvaluationOut)
+def dataset_evaluation_endpoint(
+    limit: int = Query(default=300, ge=1, le=MAX_EVAL_ROWS),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> DatasetEvaluationOut:
+    """A held-out evaluation (metrics, feature importance, predicted-vs-actual) of the
+    caller's tenant's deployed pipeline — see core/dataset.py for the reference-vs-
+    deployed-weights caveat.
+    """
+    assert identity.org_id is not None
+    artifacts = model_cache.get(identity.org_id, definition.slug)
+    store = model_cache.store_for(definition.slug)
+    df = dataset_core.load_normalized(store, identity.org_id)
+    result = dataset_core.evaluate(artifacts, df, limit)
+    return DatasetEvaluationOut(
+        task_type=result.task_type,
+        target=result.target,
+        n=result.n,
+        metrics=result.metrics,
+        feature_importance=[FeatureImportanceOut(**f) for f in result.feature_importance],
+        breakdown_feature=result.breakdown_feature,
+        breakdown=[BreakdownItemOut(**b) for b in result.breakdown],
+        actuals=result.actuals,
+        predictions=result.predictions,
+        prediction_lower=result.prediction_lower,
+        prediction_upper=result.prediction_upper,
     )

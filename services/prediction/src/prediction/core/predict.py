@@ -17,10 +17,15 @@ from prediction.core.model_cache import ModelArtifacts
 class PredictionResult:
     """One record's prediction (probability for classification, raw value for
     regression) and per-(transformed)-feature SHAP contributions.
+
+    `prediction_lower`/`prediction_upper` bound a 90% prediction interval — only set
+    for regression scenarios whose artifacts include the quantile pipelines.
     """
 
     prediction: float
     contributions: dict[str, float]
+    prediction_lower: float | None = None
+    prediction_upper: float | None = None
 
 
 def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[PredictionResult]:
@@ -47,8 +52,18 @@ def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[Prediction
         shap_values = shap_values[:, :, 1]
     feature_names = artifacts.metadata["transformed_feature_names"]
 
+    lower = artifacts.pipeline_lower.predict(x) if artifacts.pipeline_lower is not None else None
+    upper = artifacts.pipeline_upper.predict(x) if artifacts.pipeline_upper is not None else None
+
     results = []
     for i, prediction in enumerate(predictions):
         contributions = dict(zip(feature_names, [round(float(v), 4) for v in shap_values[i]], strict=True))
-        results.append(PredictionResult(prediction=round(float(prediction), 4), contributions=contributions))
+        results.append(
+            PredictionResult(
+                prediction=round(float(prediction), 4),
+                contributions=contributions,
+                prediction_lower=round(float(lower[i]), 4) if lower is not None else None,
+                prediction_upper=round(float(upper[i]), 4) if upper is not None else None,
+            )
+        )
     return results

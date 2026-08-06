@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "ai-circus-shared",
     "joblib>=1.5.3",
+    "lightgbm>=4.7.0",
     "loguru>=0.7.3",
     "pandas>=3.0.5",
     "psutil>=7.0.0",

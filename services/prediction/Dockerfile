@@ -18,6 +18,9 @@ RUN uv sync --project services/prediction --frozen --no-cache --no-dev
 FROM python:3.12-slim AS runtime
 WORKDIR /app
 
+# libgomp1: OpenMP runtime lightgbm's compiled extension dlopens at import time.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/services/prediction/.venv services/prediction/.venv
 COPY --from=builder /app/services/prediction/src   services/prediction/src
 COPY --from=builder /app/services/prediction/pyproject.toml services/prediction/pyproject.toml

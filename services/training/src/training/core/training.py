@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 import shap
+from lightgbm import LGBMRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -36,8 +37,15 @@ CANDIDATE_ESTIMATORS = {
     "regression": {
         "linear_regression": lambda: LinearRegression(),
         "random_forest": lambda: RandomForestRegressor(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
+        "lightgbm": lambda: LGBMRegressor(n_estimators=200, max_depth=6, random_state=0, verbosity=-1),
     },
 }
+
+# 90% prediction interval (5th/95th percentile) — LightGBM's native quantile
+# objective is the same technique used for ExtendedRegressor in the smart-data-science
+# reference implementation (ml_intervals.py), adapted to this repo's pipeline shape.
+INTERVAL_LOWER_ALPHA = 0.05
+INTERVAL_UPPER_ALPHA = 0.95
 
 
 @dataclass(frozen=True)
@@ -138,9 +146,34 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
         return shap.TreeExplainer(
             model, data=x_transformed, feature_perturbation="interventional", model_output="probability"
         )
-    if isinstance(model, RandomForestRegressor):
+    if isinstance(model, RandomForestRegressor | LGBMRegressor):
         return shap.TreeExplainer(model, data=x_transformed, feature_perturbation="interventional")
     return shap.LinearExplainer(model, x_transformed)
+
+
+def fit_quantile_pipelines(
+    numeric_features: list[str],
+    categorical_features: list[str],
+    x: pd.DataFrame,
+    y: pd.Series,
+) -> tuple[Pipeline, Pipeline]:
+    """Fit a (lower, upper) pair of LightGBM quantile-objective pipelines for a 90%
+    prediction interval, independent of which regression candidate `select_best_candidate`
+    picked — intervals are additive infrastructure, not part of point-accuracy selection.
+    """
+    lower = build_pipeline(
+        numeric_features,
+        categorical_features,
+        LGBMRegressor(objective="quantile", alpha=INTERVAL_LOWER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
+    )
+    upper = build_pipeline(
+        numeric_features,
+        categorical_features,
+        LGBMRegressor(objective="quantile", alpha=INTERVAL_UPPER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
+    )
+    lower.fit(x, y)
+    upper.fit(x, y)
+    return lower, upper
 
 
 def transformed_feature_names(pipeline: Pipeline) -> list[str]:

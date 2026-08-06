@@ -19,7 +19,13 @@ from typing import Any
 
 import joblib
 from ai_circus_shared.storage import ObjectStore
-from ai_circus_shared.tabular_ml import MODEL_EXPLAINER_KEY, MODEL_METADATA_KEY, MODEL_PIPELINE_KEY
+from ai_circus_shared.tabular_ml import (
+    MODEL_EXPLAINER_KEY,
+    MODEL_METADATA_KEY,
+    MODEL_PIPELINE_KEY,
+    MODEL_PIPELINE_LOWER_KEY,
+    MODEL_PIPELINE_UPPER_KEY,
+)
 from sklearn.pipeline import Pipeline
 
 from prediction.core.logger import get_logger
@@ -29,11 +35,18 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True)
 class ModelArtifacts:
-    """One tenant's trained pipeline, SHAP explainer, and training metadata for one scenario."""
+    """One tenant's trained pipeline, SHAP explainer, and training metadata for one scenario.
+
+    `pipeline_lower`/`pipeline_upper` are the 90% prediction-interval models — only
+    present for regression scenarios (see training/core/training.py's
+    fit_quantile_pipelines()), None otherwise.
+    """
 
     pipeline: Pipeline
     explainer: Any
     metadata: dict[str, Any]
+    pipeline_lower: Pipeline | None = None
+    pipeline_upper: Pipeline | None = None
 
 
 class ModelCache:
@@ -53,6 +66,10 @@ class ModelCache:
                 self._locks[key] = threading.Lock()
             return self._locks[key]
 
+    def store_for(self, scenario_slug: str) -> ObjectStore:
+        """Return the raw/normalized-dataset ObjectStore bound to this scenario's bucket."""
+        return self._stores[scenario_slug]
+
     def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
         """Return the tenant's model artifacts for this scenario, loading+caching on first call."""
         key = (org_id, scenario_slug)
@@ -66,5 +83,15 @@ class ModelCache:
                 pipeline = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_KEY)))
                 explainer = joblib.load(io.BytesIO(store.get(org_id, MODEL_EXPLAINER_KEY)))
                 metadata = json.loads(store.get(org_id, MODEL_METADATA_KEY))
-                self._cache[key] = ModelArtifacts(pipeline=pipeline, explainer=explainer, metadata=metadata)
+                pipeline_lower = pipeline_upper = None
+                if metadata.get("has_intervals") and store.exists(org_id, MODEL_PIPELINE_LOWER_KEY):
+                    pipeline_lower = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_LOWER_KEY)))
+                    pipeline_upper = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_UPPER_KEY)))
+                self._cache[key] = ModelArtifacts(
+                    pipeline=pipeline,
+                    explainer=explainer,
+                    metadata=metadata,
+                    pipeline_lower=pipeline_lower,
+                    pipeline_upper=pipeline_upper,
+                )
         return self._cache[key]

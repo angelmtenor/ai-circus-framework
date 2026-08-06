@@ -27,11 +27,13 @@ dependencies = [
     "ai-circus-shared",
     "fastapi>=0.141.1",
     "joblib>=1.5.3",
+    "lightgbm>=4.7.0",
     "loguru>=0.7.3",
     "numpy>=2.3.5",
     "pandas>=3.0.5",
     "psutil>=7.0.0",
     "py-cpuinfo>=9.0.0",
+    "pyarrow>=25.0.0",
     "pydantic>=2.11.4",
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
@@ -184,9 +186,11 @@ source = ["src"]
 #  Deptry
 # ──────────────────────────────────────────────────────────────────────────────
 [tool.deptry.per_rule_ignores]
-# shap is never imported directly — joblib.load() needs it importable to unpickle
-# the saved TreeExplainer/LinearExplainer produced by the training service.
-DEP002 = ["shap"]
+# shap/lightgbm are never imported directly — joblib.load() needs them importable to
+# unpickle the saved TreeExplainer/LinearExplainer and LGBMRegressor pipelines
+# produced by the training service. pyarrow is never imported directly either —
+# pandas loads it as the parquet engine for core/dataset.py's normalized-dataset reads.
+DEP002 = ["shap", "lightgbm", "pyarrow"]
 
 [tool.uv.sources]
 ai-circus-shared = { path = "../../libs/shared" }

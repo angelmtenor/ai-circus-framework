@@ -18,6 +18,9 @@ RUN uv sync --project services/training --frozen --no-cache --no-dev
 FROM python:3.12-slim AS runtime
 WORKDIR /app
 
+# libgomp1: OpenMP runtime lightgbm's compiled extension dlopens at import time.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/services/training/.venv services/training/.venv
 COPY --from=builder /app/services/training/src   services/training/src
 COPY --from=builder /app/services/training/pyproject.toml services/training/pyproject.toml
