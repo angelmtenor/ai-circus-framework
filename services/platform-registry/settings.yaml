@@ -78,6 +78,27 @@ env_variables:
     mandatory: false
     secret: true
 
+  # Backs the admin-only /llm-settings/* endpoints (view/test/configure llm-gateway's
+  # provider models) — reuses the same admin bearer token ui-react's admin-key login
+  # already sends, rather than re-implementing Logto JWT validation here.
+  - name: ADMIN_API_KEY
+    description: "Bearer token required on /llm-settings/* endpoints (shared with the other services' admin-key bypass)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: LLM_GATEWAY_URL
+    description: "Base URL of the llm-gateway service's OpenAI-compatible + admin API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LLM_GATEWAY_API_KEY
+    description: "API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
+    type: string
+    mandatory: true
+    secret: true
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file
@@ -101,11 +122,13 @@ environments:
   local:
     POSTGRES_HOST: "localhost"
     SCENARIOS_DIR: "../../scenarios"
+    LLM_GATEWAY_URL: "http://llm-gateway.localhost"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     POSTGRES_HOST: "postgres"
     SCENARIOS_DIR: "/app/scenarios"
+    LLM_GATEWAY_URL: "http://llm-gateway:4000"
 
   staging: {}
     # Staging environment profile — overrides go here

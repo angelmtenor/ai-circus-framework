@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,9 +53,16 @@ class EnvConfig(BaseSettings):
         description="Machine-to-machine application secret for calling Logto's Management API (sync tool only)",
         default=None,
     )
+    ADMIN_API_KEY: SecretStr = Field(
+        description="Bearer token required on /llm-settings/* endpoints (shared with the other services' admin-key bypass)"
+    )
+    LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible + admin API")
+    LLM_GATEWAY_API_KEY: SecretStr = Field(
+        description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
+    )
 
 
-_SOURCE_YAML_HASH = "b5365bec53e6299f858fc748420d4f7835e233e9720425049865c65cbd0ad5c8"
+_SOURCE_YAML_HASH = "c5d07d83136e68fa637f05c1eaa555387180cf1643509087bae37b8e973bdb5f"
 
 
 EnvConfig.model_rebuild()
@@ -90,12 +98,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

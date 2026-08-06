@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,9 +44,17 @@ class EnvConfig(BaseSettings):
     AZURE_OPENAI_API_KEY: SecretStr | None = Field(
         description="Azure OpenAI API key (only needed if litellm_config.yaml routes to an azure/* model)", default=None
     )
+    AZURE_OPENAI_API_BASE: str | None = Field(
+        description="Azure OpenAI resource endpoint, e.g. https://<resource>.openai.azure.com (azure-gpt4o model only)",
+        default=None,
+    )
+    OLLAMA_API_BASE: str | None = Field(
+        description="Base URL of an operator-run Ollama instance (llama3 model only); unset = that model is unreachable",
+        default=None,
+    )
 
 
-_SOURCE_YAML_HASH = "e84a61ebd7b995e7bbc3c58e70816bd43531ee2f8b3064715c84ee01cfa084e3"
+_SOURCE_YAML_HASH = "0d81c5bf2b2d3c35d63c64f69011fbf37a2970b45cd1f8b97f2f3c833de05913"
 
 
 EnvConfig.model_rebuild()
@@ -81,12 +90,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

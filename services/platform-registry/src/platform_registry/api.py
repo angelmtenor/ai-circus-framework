@@ -11,15 +11,47 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from platform_registry import get_env_config
+from platform_registry.core import llm_settings
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Entitlement, Scenario
 
 router = APIRouter()
+
+
+def require_admin(authorization: str | None = Header(default=None)) -> None:
+    """Gate /llm-settings/* on the same admin bearer token the other services'
+    admin-key login bypass already uses — these settings are shared gateway-wide
+    infrastructure, not a per-tenant entitlement.
+    """
+    config = get_env_config()
+    expected = f"Bearer {config.ADMIN_API_KEY.get_secret_value()}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Admin bearer token required.")
+
+
+class LlmProviderOut(BaseModel):
+    provider: str
+    label: str
+    route_exists: bool
+    model: str | None
+    api_base: str | None
+    needs_key: bool
+    needs_base: bool
+    env_vars: list[str]
+    hint: str
+
+
+class LlmProviderTestOut(BaseModel):
+    ok: bool
+    error: str | None = None
+    latency_ms: float | None = None
+    reply: str | None = None
 
 
 class ScenarioOut(BaseModel):
@@ -81,3 +113,29 @@ def revoke_entitlement(org_id: str, scenario_slug: str, session: Session = Depen
     if entitlement is not None:
         session.delete(entitlement)
         session.commit()
+
+
+@router.get("/llm-settings/providers", response_model=list[LlmProviderOut], dependencies=[Depends(require_admin)])
+def list_llm_providers() -> list[dict[str, object]]:
+    """Live status of every supported LLM provider on llm-gateway — never a raw key
+    (litellm itself redacts api_key in its admin API for env-substituted values; see
+    core/llm_settings.py's module docstring for why there's no "save" endpoint here).
+    """
+    config = get_env_config()
+    try:
+        return llm_settings.list_providers(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value())
+    except llm_settings.LlmGatewayError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post(
+    "/llm-settings/providers/{provider}/test",
+    response_model=LlmProviderTestOut,
+    dependencies=[Depends(require_admin)],
+)
+def test_llm_provider(provider: str) -> dict[str, object]:
+    """Round-trip a minimal real completion through this provider's configured model."""
+    config = get_env_config()
+    if provider not in llm_settings.PROVIDERS:
+        raise HTTPException(status_code=404, detail=f"Unknown provider {provider!r}.")
+    return llm_settings.test_provider(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value(), provider)

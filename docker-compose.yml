@@ -131,6 +131,10 @@ services:
       LOG_LEVEL: INFO
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Back the admin-only /llm-settings/* endpoints (view/test/configure
+      # llm-gateway's provider models) — see platform_registry/core/llm_settings.py.
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
     volumes:
       # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
       # bind mount here (unlike MinIO for datasets/models) keeps edits live without
@@ -143,6 +147,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      llm-gateway:
+        condition: service_started
     networks: [ai-circus]
     # Not exposed through Traefik — only other backend services on the docker
     # network call its entitlement-check API (see AGENTS.md).

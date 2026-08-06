@@ -18,14 +18,30 @@ model_list:
       model: gemini/gemini-2.0-flash
       api_key: os.environ/GOOGLE_API_KEY
 
+  # Optional — unreachable (no default model selected) until an operator sets
+  # AZURE_OPENAI_API_KEY/_BASE and edits `azure/<deployment>` below to match their
+  # actual Azure deployment name (litellm's `os.environ/VAR` substitution only
+  # replaces a value that's *entirely* that token, so the deployment name — which
+  # varies per Azure resource — can't be env-substituted inside this prefixed
+  # string). Also configurable at runtime, without a restart, via the ui-react
+  # Settings page → platform-registry's /llm-settings/* (see
+  # services/platform-registry/src/platform_registry/core/llm_settings.py), which
+  # builds the full "azure/<deployment>" string itself — no YAML edit needed there.
+  - model_name: azure-gpt4o
+    litellm_params:
+      model: azure/gpt-4o-mini # <- replace with your deployment name
+      api_key: os.environ/AZURE_OPENAI_API_KEY
+      api_base: os.environ/AZURE_OPENAI_API_BASE
+
   # Fully local/no-API-key option — platform-agnostic, no cloud dependency (carried
   # over from mlops_templates' original goals). Requires an Ollama instance the
-  # operator already runs (host machine or their own container) with `llama3.1`
-  # pulled; OLLAMA_API_BASE is unset by default, so this entry is simply unreachable
-  # (not selected as a default model anywhere) until an operator configures it.
+  # operator already runs (host machine or their own container) with the model
+  # pulled — llama3.2:3b is ~2GB, chosen so it fits in 3-4GB RAM; OLLAMA_API_BASE is
+  # unset by default, so this entry is simply unreachable until configured (env var
+  # or the Settings page, same as azure-gpt4o above).
   - model_name: llama3
     litellm_params:
-      model: ollama/llama3.1
+      model: ollama/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
 
 general_settings:
