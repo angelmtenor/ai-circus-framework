@@ -3,44 +3,71 @@ import { CopilotKit } from "@copilotkit/react-core";
 import { config } from "./config";
 import { useIdentity } from "./useIdentity";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
-import { ChurnView } from "./ChurnView";
+import { TabularView } from "./TabularView";
 import { ChatPanel } from "./ChatPanel";
 import "./App.css";
 
-function LoginScreen({ onLogin }: { onLogin: (orgId: string, roles: string[]) => void }) {
+function LoginScreen({
+  onLogin,
+  onLoginWithAdminKey,
+}: {
+  onLogin: (orgId: string, roles: string[]) => void;
+  onLoginWithAdminKey: (adminKey: string) => void;
+}) {
   const [orgId, setOrgId] = useState(config.devOrgId);
   const [roles, setRoles] = useState("scenario:churn,scenario:docs_rag");
-
-  if (!config.devMode) {
-    return (
-      <div className="login-screen">
-        <h1>🎪 ai-circus-framework</h1>
-        <button onClick={() => onLogin("", [])}>Log in</button>
-      </div>
-    );
-  }
+  const [adminKey, setAdminKey] = useState("");
 
   return (
     <div className="login-screen">
       <h1>🎪 ai-circus-framework</h1>
-      <p className="dev-warning">DEV_MODE is on — this bypasses real login. Never enable it beyond local iteration.</p>
-      <label>
-        Org id
-        <input value={orgId} onChange={(e) => setOrgId(e.target.value)} />
-      </label>
-      <label>
-        Roles (comma-separated)
-        <input value={roles} onChange={(e) => setRoles(e.target.value)} />
-      </label>
-      <button onClick={() => onLogin(orgId, roles.split(",").map((r) => r.trim()).filter(Boolean))}>
-        Log in (dev)
-      </button>
+
+      {config.devMode && (
+        <>
+          <p className="dev-warning">
+            DEV_MODE is on — this bypasses real login. Never enable it beyond local iteration.
+          </p>
+          <label>
+            Org id
+            <input value={orgId} onChange={(e) => setOrgId(e.target.value)} />
+          </label>
+          <label>
+            Roles (comma-separated)
+            <input value={roles} onChange={(e) => setRoles(e.target.value)} />
+          </label>
+          <button
+            onClick={() => onLogin(orgId, roles.split(",").map((r) => r.trim()).filter(Boolean))}
+          >
+            Log in (dev)
+          </button>
+          <hr />
+        </>
+      )}
+
+      <details>
+        <summary>Admin key login</summary>
+        <p className="dev-warning">Resolves to the admin tenant, auto-entitled to every scenario.</p>
+        <label>
+          Admin key
+          <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
+        </label>
+        <button onClick={() => onLoginWithAdminKey(adminKey)} disabled={!adminKey}>
+          Log in as admin
+        </button>
+      </details>
+
+      {!config.devMode && (
+        <>
+          <hr />
+          <button onClick={() => onLogin("", [])}>Log in</button>
+        </>
+      )}
     </div>
   );
 }
 
 function AppContent() {
-  const { identity, loading, logIn, logOut } = useIdentity();
+  const { identity, loading, logIn, logInWithAdminKey, logOut } = useIdentity();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
 
@@ -53,7 +80,7 @@ function AppContent() {
   }, [identity]);
 
   if (loading) return <p>Loading...</p>;
-  if (!identity) return <LoginScreen onLogin={logIn} />;
+  if (!identity) return <LoginScreen onLogin={logIn} onLoginWithAdminKey={logInWithAdminKey} />;
 
   return (
     <div className="app-layout">
@@ -72,11 +99,19 @@ function AppContent() {
       </aside>
       <main className="content">
         {!selected && <p>No scenarios are assigned to your account yet. Contact your admin.</p>}
-        {selected?.kind === "tabular_ml" && <ChurnView accessToken={identity.accessToken} />}
+        {selected?.kind === "tabular_ml" && <TabularView scenario={selected} accessToken={identity.accessToken} />}
         {selected?.kind === "conversational_rag" && (
           <div>
-            <h2>💬 Ask Your Documents</h2>
-            <ChatPanel baseUrl={config.ragAgentUrl} accessToken={identity.accessToken} />
+            <h2>
+              {selected.icon} {selected.title}
+            </h2>
+            <p>{selected.description}</p>
+            <ChatPanel
+              baseUrl={config.ragAgentUrl}
+              scenarioSlug={selected.slug}
+              sampleQuestions={selected.sample_questions}
+              accessToken={identity.accessToken}
+            />
           </div>
         )}
       </main>

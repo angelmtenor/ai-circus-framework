@@ -2,7 +2,7 @@ import { useState } from "react";
 import { chat, type ChatMessage } from "./apiClient";
 
 /**
- * A minimal chat UI calling a scenario's /chat endpoint directly.
+ * A minimal chat UI calling a scenario's /chat/{scenarioSlug} endpoint directly.
  *
  * @copilotkit/react-ui's <CopilotChat> is intentionally NOT used here: it expects a
  * self-hosted "Copilot Runtime" implementing CopilotKit's AG-UI protocol (a GraphQL
@@ -12,20 +12,29 @@ import { chat, type ChatMessage } from "./apiClient";
  * installed and the app is wrapped in <CopilotKit> in App.tsx as the intended
  * integration point once that runtime exists.
  */
-export function ChatPanel({ baseUrl, accessToken }: { baseUrl: string; accessToken: string | null }) {
+export function ChatPanel({
+  baseUrl,
+  scenarioSlug,
+  sampleQuestions,
+  accessToken,
+}: {
+  baseUrl: string;
+  scenarioSlug: string;
+  sampleQuestions: string[];
+  accessToken: string | null;
+}) {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [sources, setSources] = useState<{ source: string; score: number }[]>([]);
+  const [sources, setSources] = useState<{ source: string; score: number }[] | null>(null);
 
-  async function send() {
-    if (!message.trim()) return;
-    const userMessage = message;
+  async function send(text: string) {
+    if (!text.trim()) return;
     setMessage("");
     setSending(true);
-    setHistory((h) => [...h, { role: "user", content: userMessage }]);
+    setHistory((h) => [...h, { role: "user", content: text }]);
     try {
-      const result = await chat(baseUrl, userMessage, history, accessToken);
+      const result = await chat(baseUrl, scenarioSlug, text, history, accessToken);
       setHistory((h) => [...h, { role: "assistant", content: result.reply }]);
       setSources(result.sources ?? []);
     } catch (error) {
@@ -44,20 +53,32 @@ export function ChatPanel({ baseUrl, accessToken }: { baseUrl: string; accessTok
           </div>
         ))}
       </div>
-      {sources.length > 0 && (
-        <div className="chat-sources">
-          Sources: {sources.map((s) => `${s.source} (${s.score.toFixed(2)})`).join(", ")}
+      {sources !== null &&
+        (sources.length > 0 ? (
+          <div className="chat-sources">
+            Sources: {sources.map((s) => `${s.source} (${s.score.toFixed(2)})`).join(", ")}
+          </div>
+        ) : (
+          <div className="chat-sources">(answered directly, without consulting the documents)</div>
+        ))}
+      {sampleQuestions.length > 0 && history.length === 0 && (
+        <div className="chat-samples">
+          {sampleQuestions.map((question) => (
+            <button key={question} className="chat-sample" onClick={() => send(question)} disabled={sending}>
+              {question}
+            </button>
+          ))}
         </div>
       )}
       <div className="chat-input-row">
         <input
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
+          onKeyDown={(e) => e.key === "Enter" && send(message)}
           placeholder="Ask a question..."
           disabled={sending}
         />
-        <button onClick={send} disabled={sending}>
+        <button onClick={() => send(message)} disabled={sending}>
           {sending ? "..." : "Send"}
         </button>
       </div>

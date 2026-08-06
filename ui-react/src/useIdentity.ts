@@ -9,6 +9,12 @@ export type Identity = {
 };
 
 const DEV_STORAGE_KEY = "ai-circus-framework:dev-identity";
+const ADMIN_STORAGE_KEY = "ai-circus-framework:admin-identity";
+// Must match ai_circus_shared.auth.ADMIN_ORG_ID — the backend resolves any request
+// bearing a matching ADMIN_API_KEY bearer token to this org id regardless of what
+// the client sends, but list_scenarios(org_id=...) needs the right value to show
+// the same entitlements.
+const ADMIN_ORG_ID = "admin";
 
 /**
  * Resolves the caller's identity — DEV_MODE bypass (mirrors the backend services'
@@ -24,6 +30,7 @@ export function useIdentity(): {
   identity: Identity | null;
   loading: boolean;
   logIn: (orgId: string, roles: string[]) => void;
+  logInWithAdminKey: (adminKey: string) => void;
   logOut: () => void;
 } {
   const { isAuthenticated, isLoading, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
@@ -34,6 +41,13 @@ export function useIdentity(): {
     if (config.devMode) {
       const stored = localStorage.getItem(DEV_STORAGE_KEY);
       if (stored) setIdentity(JSON.parse(stored));
+      setLoading(false);
+      return;
+    }
+
+    const storedAdmin = localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (storedAdmin) {
+      setIdentity(JSON.parse(storedAdmin));
       setLoading(false);
       return;
     }
@@ -69,9 +83,20 @@ export function useIdentity(): {
       }
       signIn(window.location.origin + "/callback");
     },
+    logInWithAdminKey: (adminKey: string) => {
+      // The key itself becomes the bearer token; the backend's own
+      // resolve_caller_identity does the actual matching — this UI never needs to
+      // verify the key client-side, a bad key just 401s on the first real request.
+      const admin: Identity = { orgId: ADMIN_ORG_ID, roles: [], accessToken: adminKey };
+      localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(admin));
+      setIdentity(admin);
+    },
     logOut: () => {
-      if (config.devMode) {
-        localStorage.removeItem(DEV_STORAGE_KEY);
+      const hadAdminIdentity = localStorage.getItem(ADMIN_STORAGE_KEY) !== null;
+      localStorage.removeItem(DEV_STORAGE_KEY);
+      localStorage.removeItem(ADMIN_STORAGE_KEY);
+      if (config.devMode || hadAdminIdentity) {
+        // Neither DEV_MODE nor the admin-key path involves a real Logto session.
         setIdentity(null);
         return;
       }

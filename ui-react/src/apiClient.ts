@@ -4,12 +4,31 @@
  * stay behaviorally consistent.
  */
 
+export type NumericFeatureSpec = {
+  type: "numeric";
+  min: number;
+  max: number;
+  default: number;
+  step?: number;
+};
+
+export type CategoricalFeatureSpec = {
+  type: "categorical";
+  options: string[];
+  default: string;
+};
+
+export type FeatureSpec = NumericFeatureSpec | CategoricalFeatureSpec;
+
 export type ScenarioSummary = {
   slug: string;
   kind: string;
   title: string;
   description: string;
   icon: string;
+  feature_columns?: string[] | null;
+  feature_schema?: Record<string, FeatureSpec> | null;
+  sample_questions: string[];
 };
 
 export type PredictionResult = {
@@ -42,10 +61,13 @@ export async function listEntitledScenarios(baseUrl: string, orgId: string): Pro
 
 export async function predict(
   baseUrl: string,
+  scenarioSlug: string,
   records: Record<string, unknown>[],
   accessToken: string | null,
 ): Promise<{ predictions: PredictionResult[] }> {
-  const response = await fetch(`${baseUrl}/predict`, {
+  // One consolidated prediction instance serves every tabular_ml scenario — see root
+  // plan's "Consolidation mechanism" decision — routed here by scenarioSlug.
+  const response = await fetch(`${baseUrl}/predict/${scenarioSlug}`, {
     method: "POST",
     headers: headers(accessToken),
     body: JSON.stringify({ records }),
@@ -55,11 +77,12 @@ export async function predict(
 
 export async function chat(
   baseUrl: string,
+  scenarioSlug: string,
   message: string,
   history: ChatMessage[],
   accessToken: string | null,
 ): Promise<ChatResult> {
-  const response = await fetch(`${baseUrl}/chat`, {
+  const response = await fetch(`${baseUrl}/chat/${scenarioSlug}`, {
     method: "POST",
     headers: headers(accessToken),
     body: JSON.stringify({ message, history }),
