@@ -58,7 +58,7 @@ def _login_screen() -> None:
     if not (
         config.LOGTO_ISSUER and config.LOGTO_CLIENT_ID and config.LOGTO_REDIRECT_URI and config.LOGTO_CLIENT_SECRET
     ):
-        st.error("LOGTO_ISSUER/LOGTO_CLIENT_ID/LOGTO_CLIENT_SECRET/LOGTO_REDIRECT_URI must be set (or DEV_MODE=true).")
+        st.warning("LOGTO_ISSUER/LOGTO_CLIENT_ID/LOGTO_CLIENT_SECRET/LOGTO_REDIRECT_URI not set — Logto login is unavailable, but admin-key login above still works.")
         return
 
     query_params = st.query_params
