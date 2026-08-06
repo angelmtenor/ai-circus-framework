@@ -37,7 +37,7 @@ class FakeToolCallingModel(BaseChatModel):
         return "fake-tool-calling-model"
 
 
-def test_chitchat_question_answers_directly_without_calling_the_tool(monkeypatch) -> None:  # noqa: ANN001
+def test_chitchat_question_answers_directly_without_calling_the_tool(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
     """A chitchat message never triggers retrieval — sources come back empty."""
     monkeypatch.setattr(
         "rag_agent.core.agent.retrieve",
@@ -51,7 +51,7 @@ def test_chitchat_question_answers_directly_without_calling_the_tool(monkeypatch
     assert sources == []
 
 
-def test_in_domain_question_calls_the_tool_and_returns_sources(monkeypatch) -> None:  # noqa: ANN001
+def test_in_domain_question_calls_the_tool_and_returns_sources(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
     """An in-domain question triggers retrieval; the response is grounded and sources are returned."""
     monkeypatch.setattr(
         "rag_agent.core.agent.retrieve",
@@ -73,7 +73,7 @@ def test_in_domain_question_calls_the_tool_and_returns_sources(monkeypatch) -> N
     assert sources == [{"source": "policy.md", "score": 0.9}]
 
 
-def test_tool_call_with_no_matching_chunks_returns_empty_sources(monkeypatch) -> None:  # noqa: ANN001
+def test_tool_call_with_no_matching_chunks_returns_empty_sources(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
     """The tool is called but finds nothing — sources is an empty list, not omitted."""
     monkeypatch.setattr("rag_agent.core.agent.retrieve", lambda *_a, **_kw: [])
     tool_call = ToolCall(name="retrieve_docs", args={"query": "unrelated"}, id="call_1")
@@ -90,7 +90,7 @@ def test_tool_call_with_no_matching_chunks_returns_empty_sources(monkeypatch) ->
     assert sources == []
 
 
-def test_prior_history_is_forwarded_to_the_model(monkeypatch) -> None:  # noqa: ANN001
+def test_prior_history_is_forwarded_to_the_model(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
     """Prior conversation turns are converted to LangChain messages ahead of the new question."""
     monkeypatch.setattr("rag_agent.core.agent.retrieve", lambda *_a, **_kw: [])
     model = FakeToolCallingModel(responses=[AIMessage(content="Sure, following up on that...")])
