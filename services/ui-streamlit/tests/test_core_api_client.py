@@ -25,9 +25,9 @@ def test_predict_sends_records_and_bearer_token(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    result = predict("http://prediction:8000", [{"CreditScore": 600}], access_token="the-token")  # ruff: ignore[hardcoded-password-func-arg]
+    result = predict("http://prediction:8000", "churn", [{"CreditScore": 600}], access_token="the-token")  # ruff: ignore[hardcoded-password-func-arg]
 
-    assert captured["url"] == "http://prediction:8000/predict"
+    assert captured["url"] == "http://prediction:8000/predict/churn"
     assert captured["json"] == {"records": [{"CreditScore": 600}]}
     assert captured["headers"] == {"Authorization": "Bearer the-token"}
     assert result["predictions"][0]["probability"] == pytest.approx(0.5)
@@ -43,7 +43,7 @@ def test_predict_omits_authorization_header_without_a_token(monkeypatch: pytest.
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    predict("http://prediction:8000", [], access_token=None)
+    predict("http://prediction:8000", "churn", [], access_token=None)
 
     assert captured["headers"] == {}
 
@@ -58,8 +58,8 @@ def test_chat_sends_message_and_history(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    result = chat("http://assistant:8000", "hi", [{"role": "user", "content": "earlier"}], access_token="tok")  # ruff: ignore[hardcoded-password-func-arg]
+    result = chat("http://assistant:8000", "churn", "hi", [{"role": "user", "content": "earlier"}], access_token="tok")  # ruff: ignore[hardcoded-password-func-arg]
 
-    assert captured["url"] == "http://assistant:8000/chat"
+    assert captured["url"] == "http://assistant:8000/chat/churn"
     assert captured["json"] == {"message": "hi", "history": [{"role": "user", "content": "earlier"}]}
     assert result["reply"] == "hello back"

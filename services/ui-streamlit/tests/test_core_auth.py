@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from ai_circus_shared.auth import ADMIN_ORG_ID
 
-from ui_streamlit.core.auth import Identity, build_authorize_url, dev_identity, identity_from_claims
+from ui_streamlit.core.auth import Identity, admin_identity, build_authorize_url, dev_identity, identity_from_claims
 
 
 def test_dev_identity_builds_fixed_identity_with_no_access_token() -> None:
@@ -14,6 +15,13 @@ def test_dev_identity_builds_fixed_identity_with_no_access_token() -> None:
     assert identity == Identity(
         org_id="org-1", roles=frozenset({"scenario:churn", "scenario:docs_rag"}), access_token=None
     )
+
+
+def test_admin_identity_uses_the_key_as_the_bearer_token() -> None:
+    """admin_identity() resolves to ADMIN_ORG_ID, using the key itself as the access token."""
+    identity = admin_identity("ai-circus-2026")
+
+    assert identity == Identity(org_id=ADMIN_ORG_ID, roles=frozenset(), access_token="ai-circus-2026")  # ruff: ignore[hardcoded-password-func-arg]
 
 
 def test_build_authorize_url_points_at_the_issuer_auth_endpoint() -> None:

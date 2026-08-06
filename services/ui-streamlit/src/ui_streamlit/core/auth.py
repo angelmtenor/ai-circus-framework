@@ -19,6 +19,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass
 
+from ai_circus_shared.auth import ADMIN_ORG_ID
 from authlib.integrations.requests_client import OAuth2Session
 
 
@@ -34,6 +35,17 @@ class Identity:
 def dev_identity(org_id: str, roles: list[str]) -> Identity:
     """Build a fixed dev-mode identity — mirrors the backend services' AUTH_DISABLED bypass."""
     return Identity(org_id=org_id, roles=frozenset(roles), access_token=None)
+
+
+def admin_identity(admin_api_key: str) -> Identity:
+    """Build an identity from the shared admin key — resolves to `ADMIN_ORG_ID` on every backend call.
+
+    The key itself becomes the bearer token; the backend's own
+    `ai_circus_shared.auth.resolve_caller_identity` does the actual matching (see its
+    docstring) — this UI never needs to know the org_id in advance, but `ADMIN_ORG_ID`
+    is used here too so `list_scenarios(org_id=...)` shows the right entitlements.
+    """
+    return Identity(org_id=ADMIN_ORG_ID, roles=frozenset(), access_token=admin_api_key)
 
 
 def build_authorize_url(

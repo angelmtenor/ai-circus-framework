@@ -64,8 +64,13 @@ dataset:
     Tenure: {type: numeric, min: 0, max: 10, default: 3, step: 1}
     Balance: {type: numeric, min: 0, max: 300000, default: 50000, step: 1000}
     NumOfProducts: {type: numeric, min: 1, max: 4, default: 2, step: 1}
-    HasCrCard: {type: categorical, options: ["0", "1"], default: "1"}
-    IsActiveMember: {type: categorical, options: ["0", "1"], default: "1"}
+    # Numeric (not categorical) even though they're 0/1 flags: the raw CSV stores
+    # them as integer columns, so etl-tabular's clean() leaves them numeric dtype
+    # (only non-numeric columns get cast to "category") — training's ColumnTransformer
+    # therefore routes them through the numeric (StandardScaler) branch, which would
+    # break on a string "0"/"1" from a categorical form widget.
+    HasCrCard: {type: numeric, min: 0, max: 1, default: 1, step: 1}
+    IsActiveMember: {type: numeric, min: 0, max: 1, default: 1, step: 1}
     EstimatedSalary: {type: numeric, min: 0, max: 250000, default: 75000, step: 1000}
 
 model:
