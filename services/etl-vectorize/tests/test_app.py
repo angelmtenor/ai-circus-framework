@@ -34,7 +34,7 @@ class FakeEnvConfig:
     def __init__(self) -> None:
         """Populate fixed, valid-looking configuration values."""
         self.SCENARIOS_DIR = "/scenarios"
-        self.SCENARIO_SLUG = "docs_rag"
+        self.SCENARIOS = ""
         self.ORG_ID = "demo"
         self.MINIO_ENDPOINT = "http://minio:9000"
         self.MINIO_ACCESS_KEY = "ai_circus"
@@ -72,8 +72,8 @@ def build_validation_error() -> ValidationError:
     raise AssertionError("Expected ValidationError was not raised")
 
 
-def test_main_runs_the_vectorize_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """app.main() loads the scenario, connects to MinIO/Qdrant/the embedding model, and runs the pipeline."""
+def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
+    """app.main() runs the pipeline once per scenario resolve_scenarios() returns."""
     fake_logger = FakeLogger()
     fake_documents = FakeDocuments()
     fake_vector_store = object()
@@ -90,7 +90,7 @@ def test_main_runs_the_vectorize_pipeline(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinition()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"docs_rag": FakeDefinition()})
     monkeypatch.setattr(
         app.ObjectStore,
         "connect",
@@ -119,18 +119,14 @@ def test_main_runs_the_vectorize_pipeline(monkeypatch: pytest.MonkeyPatch) -> No
     assert fake_logger.success_messages
 
 
-def test_main_exits_if_scenario_has_no_documents_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A scenario without documents/vector_store config (wrong kind) is rejected with a clear error."""
+def test_main_exits_if_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty SCENARIOS resolution (no conversational_rag scenarios found at all) is rejected with a clear error."""
     fake_logger = FakeLogger()
-
-    class FakeDefinitionWithoutDocuments:
-        documents = None
-        vector_store = None
 
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinitionWithoutDocuments()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
     with pytest.raises(SystemExit) as exc_info:
         app.main()

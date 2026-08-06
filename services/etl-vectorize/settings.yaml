@@ -4,10 +4,11 @@
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
-# etl-vectorize is a one-shot job (not a long-running server): it loads a
-# conversational_rag scenario's documents from MinIO (bootstrapping them from a
-# tracked sample_docs/ folder on first run), chunks + embeds them, and upserts the
-# result into a per-tenant Qdrant collection for rag-agent to query.
+# etl-vectorize is a one-shot job (not a long-running server): for every
+# conversational_rag scenario in SCENARIOS (empty/unset = all), it loads the tenant's
+# documents from MinIO (bootstrapping them from a tracked sample_docs/ folder on
+# first run), chunks + embeds them, and upserts the result into a per-tenant Qdrant
+# collection for rag-agent to query.
 
 env_variables:
   - name: LOG_LEVEL
@@ -16,8 +17,8 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: SCENARIO_SLUG
-    description: "Which conversational_rag scenario (scenarios/<slug>/scenario.yaml) this run processes"
+  - name: SCENARIOS
+    description: "Comma-separated conversational_rag scenario slugs this run processes; empty/unset = every scenario"
     type: string
     mandatory: true
     secret: false
@@ -72,9 +73,9 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "demo"
     MINIO_ACCESS_KEY: "ai_circus"
-    # SCENARIO_SLUG deliberately has NO default here — see etl-tabular/settings.yaml
-    # for why (a profile default would always beat a real per-instance env var).
-    # Set it in your own .env for local (non-docker) dev.
+    # Empty = every conversational_rag scenario under SCENARIOS_DIR — see
+    # etl-tabular/settings.yaml for the same default and its residual-limitation caveat.
+    SCENARIOS: ""
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
