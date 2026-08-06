@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from types import SimpleNamespace
 from typing import ClassVar
 
 import numpy as np
@@ -10,7 +11,7 @@ import pytest
 from ai_circus_shared.auth import Identity
 from fastapi.testclient import TestClient
 
-from prediction.api import _model_cache, router
+from prediction.api import _model_cache, _scenario_definition, router
 from prediction.core.identity import resolve_identity
 from prediction.core.model_cache import ModelArtifacts, ModelCache
 from prediction.core.predict import PredictionResult
@@ -60,12 +61,13 @@ def client() -> Generator[TestClient]:
         def __init__(self) -> None:
             pass
 
-        def get(self, org_id: str) -> ModelArtifacts:
+        def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
             return artifacts
 
     app.dependency_overrides[resolve_identity] = lambda: Identity(
         subject="user-1", org_id="org-1", roles=frozenset({"scenario:churn"})
     )
+    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
     fake_model_cache = FakeModelCache()
     app.dependency_overrides[_model_cache] = lambda: fake_model_cache
     yield TestClient(app)
@@ -78,8 +80,8 @@ def test_healthz(client: TestClient) -> None:
 
 
 def test_predict_returns_probability_and_contributions(client: TestClient) -> None:
-    """POST /predict returns one probability+contributions entry per record."""
-    response = client.post("/predict", json={"records": [{"CreditScore": 600, "Geography": "France"}]})
+    """POST /predict/{scenario_slug} returns one probability+contributions entry per record."""
+    response = client.post("/predict/churn", json={"records": [{"CreditScore": 600, "Geography": "France"}]})
 
     assert response.status_code == 200
     body = response.json()

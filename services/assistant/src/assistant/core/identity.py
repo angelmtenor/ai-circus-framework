@@ -1,68 +1,50 @@
 """
-- Title:    Caller identity resolution (Logto token validation + entitlement check)
+- Title:    Caller identity resolution (thin wrapper around the shared implementation)
 - Author:   ai-circus-framework contributors
 
 Entitlement enforcement happens here, at the API — not just in whichever UI called
-us — per the platform's core design requirement (see root AGENTS.md). AUTH_DISABLED
-is a dev-only bypass for iterating before Logto is configured; it must stay "false"
-anywhere beyond local development.
-
-Duplicated (with prediction's core/identity.py) rather than shared: each service's
-`get_env_config()` returns its own generated EnvConfig type, so there's no common
-config type to hand to a shared helper without deeper refactoring. Worth
-consolidating into ai_circus_shared once a third consumer (rag-agent) needs it.
+us — per the platform's core design requirement (see root AGENTS.md). The actual
+logic (AUTH_DISABLED bypass, ADMIN_API_KEY bypass, Logto validation, entitlement
+check) lives in `ai_circus_shared.auth.resolve_caller_identity`; this wrapper just
+adapts this service's own generated `EnvConfig` into that call and translates its
+plain domain exceptions into `HTTPException`s (kept out of `libs/shared` so it stays
+free of a `fastapi` dependency — see the root plan's "Identity consolidation" decision).
 """
 
 from __future__ import annotations
 
-from ai_circus_shared.auth import Identity, TokenValidationError, validate_token
-from ai_circus_shared.entitlements import EntitlementDeniedError, PlatformRegistryClient
+from ai_circus_shared.auth import AuthSettingsAdapter, Identity, TokenValidationError, resolve_caller_identity
+from ai_circus_shared.entitlements import EntitlementDeniedError
 from fastapi import Header, HTTPException
 
 from assistant import get_env_config
-from assistant.core.logger import get_logger
-
-logger = get_logger(__name__)
 
 
-def resolve_identity(authorization: str | None = Header(default=None)) -> Identity:
-    """FastAPI dependency: resolve and validate the caller's identity from the bearer token.
+def resolve_identity(scenario_slug: str, authorization: str | None = Header(default=None)) -> Identity:
+    """FastAPI dependency: resolve and validate the caller's identity for `scenario_slug`.
+
+    `scenario_slug` is injected from the route's path parameter of the same name
+    (see e.g. `POST /chat/{scenario_slug}`) — FastAPI resolves path params into a
+    `Depends()` sub-dependency by parameter name, regardless of which function in the
+    dependency tree declares them.
 
     Raises:
         HTTPException: 401 if the token is missing/invalid, 403 if the tenant isn't
             entitled to this scenario.
     """
     config = get_env_config()
-
-    if config.AUTH_DISABLED.lower() == "true":
-        logger.warning("AUTH_DISABLED=true — using fixed dev identity, no token validation performed.")
-        dev_role = f"scenario:{config.SCENARIO_SLUG}"
-        identity = Identity(subject="dev", org_id=config.DEV_ORG_ID, roles=frozenset({dev_role}))
-    else:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing or malformed Authorization header.")
-        if not (config.LOGTO_ISSUER and config.LOGTO_API_RESOURCE_INDICATOR and config.LOGTO_JWKS_URL):
-            raise RuntimeError(
-                "LOGTO_ISSUER/LOGTO_API_RESOURCE_INDICATOR/LOGTO_JWKS_URL must be set unless AUTH_DISABLED=true."
-            )
-        token = authorization.removeprefix("Bearer ")
-        try:
-            identity = validate_token(
-                token,
-                issuer=config.LOGTO_ISSUER,
-                audience=config.LOGTO_API_RESOURCE_INDICATOR,
-                jwks_url=config.LOGTO_JWKS_URL,
-            )
-        except TokenValidationError as exc:
-            raise HTTPException(status_code=401, detail=str(exc)) from exc
-
-    if identity.org_id is None:
-        raise HTTPException(status_code=401, detail="Token has no organization (tenant) claim.")
-
-    client = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
+    settings = AuthSettingsAdapter(
+        AUTH_DISABLED=config.AUTH_DISABLED,
+        DEV_ORG_ID=config.DEV_ORG_ID,
+        LOGTO_ISSUER=config.LOGTO_ISSUER,
+        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
+        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
+        PLATFORM_REGISTRY_URL=config.PLATFORM_REGISTRY_URL,
+    )
     try:
-        client.check_entitlement(org_id=identity.org_id, scenario_slug=config.SCENARIO_SLUG)
+        return resolve_caller_identity(authorization=authorization, scenario_slug=scenario_slug, settings=settings)
+    except TokenValidationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except EntitlementDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    return identity

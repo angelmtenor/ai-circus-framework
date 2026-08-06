@@ -33,7 +33,7 @@ class FakeEnvConfig:
         """Populate fixed, valid-looking configuration values."""
         self.HTTP_PORT = "8000"
         self.LOG_LEVEL = "DEBUG"
-        self.SCENARIO_SLUG = "churn"
+        self.SCENARIOS = ""
         self.SCENARIOS_DIR = "/scenarios"
         self.MINIO_ENDPOINT = "http://minio:9000"
         self.MINIO_ACCESS_KEY = "ai_circus"
@@ -91,7 +91,7 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 async def test_lifespan_sets_up_prompt_cache_and_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The lifespan handler resolves the scenario's bucket and stashes cache+client on app.state."""
+    """The lifespan handler connects a store per resolved scenario and stashes cache+client on app.state."""
 
     class FakeDataset:
         bucket = "scenario-churn"
@@ -102,13 +102,13 @@ async def test_lifespan_sets_up_prompt_cache_and_llm_client(monkeypatch: pytest.
     connect_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinition()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
     monkeypatch.setattr(
         app.ObjectStore, "connect", staticmethod(lambda **kwargs: connect_calls.append(kwargs) or "fake-store")
     )
 
     async with app.lifespan(app.app):
-        assert app.app.state.prompt_cache._store == "fake-store"
+        assert app.app.state.prompt_cache._stores == {"churn": "fake-store"}
         assert str(app.app.state.llm_client.base_url) == "http://llm-gateway:4000"
 
     assert connect_calls == [
@@ -121,15 +121,11 @@ async def test_lifespan_sets_up_prompt_cache_and_llm_client(monkeypatch: pytest.
     ]
 
 
-async def test_lifespan_rejects_scenario_without_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A scenario with no dataset config (wrong kind) fails startup loudly, not silently."""
-
-    class FakeDefinitionWithoutDataset:
-        dataset = None
-
+async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) fails startup loudly."""
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinitionWithoutDataset()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
-    with pytest.raises(RuntimeError, match="no dataset config"):
+    with pytest.raises(RuntimeError, match="No tabular_ml scenario matched"):
         async with app.lifespan(app.app):
             pass

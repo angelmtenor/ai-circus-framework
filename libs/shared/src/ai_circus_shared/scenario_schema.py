@@ -147,3 +147,15 @@ class ScenarioDefinition(BaseModel):
 def load_all(scenarios_dir: Path) -> list[ScenarioDefinition]:
     """Load every `scenario.yaml` under `scenarios_dir` (one subdirectory per scenario)."""
     return [ScenarioDefinition.load(p) for p in sorted(scenarios_dir.glob("*/scenario.yaml"))]
+
+
+def resolve_scenarios(scenarios_dir: Path, raw_scenarios_env: str, kind: str) -> dict[str, ScenarioDefinition]:
+    """Resolve a `SCENARIOS` env var (comma-separated slugs; empty/unset = "all") to a
+    `{slug: ScenarioDefinition}` dict filtered to the given `kind`.
+
+    One consolidated `prediction`/`assistant`/`rag-agent`/`etl-tabular`/`training`/
+    `etl-vectorize` instance loads/processes every scenario this resolves to — see
+    the root plan's "Consolidation mechanism" decision for why.
+    """
+    wanted = {slug.strip() for slug in raw_scenarios_env.split(",") if slug.strip()}
+    return {d.slug: d for d in load_all(scenarios_dir) if d.kind == kind and (not wanted or d.slug in wanted)}

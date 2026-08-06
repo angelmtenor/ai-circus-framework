@@ -20,10 +20,10 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     get_env_config.cache_clear()
     monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
-    # AUTH_DISABLED and SCENARIO_SLUG intentionally have no settings.yaml default (see
+    # AUTH_DISABLED and ADMIN_API_KEY intentionally have no settings.yaml default (see
     # settings.yaml) — they must come from real env vars.
     monkeypatch.setenv("AUTH_DISABLED", "false")
-    monkeypatch.setenv("SCENARIO_SLUG", "churn")
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,6 +33,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     config = get_env_config()
 
     assert config.LOG_LEVEL == "INFO"
+    assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
     assert config.LLM_GATEWAY_URL == "http://llm-gateway.localhost"
     assert config.PLATFORM_REGISTRY_URL == "http://localhost:8010"
@@ -85,15 +86,26 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
     assert config.MINIO_ENDPOINT == "http://minio.localhost"
 
 
-def test_scenario_slug_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SCENARIO_SLUG must come from the actual process env, not a settings.yaml default.
+def test_admin_api_key_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADMIN_API_KEY must come from the actual process env, not a settings.yaml default.
 
-    Regression test: a profile default here would always win over a per-instance
-    SCENARIO_SLUG env var, silently making every instance of this image serve the
-    same scenario.
+    Regression test, same class as AUTH_DISABLED's: a profile default here would
+    always win over the real env var, silently defeating the shared admin credential.
     """
-    monkeypatch.setenv("SCENARIO_SLUG", "mpm")
+    monkeypatch.setenv("ADMIN_API_KEY", "a-different-key")
 
     config = get_env_config()
 
-    assert config.SCENARIO_SLUG == "mpm"
+    assert config.ADMIN_API_KEY.get_secret_value() == "a-different-key"
+
+
+def test_scenarios_yaml_default_beats_a_real_env_var_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Documents a known, accepted residual limitation — see prediction/settings.yaml's
+    comment (SCENARIOS has a yaml default, safe now that there's only one instance of
+    this service, but that means a real env var override of it is silently ignored).
+    """
+    monkeypatch.setenv("SCENARIOS", "churn,mpm")
+
+    config = get_env_config()
+
+    assert config.SCENARIOS == ""

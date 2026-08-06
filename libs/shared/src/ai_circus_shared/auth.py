@@ -108,6 +108,29 @@ class AuthSettings(Protocol):
     PLATFORM_REGISTRY_URL: str
 
 
+@dataclass
+class AuthSettingsAdapter:
+    """Concrete `AuthSettings` a service builds from its own generated `EnvConfig`.
+
+    A plain dataclass (not `types.SimpleNamespace`) so static type checkers can
+    actually verify it satisfies the `AuthSettings` Protocol — `SimpleNamespace`'s
+    dynamic `__getattr__` defeats that check. Each service's `core/identity.py`
+    constructs one of these, unwrapping `ADMIN_API_KEY` from its own `SecretStr`
+    field in the process (every service types real credentials as `SecretStr`).
+    Deliberately mutable (not `frozen=True`): `AuthSettings`' attributes are
+    read-write by default, and pyrefly checks a Protocol's read-write attributes
+    against a frozen dataclass's read-only ones as an incompatible override.
+    """
+
+    AUTH_DISABLED: str
+    DEV_ORG_ID: str
+    LOGTO_ISSUER: str | None
+    LOGTO_API_RESOURCE_INDICATOR: str | None
+    LOGTO_JWKS_URL: str | None
+    ADMIN_API_KEY: str | None
+    PLATFORM_REGISTRY_URL: str
+
+
 def _is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool:
     """Constant-time check that `authorization` is exactly `Bearer <admin_api_key>`."""
     if not authorization or not authorization.startswith("Bearer "):

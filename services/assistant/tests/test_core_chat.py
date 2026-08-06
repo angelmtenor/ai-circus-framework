@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from ai_circus_shared.scenario_schema import ScenarioDefinition, TabularServices
+from ai_circus_shared.scenario_schema import ChatConfig, ScenarioDefinition, TabularServices
 
 from assistant.core.chat import build_system_prompt, chat
 
@@ -16,6 +16,7 @@ DEFINITION = ScenarioDefinition(
     description="  Predicts churn risk from account/usage features.  \n",
     role_required="scenario:churn",
     icon="📉",
+    chat=ChatConfig(context="A retail bank's customer churn model."),
     services=TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant"),
 )
 
@@ -28,11 +29,11 @@ METADATA = {
 
 
 def test_build_system_prompt_includes_scenario_and_model_details() -> None:
-    """The system prompt grounds the assistant in the scenario title/description and model metadata."""
+    """The system prompt grounds the assistant in the scenario title/chat.context and model metadata."""
     prompt = build_system_prompt(DEFINITION, METADATA)
 
     assert "Customer Churn Prediction" in prompt
-    assert "Predicts churn risk from account/usage features." in prompt
+    assert "A retail bank's customer churn model." in prompt
     assert "random_forest" in prompt
     assert "86.05%" in prompt
     assert "Exited" in prompt

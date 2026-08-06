@@ -18,11 +18,16 @@ from openai.types.chat import ChatCompletion
 
 
 def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]) -> str:
-    """Ground the assistant in the scenario's description and the trained model's metadata."""
+    """Ground the assistant in the scenario's chat.context and the trained model's metadata.
+
+    `definition.chat.context` is the human-authored domain framing (see
+    scenarios/<slug>/scenario.yaml) — it supplements, not replaces, the real
+    feature-list/accuracy grounding already available from the trained model.
+    """
     feature_columns = ", ".join(str(c) for c in metadata["feature_columns"])
     return (
         f"You are a data analyst assistant for the '{definition.title}' scenario.\n"
-        f"{definition.description.strip()}\n\n"
+        f"{definition.chat.context.strip()}\n\n"
         f"A {metadata['model_name']} model was trained on this data with test accuracy "
         f"{float(metadata['test_accuracy']):.2%}. It predicts '{metadata['target']}' from these "
         f"features: {feature_columns}.\n\n"

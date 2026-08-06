@@ -4,10 +4,11 @@
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
-# assistant is a long-running FastAPI service serving POST /chat for a tabular_ml
-# scenario: chat-over-data grounded in the scenario's description and the trained
-# model's metadata (from MinIO), answered via llm-gateway — never a raw provider SDK
-# and never exec()'d code (see AGENTS.md).
+# assistant is a long-running FastAPI service serving POST /chat/{scenario_slug} for
+# every tabular_ml scenario in SCENARIOS (empty/unset = all): chat-over-data grounded
+# in the scenario's chat.context and the trained model's metadata (from MinIO),
+# answered via llm-gateway — never a raw provider SDK and never exec()'d code (see
+# AGENTS.md).
 
 env_variables:
   - name: LOG_LEVEL
@@ -22,8 +23,8 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: SCENARIO_SLUG
-    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this instance chats about"
+  - name: SCENARIOS
+    description: "Comma-separated tabular_ml scenario slugs this instance serves; empty/unset = every scenario"
     type: string
     mandatory: true
     secret: false
@@ -82,6 +83,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: ADMIN_API_KEY
+    description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
+    type: string
+    mandatory: true
+    secret: true
+
   - name: DEV_ORG_ID
     description: "Org id used for every request when AUTH_DISABLED=true"
     type: string
@@ -122,9 +129,12 @@ environments:
     MINIO_ACCESS_KEY: "ai_circus"
     LLM_MODEL: "gpt-4o-mini"
     DEV_ORG_ID: "demo"
-    # SCENARIO_SLUG and AUTH_DISABLED deliberately have NO default here — see
+    # Empty = every tabular_ml scenario under SCENARIOS_DIR — see prediction/settings.yaml
+    # for why a yaml default is safe here but not for AUTH_DISABLED/ADMIN_API_KEY below.
+    SCENARIOS: ""
+    # AUTH_DISABLED/ADMIN_API_KEY deliberately have NO default here — see
     # prediction/settings.yaml for why (a profile default would always beat a real
-    # per-instance/per-request env var).
+    # environment variable).
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
