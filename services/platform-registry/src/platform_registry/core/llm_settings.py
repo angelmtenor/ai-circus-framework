@@ -52,12 +52,12 @@ PROVIDERS: dict[str, ProviderSpec] = {
     ),
     "gemini": ProviderSpec(
         key="gemini",
-        label="Google Gemini (2.5 Flash Lite)",
+        label="Google Gemini",
         model_name="gemini-flash",
         needs_key=True,
         needs_base=False,
         env_vars=("GOOGLE_API_KEY",),
-        hint=("Free-tier default. Set GOOGLE_API_KEY in .env, then `docker compose up -d llm-gateway`."),
+        hint="Free-tier default. Set GOOGLE_API_KEY in .env, then `docker compose up -d llm-gateway`.",
     ),
     "deepseek": ProviderSpec(
         key="deepseek",
@@ -150,6 +150,7 @@ def list_providers(base_url: str, master_key: str) -> list[dict[str, object]]:
         results.append({
             "provider": spec.key,
             "label": spec.label,
+            "model_name": spec.model_name,
             "route_exists": deployment is not None,
             "model": configured_model.split("/", 1)[-1] if configured_model else None,
             "api_base": litellm_params.get("api_base"),

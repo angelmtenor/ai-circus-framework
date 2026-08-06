@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from platform_registry.api import require_admin
 from platform_registry.app import app
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Base, Scenario
@@ -42,6 +43,7 @@ def client() -> Generator[TestClient]:
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[require_admin] = lambda: None
     try:
         yield TestClient(app)
     finally:
@@ -75,3 +77,33 @@ def test_grant_unknown_scenario_returns_404(client: TestClient) -> None:
     """Granting an entitlement for a scenario slug that doesn't exist is rejected."""
     response = client.put("/entitlements/org-1/does-not-exist")
     assert response.status_code == 404
+
+
+def test_get_active_llm_model_404s_before_any_is_set(client: TestClient) -> None:
+    """No llm_settings row yet (fresh DB, no seeding) is a 404, not a made-up default."""
+    response = client.get("/llm-settings/active-model")
+    assert response.status_code == 404
+
+
+def test_set_then_get_active_llm_model(client: TestClient) -> None:
+    """Setting the active model persists it for subsequent reads — no restart involved."""
+    response = client.put("/llm-settings/active-model", json={"model_name": "gemini-flash"})
+    assert response.status_code == 200
+    assert response.json() == {"model_name": "gemini-flash"}
+
+    assert client.get("/llm-settings/active-model").json() == {"model_name": "gemini-flash"}
+
+
+def test_set_active_llm_model_rejects_unrouted_model_name(client: TestClient) -> None:
+    """A model_name not present in litellm_config.yaml's routing table (llm_settings.PROVIDERS) is rejected."""
+    response = client.put("/llm-settings/active-model", json={"model_name": "not-a-real-model"})
+    assert response.status_code == 400
+
+
+def test_set_active_llm_model_updates_in_place(client: TestClient) -> None:
+    """Setting the model twice updates the same singleton row rather than erroring."""
+    client.put("/llm-settings/active-model", json={"model_name": "gemini-flash"})
+    response = client.put("/llm-settings/active-model", json={"model_name": "groq-llama"})
+
+    assert response.status_code == 200
+    assert response.json() == {"model_name": "groq-llama"}

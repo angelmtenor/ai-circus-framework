@@ -63,3 +63,16 @@ class Entitlement(Base):
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     scenario: Mapped[Scenario] = relationship(back_populates="entitlements")
+
+
+class LlmSetting(Base):
+    """Singleton row (id=1): which litellm_config.yaml `model_name` assistant/rag-agent
+    should use for chat completions right now — the admin Settings page's live
+    provider/model picker. Read by those services on every chat request (no restart
+    needed to switch), so this is deliberately just one mutable row, not a history.
+    """
+
+    __tablename__ = "llm_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    model_name: Mapped[str] = mapped_column(String(64))

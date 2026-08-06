@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from platform_registry import get_env_config
 from platform_registry.core import llm_settings
 from platform_registry.core.db import get_session
-from platform_registry.core.models import Entitlement, Scenario
+from platform_registry.core.models import Entitlement, LlmSetting, Scenario
 
 router = APIRouter()
 
@@ -40,6 +40,7 @@ class LlmProviderOut(BaseModel):
 
     provider: str
     label: str
+    model_name: str
     route_exists: bool
     model: str | None
     api_base: str | None
@@ -56,6 +57,18 @@ class LlmProviderTestOut(BaseModel):
     error: str | None = None
     latency_ms: float | None = None
     reply: str | None = None
+
+
+class ActiveLlmModelOut(BaseModel):
+    """The litellm_config.yaml model_name assistant/rag-agent should use right now."""
+
+    model_name: str
+
+
+class ActiveLlmModelIn(BaseModel):
+    """Body for PUT /llm-settings/active-model."""
+
+    model_name: str
 
 
 class ScenarioOut(BaseModel):
@@ -154,3 +167,49 @@ def test_all_llm_providers() -> dict[str, dict[str, object]]:
     """Round-trip every provider concurrently — the Settings page's "Test All" button."""
     config = get_env_config()
     return llm_settings.test_all_providers(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value())
+
+
+@router.get(
+    "/llm-settings/active-model",
+    response_model=ActiveLlmModelOut,
+    dependencies=[Depends(require_admin)],
+)
+def get_active_llm_model(session: Session = Depends(get_session)) -> ActiveLlmModelOut:
+    """Which model_name assistant/rag-agent should use for their very next chat request.
+
+    Called by those services on every chat request (see ai_circus_shared.entitlements.
+    PlatformRegistryClient.get_active_llm_model) — no restart needed to switch models.
+    """
+    setting = session.get(LlmSetting, 1)
+    if setting is None:
+        raise HTTPException(status_code=404, detail="No active LLM model set yet.")
+    return ActiveLlmModelOut(model_name=setting.model_name)
+
+
+@router.put(
+    "/llm-settings/active-model",
+    response_model=ActiveLlmModelOut,
+    dependencies=[Depends(require_admin)],
+)
+def set_active_llm_model(body: ActiveLlmModelIn, session: Session = Depends(get_session)) -> ActiveLlmModelOut:
+    """Switch which model assistant/rag-agent use — the Settings page's model picker.
+
+    Only accepts a `model_name` already routed in litellm_config.yaml (i.e. one of
+    llm_settings.PROVIDERS' model_names) — this can't add a new route, only choose
+    among the ones an operator already configured there.
+    """
+    valid_model_names = {spec.model_name for spec in llm_settings.PROVIDERS.values()}
+    if body.model_name not in valid_model_names:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown model_name {body.model_name!r}. Valid: {sorted(valid_model_names)}.",
+        )
+
+    setting = session.get(LlmSetting, 1)
+    if setting is None:
+        setting = LlmSetting(id=1, model_name=body.model_name)
+        session.add(setting)
+    else:
+        setting.model_name = body.model_name
+    session.commit()
+    return ActiveLlmModelOut(model_name=setting.model_name)

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from platform_registry.core.logger import get_logger
-from platform_registry.core.models import Entitlement, Scenario
+from platform_registry.core.models import Entitlement, LlmSetting, Scenario
 
 logger = get_logger(__name__)
 
@@ -78,3 +78,13 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
     session.commit()
     logger.info("Seeded {} scenario(s) from {}: {}", len(slugs), scenarios_dir, ", ".join(slugs))
     return slugs
+
+
+def seed_default_llm_setting(session: Session, default_model_name: str) -> None:
+    """Insert the singleton `llm_settings` row on first boot only — never overwrites an
+    admin's already-saved choice on a later restart.
+    """
+    if session.get(LlmSetting, 1) is None:
+        session.add(LlmSetting(id=1, model_name=default_model_name))
+        session.commit()
+        logger.info("Seeded default active LLM model: {}", default_model_name)

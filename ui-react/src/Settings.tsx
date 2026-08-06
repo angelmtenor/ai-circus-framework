@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { listLlmProviders, testAllLlmProviders, testLlmProvider, type LlmProvider, type LlmProviderTest } from "./apiClient";
+import {
+  getActiveLlmModel,
+  listLlmProviders,
+  setActiveLlmModel,
+  testAllLlmProviders,
+  testLlmProvider,
+  type LlmProvider,
+  type LlmProviderTest,
+} from "./apiClient";
 import { config } from "./config";
 
 /**
@@ -18,15 +26,38 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
   const [testing, setTesting] = useState<string | null>(null);
   const [testingAll, setTestingAll] = useState(false);
   const [results, setResults] = useState<Record<string, LlmProviderTest>>({});
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [savingModel, setSavingModel] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   function load() {
     setError(null);
-    listLlmProviders(config.platformRegistryUrl, accessToken)
-      .then(setProviders)
+    Promise.all([
+      listLlmProviders(config.platformRegistryUrl, accessToken),
+      getActiveLlmModel(config.platformRegistryUrl, accessToken),
+    ])
+      .then(([providerList, model]) => {
+        setProviders(providerList);
+        setActiveModel(model);
+      })
       .catch((e) => setError((e as Error).message));
   }
 
   useEffect(load, [accessToken]);
+
+  async function saveActiveModel(modelName: string) {
+    setSavingModel(true);
+    setSaveMessage(null);
+    try {
+      const saved = await setActiveLlmModel(config.platformRegistryUrl, modelName, accessToken);
+      setActiveModel(saved);
+      setSaveMessage(`Now using "${saved}" — applies to the very next chat request, no restart needed.`);
+    } catch (e) {
+      setSaveMessage(`Failed to save: ${(e as Error).message}`);
+    } finally {
+      setSavingModel(false);
+    }
+  }
 
   async function runTest(provider: string) {
     setTesting(provider);
@@ -72,6 +103,34 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
       </p>
       {error && <p className="error">{error}</p>}
       {!providers && !error && <div className="app-loading">Loading providers…</div>}
+      {providers && (
+        <div className="panel-card settings-card">
+          <h3>Active model</h3>
+          <p className="panel-hint">
+            Which model <code>assistant</code>/<code>rag-agent</code> use for their next chat request — applies
+            immediately, no restart. Only choosing among providers already routed in{" "}
+            <code>litellm_config.yaml</code>; entering a brand-new provider/key still requires editing{" "}
+            <code>.env</code> (see the cards below).
+          </p>
+          <select
+            className="settings-model-select"
+            value={activeModel ?? ""}
+            disabled={savingModel}
+            onChange={(e) => saveActiveModel(e.target.value)}
+          >
+            {activeModel && !providers.some((p) => p.model_name === activeModel) && (
+              <option value={activeModel}>{activeModel} (not in litellm_config.yaml anymore)</option>
+            )}
+            {providers.map((p) => (
+              <option key={p.provider} value={p.model_name}>
+                {p.label} — {p.model_name}
+              </option>
+            ))}
+          </select>
+          {savingModel && <span className="panel-hint"> Saving…</span>}
+          {saveMessage && <p className="panel-hint">{saveMessage}</p>}
+        </div>
+      )}
       {providers && (
         <div className="settings-grid">
           {providers.map((p) => {

@@ -81,6 +81,7 @@ export type DatasetExplainability = {
 export type LlmProvider = {
   provider: string;
   label: string;
+  model_name: string;
   route_exists: boolean;
   model: string | null;
   api_base: string | null;
@@ -191,6 +192,27 @@ export async function testAllLlmProviders(
     headers: headers(accessToken),
   });
   return asJson(response);
+}
+
+export async function getActiveLlmModel(baseUrl: string, accessToken: string | null): Promise<string | null> {
+  const response = await fetch(`${baseUrl}/llm-settings/active-model`, { headers: headers(accessToken) });
+  if (response.status === 404) return null; // no default seeded yet — not an error
+  const body = await asJson<{ model_name: string }>(response);
+  return body.model_name;
+}
+
+export async function setActiveLlmModel(
+  baseUrl: string,
+  modelName: string,
+  accessToken: string | null,
+): Promise<string> {
+  const response = await fetch(`${baseUrl}/llm-settings/active-model`, {
+    method: "PUT",
+    headers: headers(accessToken),
+    body: JSON.stringify({ model_name: modelName }),
+  });
+  const body = await asJson<{ model_name: string }>(response);
+  return body.model_name;
 }
 
 export async function chat(

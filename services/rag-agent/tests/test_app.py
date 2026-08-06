@@ -117,7 +117,9 @@ async def test_lifespan_sets_up_qdrant_embedders_and_llm(monkeypatch: pytest.Mon
         assert app.app.state.qdrant == "fake-qdrant"
         assert app.app.state.embedders == {"docs_rag": "fake-model"}
         assert set(app.app.state.definitions) == {"docs_rag"}
-        assert app.app.state.llm.openai_api_base == "http://llm-gateway:4000"
+        # No client built eagerly here anymore — api._llm() builds one per model_name,
+        # lazily, once it knows (from platform-registry) which model is actually active.
+        assert app.app.state.llm_clients == {}
 
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
     assert model_calls == ["fake-embedding-model"]

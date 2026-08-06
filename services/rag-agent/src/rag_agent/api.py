@@ -5,14 +5,18 @@
 
 from __future__ import annotations
 
+import httpx
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from fastapi import APIRouter, Depends, HTTPException, Request
 from langchain_core.language_models import BaseChatModel
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
+from rag_agent import get_env_config
 from rag_agent.core.agent import run_chat
 from rag_agent.core.identity import resolve_identity
 
@@ -58,7 +62,26 @@ def _embedders(request: Request) -> dict[str, SentenceTransformer]:
 
 
 def _llm(request: Request) -> BaseChatModel:
-    return request.app.state.llm
+    """The chat model to use: live from platform-registry's admin Settings picker
+    (applies on the very next chat request, no restart), falling back to this
+    instance's static LLM_MODEL if platform-registry is unreachable. Cached per
+    model_name on app.state so repeat requests for the same model reuse one client.
+    """
+    config = get_env_config()
+    registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
+    try:
+        model_name = registry.get_active_llm_model(admin_api_key=config.ADMIN_API_KEY.get_secret_value())
+    except httpx.HTTPError:
+        model_name = config.LLM_MODEL
+
+    llm_clients: dict[str, ChatOpenAI] = request.app.state.llm_clients
+    if model_name not in llm_clients:
+        llm_clients[model_name] = ChatOpenAI(
+            base_url=config.LLM_GATEWAY_URL,
+            api_key=config.LLM_GATEWAY_API_KEY.get_secret_value(),
+            model=model_name,
+        )
+    return llm_clients[model_name]
 
 
 def _scenario_definition(scenario_slug: str, request: Request) -> ScenarioDefinition:

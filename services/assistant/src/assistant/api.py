@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import httpx
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from fastapi import APIRouter, Depends, HTTPException, Request
 from openai import OpenAI
@@ -48,7 +50,16 @@ def _llm_client(request: Request) -> OpenAI:
 
 
 def _llm_model() -> str:
-    return get_env_config().LLM_MODEL
+    """The model to send to llm-gateway: live from platform-registry's admin Settings
+    picker (applies on the very next chat request, no restart), falling back to this
+    instance's static LLM_MODEL if platform-registry is unreachable.
+    """
+    config = get_env_config()
+    registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
+    try:
+        return registry.get_active_llm_model(admin_api_key=config.ADMIN_API_KEY.get_secret_value())
+    except httpx.HTTPError:
+        return config.LLM_MODEL
 
 
 def _scenario_definition(scenario_slug: str, request: Request) -> ScenarioDefinition:

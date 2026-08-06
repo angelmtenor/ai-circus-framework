@@ -25,7 +25,7 @@ from platform_registry.api import router
 from platform_registry.core.db import init_engine
 from platform_registry.core.logger import configure_logger, get_logger
 from platform_registry.core.models import Base
-from platform_registry.core.seed import seed_scenarios
+from platform_registry.core.seed import seed_default_llm_setting, seed_scenarios
 
 logger = get_logger(__name__)
 
@@ -41,6 +41,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     with Session(engine) as session:
         seed_scenarios(session, Path(config.SCENARIOS_DIR))
+        # "llama3" (the bundled, no-API-key Ollama model) — matches assistant/rag-agent's
+        # own static LLM_MODEL default, so a fresh install behaves the same either way.
+        seed_default_llm_setting(session, default_model_name="llama3")
 
     yield
 

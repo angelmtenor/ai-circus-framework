@@ -9,8 +9,8 @@ from ai_circus_shared.auth import ADMIN_ORG_ID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from platform_registry.core.models import Base, Entitlement, Scenario
-from platform_registry.core.seed import seed_scenarios
+from platform_registry.core.models import Base, Entitlement, LlmSetting, Scenario
+from platform_registry.core.seed import seed_default_llm_setting, seed_scenarios
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[3] / "scenarios"
 
@@ -89,3 +89,21 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
 
     assert session.query(Scenario).count() == 4
     assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 4
+
+
+def test_seed_default_llm_setting_inserts_on_first_boot(session: Session) -> None:
+    """A fresh DB gets the default active model seeded."""
+    seed_default_llm_setting(session, default_model_name="llama3")
+
+    assert session.get(LlmSetting, 1).model_name == "llama3"
+
+
+def test_seed_default_llm_setting_never_overwrites_an_existing_choice(session: Session) -> None:
+    """Re-running the seed on restart doesn't clobber an admin's already-saved model choice."""
+    seed_default_llm_setting(session, default_model_name="llama3")
+    session.get(LlmSetting, 1).model_name = "gemini-flash"
+    session.commit()
+
+    seed_default_llm_setting(session, default_model_name="llama3")
+
+    assert session.get(LlmSetting, 1).model_name == "gemini-flash"

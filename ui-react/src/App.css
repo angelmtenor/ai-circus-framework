@@ -953,6 +953,12 @@ select {
   justify-content: space-between;
 }
 
+.settings-model-select {
+  margin-top: 0.5rem;
+  width: 100%;
+  max-width: 28rem;
+}
+
 .settings-badge {
   font-size: 0.68rem;
   padding: 0.15rem 0.5rem;

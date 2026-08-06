@@ -66,3 +66,17 @@ class PlatformRegistryClient:
         response = httpx.get(f"{self.base_url}/entitlements/{org_id}", timeout=self.timeout_seconds)
         response.raise_for_status()
         return [ScenarioSummary(**item) for item in response.json()]
+
+    def get_active_llm_model(self, *, admin_api_key: str) -> str:
+        """Return the litellm_config.yaml model_name assistant/rag-agent should use for
+        their next chat completion — the Settings page's live provider/model picker.
+        Raises on failure (network/404/etc); callers decide whether to fall back to a
+        static default.
+        """
+        response = httpx.get(
+            f"{self.base_url}/llm-settings/active-model",
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()["model_name"]

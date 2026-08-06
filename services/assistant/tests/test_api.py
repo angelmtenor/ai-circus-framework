@@ -6,13 +6,17 @@ from collections.abc import Generator
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.entitlements import PlatformRegistryClient
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from assistant import api as api_module
 from assistant.api import _llm_client, _llm_model, _prompt_cache, _scenario_definition, router
 from assistant.core.identity import resolve_identity
+from tests.conftest import FakeSecret
 
 
 @pytest.fixture
@@ -74,3 +78,35 @@ def test_chat_forwards_history(client: TestClient, fake_llm_client: MagicMock) -
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hello"},
     ]
+
+
+class _FakeLlmEnvConfig:
+    """Minimal stand-in for EnvConfig, covering only what _llm_model() reads."""
+
+    PLATFORM_REGISTRY_URL = "http://platform-registry:8000"
+    ADMIN_API_KEY = FakeSecret("admin-secret")
+    LLM_MODEL = "llama3"
+
+
+def test_llm_model_uses_platform_registrys_live_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Settings page's live picker wins over the instance's static LLM_MODEL default."""
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(
+        PlatformRegistryClient, "get_active_llm_model", lambda self, *, admin_api_key: "gemini-flash"
+    )
+
+    assert _llm_model() == "gemini-flash"
+
+
+def test_llm_model_falls_back_to_static_default_when_platform_registry_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A platform-registry hiccup shouldn't break chat — fall back to the static LLM_MODEL."""
+
+    def _raise(self: PlatformRegistryClient, *, admin_api_key: str) -> str:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", _raise)
+
+    assert _llm_model() == "llama3"

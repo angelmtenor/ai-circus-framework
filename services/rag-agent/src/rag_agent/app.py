@@ -22,7 +22,6 @@ import uvicorn
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
@@ -52,8 +51,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.definitions = definitions
     app.state.embedders = embedders
     app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
-    llm_api_key = config.LLM_GATEWAY_API_KEY.get_secret_value()
-    app.state.llm = ChatOpenAI(base_url=config.LLM_GATEWAY_URL, api_key=llm_api_key, model=config.LLM_MODEL)
+    # One ChatOpenAI client per model_name, built lazily by api._llm() as requests pick
+    # different models from platform-registry's live Settings picker — not a single
+    # client built here, since which model to use can now change without a restart.
+    app.state.llm_clients = {}
 
     yield
 
