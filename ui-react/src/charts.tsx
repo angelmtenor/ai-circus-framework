@@ -86,50 +86,93 @@ function niceTicks(lo: number, hi: number, n = 5): number[] {
   return Array.from({ length: n }, (_, i) => lo + i * step);
 }
 
+export const CATEGORY_PALETTE = [
+  CHART_COLORS.blue,
+  CHART_COLORS.amber,
+  CHART_COLORS.green,
+  CHART_COLORS.red,
+  CHART_COLORS.purple,
+  "#5eead4",
+  "#f472b6",
+  "#a3e635",
+];
+
+export function colorScale(categories: string[]): Map<string, string> {
+  const scale = new Map<string, string>();
+  categories.forEach((c, i) => scale.set(c, CATEGORY_PALETTE[i % CATEGORY_PALETTE.length]));
+  return scale;
+}
+
 export function ScatterPlot({
   points,
   xLabel,
   yLabel,
   refLine = true,
+  sharedDomain = true,
   width = 480,
   height = 260,
   color = CHART_COLORS.blue,
+  legend,
 }: {
-  points: { x: number; y: number; lower?: number; upper?: number }[];
+  points: { x: number; y: number; lower?: number; upper?: number; color?: string }[];
   xLabel: string;
   yLabel: string;
   refLine?: boolean;
+  // true (default) puts x and y on the same scale — correct for predicted-vs-actual
+  // (same units, y=x reference line makes sense); set false for two unrelated
+  // features (e.g. plotting the data), where each axis needs its own domain.
+  sharedDomain?: boolean;
   width?: number;
   height?: number;
   color?: string;
+  legend?: { label: string; color: string }[];
 }) {
   const pad = 38;
-  const values = points.flatMap((p) => [p.x, p.y, p.lower ?? p.y, p.upper ?? p.y]);
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
-  const span = hi - lo || 1;
-  const sx = (v: number) => pad + ((v - lo) / span) * (width - pad * 1.4);
-  const sy = (v: number) => height - pad - ((v - lo) / span) * (height - pad * 1.4);
+  const xs = points.map((p) => p.x);
+  const ys = points.flatMap((p) => [p.y, p.lower ?? p.y, p.upper ?? p.y]);
+  const allValues = [...xs, ...ys];
+  const xLo = sharedDomain ? Math.min(...allValues) : Math.min(...xs);
+  const xHi = sharedDomain ? Math.max(...allValues) : Math.max(...xs);
+  const yLo = sharedDomain ? Math.min(...allValues) : Math.min(...ys);
+  const yHi = sharedDomain ? Math.max(...allValues) : Math.max(...ys);
+  const xSpan = xHi - xLo || 1;
+  const ySpan = yHi - yLo || 1;
+  const sx = (v: number) => pad + ((v - xLo) / xSpan) * (width - pad * 1.4);
+  const sy = (v: number) => height - pad - ((v - yLo) / ySpan) * (height - pad * 1.4);
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label={`${yLabel} vs ${xLabel}`}>
-      {niceTicks(lo, hi).map((v, i) => (
+      {niceTicks(yLo, yHi).map((v, i) => (
         <g key={i}>
-          <line x1={sx(lo)} x2={sx(hi)} y1={sy(v)} y2={sy(v)} stroke={CHART_COLORS.border} strokeWidth={1} />
-          <text x={sx(lo) - 6} y={sy(v)} fontSize={9} fill={CHART_COLORS.dim} textAnchor="end" dominantBaseline="middle">
+          <line x1={sx(xLo)} x2={sx(xHi)} y1={sy(v)} y2={sy(v)} stroke={CHART_COLORS.border} strokeWidth={1} />
+          <text x={sx(xLo) - 6} y={sy(v)} fontSize={9} fill={CHART_COLORS.dim} textAnchor="end" dominantBaseline="middle">
             {v.toFixed(v % 1 === 0 ? 0 : 1)}
           </text>
         </g>
       ))}
+      {!sharedDomain &&
+        niceTicks(xLo, xHi).map((v, i) => (
+          <text key={i} x={sx(v)} y={height - pad + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
+            {v.toFixed(v % 1 === 0 ? 0 : 1)}
+          </text>
+        ))}
       {refLine && (
-        <line x1={sx(lo)} y1={sy(lo)} x2={sx(hi)} y2={sy(hi)} stroke={CHART_COLORS.dim} strokeDasharray="4 4" strokeWidth={1} />
+        <line x1={sx(xLo)} y1={sy(xLo)} x2={sx(xHi)} y2={sy(xHi)} stroke={CHART_COLORS.dim} strokeDasharray="4 4" strokeWidth={1} />
       )}
       {points.map((p, i) => (
         <g key={i}>
           {p.lower !== undefined && p.upper !== undefined && (
-            <line x1={sx(p.x)} x2={sx(p.x)} y1={sy(p.lower)} y2={sy(p.upper)} stroke={color} strokeOpacity={0.25} strokeWidth={2} />
+            <line
+              x1={sx(p.x)}
+              x2={sx(p.x)}
+              y1={sy(p.lower)}
+              y2={sy(p.upper)}
+              stroke={p.color ?? color}
+              strokeOpacity={0.25}
+              strokeWidth={2}
+            />
           )}
-          <circle cx={sx(p.x)} cy={sy(p.y)} r={2.6} fill={color} opacity={0.8} />
+          <circle cx={sx(p.x)} cy={sy(p.y)} r={2.6} fill={p.color ?? color} opacity={0.8} />
         </g>
       ))}
       <text x={width / 2} y={height - 4} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle">
@@ -138,6 +181,18 @@ export function ScatterPlot({
       <text x={11} y={height / 2} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle" transform={`rotate(-90 11 ${height / 2})`}>
         {yLabel}
       </text>
+      {legend && (
+        <g>
+          {legend.map((item, i) => (
+            <g key={item.label} transform={`translate(${width - pad * 3.4}, ${pad * 0.3 + i * 12})`}>
+              <circle cx={0} cy={0} r={3} fill={item.color} />
+              <text x={6} y={0} fontSize={9} fill={CHART_COLORS.dim} dominantBaseline="middle">
+                {item.label}
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

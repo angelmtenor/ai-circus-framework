@@ -65,13 +65,36 @@ export type DatasetEvaluation = {
   target: string;
   n: number;
   metrics: Record<string, number>;
-  feature_importance: FeatureImportance[];
   breakdown_feature: string | null;
   breakdown: CategoryBreakdown[];
   actuals: number[];
   predictions: number[];
   prediction_lower: number[] | null;
   prediction_upper: number[] | null;
+};
+
+export type DatasetExplainability = {
+  feature_importance: FeatureImportance[];
+  sample_size: number;
+};
+
+export type LlmProvider = {
+  provider: string;
+  label: string;
+  route_exists: boolean;
+  model: string | null;
+  api_base: string | null;
+  needs_key: boolean;
+  needs_base: boolean;
+  env_vars: string[];
+  hint: string;
+};
+
+export type LlmProviderTest = {
+  ok: boolean;
+  error: string | null;
+  latency_ms: number | null;
+  reply?: string | null;
 };
 
 function headers(accessToken: string | null): HeadersInit {
@@ -125,6 +148,35 @@ export async function datasetEvaluation(
   accessToken: string | null,
 ): Promise<DatasetEvaluation> {
   const response = await fetch(`${baseUrl}/dataset/${scenarioSlug}/evaluation?limit=${limit}`, {
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
+export async function datasetExplainability(
+  baseUrl: string,
+  scenarioSlug: string,
+  limit: number,
+  accessToken: string | null,
+): Promise<DatasetExplainability> {
+  const response = await fetch(`${baseUrl}/dataset/${scenarioSlug}/explainability?limit=${limit}`, {
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
+export async function listLlmProviders(baseUrl: string, accessToken: string | null): Promise<LlmProvider[]> {
+  const response = await fetch(`${baseUrl}/llm-settings/providers`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+export async function testLlmProvider(
+  baseUrl: string,
+  provider: string,
+  accessToken: string | null,
+): Promise<LlmProviderTest> {
+  const response = await fetch(`${baseUrl}/llm-settings/providers/${provider}/test`, {
+    method: "POST",
     headers: headers(accessToken),
   });
   return asJson(response);

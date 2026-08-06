@@ -6,7 +6,12 @@ import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
 import { TabularView } from "./TabularView";
 import { RagView } from "./RagView";
 import { ScenarioPicker } from "./ScenarioPicker";
+import { Settings } from "./Settings";
 import "./App.css";
+
+// Must match useIdentity.ts's ADMIN_ORG_ID — Settings manages shared LLM-gateway
+// infrastructure, not a per-tenant entitlement, so it's gated to the admin tenant.
+const ADMIN_ORG_ID = "admin";
 
 function LoginScreen({
   onLogin,
@@ -73,6 +78,7 @@ function AppContent() {
   const { identity, loading, logIn, logInWithAdminKey, logOut } = useIdentity();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenariosError, setScenariosError] = useState<string | null>(null);
 
@@ -92,10 +98,16 @@ function AppContent() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="topbar-brand" onClick={() => setSelected(null)}>
+        <button
+          className="topbar-brand"
+          onClick={() => {
+            setSelected(null);
+            setShowSettings(false);
+          }}
+        >
           🎪 ai-circus-framework
         </button>
-        {selected && (
+        {selected && !showSettings && (
           <div className="topbar-scenario">
             <button className="topbar-back" onClick={() => setSelected(null)}>
               ← Scenarios
@@ -106,22 +118,39 @@ function AppContent() {
           </div>
         )}
         <div className="topbar-spacer" />
+        {identity.orgId === ADMIN_ORG_ID && (
+          <button
+            className={`topbar-settings ${showSettings ? "active" : ""}`}
+            onClick={() => {
+              setShowSettings((s) => !s);
+              setSelected(null);
+            }}
+          >
+            ⚙️ Settings
+          </button>
+        )}
         <span className="topbar-org">{identity.orgId}</span>
         <button className="topbar-logout" onClick={logOut}>
           Log out
         </button>
       </header>
       <main className="app-main">
-        {scenariosError && <p className="error">{scenariosError}</p>}
-        {scenariosLoading && <div className="app-loading">Loading scenarios…</div>}
-        {!scenariosLoading && !scenariosError && !selected && (
-          <ScenarioPicker scenarios={scenarios} onSelect={setSelected} />
-        )}
-        {!scenariosLoading && selected?.kind === "tabular_ml" && (
-          <TabularView scenario={selected} accessToken={identity.accessToken} />
-        )}
-        {!scenariosLoading && selected?.kind === "conversational_rag" && (
-          <RagView scenario={selected} accessToken={identity.accessToken} />
+        {showSettings ? (
+          <Settings accessToken={identity.accessToken} />
+        ) : (
+          <>
+            {scenariosError && <p className="error">{scenariosError}</p>}
+            {scenariosLoading && <div className="app-loading">Loading scenarios…</div>}
+            {!scenariosLoading && !scenariosError && !selected && (
+              <ScenarioPicker scenarios={scenarios} onSelect={setSelected} />
+            )}
+            {!scenariosLoading && selected?.kind === "tabular_ml" && (
+              <TabularView scenario={selected} accessToken={identity.accessToken} />
+            )}
+            {!scenariosLoading && selected?.kind === "conversational_rag" && (
+              <RagView scenario={selected} accessToken={identity.accessToken} />
+            )}
+          </>
         )}
       </main>
     </div>
