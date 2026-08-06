@@ -1,7 +1,7 @@
 """Integration-style tests for the training job's main() entry point.
 
 Runs the real sklearn/SHAP pipeline against a tiny synthetic dataset and a fake
-in-memory object store — only get_env_config/ScenarioDefinition.load/ObjectStore.connect
+in-memory object store — only get_env_config/resolve_scenarios/ObjectStore.connect
 are faked, so this exercises the actual train -> select -> explain -> save pipeline.
 """
 
@@ -50,7 +50,7 @@ class FakeEnvConfig:
     def __init__(self) -> None:
         """Populate fixed, valid-looking configuration values."""
         self.SCENARIOS_DIR = "/scenarios"
-        self.SCENARIO_SLUG = "churn"
+        self.SCENARIOS = ""
         self.ORG_ID = "demo"
         self.MINIO_ENDPOINT = "http://minio:9000"
         self.MINIO_ACCESS_KEY = "ai_circus"
@@ -95,6 +95,10 @@ def fake_definition() -> object:
             index_col="id",
             target="target",
             feature_columns=["numeric_feature", "category_feature"],
+            feature_schema={
+                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
+                "category_feature": {"type": "categorical", "options": ["A", "B"], "default": "A"},
+            },
         )
         model = TabularModel(
             task_type="classification",
@@ -130,7 +134,7 @@ def test_main_trains_selects_explains_and_saves(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: fake_definition))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": fake_definition})
     monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
 
     app.main()
@@ -149,18 +153,14 @@ def test_main_trains_selects_explains_and_saves(monkeypatch: pytest.MonkeyPatch,
     assert fake_logger.success_messages
 
 
-def test_main_exits_if_scenario_has_no_model_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A scenario missing dataset/model config (wrong kind) is rejected with a clear error."""
+def test_main_exits_if_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) is rejected with a clear error."""
     fake_logger = FakeLogger()
-
-    class FakeDefinitionWithoutModel:
-        dataset = None
-        model = None
 
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinitionWithoutModel()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
     with pytest.raises(SystemExit) as exc_info:
         app.main()

@@ -4,10 +4,11 @@
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
-# training is a one-shot job (not a long-running server): it loads a tabular_ml
-# scenario's normalized parquet from MinIO (written by etl-tabular), trains/selects a
-# model per the scenario's Green Code candidate policy, builds a SHAP explainer, and
-# writes both back to MinIO for the `prediction` service to load.
+# training is a one-shot job (not a long-running server): for every tabular_ml
+# scenario in SCENARIOS (empty/unset = all), it loads the tenant's normalized parquet
+# from MinIO (written by etl-tabular), trains/selects a model per the scenario's
+# Green Code candidate policy, builds a SHAP explainer, and writes both back to MinIO
+# for the `prediction` service to load.
 
 env_variables:
   - name: LOG_LEVEL
@@ -16,8 +17,8 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: SCENARIO_SLUG
-    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this run trains"
+  - name: SCENARIOS
+    description: "Comma-separated tabular_ml scenario slugs this run trains; empty/unset = every scenario"
     type: string
     mandatory: true
     secret: false
@@ -66,9 +67,9 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "demo"
     MINIO_ACCESS_KEY: "ai_circus"
-    # SCENARIO_SLUG deliberately has NO default here — see etl-tabular/settings.yaml
-    # for why (a profile default would always beat a real per-instance env var).
-    # Set it in your own .env for local (non-docker) dev.
+    # Empty = every tabular_ml scenario under SCENARIOS_DIR — see etl-tabular/settings.yaml
+    # for the same default and its residual-limitation caveat.
+    SCENARIOS: ""
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

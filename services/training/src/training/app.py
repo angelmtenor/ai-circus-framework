@@ -2,11 +2,12 @@
 app.py
 ------
 
-Entry point for training: a one-shot job that loads a tabular_ml scenario's
-normalized parquet from MinIO (written by etl-tabular), trains/selects a model per
-the scenario's Green Code candidate policy, builds a SHAP explainer, and writes both
-back to MinIO for the `prediction` service to load. Runs once and exits — not a
-long-running server (see docker-compose.yml's `profiles: ["pipeline"]`).
+Entry point for training: a one-shot job that, for every tabular_ml scenario in
+SCENARIOS (empty/unset = all), loads the tenant's normalized parquet from MinIO
+(written by etl-tabular), trains/selects a model per the scenario's Green Code
+candidate policy, builds a SHAP explainer, and writes both back to MinIO for the
+`prediction` service to load. Runs once and exits — not a long-running server (see
+docker-compose.yml's `profiles: ["pipeline"]`).
 
 Author: ai-circus-framework contributors
 """
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
     MODEL_EXPLAINER_KEY,
@@ -40,27 +41,14 @@ from training.core.training import (
     train_candidate,
     transformed_feature_names,
 )
+from training.data_model import EnvConfig
 
 logger = get_logger(__name__)
 
 
-def main() -> None:
-    """Validate configuration, then train/select a model and save it with its explainer."""
-    configure_logger()
-
-    try:
-        config = get_env_config()
-    except ValidationError as e:
-        logger.error("Configuration error: Mandatory environment variable(s) missing or invalid:")
-        for error in e.errors():
-            logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
-        sys.exit(1)
-
-    scenario_dir = Path(config.SCENARIOS_DIR) / config.SCENARIO_SLUG
-    definition = ScenarioDefinition.load(scenario_dir / "scenario.yaml")
-    if definition.dataset is None or definition.model is None:
-        logger.error("Scenario {!r} has no dataset/model config — is it a tabular_ml scenario?", config.SCENARIO_SLUG)
-        sys.exit(1)
+def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> None:
+    """Train/select a model for one scenario and save it + its explainer to MinIO."""
+    assert definition.dataset is not None and definition.model is not None  # guaranteed by kind filter
 
     store = ObjectStore.connect(
         bucket=definition.dataset.bucket,
@@ -96,7 +84,7 @@ def main() -> None:
     store.put(config.ORG_ID, MODEL_EXPLAINER_KEY, explainer_buffer.getvalue())
 
     metadata = {
-        "scenario_slug": config.SCENARIO_SLUG,
+        "scenario_slug": slug,
         "model_name": best.name,
         "test_accuracy": best.test_accuracy,
         "candidates_evaluated": [c.name for c in candidates],
@@ -106,7 +94,30 @@ def main() -> None:
     }
     store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
 
-    logger.success("training finished for scenario={} org={}", config.SCENARIO_SLUG, config.ORG_ID)
+    logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
+
+
+def main() -> None:
+    """Validate configuration, then train/select a model per scenario."""
+    configure_logger()
+
+    try:
+        config = get_env_config()
+    except ValidationError as e:
+        logger.error("Configuration error: Mandatory environment variable(s) missing or invalid:")
+        for error in e.errors():
+            logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
+        sys.exit(1)
+
+    definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="tabular_ml")
+    if not definitions:
+        logger.error(
+            "No tabular_ml scenario matched SCENARIOS={!r} under {!r}.", config.SCENARIOS, config.SCENARIOS_DIR
+        )
+        sys.exit(1)
+
+    for slug, definition in definitions.items():
+        _train_one(config, slug, definition)
 
 
 if __name__ == "__main__":

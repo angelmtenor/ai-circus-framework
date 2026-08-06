@@ -19,6 +19,11 @@ DATASET = TabularDataset(
     target="Exited",
     protected_features_excluded=["Gender"],
     feature_columns=["CreditScore", "Geography", "Age"],
+    feature_schema={
+        "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
+        "Geography": {"type": "categorical", "options": ["France", "Spain"], "default": "France"},
+        "Age": {"type": "numeric", "min": 18, "max": 92, "default": 40},
+    },
 )
 
 SAMPLE_CSV = (

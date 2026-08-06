@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +29,8 @@ class EnvConfig(BaseSettings):
         case_sensitive=True,
     )
     LOG_LEVEL: str = Field(description="Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    SCENARIO_SLUG: str = Field(
-        description="Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this run processes"
+    SCENARIOS: str = Field(
+        description="Comma-separated tabular_ml scenario slugs this run processes; empty/unset = every scenario"
     )
     ORG_ID: str = Field(description="Tenant (Logto Organization id) whose dataset this run processes")
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
@@ -44,7 +43,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "e81ea67a23cb08ae9d2c7aafb41940128114ccb806a72bb14ef949222aa5d112"
+_SOURCE_YAML_HASH = "c72e0cbfd23b3a91689dd3ae1eafd9531ae300ffecec0fadb63600a466176c6f"
 
 
 EnvConfig.model_rebuild()
@@ -80,12 +79,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

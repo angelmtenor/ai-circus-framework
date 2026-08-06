@@ -4,9 +4,10 @@
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
-# etl-tabular is a one-shot job (not a long-running server): it loads a tabular_ml
-# scenario's raw dataset from MinIO (bootstrapping it from a tracked sample_data/ file
-# on first run), cleans/casts it, and writes the normalized parquet back to MinIO.
+# etl-tabular is a one-shot job (not a long-running server): for every tabular_ml
+# scenario in SCENARIOS (empty/unset = all), it loads the tenant's raw dataset from
+# MinIO (bootstrapping it from a tracked sample_data/ file on first run), cleans/casts
+# it, and writes the normalized parquet back to MinIO.
 
 env_variables:
   - name: LOG_LEVEL
@@ -15,8 +16,8 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: SCENARIO_SLUG
-    description: "Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this run processes"
+  - name: SCENARIOS
+    description: "Comma-separated tabular_ml scenario slugs this run processes; empty/unset = every scenario"
     type: string
     mandatory: true
     secret: false
@@ -65,13 +66,11 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "demo"
     MINIO_ACCESS_KEY: "ai_circus"
-    # SCENARIO_SLUG deliberately has NO default here: a profile default would always
-    # win over docker-compose's per-instance SCENARIO_SLUG env var (pydantic-settings
-    # gives explicit constructor kwargs — which is what these profile overrides become
-    # — priority over the real process env), silently making every instance of this
-    # image process the same scenario regardless of its actual SCENARIO_SLUG override
-    # (see the AUTH_DISABLED comment in prediction/settings.yaml for the same pitfall).
-    # Set it in your own .env for local (non-docker) dev.
+    # Empty = every tabular_ml scenario under SCENARIOS_DIR. Safe to default here:
+    # there's only one instance of this service now (see prediction/settings.yaml's
+    # "Consolidation mechanism" comment) — though a real env var override of this
+    # specific value would still be silently ignored while this default exists.
+    SCENARIOS: ""
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

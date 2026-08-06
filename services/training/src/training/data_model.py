@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,7 +29,9 @@ class EnvConfig(BaseSettings):
         case_sensitive=True,
     )
     LOG_LEVEL: str = Field(description="Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    SCENARIO_SLUG: str = Field(description="Which tabular_ml scenario (scenarios/<slug>/scenario.yaml) this run trains")
+    SCENARIOS: str = Field(
+        description="Comma-separated tabular_ml scenario slugs this run trains; empty/unset = every scenario"
+    )
     ORG_ID: str = Field(description="Tenant (Logto Organization id) whose dataset this run trains on")
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
     MINIO_ENDPOINT: str = Field(
@@ -42,7 +43,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "af498101ea6b152ccd9e8d86b2559527b1fcc37290fc3aac4286dfe247e0ecbd"
+_SOURCE_YAML_HASH = "719590b1c01eb5ea6b7401ee0e3a857c8fb6ac2c1047686e161b620fc2afb1a0"
 
 
 EnvConfig.model_rebuild()
@@ -78,12 +79,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

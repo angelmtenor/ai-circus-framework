@@ -34,7 +34,7 @@ class FakeEnvConfig:
     def __init__(self) -> None:
         """Populate fixed, valid-looking configuration values."""
         self.SCENARIOS_DIR = "/scenarios"
-        self.SCENARIO_SLUG = "churn"
+        self.SCENARIOS = ""
         self.ORG_ID = "demo"
         self.MINIO_ENDPOINT = "http://minio:9000"
         self.MINIO_ACCESS_KEY = "ai_circus"
@@ -61,8 +61,8 @@ def build_validation_error() -> ValidationError:
     raise AssertionError("Expected ValidationError was not raised")
 
 
-def test_main_runs_the_etl_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """app.main() loads the scenario, connects to MinIO, and runs the ETL pipeline."""
+def test_main_runs_the_etl_pipeline_for_every_resolved_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
+    """app.main() runs the ETL pipeline once per scenario resolve_scenarios() returns."""
     fake_logger = FakeLogger()
     fake_dataset = FakeDataset()
 
@@ -75,7 +75,7 @@ def test_main_runs_the_etl_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinition()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
     monkeypatch.setattr(
         app.ObjectStore,
         "connect",
@@ -97,17 +97,14 @@ def test_main_runs_the_etl_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     assert fake_logger.success_messages
 
 
-def test_main_exits_if_scenario_has_no_dataset(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A scenario without dataset config (wrong kind) is rejected with a clear error."""
+def test_main_exits_if_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) is rejected with a clear error."""
     fake_logger = FakeLogger()
-
-    class FakeDefinitionWithoutDataset:
-        dataset = None
 
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app.ScenarioDefinition, "load", staticmethod(lambda _path: FakeDefinitionWithoutDataset()))
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
     with pytest.raises(SystemExit) as exc_info:
         app.main()
