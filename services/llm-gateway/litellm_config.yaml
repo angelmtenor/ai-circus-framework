@@ -13,12 +13,16 @@ model_list:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
 
-  # Default free-tier pick: 2.5 Flash Lite is Gemini's cheapest/highest-quota model
-  # (see https://ai.google.dev/gemini-api/docs/rate-limits — generous free-tier RPD),
-  # so it's the model most likely to just work with no billing set up.
+  # Default free-tier pick. Google has been retiring 2.x-generation models early for
+  # *newly created* API keys/projects (404 "no longer available to new users" well
+  # before the documented shutdown date — see
+  # https://discuss.ai.google.dev/t/gemini-2-5-flash-and-gemini-2-5-flash-lite-returning-404-no-longer-available-today-july-9-contradicts-oct-16-2026-shutdown-date/174267),
+  # pushing new users to the 3.x line instead — hence 3.1, not 2.5, Flash Lite here.
+  # If this 404s again on your key, check https://ai.google.dev/gemini-api/docs/models
+  # for the current free-tier "flash-lite"-class model and swap it in.
   - model_name: gemini-flash
     litellm_params:
-      model: gemini/gemini-2.5-flash-lite
+      model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GOOGLE_API_KEY
 
   # DeepSeek's own API (not a proxy of another provider) — cheap, OpenAI-compatible.
@@ -33,12 +37,16 @@ model_list:
       model: groq/llama-3.3-70b-versatile
       api_key: os.environ/GROQ_API_KEY
 
-  # OpenRouter — one key routes to many vendors' models; pinned here to a model
-  # OpenRouter currently serves free (":free" suffix) — swap for any OpenRouter
-  # model string (see https://openrouter.ai/models) once you have paid credits.
+  # OpenRouter — one key routes to many vendors' models. Individual ":free"-suffixed
+  # model slugs (e.g. meta-llama/llama-3.3-70b-instruct:free) get delisted/relisted
+  # within weeks, so this points at OpenRouter's own "Free Models Router"
+  # (https://openrouter.ai/openrouter/free) instead — it auto-picks a currently-free
+  # model for you and won't 404 when any one underlying model rotates out. Pin to a
+  # specific model string (see https://openrouter.ai/models) once you have paid
+  # credits and want a stable, known model.
   - model_name: openrouter
     litellm_params:
-      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
+      model: openrouter/openrouter/free
       api_key: os.environ/OPENROUTER_API_KEY
 
   # Optional — unreachable (no default model selected) until an operator sets

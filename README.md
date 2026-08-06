@@ -103,10 +103,10 @@ Supported providers today:
 | `model_name` | Provider | Key needed | Notes |
 |---|---|---|---|
 | `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | |
-| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | **Default free-tier pick** — routes to `gemini-2.5-flash-lite`, Gemini's cheapest/highest-quota model |
+| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | **Default free-tier pick** — routes to `gemini-3.1-flash-lite` (Google retires 2.x-line models early for new API keys — see `litellm_config.yaml`'s comment) |
 | `deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` | |
 | `groq-llama` | GroqCloud | `GROQ_API_KEY` | Free tier, very low latency |
-| `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors; pinned to a `:free`-tier model by default |
+| `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors; routes through OpenRouter's own `openrouter/free` auto-router by default (individual `:free` model slugs rotate too often to pin one) |
 | `azure-gpt4o` | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_API_BASE` | Also edit the `azure/<deployment>` line in `litellm_config.yaml` |
 | `llama3` | Ollama (local) | none | **Optional** — off by default, see below |
 
