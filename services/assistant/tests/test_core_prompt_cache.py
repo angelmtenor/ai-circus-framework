@@ -34,14 +34,16 @@ MPM_DEFINITION = ScenarioDefinition(
 
 CHURN_METADATA = {
     "model_name": "random_forest",
-    "test_accuracy": 0.86,
+    "test_score": 0.86,
+    "task_type": "classification",
     "target": "Exited",
     "feature_columns": ["CreditScore"],
 }
 
 MPM_METADATA = {
     "model_name": "logistic_regression",
-    "test_accuracy": 0.97,
+    "test_score": 0.97,
+    "task_type": "classification",
     "target": "Target",
     "feature_columns": ["Torque [Nm]"],
 }

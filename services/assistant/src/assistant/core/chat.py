@@ -25,11 +25,15 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
     feature-list/accuracy grounding already available from the trained model.
     """
     feature_columns = ", ".join(str(c) for c in metadata["feature_columns"])
+    if metadata["task_type"] == "regression":
+        score_phrase = f"test R² of {float(metadata['test_score']):.3f}"
+    else:
+        score_phrase = f"test accuracy {float(metadata['test_score']):.2%}"
     return (
         f"You are a data analyst assistant for the '{definition.title}' scenario.\n"
         f"{definition.chat.context.strip()}\n\n"
-        f"A {metadata['model_name']} model was trained on this data with test accuracy "
-        f"{float(metadata['test_accuracy']):.2%}. It predicts '{metadata['target']}' from these "
+        f"A {metadata['model_name']} model was trained on this data with {score_phrase}. "
+        f"It predicts '{metadata['target']}' from these "
         f"features: {feature_columns}.\n\n"
         "Answer questions about the data, the model, and its predictions clearly and concisely. "
         "If asked something outside this scope, say so plainly rather than guessing."

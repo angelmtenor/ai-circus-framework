@@ -54,7 +54,11 @@ def client() -> Generator[TestClient]:
     artifacts = ModelArtifacts(
         pipeline=FakePipeline(),
         explainer=FakeExplainer(),
-        metadata={"feature_columns": ["CreditScore", "Geography"], "transformed_feature_names": ["f1", "f2"]},
+        metadata={
+            "feature_columns": ["CreditScore", "Geography"],
+            "transformed_feature_names": ["f1", "f2"],
+            "task_type": "classification",
+        },
     )
 
     class FakeModelCache(ModelCache):
@@ -80,13 +84,13 @@ def test_healthz(client: TestClient) -> None:
 
 
 def test_predict_returns_probability_and_contributions(client: TestClient) -> None:
-    """POST /predict/{scenario_slug} returns one probability+contributions entry per record."""
+    """POST /predict/{scenario_slug} returns one prediction+contributions entry per record."""
     response = client.post("/predict/churn", json={"records": [{"CreditScore": 600, "Geography": "France"}]})
 
     assert response.status_code == 200
     body = response.json()
     assert len(body["predictions"]) == 1
-    assert body["predictions"][0]["probability"] == pytest.approx(0.6)
+    assert body["predictions"][0]["prediction"] == pytest.approx(0.6)
     assert body["predictions"][0]["contributions"] == {"f1": 0.1, "f2": -0.2}
 
 
@@ -97,10 +101,14 @@ def test_predict_matches_real_predict_function(client: TestClient) -> None:
     artifacts = ModelArtifacts(
         pipeline=FakePipeline(),
         explainer=FakeExplainer(),
-        metadata={"feature_columns": ["CreditScore", "Geography"], "transformed_feature_names": ["f1", "f2"]},
+        metadata={
+            "feature_columns": ["CreditScore", "Geography"],
+            "transformed_feature_names": ["f1", "f2"],
+            "task_type": "classification",
+        },
     )
     records = pd.DataFrame([{"CreditScore": 600, "Geography": "France"}])
 
     results = real_predict(artifacts, records)
 
-    assert results == [PredictionResult(probability=0.6, contributions={"f1": 0.1, "f2": -0.2})]
+    assert results == [PredictionResult(prediction=0.6, contributions={"f1": 0.1, "f2": -0.2})]

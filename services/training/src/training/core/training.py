@@ -14,9 +14,9 @@ from dataclasses import dataclass
 import pandas as pd
 import shap
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -24,19 +24,29 @@ from training.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Keyed by task_type, then candidate name (as referenced by scenario.yaml's
+# model.candidates) — .score() is accuracy for the classification estimators and R²
+# for the regression ones; both are "higher is better", so select_best_candidate()'s
+# gain-threshold comparison works unchanged across task types.
 CANDIDATE_ESTIMATORS = {
-    "logistic_regression": lambda: LogisticRegression(max_iter=1000),
-    "random_forest": lambda: RandomForestClassifier(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
+    "classification": {
+        "logistic_regression": lambda: LogisticRegression(max_iter=1000),
+        "random_forest": lambda: RandomForestClassifier(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
+    },
+    "regression": {
+        "linear_regression": lambda: LinearRegression(),
+        "random_forest": lambda: RandomForestRegressor(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
+    },
 }
 
 
 @dataclass(frozen=True)
 class TrainedCandidate:
-    """One trained candidate model and its held-out test accuracy."""
+    """One trained candidate model and its held-out test score (accuracy or R²)."""
 
     name: str
     pipeline: Pipeline
-    test_accuracy: float
+    test_score: float
 
 
 def split_features(df: pd.DataFrame, feature_columns: list[str]) -> tuple[list[str], list[str]]:
@@ -78,28 +88,30 @@ def train_candidate(
     y_test: pd.Series,
     numeric_features: list[str],
     categorical_features: list[str],
+    task_type: str = "classification",
 ) -> TrainedCandidate:
     """Train one named candidate estimator and score it on the held-out test set."""
-    pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[name]())
+    pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name]())
     pipeline.fit(x_train, y_train)
-    accuracy = pipeline.score(x_test, y_test)
-    logger.info("Trained candidate {!r}: test accuracy={:.4f}", name, accuracy)
-    return TrainedCandidate(name, pipeline, accuracy)
+    score = pipeline.score(x_test, y_test)
+    logger.info("Trained candidate {!r}: test score={:.4f}", name, score)
+    return TrainedCandidate(name, pipeline, score)
 
 
 def select_best_candidate(candidates: list[TrainedCandidate], accuracy_gain_threshold: float) -> TrainedCandidate:
     """Green Code policy: candidates are ordered simplest-first in scenario.yaml.
 
     A more complex candidate only replaces the current best if it beats it by more
-    than `accuracy_gain_threshold` — a minor accuracy gain is not worth the added
+    than `accuracy_gain_threshold` — a minor score gain (accuracy for classification,
+    R² for regression; both higher-is-better) is not worth the added
     training/inference/explainability cost of a more complex model.
     """
     best = candidates[0]
     for candidate in candidates[1:]:
-        gain = candidate.test_accuracy - best.test_accuracy
+        gain = candidate.test_score - best.test_score
         if gain > accuracy_gain_threshold:
             logger.info(
-                "Selecting {!r} over {!r}: accuracy gain {:.4f} > threshold {:.4f}",
+                "Selecting {!r} over {!r}: score gain {:.4f} > threshold {:.4f}",
                 candidate.name,
                 best.name,
                 gain,
@@ -108,7 +120,7 @@ def select_best_candidate(candidates: list[TrainedCandidate], accuracy_gain_thre
             best = candidate
         else:
             logger.info(
-                "Keeping simpler {!r} over {!r}: accuracy gain {:.4f} <= threshold {:.4f} (Green Code)",
+                "Keeping simpler {!r} over {!r}: score gain {:.4f} <= threshold {:.4f} (Green Code)",
                 best.name,
                 candidate.name,
                 gain,
@@ -126,6 +138,8 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
         return shap.TreeExplainer(
             model, data=x_transformed, feature_perturbation="interventional", model_output="probability"
         )
+    if isinstance(model, RandomForestRegressor):
+        return shap.TreeExplainer(model, data=x_transformed, feature_perturbation="interventional")
     return shap.LinearExplainer(model, x_transformed)
 
 

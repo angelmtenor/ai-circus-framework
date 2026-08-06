@@ -29,10 +29,14 @@ export type ScenarioSummary = {
   feature_columns?: string[] | null;
   feature_schema?: Record<string, FeatureSpec> | null;
   sample_questions: string[];
+  // tabular_ml only — "regression" scenarios render a plain "value units"
+  // prediction instead of the classification probability view.
+  task_type?: string | null;
+  target_units?: string | null;
 };
 
 export type PredictionResult = {
-  probability: number;
+  prediction: number;
   contributions: Record<string, number>;
 };
 

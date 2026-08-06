@@ -33,6 +33,8 @@ class ScenarioOut(BaseModel):
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
     sample_questions: list[str] = []
+    task_type: str | None = None
+    target_units: str | None = None
 
     model_config = {"from_attributes": True}
 

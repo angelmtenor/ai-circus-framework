@@ -22,9 +22,18 @@ DEFINITION = ScenarioDefinition(
 
 METADATA = {
     "model_name": "random_forest",
-    "test_accuracy": 0.8605,
+    "test_score": 0.8605,
+    "task_type": "classification",
     "target": "Exited",
     "feature_columns": ["CreditScore", "Geography", "Age"],
+}
+
+REGRESSION_METADATA = {
+    "model_name": "random_forest",
+    "test_score": 0.912,
+    "task_type": "regression",
+    "target": "ActualShippingDays",
+    "feature_columns": ["Carrier", "YShippingDistance"],
 }
 
 
@@ -38,6 +47,14 @@ def test_build_system_prompt_includes_scenario_and_model_details() -> None:
     assert "86.05%" in prompt
     assert "Exited" in prompt
     assert "CreditScore, Geography, Age" in prompt
+
+
+def test_build_system_prompt_uses_r2_wording_for_regression() -> None:
+    """A regression scenario's prompt cites an R² score, not a percentage accuracy."""
+    prompt = build_system_prompt(DEFINITION, REGRESSION_METADATA)
+
+    assert "test R² of 0.912" in prompt
+    assert "ActualShippingDays" in prompt
 
 
 def test_chat_sends_system_history_and_message_and_returns_reply() -> None:

@@ -38,6 +38,10 @@ class ScenarioSummary:
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
     sample_questions: list[str] = field(default_factory=list)
+    # tabular_ml only — lets both UIs render a plain "value units" prediction for
+    # regression scenarios instead of the classification percentage/probability view.
+    task_type: str | None = None
+    target_units: str | None = None
 
 
 @dataclass(frozen=True)

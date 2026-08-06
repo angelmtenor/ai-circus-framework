@@ -83,6 +83,15 @@ def _synthetic_normalized_dataset() -> pd.DataFrame:
     return pd.DataFrame({"numeric_feature": numeric_feature, "category_feature": category_feature, "target": target})
 
 
+def _synthetic_normalized_regression_dataset() -> pd.DataFrame:
+    rng = np.random.default_rng(0)
+    n = 120
+    numeric_feature = rng.normal(size=n)
+    category_feature = pd.Categorical(rng.choice(["A", "B"], size=n))
+    target = numeric_feature * 2 + rng.normal(scale=0.1, size=n)
+    return pd.DataFrame({"numeric_feature": numeric_feature, "category_feature": category_feature, "target": target})
+
+
 @pytest.fixture
 def fake_definition() -> object:
     """A scenario definition with real Tabular{Dataset,Model} config over synthetic columns."""
@@ -104,6 +113,33 @@ def fake_definition() -> object:
             task_type="classification",
             candidates=["logistic_regression", "random_forest"],
             accuracy_gain_threshold_for_complexity=0.02,
+        )
+
+    return FakeDefinition()
+
+
+@pytest.fixture
+def fake_regression_definition() -> object:
+    """A regression scenario definition with real Tabular{Dataset,Model} config."""
+
+    class FakeDefinition:
+        dataset = TabularDataset(
+            bucket="scenario-supply-chain",
+            raw_object="raw/x.csv",
+            seed_file="sample_data/x.csv",
+            index_col="id",
+            target="target",
+            feature_columns=["numeric_feature", "category_feature"],
+            feature_schema={
+                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
+                "category_feature": {"type": "categorical", "options": ["A", "B"], "default": "A"},
+            },
+        )
+        model = TabularModel(
+            task_type="regression",
+            candidates=["linear_regression", "random_forest"],
+            accuracy_gain_threshold_for_complexity=0.02,
+            target_units="days",
         )
 
     return FakeDefinition()
@@ -150,6 +186,36 @@ def test_main_trains_selects_explains_and_saves(monkeypatch: pytest.MonkeyPatch,
     metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
     assert metadata["model_name"] in {"logistic_regression", "random_forest"}
     assert metadata["candidates_evaluated"] == ["logistic_regression", "random_forest"]
+    assert metadata["task_type"] == "classification"
+    assert fake_logger.success_messages
+
+
+def test_main_trains_regression_scenario_without_stratify(
+    monkeypatch: pytest.MonkeyPatch, fake_regression_definition: object
+) -> None:
+    """A regression scenario (continuous target) trains successfully without stratify=y."""
+    fake_logger = FakeLogger()
+    store = FakeObjectStore()
+    df = _synthetic_normalized_regression_dataset()
+    buffer = io.BytesIO()
+    df.to_parquet(buffer)
+    store.put("demo", NORMALIZED_DATASET_KEY, buffer.getvalue())
+
+    monkeypatch.setattr(app, "logger", fake_logger)
+    monkeypatch.setattr(app, "configure_logger", lambda: None)
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"supply_chain": fake_regression_definition})
+    monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
+
+    app.main()
+
+    pipeline = joblib.load(io.BytesIO(store.objects["demo", MODEL_PIPELINE_KEY]))
+    predictions = pipeline.predict(df[["numeric_feature", "category_feature"]])
+    assert len(predictions) == len(df)
+
+    metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
+    assert metadata["model_name"] in {"linear_regression", "random_forest"}
+    assert metadata["task_type"] == "regression"
     assert fake_logger.success_messages
 
 

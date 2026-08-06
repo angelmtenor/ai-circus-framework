@@ -1,0 +1,78 @@
+# Seed definition for the "supply_chain" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# The framework's first `regression` scenario — ported from smart-data-science's
+# scenario_supply_chain.py (a synthetic dataset from an AWS Supply Chain workshop:
+# https://catalog.us-east-1.prod.workshops.aws/workshops/80ba0ea5-7cf9-4b8c-9d3f-1cd988b6c071/en-US/1-use-cases/7-supply-chain).
+
+slug: supply_chain
+kind: tabular_ml
+title: "Supply Chain Shipping ETA"
+description: >
+  Predicts a shipment's actual delivery time (in days) from carrier, distance,
+  order type, origin, and priority — logistics ETA estimation.
+role_required: "scenario:supply_chain"
+icon: "🚚"
+
+chat:
+  context: >
+    A logistics ETA model — predicts how many days a shipment will actually take to
+    arrive, from the carrier, shipping distance, order type, origin city, and
+    shipping priority.
+  sample_questions:
+    - "Which features matter most for predicting shipping time?"
+    - "How accurate is the trained model?"
+    - "Does shipping priority actually reduce delivery time?"
+
+dataset:
+  bucket: "scenario-supply-chain"
+  # MinIO key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/supply_chain.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/supply_chain.csv"
+  index_col: "OrderID"
+  target: "ActualShippingDays"
+  # Not used as features: ExpectedShippingDays/OnTimeDelivery would leak the target
+  # (OnTimeDelivery is derived directly from Actual vs. Expected shipping days),
+  # OrderDate isn't used chronologically here, ProductId is a non-predictive identifier.
+  protected_features_excluded: ["ExpectedShippingDays", "OnTimeDelivery", "OrderDate", "ProductId"]
+  feature_columns:
+    - Carrier
+    - YShippingDistance
+    - XShippingDistance
+    - InBulkOrder
+    - ShippingOrigin
+    - ShippingPriority
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges/options taken from the real dataset's min/max/value set (10000 rows).
+  feature_schema:
+    Carrier: {type: categorical, options: ["GlobalFreight", "MicroCarrier", "Shipper", "BigBird"], default: "GlobalFreight"}
+    YShippingDistance: {type: numeric, min: -476, max: 537, default: 0, step: 1}
+    XShippingDistance: {type: numeric, min: -436, max: 458, default: 0, step: 1}
+    InBulkOrder: {type: categorical, options: ["Bulk Order", "Single Order"], default: "Single Order"}
+    ShippingOrigin: {type: categorical, options: ["Atlanta", "Chicago", "Houston", "Las Vegas", "New York City", "Salt Lake City", "San Francisco", "Seattle"], default: "Atlanta"}
+    ShippingPriority: {type: categorical, options: ["Express", "Standard", "Ground", "Air"], default: "Standard"}
+
+model:
+  task_type: regression
+  # Green Code: candidates are evaluated smallest/fastest-first; a more complex model
+  # is only selected if it beats the simpler one by more than this margin.
+  candidates: ["linear_regression", "random_forest"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "days"
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

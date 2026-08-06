@@ -21,7 +21,7 @@ def test_predict_sends_records_and_bearer_token(monkeypatch: pytest.MonkeyPatch)
 
     def fake_post(url: str, json: dict, headers: dict, timeout: float) -> httpx.Response:
         captured.update(url=url, json=json, headers=headers)
-        return _response(url, {"predictions": [{"probability": 0.5, "contributions": {}}]})
+        return _response(url, {"predictions": [{"prediction": 0.5, "contributions": {}}]})
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
@@ -30,7 +30,7 @@ def test_predict_sends_records_and_bearer_token(monkeypatch: pytest.MonkeyPatch)
     assert captured["url"] == "http://prediction:8000/predict/churn"
     assert captured["json"] == {"records": [{"CreditScore": 600}]}
     assert captured["headers"] == {"Authorization": "Bearer the-token"}
-    assert result["predictions"][0]["probability"] == pytest.approx(0.5)
+    assert result["predictions"][0]["prediction"] == pytest.approx(0.5)
 
 
 def test_predict_omits_authorization_header_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:

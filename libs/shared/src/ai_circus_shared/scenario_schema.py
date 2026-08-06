@@ -57,6 +57,8 @@ class TabularModel(BaseModel):
     candidates: list[str]
     accuracy_gain_threshold_for_complexity: float
     explainability: Literal["shap"] = "shap"
+    # Display-only unit for a regression target (e.g. "days") — None for classification.
+    target_units: str | None = None
 
 
 class TabularServices(BaseModel):

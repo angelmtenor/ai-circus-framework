@@ -15,14 +15,16 @@ from prediction.core.model_cache import ModelArtifacts
 
 @dataclass(frozen=True)
 class PredictionResult:
-    """One record's churn probability and per-(transformed)-feature SHAP contributions."""
+    """One record's prediction (probability for classification, raw value for
+    regression) and per-(transformed)-feature SHAP contributions.
+    """
 
-    probability: float
+    prediction: float
     contributions: dict[str, float]
 
 
 def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[PredictionResult]:
-    """Return probability + per-(transformed)-feature SHAP contributions for each record.
+    """Return prediction + per-(transformed)-feature SHAP contributions for each record.
 
     Contributions are keyed by *transformed* feature names (post one-hot-encoding) —
     e.g. `cat__Geography_France`, not `Geography` — since that's the level at which
@@ -31,17 +33,22 @@ def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[Prediction
     feature_columns = artifacts.metadata["feature_columns"]
     x = records.loc[:, feature_columns]
 
-    probabilities = np.asarray(artifacts.pipeline.predict_proba(x))[:, 1]
+    if artifacts.metadata["task_type"] == "regression":
+        predictions = np.asarray(artifacts.pipeline.predict(x))
+    else:
+        predictions = np.asarray(artifacts.pipeline.predict_proba(x))[:, 1]
     x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
     shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
     # Binary-classification TreeExplainer with model_output="probability" returns
     # (n_samples, n_features, n_classes); keep just the positive class's contributions.
+    # (Regression explainers return a plain 2D (n_samples, n_features) array, so this
+    # branch never triggers for them.)
     if shap_values.ndim == 3:
         shap_values = shap_values[:, :, 1]
     feature_names = artifacts.metadata["transformed_feature_names"]
 
     results = []
-    for i, probability in enumerate(probabilities):
+    for i, prediction in enumerate(predictions):
         contributions = dict(zip(feature_names, [round(float(v), 4) for v in shap_values[i]], strict=True))
-        results.append(PredictionResult(probability=round(float(probability), 4), contributions=contributions))
+        results.append(PredictionResult(prediction=round(float(prediction), 4), contributions=contributions))
     return results

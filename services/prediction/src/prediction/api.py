@@ -25,9 +25,11 @@ class PredictRequest(BaseModel):
 
 
 class PredictionOut(BaseModel):
-    """A single record's churn probability and per-feature SHAP contributions."""
+    """A single record's prediction (probability for classification, raw value for
+    regression) and per-feature SHAP contributions.
+    """
 
-    probability: float
+    prediction: float
     contributions: dict[str, float]
 
 
@@ -76,5 +78,5 @@ def predict_endpoint(
     records = pd.DataFrame(body.records)
     predictions = run_predict(artifacts, records)
     return PredictResponse(
-        predictions=[PredictionOut(probability=p.probability, contributions=p.contributions) for p in predictions]
+        predictions=[PredictionOut(prediction=p.prediction, contributions=p.contributions) for p in predictions]
     )

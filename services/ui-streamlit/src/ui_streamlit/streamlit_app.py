@@ -145,7 +145,11 @@ def _render_tabular_ml(scenario: ScenarioSummary, identity: Identity) -> None:
     if st.button(f"Run {scenario.title}"):
         result = predict(config.PREDICTION_URL, scenario.slug, [record], identity.access_token)
         prediction = result["predictions"][0]
-        st.metric("Probability", f"{prediction['probability']:.1%}")
+        if scenario.task_type == "regression":
+            units = f" {scenario.target_units}" if scenario.target_units else ""
+            st.metric("Prediction", f"{prediction['prediction']:.2f}{units}")
+        else:
+            st.metric("Probability", f"{prediction['prediction']:.1%}")
         st.bar_chart(prediction["contributions"])
 
     st.divider()

@@ -62,14 +62,19 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     y = df[definition.dataset.target]
     numeric_features, categorical_features = split_features(x, definition.dataset.feature_columns)
 
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0, stratify=y)
+    # stratify=y requires discrete classes — not meaningful (and not possible) for a
+    # continuous regression target.
+    stratify = y if definition.model.task_type == "classification" else None
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0, stratify=stratify)
 
     candidates = [
-        train_candidate(name, x_train, y_train, x_test, y_test, numeric_features, categorical_features)
+        train_candidate(
+            name, x_train, y_train, x_test, y_test, numeric_features, categorical_features, definition.model.task_type
+        )
         for name in definition.model.candidates
     ]
     best = select_best_candidate(candidates, definition.model.accuracy_gain_threshold_for_complexity)
-    logger.success("Selected model: {!r} (test accuracy={:.4f})", best.name, best.test_accuracy)
+    logger.success("Selected model: {!r} (test score={:.4f})", best.name, best.test_score)
 
     # Refit the selected model on the full dataset for the final artifact.
     best.pipeline.fit(x, y)
@@ -86,7 +91,8 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     metadata = {
         "scenario_slug": slug,
         "model_name": best.name,
-        "test_accuracy": best.test_accuracy,
+        "test_score": best.test_score,
+        "task_type": definition.model.task_type,
         "candidates_evaluated": [c.name for c in candidates],
         "feature_columns": definition.dataset.feature_columns,
         "transformed_feature_names": transformed_feature_names(best.pipeline),

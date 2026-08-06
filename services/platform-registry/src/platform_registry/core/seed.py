@@ -60,6 +60,13 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
             existing.feature_columns = None
             existing.feature_schema = None
 
+        if definition.model is not None:
+            existing.task_type = definition.model.task_type
+            existing.target_units = definition.model.target_units
+        else:
+            existing.task_type = None
+            existing.target_units = None
+
         admin_stmt = select(Entitlement).where(
             Entitlement.org_id == ADMIN_ORG_ID, Entitlement.scenario_slug == definition.slug
         )

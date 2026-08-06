@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from training.core.training import (
     build_explainer,
@@ -27,6 +27,22 @@ def synthetic_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
     category = rng.choice(["A", "B"], size=n)
     # Target correlates with `numeric` so both candidates can learn something real.
     target = (numeric + rng.normal(scale=0.1, size=n) > 0).astype(int)
+
+    df = pd.DataFrame({"numeric_feature": numeric, "category_feature": category, "target": target})
+    x = df[["numeric_feature", "category_feature"]]
+    y = df["target"]
+    split = n * 4 // 5
+    return x.iloc[:split], x.iloc[split:], y.iloc[:split], y.iloc[split:]
+
+
+@pytest.fixture
+def synthetic_regression_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """A small, deterministic, linearly-correlated synthetic regression dataset."""
+    rng = np.random.default_rng(0)
+    n = 200
+    numeric = rng.normal(size=n)
+    category = rng.choice(["A", "B"], size=n)
+    target = numeric * 2 + rng.normal(scale=0.1, size=n)
 
     df = pd.DataFrame({"numeric_feature": numeric, "category_feature": category, "target": target})
     x = df[["numeric_feature", "category_feature"]]
@@ -66,16 +82,35 @@ def test_train_candidate_scores_on_test_set(synthetic_data: tuple) -> None:
     )
 
     assert candidate.name == "logistic_regression"
-    assert 0.0 <= candidate.test_accuracy <= 1.0
+    assert 0.0 <= candidate.test_score <= 1.0
+
+
+def test_train_candidate_scores_regression_on_test_set(synthetic_regression_data: tuple) -> None:
+    """train_candidate fits a regression estimator and reports its held-out R²."""
+    x_train, x_test, y_train, y_test = synthetic_regression_data
+
+    candidate = train_candidate(
+        "linear_regression",
+        x_train,
+        y_train,
+        x_test,
+        y_test,
+        ["numeric_feature"],
+        ["category_feature"],
+        task_type="regression",
+    )
+
+    assert candidate.name == "linear_regression"
+    assert candidate.test_score > 0.9  # near-perfect linear signal
 
 
 class _FakeCandidate:
     """Minimal stand-in for TrainedCandidate, avoiding a real sklearn fit in selection tests."""
 
-    def __init__(self, name: str, test_accuracy: float) -> None:
+    def __init__(self, name: str, test_score: float) -> None:
         """Store the fields select_best_candidate() reads."""
         self.name = name
-        self.test_accuracy = test_accuracy
+        self.test_score = test_score
 
 
 def test_select_best_candidate_keeps_simpler_model_below_threshold() -> None:
@@ -114,6 +149,32 @@ def test_build_explainer_uses_linear_explainer_for_logistic_regression(synthetic
     """A logistic_regression pipeline gets a LinearExplainer."""
     x_train, _x_test, y_train, _y_test = synthetic_data
     pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LogisticRegression())
+    pipeline.fit(x_train, y_train)
+
+    explainer = build_explainer(pipeline, x_train)
+
+    shap_values = explainer.shap_values(pipeline.named_steps["preprocessor"].transform(x_train))
+    assert shap_values.shape[0] == len(x_train)
+
+
+def test_build_explainer_uses_tree_explainer_for_random_forest_regressor(synthetic_regression_data: tuple) -> None:
+    """A random_forest regressor pipeline gets a plain (non-probability) TreeExplainer."""
+    x_train, _x_test, y_train, _y_test = synthetic_regression_data
+    pipeline = build_pipeline(
+        ["numeric_feature"], ["category_feature"], RandomForestRegressor(n_estimators=10, random_state=0)
+    )
+    pipeline.fit(x_train, y_train)
+
+    explainer = build_explainer(pipeline, x_train)
+
+    shap_values = explainer.shap_values(pipeline.named_steps["preprocessor"].transform(x_train))
+    assert shap_values.shape == (len(x_train), pipeline.named_steps["preprocessor"].transform(x_train).shape[1])
+
+
+def test_build_explainer_uses_linear_explainer_for_linear_regression(synthetic_regression_data: tuple) -> None:
+    """A linear_regression pipeline gets a LinearExplainer."""
+    x_train, _x_test, y_train, _y_test = synthetic_regression_data
+    pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LinearRegression())
     pipeline.fit(x_train, y_train)
 
     explainer = build_explainer(pipeline, x_train)

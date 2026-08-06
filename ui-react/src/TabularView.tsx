@@ -100,9 +100,16 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
       {error && <p className="error">{error}</p>}
       {result && (
         <div className="prediction-result">
-          <p>
-            <strong>Probability:</strong> {(result.probability * 100).toFixed(1)}%
-          </p>
+          {scenario.task_type === "regression" ? (
+            <p>
+              <strong>Prediction:</strong> {result.prediction.toFixed(2)}
+              {scenario.target_units ? ` ${scenario.target_units}` : ""}
+            </p>
+          ) : (
+            <p>
+              <strong>Probability:</strong> {(result.prediction * 100).toFixed(1)}%
+            </p>
+          )}
           <ul>
             {Object.entries(result.contributions).map(([feature, value]) => (
               <li key={feature}>
