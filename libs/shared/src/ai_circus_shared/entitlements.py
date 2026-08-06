@@ -7,7 +7,7 @@ to render only the scenarios a tenant is entitled to.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -21,13 +21,13 @@ class EntitlementDeniedError(Exception):
 class ScenarioSummary:
     """Scenario metadata as served by platform-registry (mirrors scenario.yaml).
 
-    `prediction_service`/`assistant_service`/`agent_service` are the compose service
-    names implementing this scenario — both UIs build request URLs from these
-    (`http://<service>.localhost`) instead of a single hardcoded global endpoint, since
-    multiple scenarios of the same kind can each run their own dedicated instance of
-    the same generic image (see docker-compose.yml, e.g. `prediction` vs
-    `prediction-mpm`). `feature_columns`/`feature_schema` drive both UIs' generic
-    tabular_ml form renderer — `None` for `conversational_rag` scenarios.
+    One consolidated `prediction`/`assistant`/`rag-agent` instance serves every
+    scenario of its kind (routed by `{scenario_slug}` in the request path, e.g.
+    `POST /predict/{slug}`), so there's no per-scenario service name to carry here —
+    both UIs call one fixed configured URL per kind. `feature_columns`/`feature_schema`
+    drive both UIs' generic tabular_ml form renderer, and `sample_questions` renders
+    as clickable chat suggestions — all `None` for `conversational_rag` scenarios
+    except `sample_questions`, which applies to both kinds.
     """
 
     slug: str
@@ -35,11 +35,9 @@ class ScenarioSummary:
     title: str
     description: str
     icon: str
-    prediction_service: str | None = None
-    assistant_service: str | None = None
-    agent_service: str | None = None
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
+    sample_questions: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

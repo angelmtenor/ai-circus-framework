@@ -17,6 +17,19 @@ description: >
 role_required: "scenario:churn"
 icon: "📉"
 
+# Supplements (doesn't replace) assistant's metadata-grounded prompt — it already
+# injects the trained model's real feature list/accuracy; this adds the human-authored
+# domain framing (see libs/shared/scenario_schema.py's ChatConfig).
+chat:
+  context: >
+    A retail bank's customer churn model — predicts the risk that a customer closes
+    their account, from account/usage features like credit score, tenure, balance,
+    number of products, and activity status.
+  sample_questions:
+    - "Which features matter most for predicting churn?"
+    - "How accurate is the trained model?"
+    - "Why would a customer with a high balance still be at risk of churning?"
+
 # Real, public dataset: https://www.kaggle.com/sonalidasgupta95/churn-prediction-of-bank-customers
 dataset:
   bucket: "scenario-churn"

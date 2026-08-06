@@ -23,23 +23,16 @@ router = APIRouter()
 
 
 class ScenarioOut(BaseModel):
-    """Scenario metadata returned to callers (mirrors ai_circus_shared.ScenarioSummary).
-
-    The `*_service` fields let a caller build a request URL by hostname convention
-    (`http://<service>.localhost`) for whichever compose instance implements this
-    particular scenario — see Scenario's docstring in core/models.py.
-    """
+    """Scenario metadata returned to callers (mirrors ai_circus_shared.ScenarioSummary)."""
 
     slug: str
     kind: str
     title: str
     description: str
     icon: str
-    prediction_service: str | None = None
-    assistant_service: str | None = None
-    agent_service: str | None = None
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
+    sample_questions: list[str] = []
 
     model_config = {"from_attributes": True}
 

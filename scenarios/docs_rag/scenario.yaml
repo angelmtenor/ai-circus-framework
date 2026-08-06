@@ -10,6 +10,20 @@ description: >
 role_required: "scenario:docs_rag"
 icon: "💬"
 
+# Grounds rag-agent's system prompt AND its judgment of whether a question is
+# in-domain enough to call the retrieve_docs tool at all — chitchat/off-topic
+# questions are answered directly, without retrieval (see libs/shared/scenario_schema).
+chat:
+  context: >
+    A retail bank's account policies, customer FAQ, and data security/fraud-monitoring
+    policy documents — checking/savings account types and limits, deposits and
+    withdrawals, disputing transactions, lost/stolen cards, and how customer data is
+    protected.
+  sample_questions:
+    - "What's the daily ATM withdrawal limit on a Premium Checking account?"
+    - "How do I dispute a transaction, and how long does it take?"
+    - "How is my data protected if my card is lost or stolen?"
+
 documents:
   # Source documents uploaded/staged into MinIO at bootstrap; etl-vectorize reads them from there.
   bucket: "scenario-docs-rag"

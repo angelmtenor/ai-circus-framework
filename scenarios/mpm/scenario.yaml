@@ -23,6 +23,16 @@ description: >
 role_required: "scenario:mpm"
 icon: "⚙️"
 
+chat:
+  context: >
+    An industrial machine predictive-maintenance model — predicts failure risk from
+    sensor readings (air/process temperature, rotational speed, torque, tool wear) and
+    the machine's type (L=low, M=medium, H=high performance variant).
+  sample_questions:
+    - "Which sensor readings contribute most to a high failure risk?"
+    - "Does tool wear alone predict failure, or does it depend on other factors?"
+    - "How accurate is the trained model?"
+
 # Real, public dataset (AI4I 2020 Predictive Maintenance):
 # https://www.kaggle.com/datasets/lumierebatalong/mpm-with-f1-score-89-and-g-mean-89
 dataset:

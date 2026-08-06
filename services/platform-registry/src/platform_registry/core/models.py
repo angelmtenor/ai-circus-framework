@@ -23,12 +23,12 @@ class Base(DeclarativeBase):
 class Scenario(Base):
     """A scenario's metadata, seeded from `scenarios/<slug>/scenario.yaml`.
 
-    `prediction_service`/`assistant_service`/`agent_service` let both UIs route a
-    request to the right compose service by hostname convention
-    (`http://<service>.localhost`) instead of a single hardcoded global URL — needed
-    since multiple `tabular_ml` (or, later, `conversational_rag`) scenarios can each
-    run their own dedicated instance of the same generic image (see docker-compose.yml,
-    e.g. `prediction` vs `prediction-mpm`).
+    One consolidated `prediction`/`assistant`/`rag-agent` instance serves every
+    scenario of its kind (routed by `{scenario_slug}` in the request path), so there's
+    no per-scenario service name to store here — both UIs call one fixed configured
+    URL per kind. `feature_columns`/`feature_schema` drive both UIs' generic
+    tabular_ml form renderer; `sample_questions` renders as chat suggestion chips for
+    either kind.
     """
 
     __tablename__ = "scenarios"
@@ -40,11 +40,9 @@ class Scenario(Base):
     icon: Mapped[str] = mapped_column(String(8))
     role_required: Mapped[str] = mapped_column(String(64))
 
-    prediction_service: Mapped[str | None] = mapped_column(String(64), default=None)
-    assistant_service: Mapped[str | None] = mapped_column(String(64), default=None)
-    agent_service: Mapped[str | None] = mapped_column(String(64), default=None)
     feature_columns: Mapped[list[str] | None] = mapped_column(JSON, default=None)
     feature_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    sample_questions: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

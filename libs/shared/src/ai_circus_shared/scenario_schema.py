@@ -107,6 +107,19 @@ class RagServices(BaseModel):
     agent: str
 
 
+class ChatConfig(BaseModel):
+    """Personalizes the scenario's chat assistant, regardless of `kind`.
+
+    `context` grounds the system prompt for `assistant` (tabular_ml) and, for
+    `rag-agent` (conversational_rag), also grounds its judgment of whether a
+    question is in-domain enough to call the retrieval tool at all. `sample_questions`
+    is surfaced as clickable suggestions in both UIs.
+    """
+
+    context: str
+    sample_questions: list[str] = []
+
+
 class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
@@ -116,6 +129,7 @@ class ScenarioDefinition(BaseModel):
     description: str
     role_required: str
     icon: str
+    chat: ChatConfig
 
     dataset: TabularDataset | None = None
     model: TabularModel | None = None

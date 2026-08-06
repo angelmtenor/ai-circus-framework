@@ -11,17 +11,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_circus_shared.scenario_schema import RagServices, TabularServices, load_all
+from ai_circus_shared.auth import ADMIN_ORG_ID
+from ai_circus_shared.scenario_schema import load_all
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from platform_registry.core.logger import get_logger
-from platform_registry.core.models import Scenario
+from platform_registry.core.models import Entitlement, Scenario
 
 logger = get_logger(__name__)
 
 
 def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
     """Upsert every `scenarios/<slug>/scenario.yaml` into the `scenarios` table.
+
+    Also auto-grants `ADMIN_ORG_ID` an entitlement to every scenario seeded here —
+    not a bypass of entitlement checking (see `ai_circus_shared.auth`), just a real,
+    self-maintaining entitlement row so the admin credential always has access to
+    every scenario, including ones added after this platform first launched.
 
     Args:
         session: An open SQLAlchemy session (caller commits).
@@ -44,22 +51,20 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.description = definition.description.strip()
         existing.icon = definition.icon
         existing.role_required = definition.role_required
+        existing.sample_questions = definition.chat.sample_questions
 
-        if definition.kind == "tabular_ml":
-            assert definition.dataset is not None
-            assert isinstance(definition.services, TabularServices)
-            existing.prediction_service = definition.services.prediction
-            existing.assistant_service = definition.services.assistant
-            existing.agent_service = None
+        if definition.dataset is not None:
             existing.feature_columns = definition.dataset.feature_columns
             existing.feature_schema = {k: v.model_dump() for k, v in definition.dataset.feature_schema.items()}
         else:
-            assert isinstance(definition.services, RagServices)
-            existing.prediction_service = None
-            existing.assistant_service = None
-            existing.agent_service = definition.services.agent
             existing.feature_columns = None
             existing.feature_schema = None
+
+        admin_stmt = select(Entitlement).where(
+            Entitlement.org_id == ADMIN_ORG_ID, Entitlement.scenario_slug == definition.slug
+        )
+        if session.scalars(admin_stmt).first() is None:
+            session.add(Entitlement(org_id=ADMIN_ORG_ID, scenario_slug=definition.slug))
 
         slugs.append(definition.slug)
 
