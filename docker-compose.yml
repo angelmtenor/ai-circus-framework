@@ -267,7 +267,8 @@ services:
         condition: service_started
     networks: [ai-circus]
 
-  # One-shot job: `docker compose --profile pipeline up --build etl-vectorize` (docs_rag scenario).
+  # One-shot job: `docker compose --profile pipeline up --build etl-vectorize`.
+  # Processes every conversational_rag scenario in SCENARIOS (empty/unset = all).
   etl-vectorize:
     build:
       context: .
@@ -275,7 +276,6 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
-      SCENARIO_SLUG: "docs_rag"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     volumes:
@@ -287,17 +287,19 @@ services:
         condition: service_started
     networks: [ai-circus]
 
-  # Long-running: RAG chatbot for the docs_rag scenario, grounded in the tenant's
-  # vectorized documents, answered via llm-gateway.
+  # Long-running: agentic RAG chatbot (see rag-agent/core/agent.py) for every
+  # conversational_rag scenario in SCENARIOS (empty/unset = all), grounded in the
+  # tenant's vectorized documents when the question is in-domain, answered via
+  # llm-gateway.
   rag-agent:
     build:
       context: .
       dockerfile: services/rag-agent/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
-      SCENARIO_SLUG: "docs_rag"
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
