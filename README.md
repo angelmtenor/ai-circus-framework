@@ -112,15 +112,22 @@ make bootstrap   # copy .env.example -> .env; then fill in Logto/LLM/MinIO secre
 make up-infra    # start postgres, logto, qdrant, minio, traefik
 ```
 
-Then, once you've configured Logto (see below):
+Then, once you've configured Logto (see below) — or skip that entirely for a quick look, see below:
 
 ```bash
 make up          # start every backend service + both UIs
 make pipeline     # (re)run etl-tabular -> training for every tabular_ml scenario (SCENARIOS=all)
 ```
 
-Or skip Logto entirely for a quick look: log in with the **admin key** (`ai-circus-2026` by
-default) on either UI's login screen — it's granted every scenario automatically.
+Now open a UI:
+
+- **`http://app.localhost`** — `ui-streamlit`
+- **`http://react.localhost`** — `ui-react`
+
+For a quick look without configuring Logto at all, log in with the **admin key**
+(`ai-circus-2026` by default, see `ADMIN_API_KEY` in `.env`) on either UI's login screen — it's
+granted every scenario automatically. Otherwise sign in with a Logto-managed user (see
+"First-time Logto setup" below).
 
 Local (non-Docker) development: each generated service under `services/*/` has its own
 `make run` (from `ai-circus-template`) — run it directly with `uv run` from inside that
