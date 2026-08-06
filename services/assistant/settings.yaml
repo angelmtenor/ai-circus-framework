@@ -127,14 +127,14 @@ environments:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
     MINIO_ACCESS_KEY: "ai_circus"
-    LLM_MODEL: "gpt-4o-mini"
     DEV_ORG_ID: "demo"
     # Empty = every tabular_ml scenario under SCENARIOS_DIR — see prediction/settings.yaml
     # for why a yaml default is safe here but not for AUTH_DISABLED/ADMIN_API_KEY below.
     SCENARIOS: ""
-    # AUTH_DISABLED/ADMIN_API_KEY deliberately have NO default here — see
+    # AUTH_DISABLED/ADMIN_API_KEY/LLM_MODEL deliberately have NO default here — see
     # prediction/settings.yaml for why (a profile default would always beat a real
-    # environment variable).
+    # environment variable — docker-compose.yml's LLM_MODEL default is what actually
+    # applies, and is meant to be swapped per-deployment without a rebuild).
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

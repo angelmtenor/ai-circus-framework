@@ -19,29 +19,29 @@ model_list:
       api_key: os.environ/GOOGLE_API_KEY
 
   # Optional — unreachable (no default model selected) until an operator sets
-  # AZURE_OPENAI_API_KEY/_BASE and edits `azure/<deployment>` below to match their
-  # actual Azure deployment name (litellm's `os.environ/VAR` substitution only
-  # replaces a value that's *entirely* that token, so the deployment name — which
-  # varies per Azure resource — can't be env-substituted inside this prefixed
-  # string). Also configurable at runtime, without a restart, via the ui-react
-  # Settings page → platform-registry's /llm-settings/* (see
-  # services/platform-registry/src/platform_registry/core/llm_settings.py), which
-  # builds the full "azure/<deployment>" string itself — no YAML edit needed there.
+  # AZURE_OPENAI_API_KEY/_BASE (see docker-compose.yml's llm-gateway env) and edits
+  # `azure/<deployment>` below to match their actual Azure deployment name
+  # (litellm's `os.environ/VAR` substitution only replaces a value that's *entirely*
+  # that token, so the deployment name — which varies per Azure resource — can't be
+  # env-substituted inside this prefixed string). ui-react's Settings page can only
+  # report/test this one (see platform_registry/core/llm_settings.py's docstring
+  # for why it can't apply a change here directly — no litellm DB mode).
   - model_name: azure-gpt4o
     litellm_params:
       model: azure/gpt-4o-mini # <- replace with your deployment name
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_base: os.environ/AZURE_OPENAI_API_BASE
 
-  # Fully local/no-API-key option — platform-agnostic, no cloud dependency (carried
-  # over from mlops_templates' original goals). Requires an Ollama instance the
-  # operator already runs (host machine or their own container) with the model
-  # pulled — llama3.2:3b is ~2GB, chosen so it fits in 3-4GB RAM; OLLAMA_API_BASE is
-  # unset by default, so this entry is simply unreachable until configured (env var
-  # or the Settings page, same as azure-gpt4o above).
+  # Fully local/no-API-key option — routes to the `ollama` service in
+  # docker-compose.yml (bundled, self-contained; OLLAMA_API_BASE defaults to
+  # `http://ollama:11434`), which auto-pulls llama3.2:1b (~1.3GB — kept small since
+  # this stack's demo host itself runs with little RAM headroom; llama3.2:3b/
+  # qwen2.5:3b are viable swaps on a host with more to spare) on first start via the
+  # `ollama-pull` one-shot service. Override OLLAMA_API_BASE in .env to point at an
+  # Ollama instance you run yourself instead.
   - model_name: llama3
     litellm_params:
-      model: ollama/llama3.2:3b
+      model: ollama/llama3.2:1b
       api_base: os.environ/OLLAMA_API_BASE
 
 general_settings:

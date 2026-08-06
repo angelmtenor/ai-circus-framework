@@ -80,9 +80,9 @@ PROVIDERS: dict[str, ProviderSpec] = {
         needs_base=True,
         env_vars=("OLLAMA_API_BASE",),
         hint=(
-            "Run `ollama pull llama3.2:3b` (~2GB, fits in 3-4GB RAM) on a machine reachable from "
-            "Docker, set OLLAMA_API_BASE in .env (default: http://host.docker.internal:11434 — "
-            "your own machine), then `docker compose up -d llm-gateway`."
+            "Bundled: docker-compose.yml's `ollama` service auto-pulls llama3.2:1b (~1.3GB) on "
+            "first start — no separate install needed. First run can take a minute; retest if it "
+            "times out. Set OLLAMA_API_BASE in .env to point at a different Ollama instead."
         ),
     ),
 }
