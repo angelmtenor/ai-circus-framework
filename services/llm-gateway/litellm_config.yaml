@@ -18,6 +18,16 @@ model_list:
       model: gemini/gemini-2.0-flash
       api_key: os.environ/GOOGLE_API_KEY
 
+  # Fully local/no-API-key option — platform-agnostic, no cloud dependency (carried
+  # over from mlops_templates' original goals). Requires an Ollama instance the
+  # operator already runs (host machine or their own container) with `llama3.1`
+  # pulled; OLLAMA_API_BASE is unset by default, so this entry is simply unreachable
+  # (not selected as a default model anywhere) until an operator configures it.
+  - model_name: llama3
+    litellm_params:
+      model: ollama/llama3.1
+      api_base: os.environ/OLLAMA_API_BASE
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   # Persistent spend-tracking (general_settings.database_url) is deliberately NOT
