@@ -47,14 +47,30 @@ A **scenario** is a self-contained demo, declared once in `scenarios/<slug>/scen
 and seeded into `platform-registry`'s Postgres schema at bootstrap (see "Scenario registry"
 below). Two kinds exist today:
 
-| Kind | Example | Services involved |
+| Kind | Examples | Services involved |
 |---|---|---|
-| `tabular_ml` | `churn` — customer churn prediction + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
+| `tabular_ml` | `churn` (customer churn), `mpm` (machine predictive maintenance) — dashboard + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
 | `conversational_rag` | `docs_rag` — agentic chatbot over vectorized documents | `etl-vectorize` → `rag-agent` |
 
-A tenant (Logto **Organization**) only sees the scenarios its members have been granted the
-matching `scenario:<slug>` role for — enforced both in the UI (what's shown) and at each
-backend service's API (what's allowed).
+A tenant (Logto **Organization**, or the shared admin credential — see below) only sees the
+scenarios its members have been granted the matching `scenario:<slug>` role for — enforced
+both in the UI (what's shown) and at each backend service's API (what's allowed).
+
+**One consolidated instance per kind serves every scenario of that kind** —
+`prediction`/`assistant` both load every `tabular_ml` scenario (`churn` *and* `mpm`, from the
+*same* running container), and `rag-agent` every `conversational_rag` scenario, routed by a
+`{scenario_slug}` path segment (`POST /predict/{slug}`, `POST /chat/{slug}`). This is
+controlled by each service's `SCENARIOS` env var (comma-separated slugs; empty/unset = every
+scenario of that kind) — adding a new scenario is a new `scenarios/<slug>/scenario.yaml` file,
+never a new container. Both UIs render every `tabular_ml` scenario's form purely from its
+`feature_columns`/`feature_schema` (see `libs/shared/scenario_schema.py`) — there is no
+scenario-specific form code anywhere.
+
+`rag-agent` is a real **LangChain tool-calling agent** (see
+`services/rag-agent/src/rag_agent/core/agent.py`), not a fixed "always retrieve" pipeline: the
+model decides whether a question needs its `retrieve_docs` tool at all, grounded in the
+scenario's `chat.context` — chitchat/off-topic questions get answered directly, with an empty
+`sources` list signaling "no retrieval happened" rather than always populating it.
 
 ### Foundations chosen for future SaaS scale
 
@@ -69,6 +85,13 @@ now and expensive to retrofit once single-tenant assumptions are baked in.
   format, not read directly by any other service.
 - **Ingress**: **Traefik** is the only container with a published port; every other service
   is reached through it by hostname — a 1:1 mapping onto a Kubernetes Ingress later.
+- **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
+  deployment) is a shared bearer token resolving to a fixed `admin` tenant, which
+  `platform-registry` auto-grants access to *every* scenario it seeds — a real, auditable
+  entitlement row, not a bypass of the entitlement check. Useful for demos/ops without
+  configuring Logto at all; all three login screens (`ui-streamlit`, `ui-react`, and this
+  key) end up enforced through the exact same `ai_circus_shared.auth.resolve_caller_identity`
+  path.
 
 ### Shared code
 
@@ -93,8 +116,11 @@ Then, once you've configured Logto (see below):
 
 ```bash
 make up          # start every backend service + both UIs
-make pipeline     # (re)run the churn scenario's etl -> training -> prediction pipeline
+make pipeline     # (re)run etl-tabular -> training for every tabular_ml scenario (SCENARIOS=all)
 ```
+
+Or skip Logto entirely for a quick look: log in with the **admin key** (`ai-circus-2026` by
+default) on either UI's login screen — it's granted every scenario automatically.
 
 Local (non-Docker) development: each generated service under `services/*/` has its own
 `make run` (from `ai-circus-template`) — run it directly with `uv run` from inside that
@@ -108,8 +134,8 @@ service's directory while the infra containers stay up via `make up-infra`.
 1. Register an API resource for the framework's backend; note its identifier for
    `LOGTO_API_RESOURCE_INDICATOR` in `.env`.
 2. Enable **Organizations**; each customer/team you want isolated is one Organization (tenant).
-3. Create organization roles named `scenario:churn` / `scenario:docs_rag` (one per
-   `scenarios/*/scenario.yaml`'s `role_required`).
+3. Create organization roles named `scenario:churn` / `scenario:mpm` / `scenario:docs_rag`
+   (one per `scenarios/*/scenario.yaml`'s `role_required`).
 4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (see `AGENTS.md`'s reasoning: managed
    auth over custom auth).
@@ -123,8 +149,12 @@ service's directory while the infra containers stay up via `make up-infra`.
 - **New backend service**: `make new-service NAME=my-service` — wraps real cookiecutter
   generation from `ai-circus-template`, wires in `libs/shared`, and adapts the Dockerfile for
   this repo's build-context conventions. Then add it to `docker-compose.yml`.
-- **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`docs_rag` for the two
-  kinds), re-run `platform-registry`'s seed step, and create the matching Logto role.
+- **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`mpm`/`docs_rag` for
+  both kinds) with a `chat:` block (`context` + `sample_questions`), re-run
+  `platform-registry`'s seed step (restart it — it seeds on startup), and create the matching
+  Logto role. **No new container, no UI code** — the existing `prediction`/`assistant` or
+  `rag-agent` instance picks it up automatically (their `SCENARIOS` env var defaults to "every
+  scenario of this kind"), and both UIs render its form/chat generically.
 
 ## Testing & CI
 
@@ -159,7 +189,12 @@ platform is feature-complete on `docker compose`.
 
 Kubernetes/Helm manifests, a custom in-app admin screen (Logto's console covers v1), a task
 queue for on-demand tenant-triggered jobs, distributed tracing/OpenTelemetry, evaluation
-tooling (Opik/Giskard), voice/multimodal agents (Pipecat), per-tenant billing/metering.
+tooling (Opik/Giskard), voice/multimodal agents (Pipecat), per-tenant billing/metering, a
+shared cache (e.g. Redis) for `prediction`/`assistant`'s per-`(org, scenario)` model/prompt
+caches once running multiple replicas of either makes the current in-process `dict` cache
+insufficient, and a real AG-UI runtime bridge for `ui-react`'s `rag-agent` chat (CopilotKit's
+packages are installed and the app is wrapped in `<CopilotKit>`, but `ChatPanel` still calls
+`rag-agent` directly rather than through a Copilot Runtime).
 
 ## Contributing
 
