@@ -216,12 +216,14 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
       AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE}
-      # Defaults to the bundled `ollama` container below (self-contained, works on
-      # any host) — override in .env to point at an Ollama instance you run yourself.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      # Points at the `ollama` container below by default, but that container is
+      # OPTIONAL (profile "ollama", not started by `docker compose up` — see below)
+      # so this is only reachable once you run `make ollama-up`. Override in .env to
+      # point at an Ollama instance you run yourself instead.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
-    depends_on:
-      ollama:
-        condition: service_started
     networks: [ai-circus]
     labels:
       - "traefik.enable=true"
@@ -229,22 +231,28 @@ services:
       - "traefik.http.routers.llm-gateway.entrypoints=web"
       - "traefik.http.services.llm-gateway.loadbalancer.server.port=4000"
 
-  # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — bundled so
-  # "no genai provider configured" always has a free, working fallback out of the
-  # box, on any host (no host.docker.internal / manually-installed-Ollama dependency).
-  # mem_limit keeps a misbehaving pull/inference from starving the rest of the stack.
+  # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — OPTIONAL
+  # (profile "ollama"): `docker compose up`/`make up` never starts this, to avoid
+  # spending RAM/disk on every boot when you already have a cloud provider key. Run
+  # `make ollama-up` (or `docker compose --profile ollama up -d ollama ollama-pull`)
+  # to opt in as a free, no-API-key fallback. mem_limit keeps a misbehaving
+  # pull/inference from starving the rest of the stack.
   ollama:
     image: ollama/ollama:latest
+    profiles: ["ollama"]
     volumes:
       - ollama-data:/root/.ollama
     networks: [ai-circus]
     mem_limit: 2g
 
-  # One-shot: pulls the small (~1.3GB) default model into the `ollama-data` volume on
-  # first start; a no-op (fast exit) on every start after that since it's cached.
+  # One-shot: pulls the default model (~2GB) into the `ollama-data` volume on first
+  # start; a no-op (fast exit) on every start after that since it's cached. 3B is the
+  # floor for usable answers — the 1B tier is too inaccurate for real chat use, so
+  # it's deliberately not used here even though it's a smaller download.
   ollama-pull:
     image: ollama/ollama:latest
-    entrypoint: ["/bin/sh", "-c", "OLLAMA_HOST=ollama:11434 ollama pull llama3.2:1b"]
+    profiles: ["ollama"]
+    entrypoint: ["/bin/sh", "-c", "OLLAMA_HOST=ollama:11434 ollama pull llama3.2:3b"]
     depends_on:
       ollama:
         condition: service_started
@@ -262,9 +270,11 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # Defaults to the bundled, free, always-working local Ollama model — override
-      # to gpt-4o-mini/gemini-flash/azure-gpt4o in .env once you've added billing
-      # credits to a cloud provider (check via the Settings page's Test button).
+      # Defaults to "llama3", which only answers once you've run `make ollama-up`
+      # (see docker-compose.yml's `ollama` service — off by default). Set at least
+      # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
+      # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
+      # actually working via the Settings page's Test/Test All buttons.
       LLM_MODEL: ${LLM_MODEL:-llama3}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
@@ -336,9 +346,11 @@ services:
     environment:
       APP_ENVIRONMENT: docker
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # Defaults to the bundled, free, always-working local Ollama model — override
-      # to gpt-4o-mini/gemini-flash/azure-gpt4o in .env once you've added billing
-      # credits to a cloud provider (check via the Settings page's Test button).
+      # Defaults to "llama3", which only answers once you've run `make ollama-up`
+      # (see docker-compose.yml's `ollama` service — off by default). Set at least
+      # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
+      # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
+      # actually working via the Settings page's Test/Test All buttons.
       LLM_MODEL: ${LLM_MODEL:-llama3}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}

@@ -182,6 +182,17 @@ export async function testLlmProvider(
   return asJson(response);
 }
 
+export async function testAllLlmProviders(
+  baseUrl: string,
+  accessToken: string | null,
+): Promise<Record<string, LlmProviderTest>> {
+  const response = await fetch(`${baseUrl}/llm-settings/providers/test-all`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
 export async function chat(
   baseUrl: string,
   scenarioSlug: string,

@@ -12,7 +12,7 @@ endif
 CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
-.PHONY: help bootstrap up up-infra down logs pipeline new-service sync-shared check-all clean
+.PHONY: help bootstrap up up-infra down logs pipeline new-service sync-shared check-all clean ollama-up
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -42,6 +42,9 @@ pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start pre
 	@docker compose up --build etl-tabular
 	@docker compose up --build training
 	@docker compose up -d --build prediction
+
+ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; pulls llama3.2:3b, ~2GB, on first run)
+	@docker compose --profile ollama up -d ollama ollama-pull
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 

@@ -13,10 +13,33 @@ model_list:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
 
+  # Default free-tier pick: 2.5 Flash Lite is Gemini's cheapest/highest-quota model
+  # (see https://ai.google.dev/gemini-api/docs/rate-limits — generous free-tier RPD),
+  # so it's the model most likely to just work with no billing set up.
   - model_name: gemini-flash
     litellm_params:
-      model: gemini/gemini-2.0-flash
+      model: gemini/gemini-2.5-flash-lite
       api_key: os.environ/GOOGLE_API_KEY
+
+  # DeepSeek's own API (not a proxy of another provider) — cheap, OpenAI-compatible.
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # GroqCloud — free tier, LPU-hosted, very low latency.
+  - model_name: groq-llama
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  # OpenRouter — one key routes to many vendors' models; pinned here to a model
+  # OpenRouter currently serves free (":free" suffix) — swap for any OpenRouter
+  # model string (see https://openrouter.ai/models) once you have paid credits.
+  - model_name: openrouter
+    litellm_params:
+      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
 
   # Optional — unreachable (no default model selected) until an operator sets
   # AZURE_OPENAI_API_KEY/_BASE (see docker-compose.yml's llm-gateway env) and edits
@@ -33,15 +56,17 @@ model_list:
       api_base: os.environ/AZURE_OPENAI_API_BASE
 
   # Fully local/no-API-key option — routes to the `ollama` service in
-  # docker-compose.yml (bundled, self-contained; OLLAMA_API_BASE defaults to
-  # `http://ollama:11434`), which auto-pulls llama3.2:1b (~1.3GB — kept small since
-  # this stack's demo host itself runs with little RAM headroom; llama3.2:3b/
-  # qwen2.5:3b are viable swaps on a host with more to spare) on first start via the
-  # `ollama-pull` one-shot service. Override OLLAMA_API_BASE in .env to point at an
-  # Ollama instance you run yourself instead.
+  # docker-compose.yml. That service is OPTIONAL (profile "ollama", not started by
+  # `docker compose up` by default — see docker-compose.yml) since it costs real
+  # RAM/disk just sitting idle; start it explicitly with `make ollama-up` when you
+  # want a no-API-key fallback. Its `ollama-pull` one-shot job pulls llama3.2:3b
+  # (~2GB) on first start — 3B is the floor for usable answers in this stack's
+  # assistant/rag-agent chat scenarios; the 1B tier answers too unreliably to be
+  # worth bundling. Override OLLAMA_API_BASE in .env to point at an Ollama instance
+  # you run yourself instead (any 3B+ model works).
   - model_name: llama3
     litellm_params:
-      model: ollama/llama3.2:1b
+      model: ollama/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
 
 general_settings:

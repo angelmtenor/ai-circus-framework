@@ -62,8 +62,26 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: DEEPSEEK_API_KEY
+    description: "DeepSeek API key (only needed if litellm_config.yaml routes to the deepseek-chat model)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: GROQ_API_KEY
+    description: "GroqCloud API key (only needed if litellm_config.yaml routes to the groq-llama model)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: OPENROUTER_API_KEY
+    description: "OpenRouter API key (only needed if litellm_config.yaml routes to the openrouter model)"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: OLLAMA_API_BASE
-    description: "Base URL of an operator-run Ollama instance (llama3 model only); unset = that model is unreachable"
+    description: "Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable"
     type: string
     mandatory: false
     secret: false

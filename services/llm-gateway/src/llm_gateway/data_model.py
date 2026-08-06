@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,13 +47,25 @@ class EnvConfig(BaseSettings):
         description="Azure OpenAI resource endpoint, e.g. https://<resource>.openai.azure.com (azure-gpt4o model only)",
         default=None,
     )
+    DEEPSEEK_API_KEY: SecretStr | None = Field(
+        description="DeepSeek API key (only needed if litellm_config.yaml routes to the deepseek-chat model)",
+        default=None,
+    )
+    GROQ_API_KEY: SecretStr | None = Field(
+        description="GroqCloud API key (only needed if litellm_config.yaml routes to the groq-llama model)",
+        default=None,
+    )
+    OPENROUTER_API_KEY: SecretStr | None = Field(
+        description="OpenRouter API key (only needed if litellm_config.yaml routes to the openrouter model)",
+        default=None,
+    )
     OLLAMA_API_BASE: str | None = Field(
-        description="Base URL of an operator-run Ollama instance (llama3 model only); unset = that model is unreachable",
+        description="Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable",
         default=None,
     )
 
 
-_SOURCE_YAML_HASH = "0d81c5bf2b2d3c35d63c64f69011fbf37a2970b45cd1f8b97f2f3c833de05913"
+_SOURCE_YAML_HASH = "21fe8a594743319a75eb773cea8d2aba4a15d9e7079261ecc522a7f9909f7d1b"
 
 
 EnvConfig.model_rebuild()
@@ -90,12 +101,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

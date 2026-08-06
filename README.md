@@ -93,6 +93,41 @@ now and expensive to retrofit once single-tenant assumptions are baked in.
   key) end up enforced through the exact same `ai_circus_shared.auth.resolve_caller_identity`
   path.
 
+### LLM providers
+
+`llm-gateway` execs the real **LiteLLM** proxy (`litellm[proxy]`) — every consumer
+(`assistant`, `rag-agent`, `ui-react`) calls its OpenAI-compatible API by `model_name`, never a
+provider SDK directly (see `services/llm-gateway/litellm_config.yaml` for the routing table).
+Supported providers today:
+
+| `model_name` | Provider | Key needed | Notes |
+|---|---|---|---|
+| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | |
+| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | **Default free-tier pick** — routes to `gemini-2.5-flash-lite`, Gemini's cheapest/highest-quota model |
+| `deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` | |
+| `groq-llama` | GroqCloud | `GROQ_API_KEY` | Free tier, very low latency |
+| `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors; pinned to a `:free`-tier model by default |
+| `azure-gpt4o` | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_API_BASE` | Also edit the `azure/<deployment>` line in `litellm_config.yaml` |
+| `llama3` | Ollama (local) | none | **Optional** — off by default, see below |
+
+**At least one of these must actually work** for `assistant`/`rag-agent` chat to answer: either
+set one provider's API key(s) above in `.env` and point `LLM_MODEL` at its `model_name`, or run
+`make ollama-up` to start the bundled Ollama container as a free, no-API-key fallback (leave
+`LLM_MODEL=llama3`). Runtime key updates from a browser aren't possible — this deployment
+doesn't run litellm's DB-backed proxy mode (see `litellm_config.yaml`'s comments) — so a new key
+always means edit `.env` then `docker compose up -d llm-gateway`.
+
+`ollama` is **not started by `make up`** — it's a real container with real RAM/disk cost sitting
+idle if you already have a cloud provider key, so it's gated behind the `ollama` compose profile.
+`make ollama-up` starts it and pulls **`llama3.2:3b`** (~2GB) on first run. Stick to a 3B/4B-class
+model or larger if you swap it — Ollama's 1B tier answers too unreliably to be usable for real
+chat.
+
+ui-react's admin **Settings** page (`http://react.localhost` → Settings) shows every provider's
+live routing status, a per-provider **Test** button (a real round-trip completion call), and a
+**Test All** button that fires every provider's test concurrently — the fastest way to see which
+of your configured keys are actually working.
+
 ### Shared code
 
 Every backend service is generated via **real `cookiecutter` generation** against
@@ -118,6 +153,15 @@ Then, once you've configured Logto (see below) — or skip that entirely for a q
 make up          # start every backend service + both UIs
 make pipeline     # (re)run etl-tabular -> training for every tabular_ml scenario (SCENARIOS=all)
 ```
+
+**You need a working LLM before `assistant`/`rag-agent` chat will answer anything** — `make up`
+does *not* start a local model by default (see "LLM providers" below), so do one of:
+
+- Set at least one provider API key in `.env` (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`,
+  `GROQ_API_KEY`, `OPENROUTER_API_KEY`, or `AZURE_OPENAI_API_KEY`+`AZURE_OPENAI_API_BASE`) and point
+  `LLM_MODEL` at it, **or**
+- Run `make ollama-up` to start the bundled, free, no-API-key Ollama fallback instead (leave
+  `LLM_MODEL` at its default `llama3`).
 
 Now open a UI:
 

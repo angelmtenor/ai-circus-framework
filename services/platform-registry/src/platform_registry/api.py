@@ -36,6 +36,8 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
 
 
 class LlmProviderOut(BaseModel):
+    """One provider's live routing status, per llm_settings.list_providers."""
+
     provider: str
     label: str
     route_exists: bool
@@ -48,6 +50,8 @@ class LlmProviderOut(BaseModel):
 
 
 class LlmProviderTestOut(BaseModel):
+    """Result of a real round-trip completion call against one provider."""
+
     ok: bool
     error: str | None = None
     latency_ms: float | None = None
@@ -139,3 +143,14 @@ def test_llm_provider(provider: str) -> dict[str, object]:
     if provider not in llm_settings.PROVIDERS:
         raise HTTPException(status_code=404, detail=f"Unknown provider {provider!r}.")
     return llm_settings.test_provider(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value(), provider)
+
+
+@router.post(
+    "/llm-settings/providers/test-all",
+    response_model=dict[str, LlmProviderTestOut],
+    dependencies=[Depends(require_admin)],
+)
+def test_all_llm_providers() -> dict[str, dict[str, object]]:
+    """Round-trip every provider concurrently — the Settings page's "Test All" button."""
+    config = get_env_config()
+    return llm_settings.test_all_providers(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value())

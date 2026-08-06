@@ -21,6 +21,7 @@ effect until an operator edits `.env` and restarts llm-gateway anyway.
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import httpx
@@ -51,12 +52,39 @@ PROVIDERS: dict[str, ProviderSpec] = {
     ),
     "gemini": ProviderSpec(
         key="gemini",
-        label="Google Gemini",
+        label="Google Gemini (2.5 Flash Lite)",
         model_name="gemini-flash",
         needs_key=True,
         needs_base=False,
         env_vars=("GOOGLE_API_KEY",),
-        hint="Set GOOGLE_API_KEY in .env, then `docker compose up -d llm-gateway`.",
+        hint=("Free-tier default. Set GOOGLE_API_KEY in .env, then `docker compose up -d llm-gateway`."),
+    ),
+    "deepseek": ProviderSpec(
+        key="deepseek",
+        label="DeepSeek",
+        model_name="deepseek-chat",
+        needs_key=True,
+        needs_base=False,
+        env_vars=("DEEPSEEK_API_KEY",),
+        hint="Set DEEPSEEK_API_KEY in .env, then `docker compose up -d llm-gateway`.",
+    ),
+    "groq": ProviderSpec(
+        key="groq",
+        label="GroqCloud",
+        model_name="groq-llama",
+        needs_key=True,
+        needs_base=False,
+        env_vars=("GROQ_API_KEY",),
+        hint="Free tier. Set GROQ_API_KEY in .env, then `docker compose up -d llm-gateway`.",
+    ),
+    "openrouter": ProviderSpec(
+        key="openrouter",
+        label="OpenRouter",
+        model_name="openrouter",
+        needs_key=True,
+        needs_base=False,
+        env_vars=("OPENROUTER_API_KEY",),
+        hint="Set OPENROUTER_API_KEY in .env, then `docker compose up -d llm-gateway`.",
     ),
     "azure_openai": ProviderSpec(
         key="azure_openai",
@@ -80,9 +108,11 @@ PROVIDERS: dict[str, ProviderSpec] = {
         needs_base=True,
         env_vars=("OLLAMA_API_BASE",),
         hint=(
-            "Bundled: docker-compose.yml's `ollama` service auto-pulls llama3.2:1b (~1.3GB) on "
-            "first start — no separate install needed. First run can take a minute; retest if it "
-            "times out. Set OLLAMA_API_BASE in .env to point at a different Ollama instead."
+            "Optional, no API key needed: run `make ollama-up` to start docker-compose.yml's "
+            "`ollama` service (off by default), which auto-pulls llama3.2:3b (~2GB) — the 1B tier "
+            "is too inaccurate for real chat use, so this stack doesn't bundle it. First run can "
+            "take a minute; retest if it times out. Set OLLAMA_API_BASE in .env to point at a "
+            "different (3B+) Ollama model instead."
         ),
     ),
 }
@@ -164,3 +194,14 @@ def test_provider(base_url: str, master_key: str, provider: str) -> dict[str, ob
 
     reply = response.json()["choices"][0]["message"]["content"]
     return {"ok": True, "error": None, "latency_ms": latency_ms, "reply": reply[:200]}
+
+
+def test_all_providers(base_url: str, master_key: str) -> dict[str, dict[str, object]]:
+    """Round-trip every provider concurrently (one thread per provider, each opening
+    its own httpx.Client) — the Settings page's "Test All" button. Providers without
+    a configured key fail individually (surfaced per-provider below) rather than
+    blocking the rest; this always returns one result per entry in PROVIDERS.
+    """
+    with ThreadPoolExecutor(max_workers=len(PROVIDERS)) as pool:
+        futures = {key: pool.submit(test_provider, base_url, master_key, key) for key in PROVIDERS}
+        return {key: future.result() for key, future in futures.items()}

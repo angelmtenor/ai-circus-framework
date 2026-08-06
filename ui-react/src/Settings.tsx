@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listLlmProviders, testLlmProvider, type LlmProvider, type LlmProviderTest } from "./apiClient";
+import { listLlmProviders, testAllLlmProviders, testLlmProvider, type LlmProvider, type LlmProviderTest } from "./apiClient";
 import { config } from "./config";
 
 /**
@@ -16,6 +16,7 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
   const [providers, setProviders] = useState<LlmProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  const [testingAll, setTestingAll] = useState(false);
   const [results, setResults] = useState<Record<string, LlmProviderTest>>({});
 
   function load() {
@@ -39,14 +40,35 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
     }
   }
 
+  async function runTestAll() {
+    setTestingAll(true);
+    try {
+      const allResults = await testAllLlmProviders(config.platformRegistryUrl, accessToken);
+      setResults((r) => ({ ...r, ...allResults }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTestingAll(false);
+    }
+  }
+
   return (
     <div className="settings-page">
-      <h2>⚙️ LLM Provider Settings</h2>
+      <div className="settings-card-header">
+        <h2>⚙️ LLM Provider Settings</h2>
+        {providers && (
+          <button className="btn-secondary" onClick={runTestAll} disabled={testingAll || testing !== null}>
+            {testingAll ? "Testing all…" : "▶ Test All"}
+          </button>
+        )}
+      </div>
       <p className="panel-hint">
         Every provider here is configured through <code>.env</code> (this deployment's llm-gateway doesn't run
         litellm's database-backed mode, so runtime key updates from the browser can't apply — see the hint on each
-        card for the exact variable names). Use <strong>Test</strong> to see, right now, whether a provider is
-        actually reachable and answering.
+        card for the exact variable names). Use <strong>Test</strong> (or <strong>Test All</strong> to check every
+        provider concurrently) to see, right now, whether a provider is actually reachable and answering. At least
+        one provider needs a valid key — or run <code>make ollama-up</code> for a free local fallback — for
+        assistant/rag-agent chat to work at all.
       </p>
       {error && <p className="error">{error}</p>}
       {!providers && !error && <div className="app-loading">Loading providers…</div>}
@@ -78,7 +100,11 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
                     </code>
                   ))}
                 </div>
-                <button className="btn-secondary" onClick={() => runTest(p.provider)} disabled={testing === p.provider}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => runTest(p.provider)}
+                  disabled={testing === p.provider || testingAll}
+                >
                   {testing === p.provider ? "Testing…" : "▶ Test"}
                 </button>
                 {result && (
