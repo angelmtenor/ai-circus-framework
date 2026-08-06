@@ -22,6 +22,7 @@ import uvicorn
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import ValidationError
 
@@ -62,6 +63,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="assistant", lifespan=lifespan)
+# ui-react calls this API directly from the browser (never via cookies, always a
+# Bearer token), so a wildcard origin carries no CSRF/credential risk here.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
 
 

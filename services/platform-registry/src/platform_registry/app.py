@@ -17,6 +17,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from platform_registry import get_env_config
@@ -45,6 +46,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="platform-registry", lifespan=lifespan)
+# ui-react calls this API directly from the browser (never via cookies, always a
+# Bearer token), so a wildcard origin carries no CSRF/credential risk here.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
 
 

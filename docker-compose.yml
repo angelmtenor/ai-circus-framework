@@ -356,6 +356,11 @@ services:
       dockerfile: ui-react/Dockerfile
       args:
         VITE_LOGTO_APP_ID: ${UI_REACT_LOGTO_APP_ID:-}
+        # Mirrors ui-streamlit's DEV_MODE (see root .env's DEV_MODE) — bakes the same
+        # dev-login bypass into the React bundle. Only takes effect end-to-end if the
+        # backend services' AUTH_DISABLED is also true (see useIdentity.ts's docstring).
+        VITE_DEV_MODE: ${DEV_MODE:-false}
+        VITE_DEV_ORG_ID: ${DEV_ORG_ID:-demo}
     networks: [ai-circus]
     labels:
       - "traefik.enable=true"
