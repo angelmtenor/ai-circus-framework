@@ -38,6 +38,10 @@ export type ScenarioSummary = {
 export type PredictionResult = {
   prediction: number;
   contributions: Record<string, number>;
+  // Regression-only 90% prediction interval (LightGBM quantile models) — null for
+  // classification scenarios or if a scenario has no interval models trained.
+  prediction_lower: number | null;
+  prediction_upper: number | null;
 };
 
 export type ChatMessage = { role: string; content: string };
@@ -45,6 +49,29 @@ export type ChatMessage = { role: string; content: string };
 export type ChatResult = {
   reply: string;
   sources?: { source: string; score: number }[];
+};
+
+export type DatasetSample = {
+  columns: string[];
+  rows: Record<string, string | number | null>[];
+  total_rows: number;
+};
+
+export type FeatureImportance = { feature: string; importance: number };
+export type CategoryBreakdown = { category: string; score: number; n: number };
+
+export type DatasetEvaluation = {
+  task_type: string;
+  target: string;
+  n: number;
+  metrics: Record<string, number>;
+  feature_importance: FeatureImportance[];
+  breakdown_feature: string | null;
+  breakdown: CategoryBreakdown[];
+  actuals: number[];
+  predictions: number[];
+  prediction_lower: number[] | null;
+  prediction_upper: number[] | null;
 };
 
 function headers(accessToken: string | null): HeadersInit {
@@ -75,6 +102,30 @@ export async function predict(
     method: "POST",
     headers: headers(accessToken),
     body: JSON.stringify({ records }),
+  });
+  return asJson(response);
+}
+
+export async function datasetSample(
+  baseUrl: string,
+  scenarioSlug: string,
+  limit: number,
+  accessToken: string | null,
+): Promise<DatasetSample> {
+  const response = await fetch(`${baseUrl}/dataset/${scenarioSlug}/sample?limit=${limit}`, {
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
+export async function datasetEvaluation(
+  baseUrl: string,
+  scenarioSlug: string,
+  limit: number,
+  accessToken: string | null,
+): Promise<DatasetEvaluation> {
+  const response = await fetch(`${baseUrl}/dataset/${scenarioSlug}/evaluation?limit=${limit}`, {
+    headers: headers(accessToken),
   });
   return asJson(response);
 }

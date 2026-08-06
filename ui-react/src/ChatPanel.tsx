@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { chat, type ChatMessage } from "./apiClient";
+import { renderMarkdown } from "./markdown";
 
 /**
  * A minimal chat UI calling a scenario's /chat/{scenarioSlug} endpoint directly.
@@ -11,52 +12,84 @@ import { chat, type ChatMessage } from "./apiClient";
  * follow-up (see root README "Reserved for later"). CopilotKit's packages are still
  * installed and the app is wrapped in <CopilotKit> in App.tsx as the intended
  * integration point once that runtime exists.
+ *
+ * Replies are rendered through a small markdown subset (bold/code/lists/tables, see
+ * markdown.tsx) — the LLM already writes these naturally; no chart-in-chat protocol
+ * exists yet (that would need the backend's system prompt to emit a structured
+ * convention this UI parses), so this stays text/table/code, not literal plots.
  */
 export function ChatPanel({
   baseUrl,
   scenarioSlug,
   sampleQuestions,
   accessToken,
+  variant = "dock",
+  title,
 }: {
   baseUrl: string;
   scenarioSlug: string;
   sampleQuestions: string[];
   accessToken: string | null;
+  variant?: "dock" | "full";
+  title?: string;
 }) {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sources, setSources] = useState<{ source: string; score: number }[] | null>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   async function send(text: string) {
-    if (!text.trim()) return;
+    if (!text.trim() || sending) return;
     setMessage("");
     setSending(true);
     setHistory((h) => [...h, { role: "user", content: text }]);
     try {
       const result = await chat(baseUrl, scenarioSlug, text, history, accessToken);
       setHistory((h) => [...h, { role: "assistant", content: result.reply }]);
-      setSources(result.sources ?? []);
+      setSources(result.sources ?? null);
     } catch (error) {
-      setHistory((h) => [...h, { role: "assistant", content: `Error: ${(error as Error).message}` }]);
+      setHistory((h) => [...h, { role: "assistant", content: `⚠️ ${(error as Error).message}` }]);
+      setSources(null);
     } finally {
       setSending(false);
+      requestAnimationFrame(() => {
+        historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: "smooth" });
+      });
     }
   }
 
   return (
-    <div className="chat-panel">
-      <div className="chat-history">
+    <div className={`chat-panel chat-panel--${variant}`}>
+      {title && <div className="chat-panel-title">{title}</div>}
+      <div className="chat-history" ref={historyRef}>
+        {history.length === 0 && (
+          <div className="chat-empty">
+            <span className="chat-empty-icon">💬</span>
+            <p>Ask a question to get started.</p>
+          </div>
+        )}
         {history.map((turn, i) => (
           <div key={i} className={`chat-turn chat-turn--${turn.role}`}>
-            <strong>{turn.role}:</strong> {turn.content}
+            <div className="chat-avatar">{turn.role === "user" ? "🧑" : "🤖"}</div>
+            <div className="chat-bubble">{renderMarkdown(turn.content)}</div>
           </div>
         ))}
+        {sending && (
+          <div className="chat-turn chat-turn--assistant">
+            <div className="chat-avatar">🤖</div>
+            <div className="chat-bubble chat-bubble--typing">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        )}
       </div>
       {sources !== null &&
         (sources.length > 0 ? (
           <div className="chat-sources">
-            Sources: {sources.map((s) => `${s.source} (${s.score.toFixed(2)})`).join(", ")}
+            📎 Sources: {sources.map((s) => `${s.source} (${s.score.toFixed(2)})`).join(", ")}
           </div>
         ) : (
           <div className="chat-sources">(answered directly, without consulting the documents)</div>
@@ -78,8 +111,8 @@ export function ChatPanel({
           placeholder="Ask a question..."
           disabled={sending}
         />
-        <button onClick={() => send(message)} disabled={sending}>
-          {sending ? "..." : "Send"}
+        <button className="chat-send" onClick={() => send(message)} disabled={sending || !message.trim()}>
+          {sending ? "…" : "Send"}
         </button>
       </div>
     </div>
