@@ -196,6 +196,11 @@ insufficient, and a real AG-UI runtime bridge for `ui-react`'s `rag-agent` chat 
 packages are installed and the app is wrapped in `<CopilotKit>`, but `ChatPanel` still calls
 `rag-agent` directly rather than through a Copilot Runtime).
 
+**TODO**: every service is currently pinned to Python 3.12 (`requires-python` in each
+`pyproject.toml`, `python:3.12-slim` in each Dockerfile) — check whether the ML-heavy
+dependencies (SHAP, torch, LangChain, etc.) have 3.14 wheels yet, then bump all services
+together if so.
+
 ## Contributing
 
 - [AGENTS.md](AGENTS.md) — mandates for AI-assisted and human contributions alike.
