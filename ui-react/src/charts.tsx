@@ -9,16 +9,16 @@
  */
 
 export const CHART_COLORS = {
-  bg: "#0d1117",
-  panel: "#151b23",
-  border: "#232b36",
-  text: "#e6edf3",
-  dim: "#8b96a3",
-  green: "#3ddc97",
-  blue: "#4d9de0",
-  amber: "#e1a13d",
-  red: "#e05d6f",
-  purple: "#9d7cd8",
+  bg: "#ffffff",
+  panel: "#ffffff",
+  border: "#e6e6e9",
+  text: "#1c1c1f",
+  dim: "#71717a",
+  green: "#16805a",
+  blue: "#2563eb",
+  amber: "#a3720f",
+  red: "#d1435b",
+  purple: "#7c5cd0",
 };
 
 export function StatTile({
@@ -92,9 +92,9 @@ export const CATEGORY_PALETTE = [
   CHART_COLORS.green,
   CHART_COLORS.red,
   CHART_COLORS.purple,
-  "#5eead4",
-  "#f472b6",
-  "#a3e635",
+  "#0d9488",
+  "#db2777",
+  "#65a30d",
 ];
 
 export function colorScale(categories: string[]): Map<string, string> {

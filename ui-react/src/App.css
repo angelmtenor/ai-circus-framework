@@ -1,17 +1,25 @@
-/* Dark dashboard theme — palette mirrors the reference ML dashboards (dataviz-style
-   dark panels + a small accent set), applied consistently across every chart/card. */
+/* Light minimalist theme — white surfaces, soft gray borders, a single warm
+   accent for primary actions, in the spirit of ChatGPT/Claude/Grok's chat UIs. */
 :root {
-  --bg: #0d1117;
-  --panel: #151b23;
-  --panel-2: #1a2230;
-  --border: #232b36;
-  --text: #e6edf3;
-  --dim: #8b96a3;
-  --green: #3ddc97;
-  --blue: #4d9de0;
-  --amber: #e1a13d;
-  --red: #e05d6f;
-  --purple: #9d7cd8;
+  --bg: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f7f7f8;
+  --panel-3: #eeeef0;
+  --border: #e6e6e9;
+  --text: #1c1c1f;
+  --dim: #71717a;
+  --accent: #c96442;
+  --accent-soft: #f6e8e2;
+  --accent-border: #e3b39e;
+  --green: #16805a;
+  --blue: #2563eb;
+  --amber: #a3720f;
+  --red: #d1435b;
+  --purple: #7c5cd0;
+  --shadow-sm: 0 1px 2px rgba(15, 15, 20, 0.04);
+  --shadow-md: 0 8px 24px rgba(15, 15, 20, 0.08);
+  --radius: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
 }
 
 * {
@@ -21,6 +29,7 @@
 body {
   background: var(--bg);
   color: var(--text);
+  font-family: inherit;
 }
 
 #root {
@@ -41,11 +50,19 @@ button {
 input,
 select {
   font-family: inherit;
-  background: var(--panel-2);
+  background: #fff;
   color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────────── */
@@ -56,21 +73,20 @@ select {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: radial-gradient(circle at 30% 20%, rgba(61, 220, 151, 0.08), transparent 60%),
-    radial-gradient(circle at 80% 80%, rgba(77, 157, 224, 0.08), transparent 60%), var(--bg);
+  background: var(--panel-2);
 }
 
 .login-card {
   width: 100%;
   max-width: 26rem;
-  background: var(--panel);
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 2rem;
+  border-radius: 20px;
+  padding: 2.25rem 2rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
 .login-brand {
@@ -83,13 +99,15 @@ select {
 
 .login-brand h1 {
   font-size: 1.4rem;
-  margin: 0.5rem 0 0.25rem;
+  font-weight: 600;
+  margin: 0.6rem 0 0.35rem;
   color: var(--text);
 }
 
 .login-tagline {
   color: var(--dim);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
 }
 
 .login-section {
@@ -97,13 +115,13 @@ select {
   flex-direction: column;
   gap: 0.6rem;
   border-top: 1px solid var(--border);
-  padding-top: 1rem;
+  padding-top: 1.1rem;
 }
 
 .login-section label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
   font-size: 0.8rem;
   color: var(--dim);
 }
@@ -112,7 +130,7 @@ select {
   cursor: pointer;
   color: var(--dim);
   font-size: 0.85rem;
-  padding-top: 1rem;
+  padding-top: 1.1rem;
 }
 
 .dev-warning {
@@ -138,15 +156,16 @@ select {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: var(--bg);
 }
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.75rem 1.25rem;
+  padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  background: #fff;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -156,8 +175,14 @@ select {
   background: none;
   border: none;
   color: var(--text);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 8px;
+}
+
+.topbar-brand:hover {
+  background: var(--panel-2);
 }
 
 .topbar-scenario {
@@ -169,12 +194,16 @@ select {
 }
 
 .topbar-back {
-  background: var(--panel-2);
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 6px;
-  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  padding: 0.3rem 0.65rem;
   font-size: 0.8rem;
+}
+
+.topbar-back:hover {
+  background: var(--panel-2);
 }
 
 .topbar-scenario-name {
@@ -188,8 +217,8 @@ select {
 
 .topbar-org {
   color: var(--dim);
-  font-size: 0.8rem;
-  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+  padding: 0.25rem 0.7rem;
   border: 1px solid var(--border);
   border-radius: 999px;
 }
@@ -198,14 +227,19 @@ select {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--dim);
-  border-radius: 6px;
-  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
+}
+
+.topbar-logout:hover {
+  background: var(--panel-2);
+  color: var(--text);
 }
 
 .app-main {
   flex: 1;
-  padding: 1.5rem;
+  padding: 1.75rem 1.5rem;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
@@ -220,21 +254,23 @@ select {
 }
 
 .scenario-card {
-  background: var(--panel);
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   text-align: left;
   color: var(--text);
-  transition: transform 0.15s, border-color 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .scenario-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--green);
+  transform: translateY(-2px);
+  border-color: var(--accent-border);
+  box-shadow: var(--shadow-md);
 }
 
 .scenario-card-icon {
@@ -244,6 +280,7 @@ select {
 .scenario-card-body h3 {
   margin: 0.25rem 0;
   font-size: 1.05rem;
+  color: var(--text);
 }
 
 .scenario-card-body p {
@@ -275,7 +312,7 @@ select {
 }
 
 .scenario-card-open {
-  color: var(--green);
+  color: var(--accent);
   font-size: 0.85rem;
   font-weight: 600;
 }
@@ -310,7 +347,8 @@ select {
 
 .workspace-tabs button.active {
   color: var(--text);
-  border-bottom-color: var(--green);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 .rag-hero {
@@ -326,6 +364,7 @@ select {
 
 .rag-hero h2 {
   margin: 0 0 0.25rem;
+  color: var(--text);
 }
 
 .rag-hero p {
@@ -364,15 +403,17 @@ select {
 }
 
 .panel-card {
-  background: var(--panel);
+  background: #fff;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 1.1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-card h3 {
   margin: 0 0 0.75rem;
   font-size: 1rem;
+  color: var(--text);
 }
 
 .panel-card h4 {
@@ -453,27 +494,36 @@ select {
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
 
 .btn-primary {
-  background: var(--green);
-  color: #06170f;
+  background: var(--text);
+  color: #fff;
   border: none;
   border-radius: 8px;
   padding: 0.55rem 1.1rem;
   font-weight: 600;
   font-size: 0.88rem;
+  transition: opacity 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.85;
 }
 
 .btn-primary:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-secondary {
-  background: var(--panel-2);
+  background: #fff;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.45rem 0.9rem;
   font-size: 0.82rem;
+}
+
+.btn-secondary:hover {
+  background: var(--panel-2);
 }
 
 /* ── KPI tiles ─────────────────────────────────────────────────────────────── */
@@ -502,6 +552,7 @@ select {
   font-size: 1.3rem;
   font-weight: 700;
   margin-top: 0.15rem;
+  color: var(--text);
 }
 
 .kpi-sub {
@@ -542,7 +593,7 @@ select {
 }
 
 .bar-row-track {
-  background: var(--panel-2);
+  background: var(--panel-3);
   border-radius: 4px;
   height: 8px;
   overflow: hidden;
@@ -575,6 +626,8 @@ select {
   overflow-y: auto;
   max-height: 32rem;
   margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 
 .data-table {
@@ -586,7 +639,7 @@ select {
 .data-table th,
 .data-table td {
   border-bottom: 1px solid var(--border);
-  padding: 0.35rem 0.6rem;
+  padding: 0.4rem 0.7rem;
   text-align: left;
   white-space: nowrap;
 }
@@ -596,7 +649,11 @@ select {
   font-weight: 600;
   position: sticky;
   top: 0;
-  background: var(--panel);
+  background: var(--panel-2);
+}
+
+.data-table tbody tr:hover {
+  background: var(--panel-2);
 }
 
 /* ── Chat panel ────────────────────────────────────────────────────────────── */
@@ -632,7 +689,7 @@ select {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
   padding-right: 0.25rem;
 }
 
@@ -661,12 +718,12 @@ select {
 }
 
 .chat-bubble {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.86rem;
-  line-height: 1.45;
+  background: none;
+  border: none;
+  padding: 0.1rem 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
   max-width: 85%;
 }
 
@@ -681,8 +738,10 @@ select {
 }
 
 .chat-turn--user .chat-bubble {
-  background: rgba(61, 220, 151, 0.12);
-  border-color: rgba(61, 220, 151, 0.3);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.55rem 0.85rem;
 }
 
 .chat-bubble--typing {
@@ -732,7 +791,7 @@ select {
 
 .chat-bubble code {
   background: var(--panel-2);
-  color: var(--green);
+  color: var(--accent);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
   font-size: 0.82em;
@@ -740,9 +799,9 @@ select {
 }
 
 .chat-code {
-  background: var(--bg);
+  background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 0.5rem 0.65rem;
   overflow-x: auto;
   font-size: 0.78rem;
@@ -763,9 +822,14 @@ select {
   font-size: 0.78rem;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
-  background: var(--panel-2);
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--text);
+}
+
+.chat-sample:hover {
+  background: var(--panel-2);
+  border-color: var(--accent-border);
 }
 
 .chat-input-row {
@@ -775,19 +839,25 @@ select {
 
 .chat-input-row input {
   flex: 1;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
 }
 
 .chat-send {
-  background: var(--green);
-  color: #06170f;
+  background: var(--accent);
+  color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  padding: 0.45rem 1.1rem;
   font-weight: 600;
 }
 
+.chat-send:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
 .chat-send:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -800,7 +870,7 @@ select {
 }
 
 .sub-tabs button {
-  background: var(--panel-2);
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--dim);
   border-radius: 999px;
@@ -809,9 +879,9 @@ select {
 }
 
 .sub-tabs button.active {
-  background: var(--green);
-  color: #06170f;
-  border-color: var(--green);
+  background: var(--text);
+  color: #fff;
+  border-color: var(--text);
   font-weight: 600;
 }
 
@@ -861,13 +931,13 @@ select {
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--panel-2);
+  background: #fff;
   color: var(--dim);
 }
 
 .filter-chip.active {
   background: var(--blue);
-  color: #06131f;
+  color: #fff;
   border-color: var(--blue);
   font-weight: 600;
 }
@@ -881,7 +951,7 @@ select {
 
 .chat-dock-toggle {
   margin-left: auto;
-  background: var(--panel-2);
+  background: #fff;
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.5rem 0.9rem;
@@ -889,10 +959,14 @@ select {
   font-size: 0.85rem;
 }
 
+.chat-dock-toggle:hover {
+  background: var(--panel-2);
+}
+
 .chat-dock-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(15, 15, 20, 0.25);
   display: flex;
   justify-content: flex-end;
   z-index: 50;
@@ -901,12 +975,13 @@ select {
 .chat-dock-panel {
   width: min(28rem, 100%);
   height: 100%;
-  background: var(--panel);
+  background: #fff;
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 1rem;
   gap: 0.6rem;
+  box-shadow: var(--shadow-md);
 }
 
 .chat-dock-header {
@@ -915,6 +990,7 @@ select {
   justify-content: space-between;
   font-weight: 600;
   font-size: 0.9rem;
+  color: var(--text);
 }
 
 .chat-dock-close {
@@ -938,6 +1014,7 @@ select {
 
 .settings-page h2 {
   margin-bottom: 0.5rem;
+  color: var(--text);
 }
 
 .settings-grid {
@@ -968,12 +1045,12 @@ select {
 }
 
 .settings-badge--on {
-  background: rgba(61, 220, 151, 0.15);
+  background: rgba(22, 128, 90, 0.12);
   color: var(--green);
 }
 
 .settings-badge--off {
-  background: rgba(139, 150, 163, 0.15);
+  background: var(--panel-3);
   color: var(--dim);
 }
 
@@ -996,6 +1073,7 @@ select {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.15rem 0.4rem;
+  color: var(--text);
 }
 
 .settings-result {
@@ -1006,12 +1084,12 @@ select {
 }
 
 .settings-result--ok {
-  background: rgba(61, 220, 151, 0.1);
+  background: rgba(22, 128, 90, 0.08);
   color: var(--green);
 }
 
 .settings-result--fail {
-  background: rgba(224, 93, 111, 0.1);
+  background: rgba(209, 67, 91, 0.08);
   color: var(--red);
 }
 
@@ -1019,13 +1097,17 @@ select {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--dim);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 0.35rem 0.75rem;
   font-size: 0.82rem;
 }
 
-.topbar-settings.active {
+.topbar-settings:hover {
   background: var(--panel-2);
-  color: var(--text);
-  border-color: var(--green);
+}
+
+.topbar-settings.active {
+  background: var(--text);
+  color: #fff;
+  border-color: var(--text);
 }
