@@ -468,6 +468,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "ai-circus-shared" },
+    { name = "httpx" },
     { name = "loguru" },
     { name = "psutil" },
     { name = "py-cpuinfo" },
@@ -499,6 +500,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ai-circus-shared", directory = "../../libs/shared" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "py-cpuinfo", specifier = ">=9.0.0" },

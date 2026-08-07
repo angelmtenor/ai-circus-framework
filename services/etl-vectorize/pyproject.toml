@@ -25,6 +25,7 @@ classifiers = [
 
 dependencies = [
     "ai-circus-shared",
+    "httpx>=0.28.1",
     "loguru>=0.7.3",
     "psutil>=7.0.0",
     "py-cpuinfo>=9.0.0",

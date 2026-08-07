@@ -41,7 +41,9 @@ def _login_screen() -> None:
     if config.DEV_MODE.lower() == "true":
         st.warning("DEV_MODE is on — this bypasses real login. Never enable it beyond local iteration.")
         org_id = st.text_input("Org id", value=config.DEV_ORG_ID)
-        roles_input = st.text_input("Roles (comma-separated)", value="scenario:churn,scenario:docs_rag")
+        roles_input = st.text_input(
+            "Roles (comma-separated)", value="scenario:churn,scenario:docs_rag,scenario:ai_circus_reference"
+        )
         if st.button("Log in (dev)"):
             roles = [r.strip() for r in roles_input.split(",") if r.strip()]
             st.session_state["identity"] = dev_identity(org_id, roles)

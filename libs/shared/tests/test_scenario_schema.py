@@ -1,0 +1,55 @@
+"""Tests for ai_circus_shared.scenario_schema's DocumentsConfig seed-source validation."""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from ai_circus_shared.scenario_schema import DocumentChunking, DocumentEmbedding, DocumentsConfig, GithubDocsSource
+
+CHUNKING = DocumentChunking(strategy="recursive_character", chunk_size=800, chunk_overlap=120)
+EMBEDDING = DocumentEmbedding(model="sentence-transformers/all-MiniLM-L6-v2")
+
+
+def test_documents_config_accepts_a_local_seed_prefix() -> None:
+    """A tracked local seed folder alone is a valid seed source."""
+    documents = DocumentsConfig(
+        bucket="b", raw_prefix="raw/", seed_prefix="sample_docs", chunking=CHUNKING, embedding=EMBEDDING
+    )
+
+    assert documents.seed_prefix == "sample_docs"
+    assert documents.github_source is None
+
+
+def test_documents_config_accepts_a_github_source() -> None:
+    """A public GitHub repo folder alone is a valid seed source."""
+    documents = DocumentsConfig(
+        bucket="b",
+        raw_prefix="raw/",
+        github_source=GithubDocsSource(repo="owner/name", path="reference", ref="develop"),
+        chunking=CHUNKING,
+        embedding=EMBEDDING,
+    )
+
+    assert documents.seed_prefix is None
+    assert documents.github_source is not None
+    assert documents.github_source.repo == "owner/name"
+
+
+def test_documents_config_rejects_neither_seed_source() -> None:
+    """Omitting both seed_prefix and github_source is invalid — there'd be nothing to bootstrap from."""
+    with pytest.raises(ValidationError, match="exactly one"):
+        DocumentsConfig(bucket="b", raw_prefix="raw/", chunking=CHUNKING, embedding=EMBEDDING)
+
+
+def test_documents_config_rejects_both_seed_sources() -> None:
+    """Setting both seed_prefix and github_source is ambiguous — which one actually seeds it?"""
+    with pytest.raises(ValidationError, match="exactly one"):
+        DocumentsConfig(
+            bucket="b",
+            raw_prefix="raw/",
+            seed_prefix="sample_docs",
+            github_source=GithubDocsSource(repo="owner/name", path="reference"),
+            chunking=CHUNKING,
+            embedding=EMBEDDING,
+        )

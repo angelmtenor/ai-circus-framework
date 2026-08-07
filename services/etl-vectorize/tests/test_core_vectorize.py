@@ -9,15 +9,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
-from ai_circus_shared.scenario_schema import DocumentChunking, DocumentEmbedding, DocumentsConfig, VectorStoreConfig
+from ai_circus_shared.scenario_schema import (
+    DocumentChunking,
+    DocumentEmbedding,
+    DocumentsConfig,
+    GithubDocsSource,
+    VectorStoreConfig,
+)
 
-from etl_vectorize.core.vectorize import build_points, collection_name, ensure_raw_docs, load_raw_docs, run_vectorize
+from etl_vectorize.core import vectorize
+from etl_vectorize.core.vectorize import (
+    build_points,
+    collection_name,
+    ensure_raw_docs,
+    fetch_github_docs,
+    load_raw_docs,
+    run_vectorize,
+)
 
 DOCUMENTS = DocumentsConfig(
     bucket="scenario-docs-rag",
     raw_prefix="raw/",
     seed_prefix="sample_docs",
+    chunking=DocumentChunking(strategy="recursive_character", chunk_size=200, chunk_overlap=20),
+    embedding=DocumentEmbedding(model="fake-model"),
+)
+DOCUMENTS_FROM_GITHUB = DocumentsConfig(
+    bucket="scenario-ai-circus-reference",
+    raw_prefix="raw/",
+    github_source=GithubDocsSource(repo="owner/repo", path="reference", ref="develop"),
     chunking=DocumentChunking(strategy="recursive_character", chunk_size=200, chunk_overlap=20),
     embedding=DocumentEmbedding(model="fake-model"),
 )
@@ -112,6 +134,43 @@ def test_ensure_raw_docs_leaves_existing_docs_untouched(scenario_dir: Path) -> N
     ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)
 
     assert store.list("org-1", DOCUMENTS.raw_prefix) == ["raw/existing.md"]
+
+
+def test_fetch_github_docs_downloads_every_file_in_the_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fetch_github_docs lists a GitHub folder via the Contents API, then downloads each file (skipping subdirs)."""
+    listing = [
+        {"name": "a.md", "type": "file", "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/a.md"},
+        {"name": "b.md", "type": "file", "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/b.md"},
+        {"name": "subdir", "type": "dir", "download_url": None},
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if str(request.url).startswith("https://api.github.com/"):
+            assert request.url.params["ref"] == "develop"
+            return httpx.Response(200, json=listing)
+        if str(request.url).endswith("a.md"):
+            return httpx.Response(200, content=b"content a")
+        return httpx.Response(200, content=b"content b")
+
+    real_client_cls = httpx.Client
+    monkeypatch.setattr(
+        vectorize.httpx, "Client", lambda **_kwargs: real_client_cls(transport=httpx.MockTransport(handler))
+    )
+
+    docs = fetch_github_docs(GithubDocsSource(repo="owner/repo", path="reference", ref="develop"))
+
+    assert docs == {"a.md": b"content a", "b.md": b"content b"}
+
+
+def test_ensure_raw_docs_bootstraps_from_github_source_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When documents.github_source is set, ensure_raw_docs fetches from GitHub instead of a local folder."""
+    store = FakeObjectStore()
+    monkeypatch.setattr(vectorize, "fetch_github_docs", lambda source: {"a.md": b"content a", "b.md": b"content b"})
+
+    ensure_raw_docs(store, "org-1", DOCUMENTS_FROM_GITHUB, Path("/does/not/exist"))
+
+    assert store.get("org-1", "raw/a.md") == b"content a"
+    assert store.get("org-1", "raw/b.md") == b"content b"
 
 
 def test_load_raw_docs_reads_every_uploaded_file(scenario_dir: Path) -> None:

@@ -3,7 +3,6 @@ import {
   getActiveLlmModel,
   listLlmProviders,
   setActiveLlmModel,
-  testAllLlmProviders,
   testLlmProvider,
   type LlmProvider,
   type LlmProviderTest,
@@ -72,15 +71,22 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
   }
 
   async function runTestAll() {
+    if (!providers) return;
     setTestingAll(true);
-    try {
-      const allResults = await testAllLlmProviders(config.platformRegistryUrl, accessToken);
-      setResults((r) => ({ ...r, ...allResults }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setTestingAll(false);
-    }
+    // Fire one request per provider (instead of the batched test-all endpoint) and
+    // update each card as its own result lands, so the page reflects progress live
+    // rather than freezing until the slowest provider's round-trip finally resolves.
+    await Promise.allSettled(
+      providers.map(async (p) => {
+        try {
+          const result = await testLlmProvider(config.platformRegistryUrl, p.provider, accessToken);
+          setResults((r) => ({ ...r, [p.provider]: result }));
+        } catch (e) {
+          setResults((r) => ({ ...r, [p.provider]: { ok: false, error: (e as Error).message, latency_ms: null } }));
+        }
+      }),
+    );
+    setTestingAll(false);
   }
 
   return (

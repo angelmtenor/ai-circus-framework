@@ -42,6 +42,8 @@ class ScenarioSummary:
     # regression scenarios instead of the classification percentage/probability view.
     task_type: str | None = None
     target_units: str | None = None
+    # tabular_ml only — the dataset column being predicted (not itself a feature).
+    target: str | None = None
 
 
 @dataclass(frozen=True)

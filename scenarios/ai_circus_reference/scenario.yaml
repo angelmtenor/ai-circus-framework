@@ -1,0 +1,54 @@
+# Seed definition for the "ai_circus_reference" scenario — conversational-only, no dashboard.
+# Loaded into the `platform` Postgres schema by services/platform-registry at bootstrap.
+
+slug: ai_circus_reference
+kind: conversational_rag
+title: "AI Circus Reference Guide"
+description: >
+  Agent-based RAG chatbot answering questions grounded in the ai-circus project's own
+  reference notes: dev environment/tooling, software engineering practices, ML/DS
+  workflow, and generative AI / agent / RAG best practices.
+role_required: "scenario:ai_circus_reference"
+icon: "📚"
+
+# Grounds rag-agent's system prompt AND its judgment of whether a question is
+# in-domain enough to call the retrieve_docs tool at all — chitchat/off-topic
+# questions are answered directly, without retrieval (see libs/shared/scenario_schema).
+chat:
+  context: >
+    A learning/reference guide for building the ai-circus project itself: dev
+    environment setup (WSL/Docker/uv/ruff/pre-commit), software engineering principles
+    (SOLID/DRY/KISS, CI/CD, IaC, code review), machine learning/data science workflow
+    and explainability (SHAP/LIME), and generative AI / agent / RAG best practices and
+    tooling.
+  sample_questions:
+    - "What dev environment does ai-circus recommend, and why?"
+    - "What's the recommended workflow for ML explainability?"
+    - "What GenAI/RAG courses or reference repos does ai-circus recommend studying first?"
+
+documents:
+  # Source documents fetched at bootstrap straight from the ai-circus repo's own
+  # reference/ folder (kept in sync with upstream instead of copy-pasted into this
+  # repo) — see etl_vectorize.core.vectorize.ensure_raw_docs / fetch_github_docs.
+  bucket: "scenario-ai-circus-reference"
+  raw_prefix: "raw/"
+  github_source:
+    repo: "angelmtenor/ai-circus"
+    path: "reference"
+    ref: "develop"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 800
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+
+vector_store:
+  backend: qdrant
+  # One collection per tenant: "{collection_prefix}__{tenant_org_id}"
+  collection_prefix: "ai_circus_reference"
+  top_k: 5
+
+services:
+  etl: etl-vectorize
+  agent: rag-agent

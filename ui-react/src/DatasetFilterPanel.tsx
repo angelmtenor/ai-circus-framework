@@ -37,11 +37,13 @@ export function DatasetFilterPanel({
   featureSchema,
   rows,
   onFilteredChange,
+  labelFor = (f) => f,
 }: {
   featureColumns: string[];
   featureSchema: Record<string, FeatureSpec>;
   rows: DatasetRow[];
   onFilteredChange: (rows: DatasetRow[]) => void;
+  labelFor?: (feature: string) => string;
 }) {
   const [filters, setFilters] = useState<Record<string, Filter>>(() => initialFilters(featureColumns, featureSchema));
 
@@ -78,7 +80,7 @@ export function DatasetFilterPanel({
         if (spec.type === "numeric" && filter.type === "numeric") {
           return (
             <div className="filter-row" key={feature}>
-              <span className="filter-row-label">{feature}</span>
+              <span className="filter-row-label">{labelFor(feature)}</span>
               <div className="filter-row-range">
                 <input
                   type="number"
@@ -105,7 +107,7 @@ export function DatasetFilterPanel({
         if (spec.type === "categorical" && filter.type === "categorical") {
           return (
             <div className="filter-row" key={feature}>
-              <span className="filter-row-label">{feature}</span>
+              <span className="filter-row-label">{labelFor(feature)}</span>
               <div className="filter-row-chips">
                 {spec.options.map((option) => (
                   <button

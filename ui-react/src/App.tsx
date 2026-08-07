@@ -21,7 +21,7 @@ function LoginScreen({
   onLoginWithAdminKey: (adminKey: string) => void;
 }) {
   const [orgId, setOrgId] = useState(config.devOrgId);
-  const [roles, setRoles] = useState("scenario:churn,scenario:docs_rag");
+  const [roles, setRoles] = useState("scenario:churn,scenario:docs_rag,scenario:ai_circus_reference");
   const [adminKey, setAdminKey] = useState("");
 
   return (

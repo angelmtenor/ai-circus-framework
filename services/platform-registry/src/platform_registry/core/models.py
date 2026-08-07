@@ -47,6 +47,9 @@ class Scenario(Base):
     # units" prediction instead of the classification percentage/probability view.
     task_type: Mapped[str | None] = mapped_column(String(32), default=None)
     target_units: Mapped[str | None] = mapped_column(String(32), default=None)
+    # tabular_ml only — the dataset column being predicted (not a feature itself), so
+    # UIs can offer it in dataset-exploration views without treating it as a model input.
+    target: Mapped[str | None] = mapped_column(String(64), default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

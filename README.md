@@ -50,7 +50,7 @@ below). Two kinds exist today:
 | Kind | Examples | Services involved |
 |---|---|---|
 | `tabular_ml` | `churn` (customer churn), `mpm` (machine predictive maintenance) — dashboard + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
-| `conversational_rag` | `docs_rag` — agentic chatbot over vectorized documents | `etl-vectorize` → `rag-agent` |
+| `conversational_rag` | `docs_rag` — agentic chatbot over vectorized documents; `ai_circus_reference` — chatbot over this repo's own dev/ML/GenAI reference notes, fetched straight from GitHub | `etl-vectorize` → `rag-agent` |
 
 A tenant (Logto **Organization**, or the shared admin credential — see below) only sees the
 scenarios its members have been granted the matching `scenario:<slug>` role for — enforced
@@ -185,8 +185,8 @@ service's directory while the infra containers stay up via `make up-infra`.
 1. Register an API resource for the framework's backend; note its identifier for
    `LOGTO_API_RESOURCE_INDICATOR` in `.env`.
 2. Enable **Organizations**; each customer/team you want isolated is one Organization (tenant).
-3. Create organization roles named `scenario:churn` / `scenario:mpm` / `scenario:docs_rag`
-   (one per `scenarios/*/scenario.yaml`'s `role_required`).
+3. Create organization roles named `scenario:churn` / `scenario:mpm` / `scenario:docs_rag` /
+   `scenario:ai_circus_reference` (one per `scenarios/*/scenario.yaml`'s `role_required`).
 4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (see `AGENTS.md`'s reasoning: managed
    auth over custom auth).

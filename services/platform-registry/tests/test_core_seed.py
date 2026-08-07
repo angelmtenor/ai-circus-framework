@@ -28,7 +28,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
     """Every scenarios/*/scenario.yaml in the repo seeds successfully."""
     slugs = seed_scenarios(session, SCENARIOS_DIR)
 
-    assert set(slugs) == {"churn", "docs_rag", "mpm", "supply_chain"}
+    assert set(slugs) == {"churn", "docs_rag", "mpm", "supply_chain", "ai_circus_reference"}
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
     assert churn.role_required == "scenario:churn"
@@ -68,10 +68,20 @@ def test_seed_scenarios_conversational_rag_has_no_feature_fields(session: Sessio
     """conversational_rag scenarios have no feature_columns/feature_schema, but do get sample_questions."""
     seed_scenarios(session, SCENARIOS_DIR)
 
-    docs_rag = session.get(Scenario, "docs_rag")
-    assert docs_rag.feature_columns is None
-    assert docs_rag.feature_schema is None
-    assert len(docs_rag.sample_questions) > 0
+    for slug in ("docs_rag", "ai_circus_reference"):
+        scenario = session.get(Scenario, slug)
+        assert scenario.feature_columns is None
+        assert scenario.feature_schema is None
+        assert len(scenario.sample_questions) > 0
+
+
+def test_seed_scenarios_populates_target(session: Session) -> None:
+    """tabular_ml scenarios get the predicted column's name; conversational_rag ones don't."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    assert session.get(Scenario, "churn").target == "Exited"
+    assert session.get(Scenario, "supply_chain").target == "ActualShippingDays"
+    assert session.get(Scenario, "docs_rag").target is None
 
 
 def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -> None:
@@ -79,7 +89,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
     seed_scenarios(session, SCENARIOS_DIR)
 
     admin_slugs = {e.scenario_slug for e in session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID)}
-    assert admin_slugs == {"churn", "docs_rag", "mpm", "supply_chain"}
+    assert admin_slugs == {"churn", "docs_rag", "mpm", "supply_chain", "ai_circus_reference"}
 
 
 def test_seed_scenarios_is_idempotent(session: Session) -> None:
@@ -87,8 +97,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 4
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 4
+    assert session.query(Scenario).count() == 5
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 5
 
 
 def test_seed_default_llm_setting_inserts_on_first_boot(session: Session) -> None:

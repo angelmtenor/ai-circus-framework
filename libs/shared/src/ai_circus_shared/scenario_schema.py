@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class NumericFeatureUI(BaseModel):
@@ -84,14 +84,37 @@ class DocumentEmbedding(BaseModel):
     model: str
 
 
+class GithubDocsSource(BaseModel):
+    """Fetch seed documents straight from a public GitHub repo folder at bootstrap
+    time, instead of a locally tracked `seed_prefix` folder — for reference docs that
+    should stay in sync with an upstream repo rather than being copy-pasted into this one.
+    """
+
+    repo: str  # "owner/name"
+    path: str  # folder path within the repo, e.g. "reference"
+    ref: str = "main"
+
+
 class DocumentsConfig(BaseModel):
-    """Source-document config for a `conversational_rag` scenario."""
+    """Source-document config for a `conversational_rag` scenario.
+
+    Exactly one of `seed_prefix` (a tracked local folder, relative to the scenario's
+    directory) or `github_source` (a public GitHub repo folder) provides the demo
+    bootstrap documents — see `etl_vectorize.core.vectorize.ensure_raw_docs`.
+    """
 
     bucket: str
     raw_prefix: str
-    seed_prefix: str
+    seed_prefix: str | None = None
+    github_source: GithubDocsSource | None = None
     chunking: DocumentChunking
     embedding: DocumentEmbedding
+
+    @model_validator(mode="after")
+    def _exactly_one_seed_source(self) -> DocumentsConfig:
+        if (self.seed_prefix is None) == (self.github_source is None):
+            raise ValueError("DocumentsConfig requires exactly one of seed_prefix or github_source.")
+        return self
 
 
 class VectorStoreConfig(BaseModel):

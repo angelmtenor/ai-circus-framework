@@ -4,7 +4,8 @@ app.py
 
 Entry point for etl-vectorize: a one-shot job that, for every conversational_rag
 scenario in SCENARIOS (empty/unset = all), extracts the tenant's documents from MinIO
-(bootstrapping them from a tracked sample_docs/ folder on first run), chunks and
+(bootstrapping them on first run from either a tracked sample_docs/ folder or a public
+GitHub repo folder — see `documents.seed_prefix`/`documents.github_source`), chunks and
 embeds them, and upserts the result into the tenant's Qdrant collection. Runs once
 and exits — not a long-running server (see docker-compose.yml's `profiles: ["pipeline"]`).
 

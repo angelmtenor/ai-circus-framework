@@ -31,6 +31,13 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
   const numericFeatures = featureColumns.filter((f) => featureSchema[f]?.type === "numeric");
   const categoricalFeatures = featureColumns.filter((f) => featureSchema[f]?.type === "categorical");
 
+  // The target isn't a feature (never a model input), but it's still a real dataset
+  // column returned by the sample endpoint — worth exploring alongside the features
+  // it's a numeric target for regression scenarios, a class label for classification.
+  const targetName = scenario.target ?? null;
+  const targetIsNumeric = scenario.task_type === "regression";
+  const labelFor = (f: string) => (f === targetName ? `${f} (target)` : f);
+
   const [sample, setSample] = useState<DatasetSample | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filtered, setFiltered] = useState<DatasetRow[]>([]);
@@ -48,14 +55,35 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
       .catch((e) => setError((e as Error).message));
   }, [scenario.slug, sampleLimit, accessToken]);
 
+  const targetOptions = useMemo(() => {
+    if (!sample || !targetName || targetIsNumeric) return [];
+    return [...new Set(sample.rows.map((r) => String(r[targetName])))];
+  }, [sample, targetName, targetIsNumeric]);
+
+  const numericFeaturesWithTarget = targetName && targetIsNumeric ? [...numericFeatures, targetName] : numericFeatures;
+  const categoricalFeaturesWithTarget =
+    targetName && !targetIsNumeric ? [...categoricalFeatures, targetName] : categoricalFeatures;
+
+  const featureSchemaWithTarget = useMemo(() => {
+    if (!sample || !targetName) return featureSchema;
+    if (targetIsNumeric) {
+      const values = sample.rows.map((r) => Number(r[targetName])).filter((v) => !Number.isNaN(v));
+      if (values.length === 0) return featureSchema;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      return { ...featureSchema, [targetName]: { type: "numeric" as const, min, max, default: min } };
+    }
+    return { ...featureSchema, [targetName]: { type: "categorical" as const, options: targetOptions, default: targetOptions[0] ?? "" } };
+  }, [sample, targetName, targetIsNumeric, targetOptions, featureSchema]);
+
   const numericSummary = useMemo(() => {
     if (!sample) return [];
-    return numericFeatures.map((f) => {
+    return numericFeaturesWithTarget.map((f) => {
       const values = sample.rows.map((r) => Number(r[f])).filter((v) => !Number.isNaN(v));
       const mean = values.reduce((a, b) => a + b, 0) / (values.length || 1);
       return { feature: f, min: Math.min(...values), max: Math.max(...values), mean };
     });
-  }, [sample, numericFeatures]);
+  }, [sample, numericFeaturesWithTarget]);
 
   if (error) {
     return (
@@ -106,7 +134,7 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
           <tbody>
             {numericSummary.map((s) => (
               <tr key={s.feature}>
-                <td>{s.feature}</td>
+                <td>{labelFor(s.feature)}</td>
                 <td>{s.min.toFixed(2)}</td>
                 <td>{s.mean.toFixed(2)}</td>
                 <td>{s.max.toFixed(2)}</td>
@@ -118,7 +146,13 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
 
       <div className="panel-card">
         <h3>Query the data</h3>
-        <DatasetFilterPanel featureColumns={featureColumns} featureSchema={featureSchema} rows={sample.rows} onFilteredChange={setFiltered} />
+        <DatasetFilterPanel
+          featureColumns={[...featureColumns, ...(targetName ? [targetName] : [])]}
+          featureSchema={featureSchemaWithTarget}
+          labelFor={labelFor}
+          rows={sample.rows}
+          onFilteredChange={setFiltered}
+        />
         <button className="btn-secondary" onClick={() => exportJson(`${scenario.slug}-filtered.json`, filtered)} style={{ marginTop: "0.6rem" }}>
           ⬇ Export {filtered.length} filtered rows
         </button>
@@ -130,18 +164,18 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
           <label>
             Plot type
             <select value={mode} onChange={(e) => setMode(e.target.value as PlotMode)}>
-              {numericFeatures.length > 0 && <option value="histogram">Histogram (numeric)</option>}
-              {categoricalFeatures.length > 0 && <option value="counts">Value counts (categorical)</option>}
-              {numericFeatures.length > 1 && <option value="scatter">Scatter (numeric x numeric)</option>}
+              {numericFeaturesWithTarget.length > 0 && <option value="histogram">Histogram (numeric)</option>}
+              {categoricalFeaturesWithTarget.length > 0 && <option value="counts">Value counts (categorical)</option>}
+              {numericFeaturesWithTarget.length > 1 && <option value="scatter">Scatter (numeric x numeric)</option>}
             </select>
           </label>
           {(mode === "histogram" || mode === "scatter") && (
             <label>
               X feature
               <select value={featureX} onChange={(e) => setFeatureX(e.target.value)}>
-                {numericFeatures.map((f) => (
+                {numericFeaturesWithTarget.map((f) => (
                   <option key={f} value={f}>
-                    {f}
+                    {labelFor(f)}
                   </option>
                 ))}
               </select>
@@ -151,9 +185,9 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
             <label>
               Feature
               <select value={featureX} onChange={(e) => setFeatureX(e.target.value)}>
-                {categoricalFeatures.map((f) => (
+                {categoricalFeaturesWithTarget.map((f) => (
                   <option key={f} value={f}>
-                    {f}
+                    {labelFor(f)}
                   </option>
                 ))}
               </select>
@@ -164,20 +198,20 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
               <label>
                 Y feature
                 <select value={featureY} onChange={(e) => setFeatureY(e.target.value)}>
-                  {numericFeatures.map((f) => (
+                  {numericFeaturesWithTarget.map((f) => (
                     <option key={f} value={f}>
-                      {f}
+                      {labelFor(f)}
                     </option>
                   ))}
                 </select>
               </label>
-              {categoricalFeatures.length > 0 && (
+              {categoricalFeaturesWithTarget.length > 0 && (
                 <label>
                   Color by
                   <select value={colorFeature} onChange={(e) => setColorFeature(e.target.value)}>
-                    {categoricalFeatures.map((f) => (
+                    {categoricalFeaturesWithTarget.map((f) => (
                       <option key={f} value={f}>
-                        {f}
+                        {labelFor(f)}
                       </option>
                     ))}
                   </select>
@@ -188,7 +222,7 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
         </div>
 
         {mode === "histogram" && featureX && (
-          <Histogram values={filtered.map((r) => Number(r[featureX])).filter((v) => !Number.isNaN(v))} xLabel={featureX} />
+          <Histogram values={filtered.map((r) => Number(r[featureX])).filter((v) => !Number.isNaN(v))} xLabel={labelFor(featureX)} />
         )}
         {mode === "counts" && featureX && (
           <CategoryBars
@@ -203,7 +237,7 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
           />
         )}
         {mode === "scatter" && featureX && featureY && (
-          <ScatterConfigured rows={filtered} featureX={featureX} featureY={featureY} colorFeature={colorFeature} />
+          <ScatterConfigured rows={filtered} featureX={featureX} featureY={featureY} colorFeature={colorFeature} labelFor={labelFor} />
         )}
       </div>
 
@@ -214,7 +248,7 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
             <thead>
               <tr>
                 {sample.columns.map((c) => (
-                  <th key={c}>{c}</th>
+                  <th key={c}>{labelFor(c)}</th>
                 ))}
               </tr>
             </thead>
@@ -239,11 +273,13 @@ function ScatterConfigured({
   featureX,
   featureY,
   colorFeature,
+  labelFor,
 }: {
   rows: DatasetRow[];
   featureX: string;
   featureY: string;
   colorFeature: string;
+  labelFor: (f: string) => string;
 }) {
   const categories = colorFeature ? [...new Set(rows.map((r) => String(r[colorFeature])))] : [];
   const scale = colorScale(categories);
@@ -255,5 +291,5 @@ function ScatterConfigured({
     }))
     .filter((p) => !Number.isNaN(p.x) && !Number.isNaN(p.y));
   const legend = colorFeature ? categories.map((c) => ({ label: c, color: scale.get(c)! })) : undefined;
-  return <ScatterPlot points={points} xLabel={featureX} yLabel={featureY} refLine={false} sharedDomain={false} legend={legend} />;
+  return <ScatterPlot points={points} xLabel={labelFor(featureX)} yLabel={labelFor(featureY)} refLine={false} sharedDomain={false} legend={legend} />;
 }

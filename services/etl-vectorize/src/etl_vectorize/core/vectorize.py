@@ -2,10 +2,11 @@
 - Title:    Document vectorization pipeline for conversational_rag scenarios
 - Author:   ai-circus-framework contributors
 
-Extract: bootstrap the tenant's documents into MinIO from the scenario's tracked
-sample_docs/ folder on first run (demo convenience — a real deployment would have
-each tenant upload their own documents instead). Transform: chunk + embed. Load:
-upsert into the tenant's Qdrant collection for rag-agent to query.
+Extract: bootstrap the tenant's documents into MinIO on first run, from either the
+scenario's tracked sample_docs/ folder or a public GitHub repo folder (demo convenience
+— a real deployment would have each tenant upload their own documents instead).
+Transform: chunk + embed. Load: upsert into the tenant's Qdrant collection for
+rag-agent to query.
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig
+import httpx
+from ai_circus_shared.scenario_schema import DocumentsConfig, GithubDocsSource, VectorStoreConfig
 from ai_circus_shared.storage import ObjectStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -24,17 +26,55 @@ from etl_vectorize.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+GITHUB_API_TIMEOUT_SECONDS = 15.0
+
 
 def collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
     """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}'."""
     return f"{vector_store.collection_prefix}__{org_id}"
 
 
+def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
+    """Download every file under a public GitHub repo folder via the (unauthenticated)
+    Contents API — fine for a public repo at demo-traffic volumes; GitHub caps
+    unauthenticated requests at 60/hour per IP.
+    """
+    listing_url = f"https://api.github.com/repos/{source.repo}/contents/{source.path}"
+    with httpx.Client(timeout=GITHUB_API_TIMEOUT_SECONDS) as client:
+        listing = client.get(listing_url, params={"ref": source.ref})
+        listing.raise_for_status()
+        docs: dict[str, bytes] = {}
+        for entry in listing.json():
+            if entry["type"] != "file":
+                continue
+            content = client.get(entry["download_url"])
+            content.raise_for_status()
+            docs[entry["name"]] = content.content
+        return docs
+
+
 def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
-    """Upload the scenario's tracked sample documents to MinIO if the tenant has none yet."""
+    """Upload the scenario's bootstrap documents to MinIO if the tenant has none yet —
+    from a public GitHub repo folder (`documents.github_source`) or a tracked local
+    `sample_docs/`-style folder (`documents.seed_prefix`); `DocumentsConfig` guarantees
+    exactly one of the two is set.
+    """
     if store.list(org_id, documents.raw_prefix):
         return
 
+    if documents.github_source is not None:
+        logger.warning(
+            "No documents found for org={} under {} — bootstrapping from github:{}/{} (demo convenience).",
+            org_id,
+            documents.raw_prefix,
+            documents.github_source.repo,
+            documents.github_source.path,
+        )
+        for name, content in fetch_github_docs(documents.github_source).items():
+            store.put(org_id, f"{documents.raw_prefix}{name}", content)
+        return
+
+    assert documents.seed_prefix is not None  # guaranteed by DocumentsConfig's validator
     seed_dir = scenario_dir / documents.seed_prefix
     logger.warning(
         "No documents found for org={} under {} — bootstrapping from tracked seed folder {} (demo convenience).",

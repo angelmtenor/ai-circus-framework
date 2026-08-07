@@ -84,6 +84,7 @@ class ScenarioOut(BaseModel):
     sample_questions: list[str] = []
     task_type: str | None = None
     target_units: str | None = None
+    target: str | None = None
 
     model_config = {"from_attributes": True}
 

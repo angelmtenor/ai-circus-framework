@@ -33,6 +33,8 @@ export type ScenarioSummary = {
   // prediction instead of the classification probability view.
   task_type?: string | null;
   target_units?: string | null;
+  // tabular_ml only — the dataset column being predicted (not itself a feature).
+  target?: string | null;
 };
 
 export type PredictionResult = {
@@ -177,17 +179,6 @@ export async function testLlmProvider(
   accessToken: string | null,
 ): Promise<LlmProviderTest> {
   const response = await fetch(`${baseUrl}/llm-settings/providers/${provider}/test`, {
-    method: "POST",
-    headers: headers(accessToken),
-  });
-  return asJson(response);
-}
-
-export async function testAllLlmProviders(
-  baseUrl: string,
-  accessToken: string | null,
-): Promise<Record<string, LlmProviderTest>> {
-  const response = await fetch(`${baseUrl}/llm-settings/providers/test-all`, {
     method: "POST",
     headers: headers(accessToken),
   });
