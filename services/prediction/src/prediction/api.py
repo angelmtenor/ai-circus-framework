@@ -18,7 +18,7 @@ from prediction.core.predict import predict as run_predict
 
 router = APIRouter()
 
-MAX_SAMPLE_ROWS = 500
+MAX_SAMPLE_ROWS = 20000
 MAX_EVAL_ROWS = 1000
 
 

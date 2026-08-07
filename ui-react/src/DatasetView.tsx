@@ -4,7 +4,8 @@ import { config } from "./config";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
 import { StatTile, Histogram, ScatterPlot, CategoryBars, colorScale } from "./charts";
 
-const SAMPLE_LIMIT = 500;
+const DEFAULT_SAMPLE_LIMIT = 5000;
+const SAMPLE_LIMIT_OPTIONS = [500, 1000, 5000, 10000, 20000];
 
 function exportJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -37,14 +38,15 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
   const [featureX, setFeatureX] = useState(numericFeatures[0] ?? categoricalFeatures[0] ?? "");
   const [featureY, setFeatureY] = useState(numericFeatures[1] ?? numericFeatures[0] ?? "");
   const [colorFeature, setColorFeature] = useState(categoricalFeatures[0] ?? "");
+  const [sampleLimit, setSampleLimit] = useState(DEFAULT_SAMPLE_LIMIT);
 
   useEffect(() => {
     setSample(null);
     setError(null);
-    datasetSample(config.predictionUrl, scenario.slug, SAMPLE_LIMIT, accessToken)
+    datasetSample(config.predictionUrl, scenario.slug, sampleLimit, accessToken)
       .then(setSample)
       .catch((e) => setError((e as Error).message));
-  }, [scenario.slug, accessToken]);
+  }, [scenario.slug, sampleLimit, accessToken]);
 
   const numericSummary = useMemo(() => {
     if (!sample) return [];
@@ -70,12 +72,28 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
     <div className="tab-panel">
       <div className="panel-card">
         <h3>Data summary</h3>
+        <div className="explore-controls">
+          <label>
+            Sample size
+            <select value={sampleLimit} onChange={(e) => setSampleLimit(Number(e.target.value))}>
+              {SAMPLE_LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n.toLocaleString()} rows
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="kpi-row">
           <StatTile label="Total rows" value={String(sample.total_rows)} />
           <StatTile label="Sampled" value={String(sample.rows.length)} />
           <StatTile label="Numeric features" value={String(numericFeatures.length)} />
           <StatTile label="Categorical features" value={String(categoricalFeatures.length)} />
         </div>
+        <p style={{ marginTop: "0.4rem", fontSize: "0.8rem", color: "var(--dim)" }}>
+          Min/Mean/Max below, plus the Query and Plot panels, are computed from the {sample.rows.length.toLocaleString()}-row sample
+          only — not the full {sample.total_rows.toLocaleString()}-row dataset. Increase the sample size for more representative stats.
+        </p>
         <table className="data-table" style={{ marginTop: "0.75rem" }}>
           <thead>
             <tr>
