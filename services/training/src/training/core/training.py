@@ -13,9 +13,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 import shap
-from lightgbm import LGBMRegressor
+from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -32,11 +31,10 @@ logger = get_logger(__name__)
 CANDIDATE_ESTIMATORS = {
     "classification": {
         "logistic_regression": lambda: LogisticRegression(max_iter=1000),
-        "random_forest": lambda: RandomForestClassifier(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
+        "lightgbm": lambda: LGBMClassifier(n_estimators=200, max_depth=6, random_state=0, verbosity=-1),
     },
     "regression": {
         "linear_regression": lambda: LinearRegression(),
-        "random_forest": lambda: RandomForestRegressor(n_estimators=200, max_depth=8, n_jobs=-1, random_state=0),
         "lightgbm": lambda: LGBMRegressor(n_estimators=200, max_depth=6, random_state=0, verbosity=-1),
     },
 }
@@ -142,11 +140,11 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
     model = pipeline.named_steps["model"]
     x_transformed = pipeline.named_steps["preprocessor"].transform(x_background)
 
-    if isinstance(model, RandomForestClassifier):
+    if isinstance(model, LGBMClassifier):
         return shap.TreeExplainer(
             model, data=x_transformed, feature_perturbation="interventional", model_output="probability"
         )
-    if isinstance(model, RandomForestRegressor | LGBMRegressor):
+    if isinstance(model, LGBMRegressor):
         return shap.TreeExplainer(model, data=x_transformed, feature_perturbation="interventional")
     return shap.LinearExplainer(model, x_transformed)
 

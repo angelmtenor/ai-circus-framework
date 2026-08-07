@@ -69,9 +69,9 @@ dataset:
 
 model:
   task_type: classification
-  # Green Code: candidates are evaluated smallest/fastest-first; a more complex model
-  # is only selected if it beats the simpler one by more than this margin.
-  candidates: ["logistic_regression", "random_forest"]
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
 

@@ -111,7 +111,7 @@ def fake_definition() -> object:
         )
         model = TabularModel(
             task_type="classification",
-            candidates=["logistic_regression", "random_forest"],
+            candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
         )
 
@@ -137,7 +137,7 @@ def fake_regression_definition() -> object:
         )
         model = TabularModel(
             task_type="regression",
-            candidates=["linear_regression", "random_forest"],
+            candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
             target_units="days",
         )
@@ -184,8 +184,8 @@ def test_main_trains_selects_explains_and_saves(monkeypatch: pytest.MonkeyPatch,
     assert len(predictions) == len(df)
 
     metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
-    assert metadata["model_name"] in {"logistic_regression", "random_forest"}
-    assert metadata["candidates_evaluated"] == ["logistic_regression", "random_forest"]
+    assert metadata["model_name"] == "lightgbm"
+    assert metadata["candidates_evaluated"] == ["lightgbm"]
     assert metadata["task_type"] == "classification"
     assert fake_logger.success_messages
 
@@ -214,7 +214,7 @@ def test_main_trains_regression_scenario_without_stratify(
     assert len(predictions) == len(df)
 
     metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
-    assert metadata["model_name"] in {"linear_regression", "random_forest"}
+    assert metadata["model_name"] == "lightgbm"
     assert metadata["task_type"] == "regression"
     assert fake_logger.success_messages
 

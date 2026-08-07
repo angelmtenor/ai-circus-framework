@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from training.core.training import (
@@ -104,6 +104,16 @@ def test_train_candidate_scores_regression_on_test_set(synthetic_regression_data
     assert candidate.test_score > 0.9  # near-perfect linear signal
 
 
+def test_train_candidate_scores_lightgbm_classifier_on_test_set(synthetic_data: tuple) -> None:
+    """train_candidate fits the lightgbm classifier estimator and reports its held-out accuracy."""
+    x_train, x_test, y_train, y_test = synthetic_data
+
+    candidate = train_candidate("lightgbm", x_train, y_train, x_test, y_test, ["numeric_feature"], ["category_feature"])
+
+    assert candidate.name == "lightgbm"
+    assert 0.0 <= candidate.test_score <= 1.0
+
+
 class _FakeCandidate:
     """Minimal stand-in for TrainedCandidate, avoiding a real sklearn fit in selection tests."""
 
@@ -115,7 +125,7 @@ class _FakeCandidate:
 
 def test_select_best_candidate_keeps_simpler_model_below_threshold() -> None:
     """A more complex candidate that only marginally beats the simpler one is rejected (Green Code)."""
-    candidates = [_FakeCandidate("logistic_regression", 0.80), _FakeCandidate("random_forest", 0.81)]
+    candidates = [_FakeCandidate("logistic_regression", 0.80), _FakeCandidate("lightgbm", 0.81)]
 
     best = select_best_candidate(candidates, accuracy_gain_threshold=0.02)
 
@@ -124,18 +134,18 @@ def test_select_best_candidate_keeps_simpler_model_below_threshold() -> None:
 
 def test_select_best_candidate_adopts_significantly_better_model() -> None:
     """A more complex candidate that clearly beats the simpler one is adopted."""
-    candidates = [_FakeCandidate("logistic_regression", 0.80), _FakeCandidate("random_forest", 0.90)]
+    candidates = [_FakeCandidate("logistic_regression", 0.80), _FakeCandidate("lightgbm", 0.90)]
 
     best = select_best_candidate(candidates, accuracy_gain_threshold=0.02)
 
-    assert best.name == "random_forest"
+    assert best.name == "lightgbm"
 
 
-def test_build_explainer_uses_tree_explainer_for_random_forest(synthetic_data: tuple) -> None:
-    """A random_forest pipeline gets a TreeExplainer (Green Code: exact, no sampling needed)."""
+def test_build_explainer_uses_tree_explainer_for_lightgbm_classifier(synthetic_data: tuple) -> None:
+    """A lightgbm classifier pipeline gets a probability TreeExplainer (Green Code: exact, no sampling needed)."""
     x_train, _x_test, y_train, _y_test = synthetic_data
     pipeline = build_pipeline(
-        ["numeric_feature"], ["category_feature"], RandomForestClassifier(n_estimators=10, random_state=0)
+        ["numeric_feature"], ["category_feature"], LGBMClassifier(n_estimators=10, random_state=0, verbosity=-1)
     )
     pipeline.fit(x_train, y_train)
 
@@ -157,11 +167,11 @@ def test_build_explainer_uses_linear_explainer_for_logistic_regression(synthetic
     assert shap_values.shape[0] == len(x_train)
 
 
-def test_build_explainer_uses_tree_explainer_for_random_forest_regressor(synthetic_regression_data: tuple) -> None:
-    """A random_forest regressor pipeline gets a plain (non-probability) TreeExplainer."""
+def test_build_explainer_uses_tree_explainer_for_lightgbm_regressor(synthetic_regression_data: tuple) -> None:
+    """A lightgbm regressor pipeline gets a plain (non-probability) TreeExplainer."""
     x_train, _x_test, y_train, _y_test = synthetic_regression_data
     pipeline = build_pipeline(
-        ["numeric_feature"], ["category_feature"], RandomForestRegressor(n_estimators=10, random_state=0)
+        ["numeric_feature"], ["category_feature"], LGBMRegressor(n_estimators=10, random_state=0, verbosity=-1)
     )
     pipeline.fit(x_train, y_train)
 
