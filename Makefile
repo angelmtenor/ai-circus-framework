@@ -29,7 +29,7 @@ bootstrap: ## Create .env from .env.example if missing
 up-infra: ## Start only the platform infra (postgres, logto, qdrant, minio, traefik)
 	@docker compose up -d postgres logto qdrant minio traefik
 
-up: ## Start the full platform (infra + all backend services + both UIs)
+up: ## Start the full platform (infra + all backend services + the UI)
 	@docker compose up -d --build
 
 down: ## Stop and remove all containers
