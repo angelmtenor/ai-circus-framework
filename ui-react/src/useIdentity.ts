@@ -1,5 +1,6 @@
 import { useLogto } from "@logto/react";
 import { useEffect, useState } from "react";
+import { verifyAdminKey } from "./apiClient";
 import { config } from "./config";
 
 export type Identity = {
@@ -29,7 +30,7 @@ export function useIdentity(): {
   identity: Identity | null;
   loading: boolean;
   logIn: (orgId: string, roles: string[]) => void;
-  logInWithAdminKey: (adminKey: string) => void;
+  logInWithAdminKey: (adminKey: string) => Promise<void>;
   logOut: () => void;
 } {
   const { isAuthenticated, isLoading, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
@@ -82,10 +83,18 @@ export function useIdentity(): {
       }
       signIn(window.location.origin + "/callback");
     },
-    logInWithAdminKey: (adminKey: string) => {
+    logInWithAdminKey: async (adminKey: string) => {
+      // Verified against a real admin-gated endpoint first — /entitlements itself has
+      // no auth check (see apiClient.verifyAdminKey), so without this a bad key would
+      // still land on the scenario picker and only fail once a scenario's own
+      // chat/predict call 401s. "No valid credential" should mean "not logged in",
+      // not "logged in, then every scenario errors."
+      const valid = await verifyAdminKey(config.platformRegistryUrl, adminKey);
+      if (!valid) {
+        throw new Error("Invalid admin key.");
+      }
       // The key itself becomes the bearer token; the backend's own
-      // resolve_caller_identity does the actual matching — this UI never needs to
-      // verify the key client-side, a bad key just 401s on the first real request.
+      // resolve_caller_identity does the actual matching on every subsequent request.
       // sessionStorage (not localStorage): this is a real admin credential, not a
       // dev-mode placeholder — it should not persist once the tab/browser closes.
       const admin: Identity = { orgId: ADMIN_ORG_ID, roles: [], accessToken: adminKey };

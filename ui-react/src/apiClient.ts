@@ -114,6 +114,19 @@ export async function listEntitledScenarios(baseUrl: string, orgId: string): Pro
   return asJson<ScenarioSummary[]>(response);
 }
 
+/**
+ * Confirms an admin key is real before the login screen commits to it. `/entitlements`
+ * has no auth check at all (see platform_registry.api's module docstring — it trusts
+ * the caller to have validated already), so a bad key would otherwise sail straight
+ * through to the scenario picker and only fail once a scenario's own chat/predict
+ * call 401s. `/llm-settings/active-model` is admin-gated: 401 means a bad key; 200 or
+ * 404 ("no active model set yet") both mean the bearer token cleared that gate.
+ */
+export async function verifyAdminKey(baseUrl: string, adminKey: string): Promise<boolean> {
+  const response = await fetch(`${baseUrl}/llm-settings/active-model`, { headers: headers(adminKey) });
+  return response.status !== 401;
+}
+
 export async function predict(
   baseUrl: string,
   scenarioSlug: string,

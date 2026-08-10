@@ -17,11 +17,25 @@ function LoginScreen({
   onLoginWithAdminKey,
 }: {
   onLogin: (orgId: string, roles: string[]) => void;
-  onLoginWithAdminKey: (adminKey: string) => void;
+  onLoginWithAdminKey: (adminKey: string) => Promise<void>;
 }) {
   const [orgId, setOrgId] = useState(config.devOrgId);
   const [roles, setRoles] = useState("scenario:churn,scenario:docs_rag,scenario:ai_circus_reference");
   const [adminKey, setAdminKey] = useState("");
+  const [adminKeyError, setAdminKeyError] = useState<string | null>(null);
+  const [adminKeyChecking, setAdminKeyChecking] = useState(false);
+
+  async function submitAdminKey() {
+    setAdminKeyChecking(true);
+    setAdminKeyError(null);
+    try {
+      await onLoginWithAdminKey(adminKey);
+    } catch (e) {
+      setAdminKeyError((e as Error).message);
+    } finally {
+      setAdminKeyChecking(false);
+    }
+  }
 
   return (
     <div className="login-shell">
@@ -56,9 +70,10 @@ function LoginScreen({
             Admin key
             <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
           </label>
-          <button className="btn-primary" onClick={() => onLoginWithAdminKey(adminKey)} disabled={!adminKey}>
-            Log in as admin
+          <button className="btn-primary" onClick={submitAdminKey} disabled={!adminKey || adminKeyChecking}>
+            {adminKeyChecking ? "Checking…" : "Log in as admin"}
           </button>
+          {adminKeyError && <p className="error">{adminKeyError}</p>}
         </details>
 
         {!config.devMode && (
