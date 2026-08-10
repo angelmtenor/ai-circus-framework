@@ -5,6 +5,12 @@ import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
 import { mapContributions, topContribution, exportJson, initialRecord, FeatureInput, type Record_ } from "./predictUtils";
 
+// A batch /predict call computes a per-row SHAP explanation for every record in one
+// batched call — the same ~linear-in-row-count cost as explainability's "compute
+// global importance" (see ExploreModelView.tsx's SHAP_SAMPLE_SIZE), so this stays
+// well under MAX_ROWS (which is fine for the cheap, model-free dataset fetch below).
+const BATCH_PREDICT_CAP = 500;
+
 function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const featureColumns = scenario.feature_columns ?? [];
   const featureSchema = scenario.feature_schema ?? {};
@@ -114,7 +120,7 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     setLoading(true);
     setError(null);
     try {
-      const records = filtered.slice(0, MAX_ROWS).map((row) => {
+      const records = filtered.slice(0, BATCH_PREDICT_CAP).map((row) => {
         const record: Record_ = {};
         for (const f of featureColumns) record[f] = row[f] as number | string;
         return record;
@@ -158,9 +164,9 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
         <h3>Query</h3>
         <DatasetFilterPanel featureColumns={featureColumns} featureSchema={featureSchema} rows={sample.rows} onFilteredChange={setFiltered} />
         <button className="btn-primary" onClick={runBatch} disabled={loading || filtered.length === 0} style={{ marginTop: "0.6rem" }}>
-          {loading ? "Running…" : `Predict on ${Math.min(filtered.length, MAX_ROWS)} rows`}
+          {loading ? "Running…" : `Predict on ${Math.min(filtered.length, BATCH_PREDICT_CAP)} rows`}
         </button>
-        {filtered.length > MAX_ROWS && <span className="panel-hint"> (capped at {MAX_ROWS})</span>}
+        {filtered.length > BATCH_PREDICT_CAP && <span className="panel-hint"> (capped at {BATCH_PREDICT_CAP})</span>}
         {error && <p className="error">{error}</p>}
       </div>
 

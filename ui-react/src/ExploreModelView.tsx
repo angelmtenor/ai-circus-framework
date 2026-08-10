@@ -13,6 +13,11 @@ import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, ScatterPlot, Histogram, CategoryBars, LineChart, CHART_COLORS } from "./charts";
 import { initialRecord, FeatureInput, type Record_ } from "./predictUtils";
 
+// Unlike dataset sample/evaluation (cheap either way), SHAP explanation cost scales
+// ~linearly with row count (~50s at MAX_ROWS on churn) — 500 rows is plenty for a
+// stable global-importance ranking and stays fast (a few seconds).
+const SHAP_SAMPLE_SIZE = 500;
+
 function GlobalImportanceSection({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [data, setData] = useState<DatasetExplainability | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,7 +27,7 @@ function GlobalImportanceSection({ scenario, accessToken }: { scenario: Scenario
     setLoading(true);
     setError(null);
     try {
-      setData(await datasetExplainability(config.predictionUrl, scenario.slug, MAX_ROWS, accessToken));
+      setData(await datasetExplainability(config.predictionUrl, scenario.slug, SHAP_SAMPLE_SIZE, accessToken));
     } catch (e) {
       setError((e as Error).message);
     } finally {

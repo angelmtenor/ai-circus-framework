@@ -205,7 +205,10 @@ def dataset_evaluation_endpoint(
 
 @router.get("/dataset/{scenario_slug}/explainability", response_model=DatasetExplainabilityOut)
 def dataset_explainability_endpoint(
-    limit: int = Query(default=1000, ge=1, le=MAX_ROWS),
+    # Unlike sample/evaluation, SHAP explanation cost scales ~linearly with row count
+    # (≈50s at 10000 rows on churn) — default stays small; `le=MAX_ROWS` still lets a
+    # caller opt into a bigger, slower sample explicitly.
+    limit: int = Query(default=500, ge=1, le=MAX_ROWS),
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),
