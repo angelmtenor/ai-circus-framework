@@ -14,31 +14,31 @@ minikube/Kubernetes later (see "Kubernetes path" below).
 ## Architecture
 
 ```
-                              ┌─────────────┐
-                        ┌────▶│   Traefik   │◀──── single ingress point (*.localhost)
-                        │     └─────────────┘
-        ┌───────────────┼───────────────────────────────┬─────────────────────┐
-        │               │                               │                     │
- ┌──────▼──────┐ ┌──────▼──────┐ ┌───────────────┐ ┌─────▼─────┐       ┌───────▼──────┐
- │ ui-streamlit│ │  ui-react   │ │platform-registry│ │llm-gateway│       │ prediction / │
- │ (Logto OIDC)│ │ (Logto OIDC)│ │ (tenants/roles) │ │ (LiteLLM) │       │ assistant /  │
- └─────────────┘ └─────────────┘ └───────┬─────────┘ └─────┬─────┘       │ rag-agent    │
-                                          │                 │            └──────┬───────┘
-                                    ┌─────▼─────┐     ┌─────▼─────┐             │
-                                    │  Postgres  │     │  Qdrant   │◀────────────┘
-                                    │(logto+     │     │(per-tenant│
-                                    │ platform)  │     │collections│
-                                    └─────┬──────┘     └───────────┘
-                                          │
-                                    ┌─────▼─────┐            ┌──────────────┐
-                                    │   Logto    │            │    MinIO     │◀── datasets, models,
-                                    │(IDP/tenants)│            │(object store)│    documents
-                                    └────────────┘            └──────┬───────┘
-                                                                     │
-                                                        ┌────────────┴────────────┐
-                                                        │ etl-tabular / training / │
-                                                        │      etl-vectorize      │
-                                                        └──────────────────────────┘
+                        ┌─────────────┐
+                  ┌────▶│   Traefik   │◀──── single ingress point (*.localhost)
+                  │     └─────────────┘
+      ┌───────────┼───────────────────────┬─────────────────────┐
+      │           │                       │                     │
+┌─────▼─────┐ ┌───▼─────────────┐ ┌───────▼───┐       ┌─────────▼────┐
+│ ui-react  │ │platform-registry│ │llm-gateway│       │ prediction /  │
+│(Logto OIDC)│ │ (tenants/roles) │ │ (LiteLLM) │       │ assistant /   │
+└───────────┘ └───────┬─────────┘ └─────┬─────┘       │ rag-agent     │
+                       │                 │             └──────┬───────┘
+                 ┌─────▼─────┐     ┌─────▼─────┐              │
+                 │  Postgres  │     │  Qdrant   │◀─────────────┘
+                 │(logto+     │     │(per-tenant│
+                 │ platform)  │     │collections│
+                 └─────┬──────┘     └───────────┘
+                       │
+                 ┌─────▼─────┐            ┌──────────────┐
+                 │   Logto    │            │    MinIO     │◀── datasets, models,
+                 │(IDP/tenants)│            │(object store)│    documents
+                 └────────────┘            └──────┬───────┘
+                                                   │
+                                      ┌────────────┴────────────┐
+                                      │ etl-tabular / training / │
+                                      │      etl-vectorize      │
+                                      └──────────────────────────┘
 ```
 
 ### Scenarios (= apps a tenant is entitled to)
@@ -89,9 +89,8 @@ now and expensive to retrofit once single-tenant assumptions are baked in.
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, which
   `platform-registry` auto-grants access to *every* scenario it seeds — a real, auditable
   entitlement row, not a bypass of the entitlement check. Useful for demos/ops without
-  configuring Logto at all; all three login screens (`ui-streamlit`, `ui-react`, and this
-  key) end up enforced through the exact same `ai_circus_shared.auth.resolve_caller_identity`
-  path.
+  configuring Logto at all; both `ui-react`'s login screen and this key end up enforced
+  through the exact same `ai_circus_shared.auth.resolve_caller_identity` path.
 
 ### LLM providers
 
@@ -163,13 +162,10 @@ does *not* start a local model by default (see "LLM providers" below), so do one
 - Run `make ollama-up` to start the bundled, free, no-API-key Ollama fallback instead (leave
   `LLM_MODEL` at its default `llama3`).
 
-Now open a UI:
-
-- **`http://app.localhost`** — `ui-streamlit`
-- **`http://react.localhost`** — `ui-react`
+Now open **`http://react.localhost`**.
 
 For a quick look without configuring Logto at all, log in with the **admin key**
-(`ai-circus-2026` by default, see `ADMIN_API_KEY` in `.env`) on either UI's login screen — it's
+(`ai-circus-2026` by default, see `ADMIN_API_KEY` in `.env`) on the login screen — it's
 granted every scenario automatically. Otherwise sign in with a Logto-managed user (see
 "First-time Logto setup" below).
 
@@ -205,7 +201,7 @@ service's directory while the infra containers stay up via `make up-infra`.
   `platform-registry`'s seed step (restart it — it seeds on startup), and create the matching
   Logto role. **No new container, no UI code** — the existing `prediction`/`assistant` or
   `rag-agent` instance picks it up automatically (their `SCENARIOS` env var defaults to "every
-  scenario of this kind"), and both UIs render its form/chat generically.
+  scenario of this kind"), and `ui-react` renders its form/chat generically.
 
 ## Testing & CI
 

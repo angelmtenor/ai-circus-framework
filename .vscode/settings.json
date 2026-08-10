@@ -6,7 +6,6 @@
         "multimodal",
         "ollama",
         "openrouter",
-        "qdrant",
-        "streamlit"
+        "qdrant"
     ]
 }

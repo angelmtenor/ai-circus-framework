@@ -1,7 +1,5 @@
 /**
- * Thin fetch-based clients for the backend services — mirrors
- * services/ui-streamlit/src/ui_streamlit/core/api_client.py's shape so the two UIs
- * stay behaviorally consistent.
+ * Thin fetch-based clients for the backend services.
  */
 
 export type NumericFeatureSpec = {

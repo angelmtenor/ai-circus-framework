@@ -1,12 +1,12 @@
 # ai-circus-framework — full platform.
 #
 # Layout: infra (identity, storage, ingress) first, then backend services
-# (services/*), then the two UIs. Every HTTP service other than Traefik itself
+# (services/*), then the UI. Every HTTP service other than Traefik itself
 # publishes no host port — Traefik is the single entrypoint, which maps 1:1 onto a
 # Kubernetes Ingress when this platform moves there (see README "Kubernetes path").
 #
 # App services (platform-registry, etl-*, training, prediction, llm-gateway,
-# assistant, rag-agent, ui-streamlit, ui-react) are appended here as they're built
+# assistant, rag-agent, ui-react) are appended here as they're built
 # (see the build order in the project plan) — this file currently wires the infra
 # layer: postgres, logto, qdrant, minio, traefik.
 
@@ -428,48 +428,15 @@ services:
       - "traefik.http.routers.rag-agent.entrypoints=web"
       - "traefik.http.services.rag-agent.loadbalancer.server.port=8000"
 
-  # Long-running: the Streamlit UI — DEV_MODE bypass or Logto OIDC login, then a
-  # scenario switcher over whatever platform-registry says the tenant is entitled to.
-  ui-streamlit:
-    build:
-      context: .
-      dockerfile: services/ui-streamlit/Dockerfile
-    environment:
-      APP_ENVIRONMENT: docker
-      DEV_MODE: ${DEV_MODE:-false}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
-      LOGTO_CLIENT_ID: ${UI_LOGTO_CLIENT_ID}
-      LOGTO_CLIENT_SECRET: ${UI_LOGTO_CLIENT_SECRET}
-      LOGTO_REDIRECT_URI: ${UI_LOGTO_REDIRECT_URI}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-    depends_on:
-      platform-registry:
-        condition: service_started
-      prediction:
-        condition: service_started
-      assistant:
-        condition: service_started
-      rag-agent:
-        condition: service_started
-    networks: [ai-circus]
-    restart: unless-stopped
-    mem_limit: 512m
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ui-streamlit.rule=Host(`app.localhost`)"
-      - "traefik.http.routers.ui-streamlit.entrypoints=web"
-      - "traefik.http.services.ui-streamlit.loadbalancer.server.port=8501"
-
   ui-react:
     build:
       context: .
       dockerfile: ui-react/Dockerfile
       args:
         VITE_LOGTO_APP_ID: ${UI_REACT_LOGTO_APP_ID:-}
-        # Mirrors ui-streamlit's DEV_MODE (see root .env's DEV_MODE) — bakes the same
-        # dev-login bypass into the React bundle. Only takes effect end-to-end if the
-        # backend services' AUTH_DISABLED is also true (see useIdentity.ts's docstring).
+        # Bakes the dev-login bypass into the React bundle (see root .env's DEV_MODE).
+        # Only takes effect end-to-end if the backend services' AUTH_DISABLED is also
+        # true (see useIdentity.ts's docstring).
         VITE_DEV_MODE: ${DEV_MODE:-false}
         VITE_DEV_ORG_ID: ${DEV_ORG_ID:-demo}
     networks: [ai-circus]

@@ -2,7 +2,7 @@
 
 Foundational mandates for AI coding agents (Claude Code, GitHub Copilot, Gemini CLI, Codex,
 Cursor, or any other agent) operating on **ai-circus-framework**. This is the root-level
-policy; every service under `services/*/`, `ui-streamlit/`, and `ui-react/` is itself a
+policy; every service under `services/*/` and `ui-react/` is itself a
 cookiecutter-generated project with its **own** `AGENTS.md` — read that one too when working
 inside a specific service. Adherence is STRICTLY MANDATORY.
 

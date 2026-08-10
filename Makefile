@@ -74,6 +74,6 @@ check-all: ## Run `make check` inside every generated service
 
 clean: ## Remove containers, volumes, and per-service build artifacts
 	@docker compose down -v
-	@for dir in services/*/ ui-streamlit ui-react; do \
+	@for dir in services/*/ ui-react; do \
 		[ -f "$$dir/Makefile" ] && $(MAKE) -C "$$dir" clean 2>/dev/null || true; \
 	done

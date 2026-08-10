@@ -1,7 +1,7 @@
 """Pydantic models mirroring `scenarios/*/scenario.yaml`.
 
 `services/platform-registry` is the only service that parses these files directly
-(at bootstrap/seed time) — every other service and both UIs resolve scenario
+(at bootstrap/seed time) — every other service and `ui-react` resolve scenario
 metadata through platform-registry's API (see `entitlements.py`), not the filesystem.
 """
 
@@ -45,8 +45,8 @@ class TabularDataset(BaseModel):
     target: str
     protected_features_excluded: list[str] = []
     feature_columns: list[str]
-    # Drives both UIs' generic form renderer — keyed by `feature_columns` entries, in
-    # the same order, so neither UI needs any scenario-specific form code.
+    # Drives ui-react's generic form renderer — keyed by `feature_columns` entries, in
+    # the same order, so the UI needs no scenario-specific form code.
     feature_schema: dict[str, FeatureUI]
 
 
@@ -146,7 +146,7 @@ class ChatConfig(BaseModel):
     `context` grounds the system prompt for `assistant` (tabular_ml) and, for
     `rag-agent` (conversational_rag), also grounds its judgment of whether a
     question is in-domain enough to call the retrieval tool at all. `sample_questions`
-    is surfaced as clickable suggestions in both UIs.
+    is surfaced as clickable suggestions in `ui-react`.
     """
 
     context: str

@@ -18,13 +18,12 @@ const ADMIN_ORG_ID = "admin";
 
 /**
  * Resolves the caller's identity — DEV_MODE bypass (mirrors the backend services'
- * AUTH_DISABLED and ui-streamlit's DEV_MODE) or a real Logto organization token.
+ * AUTH_DISABLED) or a real Logto organization token.
  *
  * The Logto path is unverified against a live, browser-configured Logto tenant
- * (this repo was built without interactive browser access) — see
- * services/ui-streamlit/src/ui_streamlit/core/auth.py's docstring for the same
- * caveat. `getAccessToken(resource, organizationId)` is Logto's documented pattern
- * for a per-organization, API-scoped access token.
+ * (this repo was built without interactive browser access). `getAccessToken(resource,
+ * organizationId)` is Logto's documented pattern for a per-organization, API-scoped
+ * access token.
  */
 export function useIdentity(): {
   identity: Identity | null;

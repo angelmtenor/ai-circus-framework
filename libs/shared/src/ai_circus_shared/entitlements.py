@@ -1,8 +1,9 @@
 """Client for services/platform-registry's entitlement and scenario-metadata API.
 
 Every backend service calls `check_entitlement` before serving a scenario request —
-enforcement happens at the API, not just in the UI. Both UIs call `list_scenarios`
-to render only the scenarios a tenant is entitled to.
+enforcement happens at the API, not just in the UI. `list_scenarios` mirrors the same
+`/entitlements/{org_id}` endpoint `ui-react` calls directly (via its own TypeScript
+client) to render only the scenarios a tenant is entitled to.
 """
 
 from __future__ import annotations
@@ -35,15 +36,15 @@ class ScenarioSummary(BaseModel):
     One consolidated `prediction`/`assistant`/`rag-agent` instance serves every
     scenario of its kind (routed by `{scenario_slug}` in the request path, e.g.
     `POST /predict/{slug}`), so there's no per-scenario service name to carry here —
-    both UIs call one fixed configured URL per kind. `feature_columns`/`feature_schema`
-    drive both UIs' generic tabular_ml form renderer, and `sample_questions` renders
+    `ui-react` calls one fixed configured URL per kind. `feature_columns`/`feature_schema`
+    drive `ui-react`'s generic tabular_ml form renderer, and `sample_questions` renders
     as clickable chat suggestions — all `None` for `conversational_rag` scenarios
     except `sample_questions`, which applies to both kinds.
 
     The single source of truth for this shape: platform-registry's API uses this
     directly as its `/entitlements/{org_id}` response_model (via `from_attributes`,
-    straight off its `Scenario` ORM rows), and both UIs' `PlatformRegistryClient`
-    parses the JSON response back into this same class.
+    straight off its `Scenario` ORM rows); `ui-react`'s own TypeScript `ScenarioSummary`
+    type (see apiClient.ts) mirrors the same JSON shape independently.
     """
 
     model_config = ConfigDict(frozen=True, from_attributes=True)
@@ -56,7 +57,7 @@ class ScenarioSummary(BaseModel):
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
     sample_questions: list[str] = []
-    # tabular_ml only — lets both UIs render a plain "value units" prediction for
+    # tabular_ml only — lets ui-react render a plain "value units" prediction for
     # regression scenarios instead of the classification percentage/probability view.
     task_type: str | None = None
     target_units: str | None = None

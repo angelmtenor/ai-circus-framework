@@ -1,5 +1,5 @@
 # Git Commit Message Style Guide
-Applies repo-wide (root docs and every generated service under services/, ui-streamlit/, ui-react/).
+Applies repo-wide (root docs and every generated service under services/, ui-react/).
 
 ## Overview
 This guide defines the conventions for writing Git commit messages in this project. It aligns
