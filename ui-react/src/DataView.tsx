@@ -312,6 +312,10 @@ function ChartCard({
   const showColorBy = cfg.type !== "box";
   const showAgg = (cfg.type === "bar" || cfg.type === "pie") && Boolean(cfg.y);
   const xOptions = cfg.type === "bar" ? allOptions : cfg.type === "pie" || cfg.type === "box" ? categoricalOptions : numericOptions;
+  // Scatter/scatter3d render a numeric colorBy as a continuous gradient (see
+  // chartBuilder.ts's isNumericColumn branch) — other chart types still only group
+  // by discrete category, so numeric columns would be meaningless there.
+  const colorByOptions = cfg.type === "scatter" || cfg.type === "scatter3d" ? allOptions : categoricalOptions;
 
   const { data, layout } = useMemo(() => buildChart(rows, cfg, palette), [rows, cfg, palette]);
 
@@ -370,7 +374,7 @@ function ChartCard({
             Color by
             <select value={cfg.colorBy} onChange={(e) => onChange({ colorBy: e.target.value })}>
               <option value="">—</option>
-              {categoricalOptions.map((f) => (
+              {colorByOptions.map((f) => (
                 <option key={f} value={f}>
                   {labelFor(f)}
                 </option>

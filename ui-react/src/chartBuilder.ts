@@ -145,27 +145,60 @@ function buildBox(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
   };
 }
 
+/** A `colorBy` column is treated as a continuous gradient (not a discrete group per
+ * distinct value) when every value in the plotted rows is numeric — matches how
+ * numericFeatures/categoricalFeatures are split for the feature-schema-driven
+ * dropdowns elsewhere in DataView.tsx. */
+function isNumericColumn(rows: DatasetRow[], col: string): boolean {
+  return rows.length > 0 && rows.every((r) => Number.isFinite(toNumber(r[col])));
+}
+
 function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[], is3d: boolean): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x || !cfg.y || (is3d && !cfg.z)) return { data: [], layout: {} };
-  const groups = splitByColor(rows, cfg.colorBy);
-  const data = groups.map((g, i) => {
-    let candidateRows = withFiniteNumber(withFiniteNumber(g.rows, cfg.x), cfg.y);
-    if (is3d) candidateRows = withFiniteNumber(candidateRows, cfg.z);
+  let candidateRows = withFiniteNumber(withFiniteNumber(rows, cfg.x), cfg.y);
+  if (is3d) candidateRows = withFiniteNumber(candidateRows, cfg.z);
+
+  const sceneOrAxes: PlotlyLayout = is3d
+    ? { scene: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, zaxis: { title: cfg.z } } }
+    : { xaxis: { title: cfg.x }, yaxis: { title: cfg.y } };
+
+  // Continuous gradient: one trace, marker.color driven by a Plotly colorscale
+  // (with its own colorbar) rather than one trace per distinct value — a discrete
+  // per-value split would be meaningless (and enormous) for a continuous column.
+  if (cfg.colorBy && isNumericColumn(candidateRows, cfg.colorBy)) {
     const trace: PlotlyDatum = {
       type: is3d ? "scatter3d" : "scattergl",
       mode: "markers",
       x: candidateRows.map((r) => toNumber(r[cfg.x])),
       y: candidateRows.map((r) => toNumber(r[cfg.y])),
+      name: "points",
+      marker: {
+        size: is3d ? 4 : 6,
+        opacity: 0.85,
+        color: candidateRows.map((r) => toNumber(r[cfg.colorBy])),
+        colorscale: "Viridis",
+        showscale: true,
+        colorbar: { title: { text: cfg.colorBy } },
+      },
+    };
+    if (is3d) trace.z = candidateRows.map((r) => toNumber(r[cfg.z]));
+    return { data: [trace], layout: sceneOrAxes };
+  }
+
+  const groups = splitByColor(candidateRows, cfg.colorBy);
+  const data = groups.map((g, i) => {
+    const trace: PlotlyDatum = {
+      type: is3d ? "scatter3d" : "scattergl",
+      mode: "markers",
+      x: g.rows.map((r) => toNumber(r[cfg.x])),
+      y: g.rows.map((r) => toNumber(r[cfg.y])),
       name: g.key || "points",
       marker: { size: is3d ? 4 : 6, color: palette[i % palette.length], opacity: 0.8 },
     };
-    if (is3d) trace.z = candidateRows.map((r) => toNumber(r[cfg.z]));
+    if (is3d) trace.z = g.rows.map((r) => toNumber(r[cfg.z]));
     return trace;
   });
-  const layout: PlotlyLayout = is3d
-    ? { scene: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, zaxis: { title: cfg.z } }, showlegend: groups.length > 1 }
-    : { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, showlegend: groups.length > 1 };
-  return { data, layout };
+  return { data, layout: { ...sceneOrAxes, showlegend: groups.length > 1 } };
 }
 
 function buildLine(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
