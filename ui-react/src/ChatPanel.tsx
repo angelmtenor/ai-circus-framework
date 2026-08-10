@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chat, type ChatMessage } from "./apiClient";
 import { renderMarkdown } from "./markdown";
 
@@ -11,9 +11,9 @@ import { renderMarkdown } from "./markdown";
  * to avoid dragging in their bundle weight for an unused integration point.
  *
  * Replies are rendered through a small markdown subset (bold/code/lists/tables, see
- * markdown.tsx) — the LLM already writes these naturally; no chart-in-chat protocol
- * exists yet (that would need the backend's system prompt to emit a structured
- * convention this UI parses), so this stays text/table/code, not literal plots.
+ * markdown.tsx), plus a ```chart fenced-JSON convention (chatCharts.tsx) that reuses
+ * the dashboard's SVG chart primitives. The backends don't emit ```chart yet — their
+ * system prompts need to be taught the convention before an LLM reply will use it.
  */
 export function ChatPanel({
   baseUrl,
@@ -36,6 +36,13 @@ export function ChatPanel({
   const [sources, setSources] = useState<{ source: string; score: number }[] | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
 
+  // Scroll to the latest turn whenever the conversation changes — covers the user's
+  // own message landing immediately, the typing indicator appearing, and the reply
+  // arriving, not just the end of send().
+  useEffect(() => {
+    historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: "smooth" });
+  }, [history, sending]);
+
   async function send(text: string) {
     if (!text.trim() || sending) return;
     setMessage("");
@@ -50,9 +57,6 @@ export function ChatPanel({
       setSources(null);
     } finally {
       setSending(false);
-      requestAnimationFrame(() => {
-        historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: "smooth" });
-      });
     }
   }
 

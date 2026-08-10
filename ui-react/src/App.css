@@ -684,11 +684,6 @@ select:focus {
   font-weight: 600;
 }
 
-.chat-panel--dock .chat-history {
-  min-height: 10rem;
-  max-height: 22rem;
-}
-
 .chat-panel--full {
   height: 100%;
 }
@@ -738,6 +733,27 @@ select:focus {
   line-height: 1.55;
   color: var(--text);
   max-width: 85%;
+}
+
+/* A chart or wide table needs more room than a line of prose does. */
+.chat-bubble:has(.chat-chart),
+.chat-bubble:has(.chat-table-wrap) {
+  max-width: 100%;
+}
+
+.chat-chart {
+  margin: 0.4rem 0;
+  max-width: 34rem;
+}
+
+.chat-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0.3rem 0;
+}
+
+.chat-table-wrap .chat-table {
+  margin: 0;
 }
 
 .chat-bubble p {
@@ -1011,6 +1027,11 @@ select:focus {
   padding: 1rem;
   gap: 0.6rem;
   box-shadow: var(--shadow-md);
+  transition: width 0.15s ease;
+}
+
+.chat-dock-panel--maximized {
+  width: min(72rem, 96vw);
 }
 
 .chat-dock-header {
@@ -1022,11 +1043,23 @@ select:focus {
   color: var(--text);
 }
 
+.chat-dock-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-dock-maximize,
 .chat-dock-close {
   background: none;
   border: none;
   color: var(--dim);
   font-size: 1rem;
+}
+
+.chat-dock-maximize:hover,
+.chat-dock-close:hover {
+  color: var(--text);
 }
 
 .chat-dock-panel .chat-panel {

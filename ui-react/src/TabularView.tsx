@@ -24,6 +24,7 @@ type Tab = "dataset" | "predict" | "explore";
 export function TabularView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [tab, setTab] = useState<Tab>("dataset");
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatMaximized, setChatMaximized] = useState(false);
 
   return (
     <div className="workspace">
@@ -48,12 +49,21 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
 
       {chatOpen && (
         <div className="chat-dock-overlay" onClick={() => setChatOpen(false)}>
-          <div className="chat-dock-panel" onClick={(e) => e.stopPropagation()}>
+          <div className={`chat-dock-panel${chatMaximized ? " chat-dock-panel--maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
             <div className="chat-dock-header">
               <span>💬 Ask about {scenario.title}</span>
-              <button className="chat-dock-close" onClick={() => setChatOpen(false)}>
-                ✕
-              </button>
+              <div className="chat-dock-header-actions">
+                <button
+                  className="chat-dock-maximize"
+                  onClick={() => setChatMaximized((m) => !m)}
+                  title={chatMaximized ? "Restore" : "Maximize"}
+                >
+                  {chatMaximized ? "⤡" : "⛶"}
+                </button>
+                <button className="chat-dock-close" onClick={() => setChatOpen(false)}>
+                  ✕
+                </button>
+              </div>
             </div>
             <ChatPanel baseUrl={config.assistantUrl} scenarioSlug={scenario.slug} sampleQuestions={scenario.sample_questions} accessToken={accessToken} variant="dock" />
           </div>

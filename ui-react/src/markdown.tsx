@@ -1,11 +1,12 @@
 /**
  * Minimal markdown-ish renderer for chat replies — headers, bold/inline-code, fenced
- * code blocks, bullet/numbered lists, pipe tables, and links. No remark/react-markdown
- * dependency for a handful of block types the assistant/rag-agent LLMs already write
- * naturally.
+ * code blocks, bullet/numbered lists, pipe tables, links, and ```chart blocks (see
+ * chatCharts.tsx). No remark/react-markdown dependency for a handful of block types
+ * the assistant/rag-agent LLMs already write naturally.
  */
 
 import type { ReactNode } from "react";
+import { renderChatChart } from "./chatCharts";
 
 const LINK_PATTERN = /\[([^\]]+)\]\(([^)\s]+)\)/g;
 
@@ -92,6 +93,7 @@ export function renderMarkdown(text: string): ReactNode {
     }
 
     if (line.trim().startsWith("```")) {
+      const lang = line.trim().slice(3).trim().toLowerCase();
       const codeLines: string[] = [];
       i++;
       while (i < lines.length && !lines[i].trim().startsWith("```")) {
@@ -99,11 +101,20 @@ export function renderMarkdown(text: string): ReactNode {
         i++;
       }
       i++; // skip closing fence
-      blocks.push(
-        <pre className="chat-code" key={key++}>
-          <code>{codeLines.join("\n")}</code>
-        </pre>,
-      );
+      const chart = lang === "chart" ? renderChatChart(codeLines.join("\n")) : null;
+      if (chart) {
+        blocks.push(
+          <div className="chat-chart" key={key++}>
+            {chart}
+          </div>,
+        );
+      } else {
+        blocks.push(
+          <pre className="chat-code" key={key++}>
+            <code>{codeLines.join("\n")}</code>
+          </pre>,
+        );
+      }
       continue;
     }
 
@@ -113,7 +124,11 @@ export function renderMarkdown(text: string): ReactNode {
         tableLines.push(lines[i]);
         i++;
       }
-      blocks.push(renderTable(tableLines, key++));
+      blocks.push(
+        <div className="chat-table-wrap" key={key++}>
+          {renderTable(tableLines, key)}
+        </div>,
+      );
       continue;
     }
 
