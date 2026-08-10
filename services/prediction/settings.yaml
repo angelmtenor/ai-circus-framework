@@ -65,6 +65,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
   - name: ADMIN_API_KEY
     description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     type: string
@@ -119,11 +125,13 @@ environments:
     # actual process env) — so restricting one specific deployment to fewer scenarios
     # means editing this profile, not just setting an env var.
     SCENARIOS: ""
-    # AUTH_DISABLED/ADMIN_API_KEY deliberately have NO default here: putting one in
-    # this profile block would always win over a real environment variable at runtime
-    # (pydantic-settings gives explicit constructor kwargs, which is what these
-    # profile overrides become, priority over the actual process env). Set them in
-    # your own .env for local (non-docker) dev.
+    # AUTH_DISABLED/ADMIN_API_KEY/CORS_ALLOWED_ORIGINS deliberately have NO default
+    # here: putting one in this profile block would always win over a real
+    # environment variable at runtime (pydantic-settings gives explicit constructor
+    # kwargs, which is what these profile overrides become, priority over the actual
+    # process env) — a hardcoded local-dev origin list must never silently beat a
+    # real deployment's env var. Set them in your own .env for local (non-docker) dev;
+    # docker-compose.yml supplies a `${VAR:-default}` fallback for the docker profile.
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

@@ -71,9 +71,7 @@ def sample_rows(df: pd.DataFrame, columns: list[str], limit: int) -> DatasetSamp
     return DatasetSample(columns=columns, rows=rows, total_rows=total_rows)
 
 
-def _aggregate_by_feature(
-    names: list[str], values: np.ndarray, feature_columns: list[str]
-) -> list[dict[str, Any]]:
+def _aggregate_by_feature(names: list[str], values: np.ndarray, feature_columns: list[str]) -> list[dict[str, Any]]:
     """Aggregate per-transformed-(one-hot)-column values back to the original feature
     they came from (e.g. `cat__Geography_France` -> `Geography`), summed and ranked
     descending — shared by both the estimator-importance and SHAP importance paths.
@@ -180,11 +178,17 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
     if breakdown_feature is not None:
         y_test_arr = y_test.to_numpy(dtype=float)
         per_row_score = (
-            np.abs(predictions - y_test_arr) if task_type == "regression" else (predicted_class == y_test_arr).astype(float)
+            np.abs(predictions - y_test_arr)
+            if task_type == "regression"
+            else (predicted_class == y_test_arr).astype(float)
         )
         group_df = pd.DataFrame({breakdown_feature: x_test[breakdown_feature].to_numpy(), "score": per_row_score})
         for category, group in group_df.groupby(breakdown_feature):
-            breakdown.append({"category": str(category), "score": round(float(group["score"].mean()), 4), "n": int(len(group))})
+            breakdown.append({
+                "category": str(category),
+                "score": round(float(group["score"].mean()), 4),
+                "n": len(group),
+            })
         breakdown.sort(key=lambda b: b["n"], reverse=True)
 
     return EvaluationResult(

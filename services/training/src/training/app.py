@@ -24,12 +24,14 @@ import pandas as pd
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
     NORMALIZED_DATASET_KEY,
+    artifact_checksum,
 )
 from pydantic import ValidationError
 from sklearn.model_selection import train_test_split
@@ -47,6 +49,13 @@ from training.core.training import (
 from training.data_model import EnvConfig
 
 logger = get_logger(__name__)
+
+
+def _dump(obj: object) -> bytes:
+    """Serialize a fitted pipeline/explainer to compressed joblib bytes."""
+    buffer = io.BytesIO()
+    joblib.dump(obj, buffer, compress=True)
+    return buffer.getvalue()
 
 
 def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> None:
@@ -83,25 +92,31 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     best.pipeline.fit(x, y)
     explainer = build_explainer(best.pipeline, x)
 
-    pipeline_buffer = io.BytesIO()
-    joblib.dump(best.pipeline, pipeline_buffer, compress=True)
-    store.put(config.ORG_ID, MODEL_PIPELINE_KEY, pipeline_buffer.getvalue())
+    checksums: dict[str, str] = {}
 
-    explainer_buffer = io.BytesIO()
-    joblib.dump(explainer, explainer_buffer, compress=True)
-    store.put(config.ORG_ID, MODEL_EXPLAINER_KEY, explainer_buffer.getvalue())
+    pipeline_bytes = _dump(best.pipeline)
+    store.put(config.ORG_ID, MODEL_PIPELINE_KEY, pipeline_bytes)
+    checksums["pipeline"] = artifact_checksum(pipeline_bytes)
+
+    explainer_bytes = _dump(explainer)
+    store.put(config.ORG_ID, MODEL_EXPLAINER_KEY, explainer_bytes)
+    checksums["explainer"] = artifact_checksum(explainer_bytes)
 
     has_intervals = definition.model.task_type == "regression"
     if has_intervals:
         pipeline_lower, pipeline_upper = fit_quantile_pipelines(numeric_features, categorical_features, x, y)
-        lower_buffer = io.BytesIO()
-        joblib.dump(pipeline_lower, lower_buffer, compress=True)
-        store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_buffer.getvalue())
-        upper_buffer = io.BytesIO()
-        joblib.dump(pipeline_upper, upper_buffer, compress=True)
-        store.put(config.ORG_ID, MODEL_PIPELINE_UPPER_KEY, upper_buffer.getvalue())
+        lower_bytes = _dump(pipeline_lower)
+        store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_bytes)
+        checksums["pipeline_lower"] = artifact_checksum(lower_bytes)
+
+        upper_bytes = _dump(pipeline_upper)
+        store.put(config.ORG_ID, MODEL_PIPELINE_UPPER_KEY, upper_bytes)
+        checksums["pipeline_upper"] = artifact_checksum(upper_bytes)
         logger.success("90% prediction interval models trained for scenario={} org={}", slug, config.ORG_ID)
 
+    # Written last, once every artifact above is confirmed uploaded — prediction's
+    # model_cache treats this as the manifest: it won't serve an artifact whose bytes
+    # don't match the checksum recorded here (see MODEL_CHECKSUMS_METADATA_FIELD).
     metadata = {
         "scenario_slug": slug,
         "model_name": best.name,
@@ -112,6 +127,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "transformed_feature_names": transformed_feature_names(best.pipeline),
         "target": definition.dataset.target,
         "has_intervals": has_intervals,
+        MODEL_CHECKSUMS_METADATA_FIELD: checksums,
     }
     store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
 

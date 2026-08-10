@@ -4,7 +4,6 @@ import {
   datasetSample,
   datasetEvaluation,
   datasetExplainability,
-  type FeatureSpec,
   type ScenarioSummary,
   type DatasetSample,
   type DatasetEvaluation,
@@ -12,58 +11,7 @@ import {
 } from "./apiClient";
 import { config } from "./config";
 import { BarList, StatTile, ScatterPlot, Histogram, CategoryBars, LineChart, CHART_COLORS } from "./charts";
-
-type Record_ = Record<string, number | string>;
-
-function initialRecord(featureColumns: string[], featureSchema: Record<string, FeatureSpec>): Record_ {
-  const initial: Record_ = {};
-  for (const feature of featureColumns) initial[feature] = featureSchema[feature].default;
-  return initial;
-}
-
-function FeatureInput({
-  feature,
-  spec,
-  value,
-  onChange,
-}: {
-  feature: string;
-  spec: FeatureSpec;
-  value: number | string;
-  onChange: (value: number | string) => void;
-}) {
-  if (spec.type === "numeric") {
-    return (
-      <label className="feature-input">
-        <span className="feature-input-label">
-          {feature} <span className="feature-input-range">{spec.min}–{spec.max}</span>
-        </span>
-        <input type="range" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-        <input
-          type="number"
-          className="feature-input-number"
-          min={spec.min}
-          max={spec.max}
-          step={spec.step ?? 1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-        />
-      </label>
-    );
-  }
-  return (
-    <label className="feature-input">
-      <span className="feature-input-label">{feature}</span>
-      <select value={value as string} onChange={(e) => onChange(e.target.value)}>
-        {spec.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
+import { initialRecord, FeatureInput, type Record_ } from "./predictUtils";
 
 function GlobalImportanceSection({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [data, setData] = useState<DatasetExplainability | null>(null);

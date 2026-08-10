@@ -38,6 +38,7 @@ class FakeEnvConfig:
         self.MINIO_ENDPOINT = "http://minio:9000"
         self.MINIO_ACCESS_KEY = "ai_circus"
         self.MINIO_SECRET_KEY = FakeSecret("s3cret")
+        self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
 
 
 def build_validation_error() -> ValidationError:

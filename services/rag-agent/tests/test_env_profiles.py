@@ -23,6 +23,7 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     # settings.yaml) — they must come from real env vars.
     monkeypatch.setenv("AUTH_DISABLED", "false")
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

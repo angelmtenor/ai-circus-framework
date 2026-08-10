@@ -22,7 +22,6 @@ from ai_circus_shared.scenario_schema import (
 from etl_vectorize.core import vectorize
 from etl_vectorize.core.vectorize import (
     build_points,
-    collection_name,
     ensure_raw_docs,
     fetch_github_docs,
     load_raw_docs,
@@ -111,11 +110,6 @@ def scenario_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_collection_name_is_prefix_and_org_scoped() -> None:
-    """The collection name combines the configured prefix and the tenant's org id."""
-    assert collection_name(VECTOR_STORE, "org-1") == "docs_rag__org-1"
-
-
 def test_ensure_raw_docs_bootstraps_from_seed_folder_when_missing(scenario_dir: Path) -> None:
     """If no raw docs exist yet for the tenant, every file in sample_docs/ is uploaded."""
     store = FakeObjectStore()
@@ -139,8 +133,16 @@ def test_ensure_raw_docs_leaves_existing_docs_untouched(scenario_dir: Path) -> N
 def test_fetch_github_docs_downloads_every_file_in_the_folder(monkeypatch: pytest.MonkeyPatch) -> None:
     """fetch_github_docs lists a GitHub folder via the Contents API, then downloads each file (skipping subdirs)."""
     listing = [
-        {"name": "a.md", "type": "file", "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/a.md"},
-        {"name": "b.md", "type": "file", "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/b.md"},
+        {
+            "name": "a.md",
+            "type": "file",
+            "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/a.md",
+        },
+        {
+            "name": "b.md",
+            "type": "file",
+            "download_url": "https://raw.githubusercontent.com/owner/repo/develop/reference/b.md",
+        },
         {"name": "subdir", "type": "dir", "download_url": None},
     ]
 

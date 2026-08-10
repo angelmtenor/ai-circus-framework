@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { CopilotKit } from "@copilotkit/react-core";
 import { config } from "./config";
 import { useIdentity } from "./useIdentity";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
@@ -74,7 +73,7 @@ function LoginScreen({
   );
 }
 
-function AppContent() {
+export default function App() {
   const { identity, loading, logIn, logInWithAdminKey, logOut } = useIdentity();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
@@ -150,19 +149,14 @@ function AppContent() {
             {!scenariosLoading && selected?.kind === "conversational_rag" && (
               <RagView scenario={selected} accessToken={identity.accessToken} />
             )}
+            {!scenariosLoading && selected && selected.kind !== "tabular_ml" && selected.kind !== "conversational_rag" && (
+              <div className="app-loading">
+                {selected.title} ({selected.kind}) doesn't have a workspace view yet.
+              </div>
+            )}
           </>
         )}
       </main>
     </div>
-  );
-}
-
-export default function App() {
-  // CopilotKit provider is the intended integration point for a future AG-UI
-  // runtime bridge to rag-agent (see ChatPanel.tsx) — not wired to one yet.
-  return (
-    <CopilotKit runtimeUrl="/api/copilotkit">
-      <AppContent />
-    </CopilotKit>
   );
 }

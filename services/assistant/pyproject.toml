@@ -6,7 +6,7 @@ name = "assistant"
 version = "0.1.0"
 description = "ai-circus-framework assistant service"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
 keywords = [
@@ -139,9 +139,9 @@ project-excludes = [
     "**/*venv/**/*",
     "**/tests",
 ]
-search-path = ["src", ".venv/lib/python3.12/site-packages"]
+search-path = ["src", ".venv/lib/python3.14/site-packages"]
 python-platform = "linux"
-python-version = "3.12"
+python-version = "3.14"
 python-interpreter-path = ".venv/bin/python3"
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -45,7 +45,7 @@ export function useIdentity(): {
       return;
     }
 
-    const storedAdmin = localStorage.getItem(ADMIN_STORAGE_KEY);
+    const storedAdmin = sessionStorage.getItem(ADMIN_STORAGE_KEY);
     if (storedAdmin) {
       setIdentity(JSON.parse(storedAdmin));
       setLoading(false);
@@ -87,14 +87,16 @@ export function useIdentity(): {
       // The key itself becomes the bearer token; the backend's own
       // resolve_caller_identity does the actual matching — this UI never needs to
       // verify the key client-side, a bad key just 401s on the first real request.
+      // sessionStorage (not localStorage): this is a real admin credential, not a
+      // dev-mode placeholder — it should not persist once the tab/browser closes.
       const admin: Identity = { orgId: ADMIN_ORG_ID, roles: [], accessToken: adminKey };
-      localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(admin));
+      sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(admin));
       setIdentity(admin);
     },
     logOut: () => {
-      const hadAdminIdentity = localStorage.getItem(ADMIN_STORAGE_KEY) !== null;
+      const hadAdminIdentity = sessionStorage.getItem(ADMIN_STORAGE_KEY) !== null;
       localStorage.removeItem(DEV_STORAGE_KEY);
-      localStorage.removeItem(ADMIN_STORAGE_KEY);
+      sessionStorage.removeItem(ADMIN_STORAGE_KEY);
       if (config.devMode || hadAdminIdentity) {
         // Neither DEV_MODE nor the admin-key path involves a real Logto session.
         setIdentity(null);

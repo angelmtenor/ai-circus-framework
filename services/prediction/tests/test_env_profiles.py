@@ -19,10 +19,11 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
-    # AUTH_DISABLED and ADMIN_API_KEY intentionally have no settings.yaml default (see
-    # settings.yaml) — they must come from real env vars.
+    # AUTH_DISABLED, ADMIN_API_KEY, and CORS_ALLOWED_ORIGINS intentionally have no
+    # settings.yaml default (see settings.yaml) — they must come from real env vars.
     monkeypatch.setenv("AUTH_DISABLED", "false")
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

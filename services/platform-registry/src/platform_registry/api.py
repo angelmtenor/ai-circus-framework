@@ -9,8 +9,8 @@ this. Each of those services is responsible for validating the end user's Logto 
 
 from __future__ import annotations
 
-from typing import Any
-
+from ai_circus_shared.auth import is_admin_bearer_token
+from ai_circus_shared.entitlements import ScenarioSummary
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -25,13 +25,12 @@ router = APIRouter()
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
-    """Gate /llm-settings/* on the same admin bearer token the other services'
-    admin-key login bypass already uses — these settings are shared gateway-wide
-    infrastructure, not a per-tenant entitlement.
+    """Gate /llm-settings/* and entitlement mutations on the same admin bearer token
+    the other services' admin-key login bypass already uses — these are shared
+    gateway-wide infrastructure/mutations, not a per-tenant entitlement read.
     """
     config = get_env_config()
-    expected = f"Bearer {config.ADMIN_API_KEY.get_secret_value()}"
-    if authorization != expected:
+    if not is_admin_bearer_token(authorization, config.ADMIN_API_KEY.get_secret_value()):
         raise HTTPException(status_code=401, detail="Admin bearer token required.")
 
 
@@ -71,31 +70,13 @@ class ActiveLlmModelIn(BaseModel):
     model_name: str
 
 
-class ScenarioOut(BaseModel):
-    """Scenario metadata returned to callers (mirrors ai_circus_shared.ScenarioSummary)."""
-
-    slug: str
-    kind: str
-    title: str
-    description: str
-    icon: str
-    feature_columns: list[str] | None = None
-    feature_schema: dict[str, Any] | None = None
-    sample_questions: list[str] = []
-    task_type: str | None = None
-    target_units: str | None = None
-    target: str | None = None
-
-    model_config = {"from_attributes": True}
-
-
 @router.get("/healthz")
 def healthz() -> dict[str, str]:
     """Liveness check."""
     return {"status": "ok"}
 
 
-@router.get("/entitlements/{org_id}", response_model=list[ScenarioOut])
+@router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary])
 def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)) -> list[Scenario]:
     """Return the scenarios the given tenant (Logto Organization) is entitled to."""
     stmt = select(Scenario).join(Entitlement).where(Entitlement.org_id == org_id)
@@ -111,7 +92,7 @@ def check_entitlement(org_id: str, scenario_slug: str, session: Session = Depend
     return {"entitled": True}
 
 
-@router.put("/entitlements/{org_id}/{scenario_slug}", status_code=204)
+@router.put("/entitlements/{org_id}/{scenario_slug}", status_code=204, dependencies=[Depends(require_admin)])
 def grant_entitlement(org_id: str, scenario_slug: str, session: Session = Depends(get_session)) -> None:
     """Grant a tenant access to a scenario (idempotent). Mirrors a Logto role assignment."""
     if session.get(Scenario, scenario_slug) is None:
@@ -123,7 +104,7 @@ def grant_entitlement(org_id: str, scenario_slug: str, session: Session = Depend
         session.commit()
 
 
-@router.delete("/entitlements/{org_id}/{scenario_slug}", status_code=204)
+@router.delete("/entitlements/{org_id}/{scenario_slug}", status_code=204, dependencies=[Depends(require_admin)])
 def revoke_entitlement(org_id: str, scenario_slug: str, session: Session = Depends(get_session)) -> None:
     """Revoke a tenant's access to a scenario (idempotent)."""
     stmt = select(Entitlement).where(Entitlement.org_id == org_id, Entitlement.scenario_slug == scenario_slug)

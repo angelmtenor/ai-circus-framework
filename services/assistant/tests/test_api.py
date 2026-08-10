@@ -91,9 +91,7 @@ class _FakeLlmEnvConfig:
 def test_llm_model_uses_platform_registrys_live_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Settings page's live picker wins over the instance's static LLM_MODEL default."""
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
-    monkeypatch.setattr(
-        PlatformRegistryClient, "get_active_llm_model", lambda self, *, admin_api_key: "gemini-flash"
-    )
+    monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", lambda self, *, admin_api_key: "gemini-flash")
 
     assert _llm_model() == "gemini-flash"
 

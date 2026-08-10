@@ -19,6 +19,9 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the one mandatory secret every profile needs."""
     get_env_config.cache_clear()
     monkeypatch.setenv("POSTGRES_PASSWORD", "test-password")
+    # CORS_ALLOWED_ORIGINS intentionally has no settings.yaml default (see
+    # settings.yaml) — it must come from a real env var.
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

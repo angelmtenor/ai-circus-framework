@@ -15,7 +15,12 @@ import uuid
 from pathlib import Path
 
 import httpx
-from ai_circus_shared.scenario_schema import DocumentsConfig, GithubDocsSource, VectorStoreConfig
+from ai_circus_shared.scenario_schema import (
+    DocumentsConfig,
+    GithubDocsSource,
+    VectorStoreConfig,
+    qdrant_collection_name,
+)
 from ai_circus_shared.storage import ObjectStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -27,11 +32,6 @@ from etl_vectorize.core.logger import get_logger
 logger = get_logger(__name__)
 
 GITHUB_API_TIMEOUT_SECONDS = 15.0
-
-
-def collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
-    """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}'."""
-    return f"{vector_store.collection_prefix}__{org_id}"
 
 
 def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
@@ -131,7 +131,7 @@ def run_vectorize(
         vector_size = model.get_embedding_dimension()
         if vector_size is None:
             raise RuntimeError("Embedding model did not report a sentence embedding dimension.")
-        name = collection_name(vector_store, org_id)
+        name = qdrant_collection_name(vector_store, org_id)
         upsert_points(qdrant, name, points, vector_size)
     logger.success("Vectorized {} document(s) into {} chunk(s) for org={}", len(docs), len(points), org_id)
     return len(points)

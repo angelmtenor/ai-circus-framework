@@ -1,66 +1,12 @@
 import { useState } from "react";
-import { predict, datasetSample, type FeatureSpec, type ScenarioSummary, type DatasetSample } from "./apiClient";
+import { predict, datasetSample, type ScenarioSummary, type DatasetSample } from "./apiClient";
 import { config } from "./config";
 import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
-import { mapContributions, topContribution, exportJson, type Record_ } from "./predictUtils";
+import { mapContributions, topContribution, exportJson, initialRecord, FeatureInput, type Record_ } from "./predictUtils";
 
 const BATCH_SAMPLE_LIMIT = 300;
 const BATCH_PREDICT_CAP = 200;
-
-function defaultValue(spec: FeatureSpec): number | string {
-  return spec.default;
-}
-
-function initialRecord(featureColumns: string[], featureSchema: Record<string, FeatureSpec>): Record_ {
-  const initial: Record_ = {};
-  for (const feature of featureColumns) initial[feature] = defaultValue(featureSchema[feature]);
-  return initial;
-}
-
-function FeatureInput({
-  feature,
-  spec,
-  value,
-  onChange,
-}: {
-  feature: string;
-  spec: FeatureSpec;
-  value: number | string;
-  onChange: (value: number | string) => void;
-}) {
-  if (spec.type === "numeric") {
-    return (
-      <label className="feature-input">
-        <span className="feature-input-label">
-          {feature} <span className="feature-input-range">{spec.min}–{spec.max}</span>
-        </span>
-        <input type="range" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-        <input
-          type="number"
-          className="feature-input-number"
-          min={spec.min}
-          max={spec.max}
-          step={spec.step ?? 1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-        />
-      </label>
-    );
-  }
-  return (
-    <label className="feature-input">
-      <span className="feature-input-label">{feature}</span>
-      <select value={value as string} onChange={(e) => onChange(e.target.value)}>
-        {spec.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const featureColumns = scenario.feature_columns ?? [];

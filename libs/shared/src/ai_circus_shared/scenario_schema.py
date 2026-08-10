@@ -125,6 +125,14 @@ class VectorStoreConfig(BaseModel):
     top_k: int
 
 
+def qdrant_collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
+    """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}' — the single
+    source of truth etl-vectorize (writer) and rag-agent (reader) both call, so the
+    two can't drift out of sync on where a tenant's vectors live.
+    """
+    return f"{vector_store.collection_prefix}__{org_id}"
+
+
 class RagServices(BaseModel):
     """Names of the services that implement a `conversational_rag` scenario."""
 

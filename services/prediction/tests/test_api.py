@@ -94,6 +94,14 @@ def test_predict_returns_probability_and_contributions(client: TestClient) -> No
     assert body["predictions"][0]["contributions"] == {"f1": 0.1, "f2": -0.2}
 
 
+def test_predict_returns_422_for_missing_feature_column(client: TestClient) -> None:
+    """A record missing a required feature_column is a 422 validation error, not a 500."""
+    response = client.post("/predict/churn", json={"records": [{"CreditScore": 600}]})
+
+    assert response.status_code == 422
+    assert "Geography" in response.json()["detail"]
+
+
 def test_predict_matches_real_predict_function(client: TestClient) -> None:
     """Sanity check that the fakes used here satisfy predict()'s real call contract."""
     import pandas as pd

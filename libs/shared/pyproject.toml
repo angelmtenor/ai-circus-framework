@@ -6,7 +6,7 @@ name = "ai-circus-shared"
 version = "0.1.0"
 description = "Shared auth, storage, and entitlement helpers for ai-circus-framework services."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "pydantic>=2.11.4",
     "PyYAML>=6.0.2",

@@ -1,6 +1,6 @@
 # ── Builder stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM python:3.14-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -15,15 +15,18 @@ COPY services/ui-streamlit services/ui-streamlit
 RUN uv sync --project services/ui-streamlit --frozen --no-cache --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 WORKDIR /app
+RUN useradd --create-home --shell /bin/bash app
 
-COPY --from=builder /app/services/ui-streamlit/.venv services/ui-streamlit/.venv
-COPY --from=builder /app/services/ui-streamlit/src   services/ui-streamlit/src
-COPY --from=builder /app/services/ui-streamlit/pyproject.toml services/ui-streamlit/pyproject.toml
-COPY --from=builder /app/services/ui-streamlit/settings.yaml  services/ui-streamlit/settings.yaml
+COPY --from=builder --chown=app:app /app/services/ui-streamlit/.venv services/ui-streamlit/.venv
+COPY --from=builder --chown=app:app /app/services/ui-streamlit/src   services/ui-streamlit/src
+COPY --from=builder --chown=app:app /app/services/ui-streamlit/pyproject.toml services/ui-streamlit/pyproject.toml
+COPY --from=builder --chown=app:app /app/services/ui-streamlit/settings.yaml  services/ui-streamlit/settings.yaml
 
 ENV PATH="/app/services/ui-streamlit/.venv/bin:$PATH"
 WORKDIR /app/services/ui-streamlit
+
+USER app
 
 CMD ["python", "-m", "ui_streamlit.app"]

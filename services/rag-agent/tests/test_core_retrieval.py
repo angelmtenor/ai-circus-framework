@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 
-from rag_agent.core.retrieval import RetrievedChunk, collection_name, retrieve
+from rag_agent.core.retrieval import RetrievedChunk, retrieve
 
 VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3)
 
@@ -36,11 +36,6 @@ class FakeQdrantClient:
         """Record the call and return the configured fake points."""
         self.query_calls.append({"collection_name": collection_name, "query": query, "limit": limit})
         return SimpleNamespace(points=self._points)
-
-
-def test_collection_name_is_prefix_and_org_scoped() -> None:
-    """The collection name combines the configured prefix and the tenant's org id (matches etl-vectorize)."""
-    assert collection_name(VECTOR_STORE, "org-1") == "docs_rag__org-1"
 
 
 def test_retrieve_returns_empty_list_when_collection_missing() -> None:

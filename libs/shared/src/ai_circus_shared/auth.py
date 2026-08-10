@@ -131,7 +131,7 @@ class AuthSettingsAdapter:
     PLATFORM_REGISTRY_URL: str
 
 
-def _is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool:
+def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool:
     """Constant-time check that `authorization` is exactly `Bearer <admin_api_key>`."""
     if not authorization or not authorization.startswith("Bearer "):
         return False
@@ -156,7 +156,7 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
     if settings.AUTH_DISABLED.lower() == "true":
         dev_role = f"scenario:{scenario_slug}"
         identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=frozenset({dev_role}))
-    elif settings.ADMIN_API_KEY and _is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
+    elif settings.ADMIN_API_KEY and is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
         admin_role = f"scenario:{scenario_slug}"
         identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=frozenset({admin_role}))
     else:

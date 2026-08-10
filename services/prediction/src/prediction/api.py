@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from prediction.core import dataset as dataset_core
 from prediction.core.identity import resolve_identity
 from prediction.core.model_cache import ModelCache
+from prediction.core.predict import MissingFeatureColumnsError
 from prediction.core.predict import predict as run_predict
 
 router = APIRouter()
@@ -134,7 +135,10 @@ def predict_endpoint(
     assert identity.org_id is not None
     artifacts = model_cache.get(identity.org_id, definition.slug)
     records = pd.DataFrame(body.records)
-    predictions = run_predict(artifacts, records)
+    try:
+        predictions = run_predict(artifacts, records)
+    except MissingFeatureColumnsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return PredictResponse(
         predictions=[
             PredictionOut(

@@ -5,10 +5,26 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from ai_circus_shared.scenario_schema import DocumentChunking, DocumentEmbedding, DocumentsConfig, GithubDocsSource
+from ai_circus_shared.scenario_schema import (
+    DocumentChunking,
+    DocumentEmbedding,
+    DocumentsConfig,
+    GithubDocsSource,
+    VectorStoreConfig,
+    qdrant_collection_name,
+)
 
 CHUNKING = DocumentChunking(strategy="recursive_character", chunk_size=800, chunk_overlap=120)
 EMBEDDING = DocumentEmbedding(model="sentence-transformers/all-MiniLM-L6-v2")
+
+
+def test_qdrant_collection_name_is_prefix_and_org_scoped() -> None:
+    """The collection name combines the configured prefix and the tenant's org id —
+    etl-vectorize (writer) and rag-agent (reader) both call this, not their own copy.
+    """
+    vector_store = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3)
+
+    assert qdrant_collection_name(vector_store, "org-1") == "docs_rag__org-1"
 
 
 def test_documents_config_accepts_a_local_seed_prefix() -> None:

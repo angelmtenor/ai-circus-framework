@@ -25,7 +25,7 @@ volumes:
 services:
   # ── Ingress ─────────────────────────────────────────────────────────────────
   traefik:
-    image: traefik:latest
+    image: traefik:v3.7.10
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -39,10 +39,12 @@ services:
       DOCKER_API_VERSION: "1.41"
     ports:
       - "${TRAEFIK_HTTP_PORT:-80}:80"
-      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
+      - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 256m
 
   # ── Identity (Logto: hosted+branded sign-in, Organizations = tenants, roles) ──
   postgres:
@@ -59,6 +61,8 @@ services:
       # dev of services like platform-registry, and ad-hoc `psql` access.
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 5s
@@ -66,7 +70,7 @@ services:
       retries: 10
 
   logto:
-    image: svhd/logto:latest
+    image: svhd/logto:1.42.0
     entrypoint: ["sh", "-c", "npm run cli db seed -- --swe; npm start"]
     environment:
       TRUST_PROXY_HEADER: ${LOGTO_TRUST_PROXY_HEADER:-1}
@@ -78,6 +82,14 @@ services:
       postgres:
         condition: service_healthy
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/api/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.logto.rule=Host(`logto.localhost`)"
@@ -91,10 +103,19 @@ services:
 
   # ── Vector store (conversational_rag scenarios; one collection per tenant) ────
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.0
     volumes:
       - qdrant-storage:/qdrant/storage
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      # No curl/wget in this image — a bare TCP connect is enough to know the gRPC/HTTP
+      # port is accepting connections.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.qdrant.rule=Host(`qdrant.localhost`)"
@@ -103,7 +124,7 @@ services:
 
   # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -111,6 +132,13 @@ services:
     volumes:
       - minio-data:/data
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.minio-api.rule=Host(`minio.localhost`)"
@@ -136,6 +164,9 @@ services:
       # llm-gateway's provider models) — see platform_registry/core/llm_settings.py.
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # ui-react calls this API directly from the browser — react.localhost is the
+      # Traefik-served build, localhost:5173 the Vite dev server.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
     volumes:
       # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
       # bind mount here (unlike MinIO for datasets/models) keeps edits live without
@@ -151,6 +182,8 @@ services:
       llm-gateway:
         condition: service_started
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
     # Not exposed through Traefik — only other backend services on the docker
     # network call its entitlement-check API (see AGENTS.md).
 
@@ -169,8 +202,9 @@ services:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
     networks: [ai-circus]
+    mem_limit: 1g
 
   # Long-running: serves POST /predict/{scenario_slug} for every tabular_ml scenario
   # in SCENARIOS (empty/unset = all), across every tenant.
@@ -189,14 +223,19 @@ services:
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # ui-react calls this API directly from the browser — react.localhost is the
+      # Traefik-served build, localhost:5173 the Vite dev server.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
       platform-registry:
         condition: service_started
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.prediction.rule=Host(`prediction.localhost`)"
@@ -225,6 +264,8 @@ services:
       # point at an Ollama instance you run yourself instead.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.llm-gateway.rule=Host(`llm-gateway.localhost`)"
@@ -238,11 +279,12 @@ services:
   # to opt in as a free, no-API-key fallback. mem_limit keeps a misbehaving
   # pull/inference from starving the rest of the stack.
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.6
     profiles: ["ollama"]
     volumes:
       - ollama-data:/root/.ollama
     networks: [ai-circus]
+    restart: unless-stopped
     mem_limit: 2g
 
   # One-shot: pulls the default model (~2GB) into the `ollama-data` volume on first
@@ -250,13 +292,14 @@ services:
   # floor for usable answers — the 1B tier is too inaccurate for real chat use, so
   # it's deliberately not used here even though it's a smaller download.
   ollama-pull:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.6
     profiles: ["ollama"]
     entrypoint: ["/bin/sh", "-c", "OLLAMA_HOST=ollama:11434 ollama pull llama3.2:3b"]
     depends_on:
       ollama:
         condition: service_started
     networks: [ai-circus]
+    mem_limit: 512m
 
   # Long-running: chat-over-tabular-data for every tabular_ml scenario in SCENARIOS
   # (empty/unset = all), grounded in each scenario's chat.context and the trained
@@ -281,16 +324,21 @@ services:
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # ui-react calls this API directly from the browser — react.localhost is the
+      # Traefik-served build, localhost:5173 the Vite dev server.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
       platform-registry:
         condition: service_started
       llm-gateway:
         condition: service_started
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.assistant.rule=Host(`assistant.localhost`)"
@@ -312,8 +360,9 @@ services:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
     networks: [ai-circus]
+    mem_limit: 2g
 
   # One-shot job: `docker compose --profile pipeline up --build etl-vectorize`.
   # Processes every conversational_rag scenario in SCENARIOS (empty/unset = all).
@@ -330,10 +379,11 @@ services:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
     networks: [ai-circus]
+    mem_limit: 1g
 
   # Long-running: agentic RAG chatbot (see rag-agent/core/agent.py) for every
   # conversational_rag scenario in SCENARIOS (empty/unset = all), grounded in the
@@ -357,16 +407,21 @@ services:
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # ui-react calls this API directly from the browser — react.localhost is the
+      # Traefik-served build, localhost:5173 the Vite dev server.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       qdrant:
-        condition: service_started
+        condition: service_healthy
       platform-registry:
         condition: service_started
       llm-gateway:
         condition: service_started
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rag-agent.rule=Host(`rag-agent.localhost`)"
@@ -398,6 +453,8 @@ services:
       rag-agent:
         condition: service_started
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ui-streamlit.rule=Host(`app.localhost`)"
@@ -416,6 +473,8 @@ services:
         VITE_DEV_MODE: ${DEV_MODE:-false}
         VITE_DEV_ORG_ID: ${DEV_ORG_ID:-demo}
     networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 128m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.ui-react.rule=Host(`react.localhost`)"

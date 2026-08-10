@@ -1,6 +1,6 @@
 # ── Builder stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM python:3.14-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -15,15 +15,18 @@ COPY services/etl-vectorize services/etl-vectorize
 RUN uv sync --project services/etl-vectorize --frozen --no-cache --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 WORKDIR /app
+RUN useradd --create-home --shell /bin/bash app
 
-COPY --from=builder /app/services/etl-vectorize/.venv services/etl-vectorize/.venv
-COPY --from=builder /app/services/etl-vectorize/src   services/etl-vectorize/src
-COPY --from=builder /app/services/etl-vectorize/pyproject.toml services/etl-vectorize/pyproject.toml
-COPY --from=builder /app/services/etl-vectorize/settings.yaml  services/etl-vectorize/settings.yaml
+COPY --from=builder --chown=app:app /app/services/etl-vectorize/.venv services/etl-vectorize/.venv
+COPY --from=builder --chown=app:app /app/services/etl-vectorize/src   services/etl-vectorize/src
+COPY --from=builder --chown=app:app /app/services/etl-vectorize/pyproject.toml services/etl-vectorize/pyproject.toml
+COPY --from=builder --chown=app:app /app/services/etl-vectorize/settings.yaml  services/etl-vectorize/settings.yaml
 
 ENV PATH="/app/services/etl-vectorize/.venv/bin:$PATH"
 WORKDIR /app/services/etl-vectorize
+
+USER app
 
 CMD ["python", "-m", "etl_vectorize.app"]

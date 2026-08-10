@@ -14,6 +14,7 @@ from platform_registry.api import require_admin
 from platform_registry.app import app
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Base, Scenario
+from tests.conftest import FakeSecret
 
 
 @pytest.fixture
@@ -76,6 +77,49 @@ def test_grant_then_check_then_list_then_revoke(client: TestClient) -> None:
 def test_grant_unknown_scenario_returns_404(client: TestClient) -> None:
     """Granting an entitlement for a scenario slug that doesn't exist is rejected."""
     response = client.put("/entitlements/org-1/does-not-exist")
+    assert response.status_code == 404
+
+
+class _FakeAdminConfig:
+    """Stand-in for EnvConfig exposing only what `require_admin` reads."""
+
+    def __init__(self, admin_api_key: str = "test-admin-key") -> None:
+        self.ADMIN_API_KEY = FakeSecret(admin_api_key)
+
+
+@pytest.fixture
+def unauthenticated_client(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Same wiring as `client`, but with the real `require_admin` dependency restored,
+    backed by a fake config so the admin-gate check doesn't need every mandatory env var.
+    """
+    del app.dependency_overrides[require_admin]
+    monkeypatch.setattr("platform_registry.api.get_env_config", lambda: _FakeAdminConfig())
+    return client
+
+
+def test_grant_entitlement_requires_admin_token(unauthenticated_client: TestClient) -> None:
+    """Without an admin bearer token, granting an entitlement is rejected, not silently allowed."""
+    response = unauthenticated_client.put("/entitlements/org-1/churn")
+    assert response.status_code == 401
+
+
+def test_revoke_entitlement_requires_admin_token(unauthenticated_client: TestClient) -> None:
+    """Without an admin bearer token, revoking an entitlement is rejected, not silently allowed."""
+    response = unauthenticated_client.delete("/entitlements/org-1/churn")
+    assert response.status_code == 401
+
+
+def test_grant_entitlement_succeeds_with_admin_token(unauthenticated_client: TestClient) -> None:
+    """The real admin bearer token still authorizes the mutation."""
+    response = unauthenticated_client.put(
+        "/entitlements/org-1/churn", headers={"Authorization": "Bearer test-admin-key"}
+    )
+    assert response.status_code == 204
+
+
+def test_check_entitlement_does_not_require_admin_token(unauthenticated_client: TestClient) -> None:
+    """The read-only entitlement check stays open to every backend service, unauthenticated."""
+    response = unauthenticated_client.get("/entitlements/org-1/churn")
     assert response.status_code == 404
 
 

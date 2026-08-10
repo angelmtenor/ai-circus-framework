@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_circus_shared.scenario_schema import VectorStoreConfig
+from ai_circus_shared.scenario_schema import VectorStoreConfig, qdrant_collection_name
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
@@ -21,11 +21,6 @@ class RetrievedChunk:
     score: float
 
 
-def collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
-    """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}' (matches etl-vectorize)."""
-    return f"{vector_store.collection_prefix}__{org_id}"
-
-
 def retrieve(
     qdrant: QdrantClient,
     model: SentenceTransformer,
@@ -34,7 +29,7 @@ def retrieve(
     query: str,
 ) -> list[RetrievedChunk]:
     """Embed the query and return the tenant's top-k most similar chunks."""
-    name = collection_name(vector_store, org_id)
+    name = qdrant_collection_name(vector_store, org_id)
     if not qdrant.collection_exists(name):
         return []
 

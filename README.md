@@ -21,7 +21,7 @@ minikube/Kubernetes later (see "Kubernetes path" below).
         │               │                               │                     │
  ┌──────▼──────┐ ┌──────▼──────┐ ┌───────────────┐ ┌─────▼─────┐       ┌───────▼──────┐
  │ ui-streamlit│ │  ui-react   │ │platform-registry│ │llm-gateway│       │ prediction / │
- │ (Logto OIDC)│ │(CopilotKit) │ │ (tenants/roles) │ │ (LiteLLM) │       │ assistant /  │
+ │ (Logto OIDC)│ │ (Logto OIDC)│ │ (tenants/roles) │ │ (LiteLLM) │       │ assistant /  │
  └─────────────┘ └─────────────┘ └───────┬─────────┘ └─────┬─────┘       │ rag-agent    │
                                           │                 │            └──────┬───────┘
                                     ┌─────▼─────┐     ┌─────▼─────┐             │
@@ -244,13 +244,13 @@ tooling (Opik/Giskard), voice/multimodal agents (Pipecat), per-tenant billing/me
 shared cache (e.g. Redis) for `prediction`/`assistant`'s per-`(org, scenario)` model/prompt
 caches once running multiple replicas of either makes the current in-process `dict` cache
 insufficient, and a real AG-UI runtime bridge for `ui-react`'s `rag-agent` chat (CopilotKit's
-packages are installed and the app is wrapped in `<CopilotKit>`, but `ChatPanel` still calls
-`rag-agent` directly rather than through a Copilot Runtime).
+`<CopilotChat>`/Copilot Runtime protocol — `ChatPanel` calls `rag-agent` directly for now;
+CopilotKit's packages aren't installed until this integration is actually built).
 
-**TODO**: every service is currently pinned to Python 3.12 (`requires-python` in each
-`pyproject.toml`, `python:3.12-slim` in each Dockerfile) — check whether the ML-heavy
-dependencies (SHAP, torch, LangChain, etc.) have 3.14 wheels yet, then bump all services
-together if so.
+Every service now runs on Python 3.14 (`requires-python` in each `pyproject.toml`,
+`python:3.14-slim` in each Dockerfile) — the ML-heavy dependencies (SHAP, LightGBM,
+numba, pandas, scikit-learn) all ship 3.14 wheels, and every service's test suite passes
+unchanged.
 
 ## Contributing
 

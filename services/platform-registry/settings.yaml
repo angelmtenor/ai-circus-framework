@@ -78,11 +78,17 @@ env_variables:
     mandatory: false
     secret: true
 
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
   # Backs the admin-only /llm-settings/* endpoints (view/test/configure llm-gateway's
   # provider models) — reuses the same admin bearer token ui-react's admin-key login
   # already sends, rather than re-implementing Logto JWT validation here.
   - name: ADMIN_API_KEY
-    description: "Bearer token required on /llm-settings/* endpoints (shared with the other services' admin-key bypass)"
+    description: "Bearer token required on /llm-settings/* (shared with other services' admin-key bypass)"
     type: string
     mandatory: true
     secret: true
@@ -117,6 +123,12 @@ environments:
     # Must match POSTGRES_USER in the repo root .env; override here (or via env var)
     # if you change it there.
     POSTGRES_USER: "ai_circus"
+    # ADMIN_API_KEY/CORS_ALLOWED_ORIGINS deliberately have NO default here: a profile
+    # default would always win over a real environment variable at runtime
+    # (pydantic-settings gives explicit constructor kwargs, which is what these
+    # profile overrides become, priority over the actual process env) — a hardcoded
+    # local-dev origin list must never silently beat a real deployment's env var.
+    # docker-compose.yml supplies a `${VAR:-default}` fallback for the docker profile.
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

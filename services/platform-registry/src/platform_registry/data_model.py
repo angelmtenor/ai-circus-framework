@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,8 +52,11 @@ class EnvConfig(BaseSettings):
         description="Machine-to-machine application secret for calling Logto's Management API (sync tool only)",
         default=None,
     )
+    CORS_ALLOWED_ORIGINS: str = Field(
+        description="Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    )
     ADMIN_API_KEY: SecretStr = Field(
-        description="Bearer token required on /llm-settings/* endpoints (shared with the other services' admin-key bypass)"
+        description="Bearer token required on /llm-settings/* (shared with other services' admin-key bypass)"
     )
     LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible + admin API")
     LLM_GATEWAY_API_KEY: SecretStr = Field(
@@ -62,7 +64,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "c5d07d83136e68fa637f05c1eaa555387180cf1643509087bae37b8e973bdb5f"
+_SOURCE_YAML_HASH = "a6176a3626a69b7368dd07847bd89875e1f4372f8a0527c7502aa0415360fd2e"
 
 
 EnvConfig.model_rebuild()
@@ -98,12 +100,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

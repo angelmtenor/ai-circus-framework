@@ -6,7 +6,7 @@ ai-circus-framework rag-agent service
 
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 ![Package Version](https://img.shields.io/badge/Package%20Version-0.1.0-green?style=for-the-badge)
-![Supported Python Versions](https://img.shields.io/badge/Supported%20Python%20Versions-3.12%2B-blue?style=for-the-badge)
+![Supported Python Versions](https://img.shields.io/badge/Supported%20Python%20Versions-3.14%2B-blue?style=for-the-badge)
 
 ---
 

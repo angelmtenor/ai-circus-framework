@@ -1,6 +1,6 @@
 # ── Builder stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM python:3.14-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -15,18 +15,21 @@ COPY services/prediction services/prediction
 RUN uv sync --project services/prediction --frozen --no-cache --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 WORKDIR /app
+RUN useradd --create-home --shell /bin/bash app
 
 # libgomp1: OpenMP runtime lightgbm's compiled extension dlopens at import time.
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/services/prediction/.venv services/prediction/.venv
-COPY --from=builder /app/services/prediction/src   services/prediction/src
-COPY --from=builder /app/services/prediction/pyproject.toml services/prediction/pyproject.toml
-COPY --from=builder /app/services/prediction/settings.yaml  services/prediction/settings.yaml
+COPY --from=builder --chown=app:app /app/services/prediction/.venv services/prediction/.venv
+COPY --from=builder --chown=app:app /app/services/prediction/src   services/prediction/src
+COPY --from=builder --chown=app:app /app/services/prediction/pyproject.toml services/prediction/pyproject.toml
+COPY --from=builder --chown=app:app /app/services/prediction/settings.yaml  services/prediction/settings.yaml
 
 ENV PATH="/app/services/prediction/.venv/bin:$PATH"
 WORKDIR /app/services/prediction
+
+USER app
 
 CMD ["python", "-m", "prediction.app"]

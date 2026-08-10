@@ -45,6 +45,9 @@ class EnvConfig(BaseSettings):
     AUTH_DISABLED: str = Field(
         description="DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
     )
+    CORS_ALLOWED_ORIGINS: str = Field(
+        description="Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    )
     ADMIN_API_KEY: SecretStr = Field(
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
@@ -63,7 +66,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "7e604ce7fd935d364531688c8a82d566e00da07a7be01f7e50cc1a68cb33d938"
+_SOURCE_YAML_HASH = "b7be15fe7da4067d0879389f86ef5fadd5a97132f58125cc7dc409c19860716d"
 
 
 EnvConfig.model_rebuild()

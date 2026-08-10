@@ -5,13 +5,10 @@ import { renderMarkdown } from "./markdown";
 /**
  * A minimal chat UI calling a scenario's /chat/{scenarioSlug} endpoint directly.
  *
- * @copilotkit/react-ui's <CopilotChat> is intentionally NOT used here: it expects a
- * self-hosted "Copilot Runtime" implementing CopilotKit's AG-UI protocol (a GraphQL
- * endpoint bridging to an LLM/agent), which this pass doesn't build — wiring rag-agent
- * behind a real AG-UI runtime (streaming agent state, generative UI) is a documented
- * follow-up (see root README "Reserved for later"). CopilotKit's packages are still
- * installed and the app is wrapped in <CopilotKit> in App.tsx as the intended
- * integration point once that runtime exists.
+ * A future AG-UI runtime bridge to rag-agent (CopilotKit's <CopilotChat>, streaming
+ * agent state, generative UI) is a documented follow-up (see root README "Reserved
+ * for later") — CopilotKit's packages aren't installed until that's actually built,
+ * to avoid dragging in their bundle weight for an unused integration point.
  *
  * Replies are rendered through a small markdown subset (bold/code/lists/tables, see
  * markdown.tsx) — the LLM already writes these naturally; no chart-in-chat protocol

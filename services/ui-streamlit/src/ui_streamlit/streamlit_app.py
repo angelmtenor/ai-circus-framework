@@ -165,6 +165,15 @@ def _render_conversational_rag(scenario: ScenarioSummary, identity: Identity) ->
     _render_chat(config.RAG_AGENT_URL, scenario, identity, f"{scenario.slug}_chat")
 
 
+@st.cache_data(ttl=30)
+def _cached_list_scenarios(base_url: str, org_id: str) -> list[ScenarioSummary]:
+    """list_scenarios() otherwise re-hits platform-registry on every Streamlit
+    rerun (i.e. every user interaction), even though a tenant's entitlements
+    rarely change mid-session.
+    """
+    return PlatformRegistryClient(base_url=base_url).list_scenarios(org_id=org_id)
+
+
 def main() -> None:
     """Render the login screen, or the scenario switcher + selected scenario's view."""
     identity: Identity | None = st.session_state.get("identity")
@@ -172,8 +181,7 @@ def main() -> None:
         _login_screen()
         return
 
-    registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
-    scenarios = registry.list_scenarios(org_id=identity.org_id)
+    scenarios = _cached_list_scenarios(config.PLATFORM_REGISTRY_URL, identity.org_id)
     if not scenarios:
         st.info("No scenarios are assigned to your account yet. Contact your admin.")
         return

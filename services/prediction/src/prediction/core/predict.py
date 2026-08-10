@@ -13,6 +13,17 @@ import pandas as pd
 from prediction.core.model_cache import ModelArtifacts
 
 
+class MissingFeatureColumnsError(ValueError):
+    """Raised when a request record is missing one or more of the scenario's
+    feature_columns — the api layer turns this into a 422, not a raw 500.
+    """
+
+    def __init__(self, missing_columns: list[str]) -> None:
+        """Store the missing column names for the caller to report back verbatim."""
+        self.missing_columns = missing_columns
+        super().__init__(f"Record(s) missing required feature column(s): {', '.join(missing_columns)}")
+
+
 @dataclass(frozen=True)
 class PredictionResult:
     """One record's prediction (probability for classification, raw value for
@@ -36,6 +47,9 @@ def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[Prediction
     the explainer computed them.
     """
     feature_columns = artifacts.metadata["feature_columns"]
+    missing = [c for c in feature_columns if c not in records.columns]
+    if missing:
+        raise MissingFeatureColumnsError(missing)
     x = records.loc[:, feature_columns]
 
     if artifacts.metadata["task_type"] == "regression":

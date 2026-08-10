@@ -8,6 +8,7 @@ from collections.abc import Generator
 import pytest
 
 import platform_registry.core.logger as _logger_module
+from platform_registry.app import app as _fastapi_app
 
 
 class FakeSecret:
@@ -29,6 +30,11 @@ def reset_singletons() -> Generator[None]:
     sys.modules.pop("platform_registry.data_model", None)
     # Reset loguru configuration flag so configure_logger() works fresh each test
     _logger_module._configured = False
+    # A prior test's TestClient(app) call against the real module-level `app`
+    # (test_api.py's `client` fixture reuses it, unlike other services) builds its
+    # middleware stack, which would make app.main()'s add_middleware() raise
+    # RuntimeError in a later test — reset so each test starts as if unstarted.
+    _fastapi_app.middleware_stack = None
 
     yield
 

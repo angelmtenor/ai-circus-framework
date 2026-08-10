@@ -1,6 +1,6 @@
 # ── Builder stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM python:3.14-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
@@ -15,15 +15,18 @@ COPY services/etl-tabular services/etl-tabular
 RUN uv sync --project services/etl-tabular --frozen --no-cache --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 WORKDIR /app
+RUN useradd --create-home --shell /bin/bash app
 
-COPY --from=builder /app/services/etl-tabular/.venv services/etl-tabular/.venv
-COPY --from=builder /app/services/etl-tabular/src   services/etl-tabular/src
-COPY --from=builder /app/services/etl-tabular/pyproject.toml services/etl-tabular/pyproject.toml
-COPY --from=builder /app/services/etl-tabular/settings.yaml  services/etl-tabular/settings.yaml
+COPY --from=builder --chown=app:app /app/services/etl-tabular/.venv services/etl-tabular/.venv
+COPY --from=builder --chown=app:app /app/services/etl-tabular/src   services/etl-tabular/src
+COPY --from=builder --chown=app:app /app/services/etl-tabular/pyproject.toml services/etl-tabular/pyproject.toml
+COPY --from=builder --chown=app:app /app/services/etl-tabular/settings.yaml  services/etl-tabular/settings.yaml
 
 ENV PATH="/app/services/etl-tabular/.venv/bin:$PATH"
 WORKDIR /app/services/etl-tabular
+
+USER app
 
 CMD ["python", "-m", "etl_tabular.app"]

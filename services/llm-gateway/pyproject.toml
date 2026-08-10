@@ -6,7 +6,7 @@ name = "llm-gateway"
 version = "0.1.0"
 description = "ai-circus-framework llm-gateway service"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
 keywords = [
@@ -24,6 +24,10 @@ classifiers = [
 ]
 
 dependencies = [
+    # Pinned exactly (re-verified, still required): fastapi>=0.141.1 removes
+    # fastapi.dependencies.utils.get_flat_dependant, which litellm[proxy]'s own
+    # internal imports still depend on — bumping this crashes the proxy server at
+    # startup with an ImportError, not just a resolver warning. See DEP002 below.
     "fastapi==0.136.3",
     "litellm[proxy]>=1.95.0",
     "loguru>=0.7.3",
@@ -136,9 +140,9 @@ project-excludes = [
     "**/*venv/**/*",
     "**/tests",
 ]
-search-path = ["src", ".venv/lib/python3.12/site-packages"]
+search-path = ["src", ".venv/lib/python3.14/site-packages"]
 python-platform = "linux"
-python-version = "3.12"
+python-version = "3.14"
 python-interpreter-path = ".venv/bin/python3"
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -83,6 +83,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
   - name: ADMIN_API_KEY
     description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     type: string
@@ -131,7 +137,7 @@ environments:
     # Empty = every tabular_ml scenario under SCENARIOS_DIR — see prediction/settings.yaml
     # for why a yaml default is safe here but not for AUTH_DISABLED/ADMIN_API_KEY below.
     SCENARIOS: ""
-    # AUTH_DISABLED/ADMIN_API_KEY/LLM_MODEL deliberately have NO default here — see
+    # AUTH_DISABLED/ADMIN_API_KEY/LLM_MODEL/CORS_ALLOWED_ORIGINS deliberately have NO default here — see
     # prediction/settings.yaml for why (a profile default would always beat a real
     # environment variable — docker-compose.yml's LLM_MODEL default is what actually
     # applies, and is meant to be swapped per-deployment without a rebuild).

@@ -60,9 +60,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="rag-agent", lifespan=lifespan)
-# ui-react calls this API directly from the browser (never via cookies, always a
-# Bearer token), so a wildcard origin carries no CSRF/credential risk here.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
 
 
@@ -77,6 +74,16 @@ def main() -> None:
         for error in e.errors():
             logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
         sys.exit(1)
+
+    # ui-react calls this API directly from the browser (never via cookies, always a
+    # Bearer token, so no CSRF risk) — still scoped to CORS_ALLOWED_ORIGINS rather than
+    # "*" so a token that leaked to some other origin can't be replayed cross-origin.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[origin.strip() for origin in config.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     logger.success("rag-agent starting on port {} for SCENARIOS={!r}", config.HTTP_PORT, config.SCENARIOS or "all")
     uvicorn.run(app, host="0.0.0.0", port=int(config.HTTP_PORT), log_level=config.LOG_LEVEL.lower())  # ruff: ignore[hardcoded-bind-all-interfaces]

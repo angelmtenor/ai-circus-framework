@@ -7,9 +7,15 @@ import json
 
 import joblib
 import pytest
-from ai_circus_shared.tabular_ml import MODEL_EXPLAINER_KEY, MODEL_METADATA_KEY, MODEL_PIPELINE_KEY
+from ai_circus_shared.tabular_ml import (
+    MODEL_CHECKSUMS_METADATA_FIELD,
+    MODEL_EXPLAINER_KEY,
+    MODEL_METADATA_KEY,
+    MODEL_PIPELINE_KEY,
+    artifact_checksum,
+)
 
-from prediction.core.model_cache import ModelCache
+from prediction.core.model_cache import MAX_CACHED_TENANTS, CorruptArtifactError, ModelCache
 
 
 class FakeObjectStore:
@@ -33,13 +39,22 @@ class FakeObjectStore:
 def _seed(store: FakeObjectStore, org_id: str, model_name: str) -> None:
     pipeline_buffer = io.BytesIO()
     joblib.dump({"fake": "pipeline"}, pipeline_buffer)
-    store.put(org_id, MODEL_PIPELINE_KEY, pipeline_buffer.getvalue())
+    pipeline_bytes = pipeline_buffer.getvalue()
+    store.put(org_id, MODEL_PIPELINE_KEY, pipeline_bytes)
 
     explainer_buffer = io.BytesIO()
     joblib.dump({"fake": "explainer"}, explainer_buffer)
-    store.put(org_id, MODEL_EXPLAINER_KEY, explainer_buffer.getvalue())
+    explainer_bytes = explainer_buffer.getvalue()
+    store.put(org_id, MODEL_EXPLAINER_KEY, explainer_bytes)
 
-    store.put(org_id, MODEL_METADATA_KEY, json.dumps({"model_name": model_name}).encode())
+    metadata = {
+        "model_name": model_name,
+        MODEL_CHECKSUMS_METADATA_FIELD: {
+            "pipeline": artifact_checksum(pipeline_bytes),
+            "explainer": artifact_checksum(explainer_bytes),
+        },
+    }
+    store.put(org_id, MODEL_METADATA_KEY, json.dumps(metadata).encode())
 
 
 @pytest.fixture
@@ -60,7 +75,7 @@ def test_get_loads_artifacts_on_first_call(stores: dict[str, FakeObjectStore]) -
 
     assert artifacts.pipeline == {"fake": "pipeline"}
     assert artifacts.explainer == {"fake": "explainer"}
-    assert artifacts.metadata == {"model_name": "random_forest"}
+    assert artifacts.metadata["model_name"] == "random_forest"
     assert len(stores["churn"].get_calls) == 3
 
 
@@ -85,3 +100,76 @@ def test_different_scenarios_are_cached_independently(stores: dict[str, FakeObje
     assert mpm_artifacts.metadata["model_name"] == "logistic_regression"
     assert len(stores["churn"].get_calls) == 3
     assert len(stores["mpm"].get_calls) == 3
+
+
+def test_get_evicts_least_recently_used_entry_once_full(stores: dict[str, FakeObjectStore]) -> None:
+    """Once MAX_CACHED_TENANTS distinct (org, scenario) pairs are cached, adding one
+    more evicts the least-recently-used one instead of growing unbounded.
+    """
+    churn_store = stores["churn"]
+    org_ids = [f"org-{i}" for i in range(MAX_CACHED_TENANTS + 1)]
+    for org_id in org_ids:
+        _seed(churn_store, org_id, "random_forest")
+    cache = ModelCache(stores)
+
+    for org_id in org_ids[:-1]:  # fill to exactly MAX_CACHED_TENANTS
+        cache.get(org_id, "churn")
+    calls_before_overflow = len(churn_store.get_calls)
+
+    cache.get(org_ids[-1], "churn")  # one more than capacity — evicts org_ids[0]
+
+    assert len(cache._cache) == MAX_CACHED_TENANTS
+    assert org_ids[0] not in {org for org, _ in cache._cache}
+    assert len(churn_store.get_calls) == calls_before_overflow + 3  # the new entry's real load
+
+    cache.get(org_ids[0], "churn")  # evicted — must hit the store again, not just re-cache
+    assert len(churn_store.get_calls) == calls_before_overflow + 6
+
+
+def test_get_moves_entry_to_most_recently_used_on_cache_hit(stores: dict[str, FakeObjectStore]) -> None:
+    """Re-fetching an already-cached entry marks it as recently used, so it survives
+    eviction even though it was the first one loaded.
+    """
+    churn_store = stores["churn"]
+    org_ids = [f"org-{i}" for i in range(MAX_CACHED_TENANTS + 1)]
+    for org_id in org_ids:
+        _seed(churn_store, org_id, "random_forest")
+    cache = ModelCache(stores)
+
+    for org_id in org_ids[:-1]:
+        cache.get(org_id, "churn")
+    cache.get(org_ids[0], "churn")  # touch the oldest entry again — now most-recent
+
+    cache.get(org_ids[-1], "churn")  # triggers eviction of the *new* least-recently-used
+
+    assert org_ids[0] in {org for org, _ in cache._cache}
+    assert org_ids[1] not in {org for org, _ in cache._cache}
+
+
+def test_get_rejects_pipeline_that_does_not_match_its_checksum(stores: dict[str, FakeObjectStore]) -> None:
+    """An interrupted retrain that overwrote the pipeline but not metadata is caught,
+    not silently served as a mismatched (old metadata, new pipeline) pair.
+    """
+    store = stores["churn"]
+    tampered = io.BytesIO()
+    joblib.dump({"fake": "a different pipeline"}, tampered)
+    store.put("org-1", MODEL_PIPELINE_KEY, tampered.getvalue())
+
+    with pytest.raises(CorruptArtifactError):
+        ModelCache(stores).get("org-1", "churn")
+
+
+def test_get_skips_intervals_when_only_one_quantile_checksum_is_present(stores: dict[str, FakeObjectStore]) -> None:
+    """has_intervals=True but only pipeline_lower's checksum was recorded (the upper
+    write was interrupted) — treated as no intervals, not a crash on a missing key.
+    """
+    store = stores["churn"]
+    metadata = json.loads(store.get("org-1", MODEL_METADATA_KEY))
+    metadata["has_intervals"] = True
+    metadata[MODEL_CHECKSUMS_METADATA_FIELD]["pipeline_lower"] = "irrelevant-because-never-loaded"
+    store.put("org-1", MODEL_METADATA_KEY, json.dumps(metadata).encode())
+
+    artifacts = ModelCache(stores).get("org-1", "churn")
+
+    assert artifacts.pipeline_lower is None
+    assert artifacts.pipeline_upper is None

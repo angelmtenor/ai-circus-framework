@@ -14,23 +14,45 @@ from __future__ import annotations
 import io
 import json
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
 import joblib
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
+    artifact_checksum,
 )
 from sklearn.pipeline import Pipeline
 
 from prediction.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class CorruptArtifactError(RuntimeError):
+    """Raised when a MinIO artifact's bytes don't match its metadata checksum —
+    i.e. it was partially overwritten by an interrupted retrain, or corrupted/tampered
+    with in storage. Refuse to deserialize it rather than joblib.load()'ing unknown
+    bytes.
+    """
+
+
+def _load_checked(store: ObjectStore, org_id: str, key: str, checksums: dict[str, str], artifact_name: str) -> Any:
+    """Download, checksum-verify, then joblib.load() one model artifact."""
+    data = store.get(org_id, key)
+    expected = checksums.get(artifact_name)
+    if expected is None or artifact_checksum(data) != expected:
+        raise CorruptArtifactError(
+            f"Checksum mismatch for {artifact_name!r} (org={org_id}, key={key}) — refusing to load it."
+        )
+    return joblib.load(io.BytesIO(data))
 
 
 @dataclass(frozen=True)
@@ -49,13 +71,21 @@ class ModelArtifacts:
     pipeline_upper: Pipeline | None = None
 
 
+#: Each entry holds a full sklearn pipeline + SHAP explainer (can be multi-MB) — bound
+#: the cache so an ever-growing set of distinct (org, scenario) tenants can't grow this
+#: service's memory without limit. Evicts the least-recently-used entry once full.
+MAX_CACHED_TENANTS = 64
+
+
 class ModelCache:
-    """Lazily loads and caches `ModelArtifacts` per (org_id, scenario_slug)."""
+    """Lazily loads and caches `ModelArtifacts` per (org_id, scenario_slug), bounded to
+    `MAX_CACHED_TENANTS` entries (LRU eviction).
+    """
 
     def __init__(self, stores: dict[str, ObjectStore]) -> None:
         """Bind this cache to one ObjectStore per loaded scenario_slug (own MinIO bucket each)."""
         self._stores = stores
-        self._cache: dict[tuple[str, str], ModelArtifacts] = {}
+        self._cache: OrderedDict[tuple[str, str], ModelArtifacts] = OrderedDict()
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
 
@@ -74,19 +104,28 @@ class ModelCache:
         """Return the tenant's model artifacts for this scenario, loading+caching on first call."""
         key = (org_id, scenario_slug)
         if key in self._cache:
+            self._cache.move_to_end(key)
             return self._cache[key]
 
         with self._lock_for(key):
             if key not in self._cache:  # re-check: another thread may have just populated it
                 logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", *key)
                 store = self._stores[scenario_slug]
-                pipeline = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_KEY)))
-                explainer = joblib.load(io.BytesIO(store.get(org_id, MODEL_EXPLAINER_KEY)))
+                # Read metadata first — it's the manifest training writes last, once
+                # every artifact below it has been confirmed uploaded — so an
+                # interrupted retrain shows up here as a checksum mismatch rather than
+                # a silent mix of old/new artifacts.
                 metadata = json.loads(store.get(org_id, MODEL_METADATA_KEY))
+                checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
+                pipeline = _load_checked(store, org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
+                explainer = _load_checked(store, org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
                 pipeline_lower = pipeline_upper = None
-                if metadata.get("has_intervals") and store.exists(org_id, MODEL_PIPELINE_LOWER_KEY):
-                    pipeline_lower = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_LOWER_KEY)))
-                    pipeline_upper = joblib.load(io.BytesIO(store.get(org_id, MODEL_PIPELINE_UPPER_KEY)))
+                if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
+                    pipeline_lower = _load_checked(store, org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
+                    pipeline_upper = _load_checked(store, org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+                if len(self._cache) >= MAX_CACHED_TENANTS:
+                    evicted_key, _ = self._cache.popitem(last=False)
+                    logger.info("Model cache full — evicted org={} scenario={}", *evicted_key)
                 self._cache[key] = ModelArtifacts(
                     pipeline=pipeline,
                     explainer=explainer,

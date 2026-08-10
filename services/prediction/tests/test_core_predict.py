@@ -12,7 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from prediction.core.model_cache import ModelArtifacts
-from prediction.core.predict import predict
+from prediction.core.predict import MissingFeatureColumnsError, predict
 
 
 @pytest.fixture
@@ -102,6 +102,16 @@ def test_predict_ignores_extra_columns_not_in_feature_columns(artifacts: ModelAr
     results = predict(artifacts, records)
 
     assert len(results) == 1
+
+
+def test_predict_raises_on_missing_feature_column(artifacts: ModelArtifacts) -> None:
+    """A record missing a required feature_column raises a clear, typed error instead
+    of pandas' raw KeyError — the api layer turns this into a 422, not a 500.
+    """
+    records = pd.DataFrame([{"numeric_feature": 0.5}])  # missing "category_feature"
+
+    with pytest.raises(MissingFeatureColumnsError, match="category_feature"):
+        predict(artifacts, records)
 
 
 def test_predict_returns_raw_value_for_regression(regression_artifacts: ModelArtifacts) -> None:

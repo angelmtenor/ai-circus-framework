@@ -10,8 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@copilotkit/react-core": "^1.66.2",
-    "@copilotkit/react-ui": "^1.66.2",
     "@logto/react": "^4.0.14",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

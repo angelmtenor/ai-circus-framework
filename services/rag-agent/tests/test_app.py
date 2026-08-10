@@ -39,6 +39,7 @@ class FakeEnvConfig:
         self.QDRANT_URL = "http://qdrant:6333"
         self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
         self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
+        self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
 
 
 def build_validation_error() -> ValidationError:

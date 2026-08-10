@@ -27,7 +27,7 @@ cookiecutter "$TEMPLATE" --no-input -o "$REPO_ROOT/services" \
     author_name="ai-circus-framework contributors" \
     author_email="dev@ai-circus-framework.local" \
     github_username_or_org="ai-circus-framework" \
-    python_version="3.12"
+    python_version="3.14"
 
 # The template's post_gen hook git-inits + commits each generated project; flatten
 # that so the service is tracked by this monorepo's single top-level repo instead.
@@ -52,7 +52,7 @@ PYTHON_VERSION="$(grep -oP 'FROM python:\K[0-9.]+' "$SERVICE_DIR/Dockerfile" | h
 cat > "$SERVICE_DIR/Dockerfile" <<EOF
 # ── Builder stage ───────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 

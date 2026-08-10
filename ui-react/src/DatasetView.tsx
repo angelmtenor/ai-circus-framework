@@ -3,19 +3,10 @@ import { datasetSample, type ScenarioSummary, type DatasetSample } from "./apiCl
 import { config } from "./config";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
 import { StatTile, Histogram, ScatterPlot, CategoryBars, colorScale } from "./charts";
+import { exportJson } from "./predictUtils";
 
 const DEFAULT_SAMPLE_LIMIT = 5000;
 const SAMPLE_LIMIT_OPTIONS = [500, 1000, 5000, 10000, 20000];
-
-function exportJson(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 type PlotMode = "histogram" | "counts" | "scatter";
 
@@ -26,10 +17,16 @@ type PlotMode = "histogram" | "counts" | "scatter";
  * in the Explore model tab instead, to keep this section "just the data".
  */
 export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
-  const featureColumns = scenario.feature_columns ?? [];
-  const featureSchema = scenario.feature_schema ?? {};
-  const numericFeatures = featureColumns.filter((f) => featureSchema[f]?.type === "numeric");
-  const categoricalFeatures = featureColumns.filter((f) => featureSchema[f]?.type === "categorical");
+  const featureColumns = useMemo(() => scenario.feature_columns ?? [], [scenario.feature_columns]);
+  const featureSchema = useMemo(() => scenario.feature_schema ?? {}, [scenario.feature_schema]);
+  const numericFeatures = useMemo(
+    () => featureColumns.filter((f) => featureSchema[f]?.type === "numeric"),
+    [featureColumns, featureSchema],
+  );
+  const categoricalFeatures = useMemo(
+    () => featureColumns.filter((f) => featureSchema[f]?.type === "categorical"),
+    [featureColumns, featureSchema],
+  );
 
   // The target isn't a feature (never a model input), but it's still a real dataset
   // column returned by the sample endpoint — worth exploring alongside the features
@@ -48,11 +45,19 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
   const [sampleLimit, setSampleLimit] = useState(DEFAULT_SAMPLE_LIMIT);
 
   useEffect(() => {
+    let cancelled = false;
     setSample(null);
     setError(null);
     datasetSample(config.predictionUrl, scenario.slug, sampleLimit, accessToken)
-      .then(setSample)
-      .catch((e) => setError((e as Error).message));
+      .then((result) => {
+        if (!cancelled) setSample(result);
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [scenario.slug, sampleLimit, accessToken]);
 
   const targetOptions = useMemo(() => {
@@ -60,9 +65,14 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
     return [...new Set(sample.rows.map((r) => String(r[targetName])))];
   }, [sample, targetName, targetIsNumeric]);
 
-  const numericFeaturesWithTarget = targetName && targetIsNumeric ? [...numericFeatures, targetName] : numericFeatures;
-  const categoricalFeaturesWithTarget =
-    targetName && !targetIsNumeric ? [...categoricalFeatures, targetName] : categoricalFeatures;
+  const numericFeaturesWithTarget = useMemo(
+    () => (targetName && targetIsNumeric ? [...numericFeatures, targetName] : numericFeatures),
+    [numericFeatures, targetName, targetIsNumeric],
+  );
+  const categoricalFeaturesWithTarget = useMemo(
+    () => (targetName && !targetIsNumeric ? [...categoricalFeatures, targetName] : categoricalFeatures),
+    [categoricalFeatures, targetName, targetIsNumeric],
+  );
 
   const featureSchemaWithTarget = useMemo(() => {
     if (!sample || !targetName) return featureSchema;
@@ -80,7 +90,11 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
     if (!sample) return [];
     return numericFeaturesWithTarget.map((f) => {
       const values = sample.rows.map((r) => Number(r[f])).filter((v) => !Number.isNaN(v));
-      const mean = values.reduce((a, b) => a + b, 0) / (values.length || 1);
+      // Math.min/max of an empty array is Infinity/-Infinity, not a missing value —
+      // render "—" instead of those literal strings when a column has no numeric
+      // values in this sample.
+      if (values.length === 0) return { feature: f, min: null, max: null, mean: null };
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
       return { feature: f, min: Math.min(...values), max: Math.max(...values), mean };
     });
   }, [sample, numericFeaturesWithTarget]);
@@ -135,9 +149,9 @@ export function DatasetView({ scenario, accessToken }: { scenario: ScenarioSumma
             {numericSummary.map((s) => (
               <tr key={s.feature}>
                 <td>{labelFor(s.feature)}</td>
-                <td>{s.min.toFixed(2)}</td>
-                <td>{s.mean.toFixed(2)}</td>
-                <td>{s.max.toFixed(2)}</td>
+                <td>{s.min === null ? "—" : s.min.toFixed(2)}</td>
+                <td>{s.mean === null ? "—" : s.mean.toFixed(2)}</td>
+                <td>{s.max === null ? "—" : s.max.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>

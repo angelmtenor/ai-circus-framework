@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,6 +50,9 @@ class EnvConfig(BaseSettings):
     AUTH_DISABLED: str = Field(
         description="DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
     )
+    CORS_ALLOWED_ORIGINS: str = Field(
+        description="Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    )
     ADMIN_API_KEY: SecretStr = Field(
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
@@ -69,7 +71,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "995392aab30ff2b6282c36f8d9d7a3aea215bfb9e475c0e80198c78eb9355c6c"
+_SOURCE_YAML_HASH = "413f402d5cf697a3425b021a7311d4c4378dba6223980738b73ed93372fb1a46"
 
 
 EnvConfig.model_rebuild()
@@ -105,12 +107,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":
