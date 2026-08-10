@@ -86,6 +86,15 @@ PROVIDERS: dict[str, ProviderSpec] = {
         env_vars=("OPENROUTER_API_KEY",),
         hint="Set OPENROUTER_API_KEY in .env, then `docker compose up -d llm-gateway`.",
     ),
+    "anthropic": ProviderSpec(
+        key="anthropic",
+        label="Anthropic Claude",
+        model_name="claude-haiku",
+        needs_key=True,
+        needs_base=False,
+        env_vars=("ANTHROPIC_API_KEY",),
+        hint="Set ANTHROPIC_API_KEY in .env, then `docker compose up -d llm-gateway`.",
+    ),
     "azure_openai": ProviderSpec(
         key="azure_openai",
         label="Azure OpenAI",

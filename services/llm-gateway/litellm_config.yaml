@@ -49,6 +49,15 @@ model_list:
       model: openrouter/openrouter/free
       api_key: os.environ/OPENROUTER_API_KEY
 
+  # Anthropic's own API (not a proxy of another provider). Haiku is the
+  # fast/cheap tier — matches the cost-conscious default picked for the other
+  # providers above (gemini-flash, groq-llama). Switch to claude-sonnet-4-5 or
+  # claude-opus-4-1 here if you want a more capable (pricier) default instead.
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
   # Optional — unreachable (no default model selected) until an operator sets
   # AZURE_OPENAI_API_KEY/_BASE (see docker-compose.yml's llm-gateway env) and edits
   # `azure/<deployment>` below to match their actual Azure deployment name

@@ -258,6 +258,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       GROQ_API_KEY: ${GROQ_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       # Points at the `ollama` container below by default, but that container is
       # OPTIONAL (profile "ollama", not started by `docker compose up` — see below)
       # so this is only reachable once you run `make ollama-up`. Override in .env to

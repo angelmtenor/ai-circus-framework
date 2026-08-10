@@ -59,13 +59,17 @@ class EnvConfig(BaseSettings):
         description="OpenRouter API key (only needed if litellm_config.yaml routes to the openrouter model)",
         default=None,
     )
+    ANTHROPIC_API_KEY: SecretStr | None = Field(
+        description="Anthropic API key (only needed if litellm_config.yaml routes to the claude-haiku model)",
+        default=None,
+    )
     OLLAMA_API_BASE: str | None = Field(
         description="Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable",
         default=None,
     )
 
 
-_SOURCE_YAML_HASH = "21fe8a594743319a75eb773cea8d2aba4a15d9e7079261ecc522a7f9909f7d1b"
+_SOURCE_YAML_HASH = "1402ec30cea72d5e111391cb78c58d0993fd9494c343810483e77fe2c29016fc"
 
 
 EnvConfig.model_rebuild()

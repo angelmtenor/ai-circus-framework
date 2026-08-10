@@ -80,6 +80,12 @@ env_variables:
     mandatory: false
     secret: true
 
+  - name: ANTHROPIC_API_KEY
+    description: "Anthropic API key (only needed if litellm_config.yaml routes to the claude-haiku model)"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: OLLAMA_API_BASE
     description: "Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable"
     type: string
