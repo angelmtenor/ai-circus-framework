@@ -50,7 +50,7 @@ below). Two kinds exist today:
 | Kind | Examples | Services involved |
 |---|---|---|
 | `tabular_ml` | `churn` (customer churn), `mpm` (machine predictive maintenance) — dashboard + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
-| `conversational_rag` | `docs_rag` — agentic chatbot over vectorized documents; `ai_circus_reference` — chatbot over this repo's own dev/ML/GenAI reference notes, fetched straight from GitHub | `etl-vectorize` → `rag-agent` |
+| `conversational_rag` | `ai_circus_reference` — agentic chatbot over this repo's own dev/ML/GenAI reference notes, fetched straight from GitHub and vectorized | `etl-vectorize` → `rag-agent` |
 
 A tenant (Logto **Organization**, or the shared admin credential — see below) only sees the
 scenarios its members have been granted the matching `scenario:<slug>` role for — enforced
@@ -181,7 +181,7 @@ service's directory while the infra containers stay up via `make up-infra`.
 1. Register an API resource for the framework's backend; note its identifier for
    `LOGTO_API_RESOURCE_INDICATOR` in `.env`.
 2. Enable **Organizations**; each customer/team you want isolated is one Organization (tenant).
-3. Create organization roles named `scenario:churn` / `scenario:mpm` / `scenario:docs_rag` /
+3. Create organization roles named `scenario:churn` / `scenario:mpm` /
    `scenario:ai_circus_reference` (one per `scenarios/*/scenario.yaml`'s `role_required`).
 4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (see `AGENTS.md`'s reasoning: managed
@@ -196,8 +196,9 @@ service's directory while the infra containers stay up via `make up-infra`.
 - **New backend service**: `make new-service NAME=my-service` — wraps real cookiecutter
   generation from `ai-circus-template`, wires in `libs/shared`, and adapts the Dockerfile for
   this repo's build-context conventions. Then add it to `docker-compose.yml`.
-- **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`mpm`/`docs_rag` for
-  both kinds) with a `chat:` block (`context` + `sample_questions`), re-run
+- **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`mpm` for `tabular_ml`,
+  `ai_circus_reference` for `conversational_rag`) with a `chat:` block (`context` +
+  `sample_questions`), re-run
   `platform-registry`'s seed step (restart it — it seeds on startup), and create the matching
   Logto role. **No new container, no UI code** — the existing `prediction`/`assistant` or
   `rag-agent` instance picks it up automatically (their `SCENARIOS` env var defaults to "every

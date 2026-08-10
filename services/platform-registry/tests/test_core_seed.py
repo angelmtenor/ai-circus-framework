@@ -28,7 +28,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
     """Every scenarios/*/scenario.yaml in the repo seeds successfully."""
     slugs = seed_scenarios(session, SCENARIOS_DIR)
 
-    assert set(slugs) == {"churn", "docs_rag", "mpm", "supply_chain", "ai_circus_reference"}
+    assert set(slugs) == {"churn", "mpm", "supply_chain", "ai_circus_reference"}
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
     assert churn.role_required == "scenario:churn"
@@ -60,19 +60,18 @@ def test_seed_scenarios_populates_task_type_and_target_units(session: Session) -
     assert supply_chain.task_type == "regression"
     assert supply_chain.target_units == "days"
 
-    docs_rag = session.get(Scenario, "docs_rag")
-    assert docs_rag.task_type is None
+    reference = session.get(Scenario, "ai_circus_reference")
+    assert reference.task_type is None
 
 
 def test_seed_scenarios_conversational_rag_has_no_feature_fields(session: Session) -> None:
     """conversational_rag scenarios have no feature_columns/feature_schema, but do get sample_questions."""
     seed_scenarios(session, SCENARIOS_DIR)
 
-    for slug in ("docs_rag", "ai_circus_reference"):
-        scenario = session.get(Scenario, slug)
-        assert scenario.feature_columns is None
-        assert scenario.feature_schema is None
-        assert len(scenario.sample_questions) > 0
+    scenario = session.get(Scenario, "ai_circus_reference")
+    assert scenario.feature_columns is None
+    assert scenario.feature_schema is None
+    assert len(scenario.sample_questions) > 0
 
 
 def test_seed_scenarios_populates_target(session: Session) -> None:
@@ -81,7 +80,7 @@ def test_seed_scenarios_populates_target(session: Session) -> None:
 
     assert session.get(Scenario, "churn").target == "Exited"
     assert session.get(Scenario, "supply_chain").target == "ActualShippingDays"
-    assert session.get(Scenario, "docs_rag").target is None
+    assert session.get(Scenario, "ai_circus_reference").target is None
 
 
 def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -> None:
@@ -89,7 +88,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
     seed_scenarios(session, SCENARIOS_DIR)
 
     admin_slugs = {e.scenario_slug for e in session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID)}
-    assert admin_slugs == {"churn", "docs_rag", "mpm", "supply_chain", "ai_circus_reference"}
+    assert admin_slugs == {"churn", "mpm", "supply_chain", "ai_circus_reference"}
 
 
 def test_seed_scenarios_is_idempotent(session: Session) -> None:
@@ -97,8 +96,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 5
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 5
+    assert session.query(Scenario).count() == 4
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 4
 
 
 def test_seed_default_llm_setting_inserts_on_first_boot(session: Session) -> None:
