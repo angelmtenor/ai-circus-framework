@@ -6,6 +6,7 @@ import { TabularView } from "./TabularView";
 import { RagView } from "./RagView";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { Settings } from "./Settings";
+import logo from "./assets/logo.svg";
 import "./App.css";
 
 // Must match useIdentity.ts's ADMIN_ORG_ID — Settings manages shared LLM-gateway
@@ -41,7 +42,7 @@ function LoginScreen({
     <div className="login-shell">
       <div className="login-card">
         <div className="login-brand">
-          <span className="login-brand-icon">🎪</span>
+          <img src={logo} alt="AI Circus" className="login-brand-icon" />
           <h1>ai-circus-framework</h1>
           <p className="login-tagline">Explainable ML &amp; document Q&amp;A, one scenario at a time.</p>
         </div>
@@ -119,7 +120,7 @@ export default function App() {
             setShowSettings(false);
           }}
         >
-          🎪 ai-circus-framework
+          <img src={logo} alt="AI Circus" className="topbar-brand-icon" />
         </button>
         {selected && !showSettings && (
           <div className="topbar-scenario">
