@@ -9,7 +9,7 @@ import {
   type DatasetEvaluation,
   type DatasetExplainability,
 } from "./apiClient";
-import { config } from "./config";
+import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, ScatterPlot, Histogram, CategoryBars, LineChart, CHART_COLORS } from "./charts";
 import { initialRecord, FeatureInput, type Record_ } from "./predictUtils";
 
@@ -22,7 +22,7 @@ function GlobalImportanceSection({ scenario, accessToken }: { scenario: Scenario
     setLoading(true);
     setError(null);
     try {
-      setData(await datasetExplainability(config.predictionUrl, scenario.slug, 200, accessToken));
+      setData(await datasetExplainability(config.predictionUrl, scenario.slug, MAX_ROWS, accessToken));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -158,7 +158,7 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
     try {
       const [s, e] = await Promise.all([
         datasetSample(config.predictionUrl, scenario.slug, 30, accessToken),
-        datasetEvaluation(config.predictionUrl, scenario.slug, 400, accessToken),
+        datasetEvaluation(config.predictionUrl, scenario.slug, MAX_ROWS, accessToken),
       ]);
       setSample(s);
       setEvaluation(e);

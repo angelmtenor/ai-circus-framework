@@ -1,24 +1,25 @@
 /**
- * Hand-rolled, dependency-free SVG chart primitives for the dashboard views.
+ * Hand-rolled, dependency-free SVG chart primitives for fixed-purpose analytical
+ * views (SHAP bars, partial dependence, held-out evaluation — see ExploreModelView.tsx
+ * and MlPredictionsView.tsx). The flexible, user-configurable "Data" dashboard instead
+ * uses Plotly (see PlotlyChart.tsx/chartBuilder.ts) for its broader chart-type/3D needs.
  *
- * No charting library is installed in this project (see ui-react/package.json) — for
- * the handful of chart shapes these workspaces need (bar list, scatter, histogram,
- * line+band, category bars, a probability gauge), plain SVG avoids adding a whole
- * library + its bundle weight for a handful of shapes, and keeps every chart themed
- * consistently via the same color tokens.
+ * Colors reference the active theme's CSS custom properties (see themes/) rather than
+ * literal hex — these are inline JSX SVGs, so `fill="var(--blue)"` resolves live, and
+ * every chart re-themes for free alongside the rest of the app.
  */
 
 export const CHART_COLORS = {
-  bg: "#ffffff",
-  panel: "#ffffff",
-  border: "#e6e6e9",
-  text: "#1c1c1f",
-  dim: "#71717a",
-  green: "#16805a",
-  blue: "#2563eb",
-  amber: "#a3720f",
-  red: "#d1435b",
-  purple: "#7c5cd0",
+  bg: "transparent",
+  panel: "var(--panel)",
+  border: "var(--border)",
+  text: "var(--text)",
+  dim: "var(--dim)",
+  green: "var(--green)",
+  blue: "var(--blue)",
+  amber: "var(--amber)",
+  red: "var(--red)",
+  purple: "var(--purple)",
 };
 
 export function StatTile({
@@ -88,13 +89,13 @@ function niceTicks(lo: number, hi: number, n = 5): number[] {
 
 export const CATEGORY_PALETTE = [
   CHART_COLORS.blue,
+  CHART_COLORS.purple,
   CHART_COLORS.amber,
   CHART_COLORS.green,
   CHART_COLORS.red,
-  CHART_COLORS.purple,
-  "#0d9488",
-  "#db2777",
-  "#65a30d",
+  "var(--teal)",
+  "var(--pink)",
+  "var(--lime)",
 ];
 
 export function colorScale(categories: string[]): Map<string, string> {

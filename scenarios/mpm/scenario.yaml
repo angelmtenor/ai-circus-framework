@@ -67,6 +67,14 @@ dataset:
     Tool wear [min]: {type: numeric, min: 0, max: 260, default: 108, step: 1}
     Type: {type: categorical, options: ["L", "M", "H"], default: "M"}
 
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  # Column names with brackets/spaces must stay quoted inside these flow mappings.
+  default_charts:
+    - {type: histogram, x: "Tool wear [min]"}
+    - {type: bar, x: Type, y: Target, agg: mean, color_by: Type}
+    - {type: scatter, x: "Torque [Nm]", y: "Rotational speed [rpm]", color_by: Type}
+
 model:
   task_type: classification
   # Green Code: LightGBM alone — more accurate and efficient than a classic

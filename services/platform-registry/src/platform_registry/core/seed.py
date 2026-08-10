@@ -56,10 +56,12 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         if definition.dataset is not None:
             existing.feature_columns = definition.dataset.feature_columns
             existing.feature_schema = {k: v.model_dump() for k, v in definition.dataset.feature_schema.items()}
+            existing.default_charts = [c.model_dump() for c in definition.dataset.default_charts]
             existing.target = definition.dataset.target
         else:
             existing.feature_columns = None
             existing.feature_schema = None
+            existing.default_charts = None
             existing.target = None
 
         if definition.model is not None:

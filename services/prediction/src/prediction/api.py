@@ -19,8 +19,10 @@ from prediction.core.predict import predict as run_predict
 
 router = APIRouter()
 
-MAX_SAMPLE_ROWS = 20000
-MAX_EVAL_ROWS = 1000
+# One standardized ceiling for every row-limited dataset endpoint below (sample,
+# evaluation, explainability) — previously two different, much smaller caps
+# (20000/1000) with inconsistent per-endpoint defaults (100/300/200).
+MAX_ROWS = 10000
 
 
 class PredictRequest(BaseModel):
@@ -154,7 +156,7 @@ def predict_endpoint(
 
 @router.get("/dataset/{scenario_slug}/sample", response_model=DatasetSampleOut)
 def dataset_sample_endpoint(
-    limit: int = Query(default=100, ge=1, le=MAX_SAMPLE_ROWS),
+    limit: int = Query(default=1000, ge=1, le=MAX_ROWS),
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),
@@ -173,7 +175,7 @@ def dataset_sample_endpoint(
 
 @router.get("/dataset/{scenario_slug}/evaluation", response_model=DatasetEvaluationOut)
 def dataset_evaluation_endpoint(
-    limit: int = Query(default=300, ge=1, le=MAX_EVAL_ROWS),
+    limit: int = Query(default=1000, ge=1, le=MAX_ROWS),
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),
@@ -203,7 +205,7 @@ def dataset_evaluation_endpoint(
 
 @router.get("/dataset/{scenario_slug}/explainability", response_model=DatasetExplainabilityOut)
 def dataset_explainability_endpoint(
-    limit: int = Query(default=200, ge=1, le=MAX_EVAL_ROWS),
+    limit: int = Query(default=1000, ge=1, le=MAX_ROWS),
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),

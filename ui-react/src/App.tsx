@@ -1,22 +1,27 @@
 import { useEffect, useState } from "react";
 import { config } from "./config";
 import { useIdentity } from "./useIdentity";
+import { useTheme } from "./useTheme";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
 import { TabularView } from "./TabularView";
 import { RagView } from "./RagView";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { Settings } from "./Settings";
-import logo from "./assets/logo.svg";
+import { Icon } from "./Icon";
 import "./App.css";
 
-// Must match useIdentity.ts's ADMIN_ORG_ID — Settings manages shared LLM-gateway
-// infrastructure, not a per-tenant entitlement, so it's gated to the admin tenant.
+// Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider section manages
+// shared LLM-gateway infrastructure, not a per-tenant entitlement, so it's gated to
+// the admin tenant; the Appearance (theme) section is a per-browser preference open
+// to every org.
 const ADMIN_ORG_ID = "admin";
 
 function LoginScreen({
+  logo,
   onLogin,
   onLoginWithAdminKey,
 }: {
+  logo: string;
   onLogin: (orgId: string, roles: string[]) => void;
   onLoginWithAdminKey: (adminKey: string) => Promise<void>;
 }) {
@@ -91,6 +96,7 @@ function LoginScreen({
 
 export default function App() {
   const { identity, loading, logIn, logInWithAdminKey, logOut } = useIdentity();
+  const { theme, themes, setThemeId } = useTheme();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -108,7 +114,7 @@ export default function App() {
   }, [identity]);
 
   if (loading) return <div className="app-loading">Loading…</div>;
-  if (!identity) return <LoginScreen onLogin={logIn} onLoginWithAdminKey={logInWithAdminKey} />;
+  if (!identity) return <LoginScreen logo={theme.logo} onLogin={logIn} onLoginWithAdminKey={logInWithAdminKey} />;
 
   return (
     <div className="app-shell">
@@ -120,12 +126,12 @@ export default function App() {
             setShowSettings(false);
           }}
         >
-          <img src={logo} alt="AI Circus" className="topbar-brand-icon" />
+          <img src={theme.logo} alt="AI Circus" className="topbar-brand-icon" />
         </button>
         {selected && !showSettings && (
           <div className="topbar-scenario">
             <button className="topbar-back" onClick={() => setSelected(null)}>
-              ← Scenarios
+              <Icon name="back" size={14} /> Scenarios
             </button>
             <span className="topbar-scenario-name">
               {selected.icon} {selected.title}
@@ -133,17 +139,15 @@ export default function App() {
           </div>
         )}
         <div className="topbar-spacer" />
-        {identity.orgId === ADMIN_ORG_ID && (
-          <button
-            className={`topbar-settings ${showSettings ? "active" : ""}`}
-            onClick={() => {
-              setShowSettings((s) => !s);
-              setSelected(null);
-            }}
-          >
-            ⚙️ Settings
-          </button>
-        )}
+        <button
+          className={`topbar-settings ${showSettings ? "active" : ""}`}
+          onClick={() => {
+            setShowSettings((s) => !s);
+            setSelected(null);
+          }}
+        >
+          <Icon name="gear" size={14} /> Settings
+        </button>
         <span className="topbar-org">{identity.orgId}</span>
         <button className="topbar-logout" onClick={logOut}>
           Log out
@@ -151,7 +155,13 @@ export default function App() {
       </header>
       <main className="app-main">
         {showSettings ? (
-          <Settings accessToken={identity.accessToken} />
+          <Settings
+            accessToken={identity.accessToken}
+            isAdmin={identity.orgId === ADMIN_ORG_ID}
+            theme={theme}
+            themes={themes}
+            onThemeChange={setThemeId}
+          />
         ) : (
           <>
             {scenariosError && <p className="error">{scenariosError}</p>}

@@ -1,26 +1,8 @@
-/* Light minimalist theme — white surfaces, soft gray borders, a single warm
-   accent for primary actions, in the spirit of ChatGPT/Claude/Grok's chat UIs. */
-:root {
-  --bg: #ffffff;
-  --panel: #ffffff;
-  --panel-2: #f7f7f8;
-  --panel-3: #eeeef0;
-  --border: #e6e6e9;
-  --text: #1c1c1f;
-  --dim: #71717a;
-  --accent: #c96442;
-  --accent-soft: #f6e8e2;
-  --accent-border: #e3b39e;
-  --green: #16805a;
-  --blue: #2563eb;
-  --amber: #a3720f;
-  --red: #d1435b;
-  --purple: #7c5cd0;
-  --shadow-sm: 0 1px 2px rgba(15, 15, 20, 0.04);
-  --shadow-md: 0 8px 24px rgba(15, 15, 20, 0.08);
-  --radius: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
-}
+/* Tron Legacy-inspired dark theme — near-black navy surfaces, glowing cyan/purple
+   accents, matching src/assets/logo.svg. Color/logo values themselves live in
+   themes/ (see useTheme.ts, which writes them as CSS custom properties onto
+   :root) — this file only consumes var(--...) tokens, never a literal color, so a
+   future second theme needs zero changes here. */
 
 * {
   box-sizing: border-box;
@@ -50,7 +32,7 @@ button {
 input,
 select {
   font-family: inherit;
-  background: #fff;
+  background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -62,7 +44,7 @@ input:focus,
 select:focus {
   outline: none;
   border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--glow-accent-soft);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────────── */
@@ -73,13 +55,13 @@ select:focus {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: var(--panel-2);
+  background: radial-gradient(circle at 50% 0%, var(--panel-2) 0%, var(--bg) 60%);
 }
 
 .login-card {
   width: 100%;
   max-width: 26rem;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 2.25rem 2rem;
@@ -97,13 +79,14 @@ select:focus {
   width: 15rem;
   height: auto;
   border-radius: 10px;
+  filter: drop-shadow(var(--glow-accent-soft));
 }
 
 .login-brand h1 {
   font-size: 1.4rem;
   font-weight: 600;
   margin: 0.6rem 0 0.35rem;
-  color: var(--text);
+  color: var(--text-h);
 }
 
 .login-tagline {
@@ -167,7 +150,7 @@ select:focus {
   gap: 1rem;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  background: var(--panel);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -190,6 +173,7 @@ select:focus {
   width: 8rem;
   height: auto;
   border-radius: 6px;
+  filter: drop-shadow(var(--glow-accent-soft));
 }
 
 .topbar-brand:hover {
@@ -205,7 +189,10 @@ select:focus {
 }
 
 .topbar-back {
-  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: 8px;
@@ -214,7 +201,8 @@ select:focus {
 }
 
 .topbar-back:hover {
-  background: var(--panel-2);
+  border-color: var(--accent-border);
+  color: var(--accent-2);
 }
 
 .topbar-scenario-name {
@@ -244,8 +232,8 @@ select:focus {
 }
 
 .topbar-logout:hover {
-  background: var(--panel-2);
-  color: var(--text);
+  border-color: var(--red);
+  color: var(--red);
 }
 
 .app-main {
@@ -278,7 +266,7 @@ select:focus {
 }
 
 .scenario-card {
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem;
@@ -294,7 +282,7 @@ select:focus {
 .scenario-card:hover {
   transform: translateY(-2px);
   border-color: var(--accent-border);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md), var(--glow-accent-soft);
 }
 
 .scenario-card-icon {
@@ -317,7 +305,7 @@ select:focus {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--blue);
+  color: var(--accent-2);
 }
 
 .scenario-card-footer {
@@ -355,12 +343,16 @@ select:focus {
 
 .workspace-tabs {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
   border-bottom: 1px solid var(--border);
 }
 
 .workspace-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background: none;
   border: none;
   color: var(--dim);
@@ -369,10 +361,15 @@ select:focus {
   border-bottom: 2px solid transparent;
 }
 
-.workspace-tabs button.active {
+.workspace-tabs button:hover {
   color: var(--text);
+}
+
+.workspace-tabs button.active {
+  color: var(--accent-2);
   border-bottom-color: var(--accent);
   font-weight: 600;
+  text-shadow: var(--glow-accent-soft);
 }
 
 .rag-hero {
@@ -426,8 +423,14 @@ select:focus {
   }
 }
 
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 1rem;
+}
+
 .panel-card {
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.1rem 1.25rem;
@@ -462,6 +465,50 @@ select:focus {
 .panel-card--chat {
   display: flex;
   min-height: 22rem;
+}
+
+/* ── Chart cards (Data dashboard) ─────────────────────────────────────────── */
+
+.chart-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.chart-card-header label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.chart-card-header select {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.chart-card-remove {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+}
+
+.chart-card-remove:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.chart-card-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-start;
 }
 
 /* ── Feature form ──────────────────────────────────────────────────────────── */
@@ -505,6 +552,7 @@ select:focus {
   align-items: end;
   gap: 1rem;
   margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .explore-controls label {
@@ -518,27 +566,35 @@ select:focus {
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
 
 .btn-primary {
-  background: var(--text);
-  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--accent);
+  color: #04121c;
   border: none;
   border-radius: 8px;
   padding: 0.55rem 1.1rem;
   font-weight: 600;
   font-size: 0.88rem;
-  transition: opacity 0.15s;
+  box-shadow: var(--glow-accent-soft);
+  transition: opacity 0.15s, box-shadow 0.15s;
 }
 
 .btn-primary:hover:not(:disabled) {
-  opacity: 0.85;
+  box-shadow: var(--glow-accent);
 }
 
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-secondary {
-  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--panel-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -547,7 +603,8 @@ select:focus {
 }
 
 .btn-secondary:hover {
-  background: var(--panel-2);
+  border-color: var(--accent-border);
+  color: var(--accent-2);
 }
 
 /* ── KPI tiles ─────────────────────────────────────────────────────────────── */
@@ -576,7 +633,7 @@ select:focus {
   font-size: 1.3rem;
   font-weight: 700;
   margin-top: 0.15rem;
-  color: var(--text);
+  color: var(--accent-2);
 }
 
 .kpi-sub {
@@ -641,6 +698,10 @@ select:focus {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.plotly-chart {
+  width: 100%;
 }
 
 /* ── Data table ────────────────────────────────────────────────────────────── */
@@ -789,7 +850,7 @@ select:focus {
 }
 
 .chat-bubble a {
-  color: var(--accent);
+  color: var(--accent-2);
   text-decoration: underline;
 }
 
@@ -810,7 +871,7 @@ select:focus {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--dim);
+  background: var(--accent);
   animation: chat-typing 1s infinite ease-in-out;
 }
 
@@ -847,7 +908,7 @@ select:focus {
 
 .chat-bubble code {
   background: var(--panel-2);
-  color: var(--accent);
+  color: var(--accent-2);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
   font-size: 0.82em;
@@ -878,14 +939,14 @@ select:focus {
   font-size: 0.78rem;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
-  background: #fff;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
 }
 
 .chat-sample:hover {
-  background: var(--panel-2);
   border-color: var(--accent-border);
+  color: var(--accent-2);
 }
 
 .chat-input-row {
@@ -901,20 +962,22 @@ select:focus {
 
 .chat-send {
   background: var(--accent);
-  color: #fff;
+  color: #04121c;
   border: none;
   border-radius: 999px;
   padding: 0.45rem 1.1rem;
   font-weight: 600;
+  box-shadow: var(--glow-accent-soft);
 }
 
 .chat-send:hover:not(:disabled) {
-  opacity: 0.88;
+  box-shadow: var(--glow-accent);
 }
 
 .chat-send:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ── Sub-tabs (Individual / Batch, etc.) ───────────────────────────────────── */
@@ -926,7 +989,7 @@ select:focus {
 }
 
 .sub-tabs button {
-  background: #fff;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--dim);
   border-radius: 999px;
@@ -935,9 +998,9 @@ select:focus {
 }
 
 .sub-tabs button.active {
-  background: var(--text);
-  color: #fff;
-  border-color: var(--text);
+  background: var(--accent);
+  color: #04121c;
+  border-color: var(--accent);
   font-weight: 600;
 }
 
@@ -987,14 +1050,14 @@ select:focus {
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--panel-2);
   color: var(--dim);
 }
 
 .filter-chip.active {
-  background: var(--blue);
-  color: #fff;
-  border-color: var(--blue);
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  border-color: var(--accent-border);
   font-weight: 600;
 }
 
@@ -1006,8 +1069,11 @@ select:focus {
 /* ── Chat dock (overlay) ───────────────────────────────────────────────────── */
 
 .chat-dock-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-left: auto;
-  background: #fff;
+  background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.5rem 0.9rem;
@@ -1016,13 +1082,14 @@ select:focus {
 }
 
 .chat-dock-toggle:hover {
-  background: var(--panel-2);
+  border-color: var(--accent-border);
+  color: var(--accent-2);
 }
 
 .chat-dock-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 15, 20, 0.25);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   justify-content: flex-end;
   z-index: 50;
@@ -1031,7 +1098,7 @@ select:focus {
 .chat-dock-panel {
   width: min(28rem, 100%);
   height: 100%;
-  background: #fff;
+  background: var(--panel);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -1070,7 +1137,7 @@ select:focus {
 
 .chat-dock-maximize:hover,
 .chat-dock-close:hover {
-  color: var(--text);
+  color: var(--accent-2);
 }
 
 .chat-dock-panel .chat-panel {
@@ -1118,7 +1185,7 @@ select:focus {
 }
 
 .settings-badge--on {
-  background: rgba(22, 128, 90, 0.12);
+  background: rgba(45, 232, 160, 0.14);
   color: var(--green);
 }
 
@@ -1157,16 +1224,19 @@ select:focus {
 }
 
 .settings-result--ok {
-  background: rgba(22, 128, 90, 0.08);
+  background: rgba(45, 232, 160, 0.1);
   color: var(--green);
 }
 
 .settings-result--fail {
-  background: rgba(209, 67, 91, 0.08);
+  background: rgba(255, 95, 122, 0.1);
   color: var(--red);
 }
 
 .topbar-settings {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   background: transparent;
   border: 1px solid var(--border);
   color: var(--dim);
@@ -1176,11 +1246,55 @@ select:focus {
 }
 
 .topbar-settings:hover {
-  background: var(--panel-2);
+  border-color: var(--accent-border);
+  color: var(--accent-2);
 }
 
 .topbar-settings.active {
-  background: var(--text);
-  color: #fff;
-  border-color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+}
+
+/* ── Appearance / theme picker ─────────────────────────────────────────────── */
+
+.theme-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.theme-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem 0.4rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.theme-swatch.active {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.theme-swatch-dots {
+  display: inline-flex;
+}
+
+.theme-swatch-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  margin-left: -0.2rem;
+  border: 1px solid var(--panel);
+}
+
+.theme-swatch-dot:first-child {
+  margin-left: 0;
 }

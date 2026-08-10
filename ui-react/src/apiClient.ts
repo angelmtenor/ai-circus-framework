@@ -18,6 +18,19 @@ export type CategoricalFeatureSpec = {
 
 export type FeatureSpec = NumericFeatureSpec | CategoricalFeatureSpec;
 
+// Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's ChartSpec — one chart
+// in a scenario's default "Data" dashboard combination (see DataView.tsx/chartBuilder.ts).
+export type ChartType = "histogram" | "bar" | "line" | "scatter" | "scatter3d" | "box" | "pie" | "heatmap";
+export type ChartAgg = "count" | "sum" | "mean" | "min" | "max";
+export type ChartSpec = {
+  type: ChartType;
+  x?: string | null;
+  y?: string | null;
+  z?: string | null;
+  color_by?: string | null;
+  agg?: ChartAgg;
+};
+
 export type ScenarioSummary = {
   slug: string;
   kind: string;
@@ -26,6 +39,9 @@ export type ScenarioSummary = {
   icon: string;
   feature_columns?: string[] | null;
   feature_schema?: Record<string, FeatureSpec> | null;
+  // tabular_ml only — seeds the Data tab dashboard; empty/missing falls back to the
+  // UI's own generic default (see DataView.tsx).
+  default_charts?: ChartSpec[] | null;
   sample_questions: string[];
   // tabular_ml only — "regression" scenarios render a plain "value units"
   // prediction instead of the classification probability view.

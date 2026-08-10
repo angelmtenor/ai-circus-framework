@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@logto/react": "^4.0.14",
+    "plotly.js-dist-min": "^3.7.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-plotly.js": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

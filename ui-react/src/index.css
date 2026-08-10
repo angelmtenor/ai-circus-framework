@@ -1,15 +1,38 @@
+/* Base tokens default to the Tron theme's values (see themes/tron.ts) so there's no
+   flash-of-wrong-theme before useTheme's effect runs; useTheme then overwrites these
+   same custom properties inline once the saved/active theme is known. */
 :root {
-  --text: #71717a;
-  --text-h: #1c1c1f;
-  --bg: #fff;
-  --border: #e6e6e9;
-  --code-bg: #f7f7f8;
-  --accent: #c96442;
-  --accent-bg: rgba(201, 100, 66, 0.1);
-  --accent-border: rgba(201, 100, 66, 0.5);
-  --social-bg: rgba(247, 247, 248, 0.5);
-  --shadow:
-    rgba(15, 15, 20, 0.08) 0 10px 15px -3px, rgba(15, 15, 20, 0.04) 0 4px 6px -2px;
+  --bg: #05070f;
+  --panel: #0b1224;
+  --panel-2: #101b36;
+  --panel-3: #152244;
+  --border: #1c3a5e;
+  --border-strong: #2c5a8a;
+  --text: #dcecf7;
+  --text-h: #f3fbff;
+  --dim: #7fa3c9;
+  --code-bg: #0f1830;
+  --accent: #33c7ff;
+  --accent-2: #7cf9ff;
+  --accent-soft: rgba(51, 199, 255, 0.12);
+  --accent-bg: rgba(51, 199, 255, 0.1);
+  --accent-border: rgba(51, 199, 255, 0.5);
+  --purple: #aa3bff;
+  --purple-soft: rgba(170, 59, 255, 0.14);
+  --green: #2de8a0;
+  --blue: #33c7ff;
+  --amber: #ffcf4d;
+  --red: #ff5f7a;
+  --teal: #22d3c8;
+  --pink: #ff8fd6;
+  --lime: #b6ff5c;
+  --social-bg: rgba(15, 24, 48, 0.6);
+  --glow-accent: 0 0 12px rgba(51, 199, 255, 0.55);
+  --glow-accent-soft: 0 0 6px rgba(51, 199, 255, 0.35);
+  --shadow: rgba(0, 0, 0, 0.55) 0 10px 20px -3px, rgba(51, 199, 255, 0.06) 0 0 0 1px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(51, 199, 255, 0.08);
+  --radius: 12px;
 
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
   --heading: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif;
@@ -17,7 +40,7 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -30,27 +53,34 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
 #root {
-  width: 1126px;
+  width: 100%;
   max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  margin: 0;
+  text-align: left;
+  border-inline: none;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
+  background: var(--bg);
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  transition: background-color 0.2s ease;
 }
 
 h1,
 h2 {
   font-family: var(--heading);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-h);
+  text-shadow: var(--glow-accent-soft);
 }
 
 h1 {
@@ -67,6 +97,9 @@ h2 {
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   @media (max-width: 1024px) {
     font-size: 20px;
   }
@@ -80,7 +113,7 @@ code,
   font-family: var(--mono);
   display: inline-flex;
   border-radius: 4px;
-  color: var(--text-h);
+  color: var(--accent-2);
 }
 
 code {
@@ -88,4 +121,11 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+  border: 1px solid var(--border);
+}
+
+/* Thin neon-tinted scrollbars everywhere, instead of the platform default. */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-width: thin;
 }

@@ -73,6 +73,13 @@ dataset:
     IsActiveMember: {type: numeric, min: 0, max: 1, default: 1, step: 1}
     EstimatedSalary: {type: numeric, min: 0, max: 250000, default: 75000, step: 1000}
 
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: histogram, x: Age}
+    - {type: bar, x: Geography, y: Exited, agg: mean, color_by: Geography}
+    - {type: scatter, x: Balance, y: EstimatedSalary, color_by: Geography}
+
 model:
   task_type: classification
   # Green Code: LightGBM alone — more accurate and efficient than a classic

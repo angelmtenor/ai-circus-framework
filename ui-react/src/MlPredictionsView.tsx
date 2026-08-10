@@ -1,12 +1,9 @@
 import { useState } from "react";
 import { predict, datasetSample, type ScenarioSummary, type DatasetSample } from "./apiClient";
-import { config } from "./config";
+import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
 import { mapContributions, topContribution, exportJson, initialRecord, FeatureInput, type Record_ } from "./predictUtils";
-
-const BATCH_SAMPLE_LIMIT = 300;
-const BATCH_PREDICT_CAP = 200;
 
 function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const featureColumns = scenario.feature_columns ?? [];
@@ -107,7 +104,7 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
   async function load() {
     setError(null);
     try {
-      setSample(await datasetSample(config.predictionUrl, scenario.slug, BATCH_SAMPLE_LIMIT, accessToken));
+      setSample(await datasetSample(config.predictionUrl, scenario.slug, MAX_ROWS, accessToken));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -117,7 +114,7 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     setLoading(true);
     setError(null);
     try {
-      const records = filtered.slice(0, BATCH_PREDICT_CAP).map((row) => {
+      const records = filtered.slice(0, MAX_ROWS).map((row) => {
         const record: Record_ = {};
         for (const f of featureColumns) record[f] = row[f] as number | string;
         return record;
@@ -161,9 +158,9 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
         <h3>Query</h3>
         <DatasetFilterPanel featureColumns={featureColumns} featureSchema={featureSchema} rows={sample.rows} onFilteredChange={setFiltered} />
         <button className="btn-primary" onClick={runBatch} disabled={loading || filtered.length === 0} style={{ marginTop: "0.6rem" }}>
-          {loading ? "Running…" : `Predict on ${Math.min(filtered.length, BATCH_PREDICT_CAP)} rows`}
+          {loading ? "Running…" : `Predict on ${Math.min(filtered.length, MAX_ROWS)} rows`}
         </button>
-        {filtered.length > BATCH_PREDICT_CAP && <span className="panel-hint"> (capped at {BATCH_PREDICT_CAP})</span>}
+        {filtered.length > MAX_ROWS && <span className="panel-hint"> (capped at {MAX_ROWS})</span>}
         {error && <p className="error">{error}</p>}
       </div>
 

@@ -56,6 +56,10 @@ class ScenarioSummary(BaseModel):
     icon: str
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
+    # tabular_ml only — seeds ui-react's Data tab dashboard (see scenario_schema.py's
+    # ChartSpec); plain dicts here, not the pydantic model, matching feature_schema's
+    # own wire/ORM-facing shape above.
+    default_charts: list[dict[str, Any]] | None = None
     sample_questions: list[str] = []
     # tabular_ml only — lets ui-react render a plain "value units" prediction for
     # regression scenarios instead of the classification percentage/probability view.

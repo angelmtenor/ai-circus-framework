@@ -35,6 +35,23 @@ class CategoricalFeatureUI(BaseModel):
 FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI, Field(discriminator="type")]
 
 
+class ChartSpec(BaseModel):
+    """One chart in a scenario's default "Data" dashboard combination.
+
+    `x`/`y`/`z`/`color_by` name real dataset columns (feature, or the target — same
+    columns `ui-react`'s Data tab already offers). `ui-react`'s chartBuilder.ts is the
+    single place that interprets these per `type` (e.g. `bar` aggregates `y` by `x`
+    using `agg` when both are given, or falls back to value-counts of `x` alone).
+    """
+
+    type: Literal["histogram", "bar", "line", "scatter", "scatter3d", "box", "pie", "heatmap"]
+    x: str | None = None
+    y: str | None = None
+    z: str | None = None
+    color_by: str | None = None
+    agg: Literal["count", "sum", "mean", "min", "max"] = "count"
+
+
 class TabularDataset(BaseModel):
     """Dataset config for a `tabular_ml` scenario."""
 
@@ -48,6 +65,9 @@ class TabularDataset(BaseModel):
     # Drives ui-react's generic form renderer — keyed by `feature_columns` entries, in
     # the same order, so the UI needs no scenario-specific form code.
     feature_schema: dict[str, FeatureUI]
+    # Seeds ui-react's Data tab dashboard on first load (still user-editable/addable
+    # there) — optional; an empty list falls back to the UI's own generic default.
+    default_charts: list[ChartSpec] = []
 
 
 class TabularModel(BaseModel):

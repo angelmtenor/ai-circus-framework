@@ -42,6 +42,9 @@ class Scenario(Base):
 
     feature_columns: Mapped[list[str] | None] = mapped_column(JSON, default=None)
     feature_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml only — seeds both UIs' Data/dataset dashboard (see
+    # ai_circus_shared.scenario_schema.ChartSpec).
+    default_charts: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None)
     sample_questions: Mapped[list[str]] = mapped_column(JSON, default=list)
     # tabular_ml only — lets both UIs render a regression scenario's plain "value
     # units" prediction instead of the classification percentage/probability view.

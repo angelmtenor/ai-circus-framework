@@ -8,6 +8,37 @@ import {
   type LlmProviderTest,
 } from "./apiClient";
 import { config } from "./config";
+import type { Theme } from "./themes";
+import { Icon } from "./Icon";
+
+function AppearanceSection({
+  theme,
+  themes,
+  onThemeChange,
+}: {
+  theme: Theme;
+  themes: Theme[];
+  onThemeChange: (id: string) => void;
+}) {
+  return (
+    <div className="panel-card settings-card">
+      <h3>Appearance</h3>
+      <p className="panel-hint">Colors and logo only — layout stays identical across themes. Saved to this browser.</p>
+      <div className="theme-picker">
+        {themes.map((t) => (
+          <button key={t.id} className={`theme-swatch ${t.id === theme.id ? "active" : ""}`} onClick={() => onThemeChange(t.id)}>
+            <span className="theme-swatch-dots">
+              {t.categoryPalette.slice(0, 4).map((c) => (
+                <span key={c} className="theme-swatch-dot" style={{ background: c }} />
+              ))}
+            </span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Admin-only LLM provider status/test page. There's no "save a key from the browser"
@@ -19,7 +50,19 @@ import { config } from "./config";
  * other secret in this repo. What IS real: live status from llm-gateway itself, and a
  * genuine round-trip completion call per provider via "Test".
  */
-export function Settings({ accessToken }: { accessToken: string | null }) {
+export function Settings({
+  accessToken,
+  isAdmin,
+  theme,
+  themes,
+  onThemeChange,
+}: {
+  accessToken: string | null;
+  isAdmin: boolean;
+  theme: Theme;
+  themes: Theme[];
+  onThemeChange: (id: string) => void;
+}) {
   const [providers, setProviders] = useState<LlmProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
@@ -30,6 +73,7 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   function load() {
+    if (!isAdmin) return;
     setError(null);
     Promise.all([
       listLlmProviders(config.platformRegistryUrl, accessToken),
@@ -42,7 +86,7 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
       .catch((e) => setError((e as Error).message));
   }
 
-  useEffect(load, [accessToken]);
+  useEffect(load, [accessToken, isAdmin]);
 
   async function saveActiveModel(modelName: string) {
     setSavingModel(true);
@@ -91,102 +135,112 @@ export function Settings({ accessToken }: { accessToken: string | null }) {
 
   return (
     <div className="settings-page">
-      <div className="settings-card-header">
-        <h2>⚙️ LLM Provider Settings</h2>
-        {providers && (
-          <button className="btn-secondary" onClick={runTestAll} disabled={testingAll || testing !== null}>
-            {testingAll ? "Testing all…" : "▶ Test All"}
-          </button>
-        )}
-      </div>
-      <p className="panel-hint">
-        Every provider here is configured through <code>.env</code> (this deployment's llm-gateway doesn't run
-        litellm's database-backed mode, so runtime key updates from the browser can't apply — see the hint on each
-        card for the exact variable names). Use <strong>Test</strong> (or <strong>Test All</strong> to check every
-        provider concurrently) to see, right now, whether a provider is actually reachable and answering. At least
-        one provider needs a valid key — or run <code>make ollama-up</code> for a free local fallback — for
-        assistant/rag-agent chat to work at all.
-      </p>
-      {error && <p className="error">{error}</p>}
-      {!providers && !error && <div className="app-loading">Loading providers…</div>}
-      {providers && (
-        <div className="panel-card settings-card">
-          <h3>Active model</h3>
-          <p className="panel-hint">
-            Which model <code>assistant</code>/<code>rag-agent</code> use for their next chat request — applies
-            immediately, no restart. Only choosing among providers already routed in{" "}
-            <code>litellm_config.yaml</code>; entering a brand-new provider/key still requires editing{" "}
-            <code>.env</code> (see the cards below).
-          </p>
-          <select
-            className="settings-model-select"
-            value={activeModel ?? ""}
-            disabled={savingModel}
-            onChange={(e) => saveActiveModel(e.target.value)}
-          >
-            {activeModel && !providers.some((p) => p.model_name === activeModel) && (
-              <option value={activeModel}>{activeModel} (not in litellm_config.yaml anymore)</option>
+      <h2>
+        <Icon name="gear" size={20} /> Settings
+      </h2>
+
+      <AppearanceSection theme={theme} themes={themes} onThemeChange={onThemeChange} />
+
+      {isAdmin && (
+        <>
+          <div className="settings-card-header">
+            <h3>LLM Provider Settings</h3>
+            {providers && (
+              <button className="btn-secondary" onClick={runTestAll} disabled={testingAll || testing !== null}>
+                {testingAll ? "Testing all…" : "▶ Test All"}
+              </button>
             )}
-            {providers.map((p) => (
-              <option key={p.provider} value={p.model_name}>
-                {p.label} — {p.model_name}
-              </option>
-            ))}
-          </select>
-          {savingModel && <span className="panel-hint"> Saving…</span>}
-          {saveMessage && <p className="panel-hint">{saveMessage}</p>}
-        </div>
-      )}
-      {providers && (
-        <div className="settings-grid">
-          {providers.map((p) => {
-            const result = results[p.provider];
-            return (
-              <div className="panel-card settings-card" key={p.provider}>
-                <div className="settings-card-header">
-                  <h3>{p.label}</h3>
-                  <span className={`settings-badge ${p.route_exists ? "settings-badge--on" : "settings-badge--off"}`}>
-                    {p.route_exists ? "routed" : "not routed"}
-                  </span>
-                </div>
-                <div className="settings-card-model">
-                  model: <code>{p.model ?? "—"}</code>
-                </div>
-                {p.api_base && (
-                  <div className="settings-card-model">
-                    base: <code>{p.api_base}</code>
-                  </div>
+          </div>
+          <p className="panel-hint">
+            Every provider here is configured through <code>.env</code> (this deployment's llm-gateway doesn't run
+            litellm's database-backed mode, so runtime key updates from the browser can't apply — see the hint on
+            each card for the exact variable names). Use <strong>Test</strong> (or <strong>Test All</strong> to check
+            every provider concurrently) to see, right now, whether a provider is actually reachable and answering.
+            At least one provider needs a valid key — or run <code>make ollama-up</code> for a free local fallback —
+            for assistant/rag-agent chat to work at all.
+          </p>
+          {error && <p className="error">{error}</p>}
+          {!providers && !error && <div className="app-loading">Loading providers…</div>}
+          {providers && (
+            <div className="panel-card settings-card">
+              <h3>Active model</h3>
+              <p className="panel-hint">
+                Which model <code>assistant</code>/<code>rag-agent</code> use for their next chat request — applies
+                immediately, no restart. Only choosing among providers already routed in{" "}
+                <code>litellm_config.yaml</code>; entering a brand-new provider/key still requires editing{" "}
+                <code>.env</code> (see the cards below).
+              </p>
+              <select
+                className="settings-model-select"
+                value={activeModel ?? ""}
+                disabled={savingModel}
+                onChange={(e) => saveActiveModel(e.target.value)}
+              >
+                {activeModel && !providers.some((p) => p.model_name === activeModel) && (
+                  <option value={activeModel}>{activeModel} (not in litellm_config.yaml anymore)</option>
                 )}
-                <p className="panel-hint">{p.hint}</p>
-                <div className="settings-card-envvars">
-                  {p.env_vars.map((v) => (
-                    <code key={v} className="settings-envvar">
-                      {v}
-                    </code>
-                  ))}
-                </div>
-                <button
-                  className="btn-secondary"
-                  onClick={() => runTest(p.provider)}
-                  disabled={testing === p.provider || testingAll}
-                >
-                  {testing === p.provider ? "Testing…" : "▶ Test"}
-                </button>
-                {result && (
-                  <div className={`settings-result ${result.ok ? "settings-result--ok" : "settings-result--fail"}`}>
-                    {result.ok ? (
-                      <>
-                        ✅ Working ({result.latency_ms}ms) — replied "{result.reply}"
-                      </>
-                    ) : (
-                      <>❌ {result.error}</>
+                {providers.map((p) => (
+                  <option key={p.provider} value={p.model_name}>
+                    {p.label} — {p.model_name}
+                  </option>
+                ))}
+              </select>
+              {savingModel && <span className="panel-hint"> Saving…</span>}
+              {saveMessage && <p className="panel-hint">{saveMessage}</p>}
+            </div>
+          )}
+          {providers && (
+            <div className="settings-grid">
+              {providers.map((p) => {
+                const result = results[p.provider];
+                return (
+                  <div className="panel-card settings-card" key={p.provider}>
+                    <div className="settings-card-header">
+                      <h3>{p.label}</h3>
+                      <span className={`settings-badge ${p.route_exists ? "settings-badge--on" : "settings-badge--off"}`}>
+                        {p.route_exists ? "routed" : "not routed"}
+                      </span>
+                    </div>
+                    <div className="settings-card-model">
+                      model: <code>{p.model ?? "—"}</code>
+                    </div>
+                    {p.api_base && (
+                      <div className="settings-card-model">
+                        base: <code>{p.api_base}</code>
+                      </div>
+                    )}
+                    <p className="panel-hint">{p.hint}</p>
+                    <div className="settings-card-envvars">
+                      {p.env_vars.map((v) => (
+                        <code key={v} className="settings-envvar">
+                          {v}
+                        </code>
+                      ))}
+                    </div>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => runTest(p.provider)}
+                      disabled={testing === p.provider || testingAll}
+                    >
+                      {testing === p.provider ? "Testing…" : "▶ Test"}
+                    </button>
+                    {result && (
+                      <div className={`settings-result ${result.ok ? "settings-result--ok" : "settings-result--fail"}`}>
+                        {result.ok ? (
+                          <>
+                            ✅ Working ({result.latency_ms}ms) — replied "{result.reply}"
+                          </>
+                        ) : (
+                          <>❌ {result.error}</>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
