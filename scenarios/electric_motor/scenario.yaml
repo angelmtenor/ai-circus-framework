@@ -1,0 +1,98 @@
+# Seed definition for the "electric_motor" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# A `regression` scenario ported from smart-data-science's scenario_electric_motor.py.
+
+slug: electric_motor
+kind: tabular_ml
+title: "Electric Motor Speed"
+description: >
+  Predicts a permanent-magnet synchronous motor's rotational speed (in rpm) from its
+  voltage, current, and temperature sensor readings — industrial motor monitoring.
+role_required: "scenario:electric_motor"
+icon: "🧲"
+
+credits:
+  source: "Kaggle — Wilhelm Kirchgassner, Electric Motor Temperature"
+  url: "https://www.kaggle.com/datasets/wkirgsn/electric-motor-temperature"
+  note: "ported via smart-data-science's scenario_electric_motor.py; 10,000-row random sample of the original 50,000-row dataset"
+
+chat:
+  context: >
+    An industrial permanent-magnet synchronous motor (PMSM) monitoring model — predicts
+    the motor's rotational speed from its d/q-axis voltages and currents (u_d, u_q, i_d,
+    i_q), applied torque, and temperature readings from the stator (winding, tooth, yoke),
+    permanent magnet, coolant, and ambient air.
+  sample_questions:
+    - "Which sensor readings contribute most to predicting motor speed?"
+    - "How accurate is the trained model?"
+    - "Does torque alone predict motor speed, or does it depend on the voltage readings too?"
+
+dataset:
+  bucket: "scenario-electric-motor"
+  # MinIO key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/electric_motor.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/electric_motor.csv"
+  # Identifies the measurement session a row belongs to, not a per-row predictive
+  # feature (sessions run 1-6 hours at 2Hz) — used only as the row index, dropped
+  # before training like churn's CustomerId.
+  index_col: "profile_id"
+  target: "motor_speed"
+  feature_columns:
+    - u_q
+    - coolant
+    - stator_winding
+    - u_d
+    - stator_tooth
+    - i_d
+    - i_q
+    - pm
+    - stator_yoke
+    - ambient
+    - torque
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max (10,000-row sample).
+  feature_schema:
+    u_q: {type: numeric, min: -20.0, max: 135.0, default: 60.0, step: 1.0}
+    coolant: {type: numeric, min: 15.0, max: 95.0, default: 35.0, step: 1.0}
+    stator_winding: {type: numeric, min: 19.0, max: 140.0, default: 70.0, step: 1.0}
+    u_d: {type: numeric, min: -135.0, max: 135.0, default: 0.0, step: 1.0}
+    stator_tooth: {type: numeric, min: 18.0, max: 115.0, default: 60.0, step: 1.0}
+    i_d: {type: numeric, min: -270.0, max: 5.0, default: -50.0, step: 1.0}
+    i_q: {type: numeric, min: -290.0, max: 305.0, default: 60.0, step: 1.0}
+    pm: {type: numeric, min: 21.0, max: 115.0, default: 70.0, step: 1.0}
+    stator_yoke: {type: numeric, min: 18.0, max: 105.0, default: 60.0, step: 1.0}
+    ambient: {type: numeric, min: 18.0, max: 30.0, default: 24.0, step: 0.5}
+    torque: {type: numeric, min: -245.0, max: 265.0, default: 40.0, step: 1.0}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: histogram, x: motor_speed}
+    - {type: scatter, x: torque, y: motor_speed}
+    - {type: scatter, x: i_d, y: i_q}
+
+model:
+  task_type: regression
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "rpm"
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

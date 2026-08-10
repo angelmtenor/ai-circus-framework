@@ -23,6 +23,11 @@ description: >
 role_required: "scenario:mpm"
 icon: "⚙️"
 
+credits:
+  source: "Kaggle — AI4I 2020 Predictive Maintenance Dataset"
+  url: "https://www.kaggle.com/datasets/lumierebatalong/mpm-with-f1-score-89-and-g-mean-89"
+  note: "ported via mlops_templates' mpm_scenario"
+
 chat:
   context: >
     An industrial machine predictive-maintenance model — predicts failure risk from
@@ -33,8 +38,6 @@ chat:
     - "Does tool wear alone predict failure, or does it depend on other factors?"
     - "How accurate is the trained model?"
 
-# Real, public dataset (AI4I 2020 Predictive Maintenance):
-# https://www.kaggle.com/datasets/lumierebatalong/mpm-with-f1-score-89-and-g-mean-89
 dataset:
   bucket: "scenario-mpm"
   # MinIO key once uploaded; etl-tabular reads it from there.

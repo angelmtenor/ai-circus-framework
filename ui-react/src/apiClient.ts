@@ -37,6 +37,9 @@ export type ScenarioSummary = {
   title: string;
   description: string;
   icon: string;
+  // Attribution for a ported public dataset (see scenario_schema.py's
+  // DatasetCredits) — null for scenarios whose content is original.
+  credits?: { source: string; url: string; note?: string | null } | null;
   feature_columns?: string[] | null;
   feature_schema?: Record<string, FeatureSpec> | null;
   // tabular_ml only — seeds the Data tab dashboard; empty/missing falls back to the

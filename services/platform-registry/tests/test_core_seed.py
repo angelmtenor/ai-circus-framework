@@ -28,7 +28,15 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
     """Every scenarios/*/scenario.yaml in the repo seeds successfully."""
     slugs = seed_scenarios(session, SCENARIOS_DIR)
 
-    assert set(slugs) == {"churn", "mpm", "supply_chain", "ai_circus_reference"}
+    assert set(slugs) == {
+        "churn",
+        "mpm",
+        "supply_chain",
+        "supermarket_sales",
+        "electric_motor",
+        "energy_building",
+        "ai_circus_reference",
+    }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
     assert churn.role_required == "scenario:churn"
@@ -83,12 +91,32 @@ def test_seed_scenarios_populates_target(session: Session) -> None:
     assert session.get(Scenario, "ai_circus_reference").target is None
 
 
+def test_seed_scenarios_populates_credits_for_ported_datasets_only(session: Session) -> None:
+    """Ported public-dataset scenarios get `credits`; the original ai_circus_reference doesn't."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    churn = session.get(Scenario, "churn")
+    assert churn.credits["source"].startswith("Kaggle")
+    assert churn.credits["url"].startswith("https://")
+
+    reference = session.get(Scenario, "ai_circus_reference")
+    assert reference.credits is None
+
+
 def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -> None:
     """The admin org gets a real, seeded entitlement to every scenario — not a bypass."""
     seed_scenarios(session, SCENARIOS_DIR)
 
     admin_slugs = {e.scenario_slug for e in session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID)}
-    assert admin_slugs == {"churn", "mpm", "supply_chain", "ai_circus_reference"}
+    assert admin_slugs == {
+        "churn",
+        "mpm",
+        "supply_chain",
+        "supermarket_sales",
+        "electric_motor",
+        "energy_building",
+        "ai_circus_reference",
+    }
 
 
 def test_seed_scenarios_is_idempotent(session: Session) -> None:
@@ -96,8 +124,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 4
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 4
+    assert session.query(Scenario).count() == 7
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 7
 
 
 def test_seed_default_llm_setting_inserts_on_first_boot(session: Session) -> None:

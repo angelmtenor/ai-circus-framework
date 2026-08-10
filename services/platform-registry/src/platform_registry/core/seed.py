@@ -52,6 +52,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.icon = definition.icon
         existing.role_required = definition.role_required
         existing.sample_questions = definition.chat.sample_questions
+        existing.credits = definition.credits.model_dump() if definition.credits is not None else None
 
         if definition.dataset is not None:
             existing.feature_columns = definition.dataset.feature_columns

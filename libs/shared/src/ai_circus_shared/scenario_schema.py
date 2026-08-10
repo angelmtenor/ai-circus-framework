@@ -173,6 +173,18 @@ class ChatConfig(BaseModel):
     sample_questions: list[str] = []
 
 
+class DatasetCredits(BaseModel):
+    """Attribution for a scenario's real-world dataset — surfaced to the end user
+    (`ui-react`'s Data tab) alongside `description`, not just left in a YAML comment.
+    `None` for a scenario whose content is original (e.g. `ai_circus_reference`),
+    rather than ported from a public dataset.
+    """
+
+    source: str  # e.g. "Kaggle", "AWS Supply Chain Workshop", "UCI Machine Learning Repository"
+    url: str
+    note: str | None = None
+
+
 class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
@@ -183,6 +195,7 @@ class ScenarioDefinition(BaseModel):
     role_required: str
     icon: str
     chat: ChatConfig
+    credits: DatasetCredits | None = None
 
     dataset: TabularDataset | None = None
     model: TabularModel | None = None

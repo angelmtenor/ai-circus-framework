@@ -54,6 +54,9 @@ class ScenarioSummary(BaseModel):
     title: str
     description: str
     icon: str
+    # Attribution for a ported public dataset (see scenario_schema.DatasetCredits) —
+    # None for scenarios whose content is original.
+    credits: dict[str, Any] | None = None
     feature_columns: list[str] | None = None
     feature_schema: dict[str, Any] | None = None
     # tabular_ml only — seeds ui-react's Data tab dashboard (see scenario_schema.py's

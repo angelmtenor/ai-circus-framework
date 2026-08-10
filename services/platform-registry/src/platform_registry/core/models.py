@@ -40,6 +40,10 @@ class Scenario(Base):
     icon: Mapped[str] = mapped_column(String(8))
     role_required: Mapped[str] = mapped_column(String(64))
 
+    # Attribution for a ported public dataset (see ai_circus_shared.scenario_schema.
+    # DatasetCredits) — None for scenarios whose content is original.
+    credits: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+
     feature_columns: Mapped[list[str] | None] = mapped_column(JSON, default=None)
     feature_schema: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     # tabular_ml only — seeds both UIs' Data/dataset dashboard (see

@@ -164,6 +164,16 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
     <div className="tab-panel">
       <div className="panel-card">
         <h3>Data summary</h3>
+        <p style={{ marginTop: "-0.2rem", marginBottom: "0.6rem" }}>{scenario.description}</p>
+        {scenario.credits && (
+          <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
+            Dataset credit: {scenario.credits.source} —{" "}
+            <a href={scenario.credits.url} target="_blank" rel="noreferrer">
+              original source
+            </a>
+            {scenario.credits.note ? ` (${scenario.credits.note})` : ""}
+          </p>
+        )}
         <div className="explore-controls">
           <label>
             Sample size

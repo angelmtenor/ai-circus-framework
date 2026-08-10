@@ -9,8 +9,7 @@
 # not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
 #
 # The framework's first `regression` scenario — ported from smart-data-science's
-# scenario_supply_chain.py (a synthetic dataset from an AWS Supply Chain workshop:
-# https://catalog.us-east-1.prod.workshops.aws/workshops/80ba0ea5-7cf9-4b8c-9d3f-1cd988b6c071/en-US/1-use-cases/7-supply-chain).
+# scenario_supply_chain.py.
 
 slug: supply_chain
 kind: tabular_ml
@@ -20,6 +19,11 @@ description: >
   order type, origin, and priority — logistics ETA estimation.
 role_required: "scenario:supply_chain"
 icon: "🚚"
+
+credits:
+  source: "Amazon SageMaker Supply Chain workshop (synthetic dataset)"
+  url: "https://catalog.us-east-1.prod.workshops.aws/workshops/80ba0ea5-7cf9-4b8c-9d3f-1cd988b6c071/en-US/1-use-cases/7-supply-chain"
+  note: "ported via smart-data-science's scenario_supply_chain.py"
 
 chat:
   context: >

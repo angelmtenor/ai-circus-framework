@@ -1,0 +1,115 @@
+# Seed definition for the "energy_building" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# A `regression` scenario ported from smart-data-science's scenario_energy_building.py.
+
+slug: energy_building
+kind: tabular_ml
+title: "Building Energy Consumption"
+description: >
+  Predicts a home's appliance energy use (in Wh) from indoor climate readings across
+  three zones, outdoor weather, and time-of-day/week — building energy forecasting.
+role_required: "scenario:energy_building"
+icon: "🏠"
+
+credits:
+  source: "UCI Machine Learning Repository — Appliances Energy Prediction"
+  url: "https://archive.ics.uci.edu/ml/datasets/Appliances+energy+prediction"
+  note: "ported via smart-data-science's scenario_energy_building.py; 10,000-row random sample of the original ~19,700-row dataset"
+
+chat:
+  context: >
+    A residential energy-forecasting model — predicts appliance electricity use (Wh) from
+    10-minute-averaged indoor temperature/humidity readings in three zones of the house
+    (kitchen, living room, laundry room), outdoor weather (temperature, pressure, humidity,
+    wind speed, visibility, dew point), and the time of day/week/holiday status.
+  sample_questions:
+    - "Which features matter most for predicting appliance energy use?"
+    - "How accurate is the trained model?"
+    - "Does the time of day matter more than the weather for energy consumption?"
+
+dataset:
+  bucket: "scenario-energy-building"
+  # MinIO key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/energy_building.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/energy_building.csv"
+  index_col: "date"
+  target: "Appliances"
+  # Responsible AI / data-quality: dropped before training regardless of predictive
+  # value — "lights" is a separate submeter excluded per the original study's own
+  # cleaning; rv1/rv2 are random noise columns the original dataset ships for
+  # benchmarking, not real signal; T4-T9/RH_4-RH_9 are additional house zones dropped
+  # as redundant with zones 1-3 (T1/RH_1, T2/RH_2, T3/RH_3), again per the original
+  # study; "year" is constant (2016) across this sample, so carries no signal.
+  protected_features_excluded:
+    ["lights", "rv1", "rv2", "T4", "RH_4", "T5", "RH_5", "T6", "RH_6", "T7", "RH_7", "T8", "RH_8", "T9", "RH_9", "year"]
+  feature_columns:
+    - T1
+    - RH_1
+    - T2
+    - RH_2
+    - T3
+    - RH_3
+    - T_out
+    - Press_mm_hg
+    - RH_out
+    - Windspeed
+    - Visibility
+    - Tdewpoint
+    - month
+    - day
+    - hour
+    - day_of_week
+    - is_holiday
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max (10,000-row sample).
+  feature_schema:
+    T1: {type: numeric, min: 16.0, max: 27.0, default: 21.0, step: 0.1}
+    RH_1: {type: numeric, min: 27.0, max: 64.0, default: 40.0, step: 0.5}
+    T2: {type: numeric, min: 16.0, max: 30.0, default: 20.0, step: 0.1}
+    RH_2: {type: numeric, min: 20.0, max: 57.0, default: 40.0, step: 0.5}
+    T3: {type: numeric, min: 17.0, max: 30.0, default: 22.0, step: 0.1}
+    RH_3: {type: numeric, min: 29.0, max: 50.0, default: 40.0, step: 0.5}
+    T_out: {type: numeric, min: -5.0, max: 27.0, default: 10.0, step: 0.5}
+    Press_mm_hg: {type: numeric, min: 729.0, max: 773.0, default: 755.0, step: 1.0}
+    RH_out: {type: numeric, min: 24.0, max: 100.0, default: 80.0, step: 1.0}
+    Windspeed: {type: numeric, min: 0.0, max: 13.0, default: 4.0, step: 0.5}
+    Visibility: {type: numeric, min: 1.0, max: 66.0, default: 40.0, step: 1.0}
+    Tdewpoint: {type: numeric, min: -7.0, max: 16.0, default: 4.0, step: 0.5}
+    month: {type: numeric, min: 1, max: 5, default: 3, step: 1}
+    day: {type: numeric, min: 1, max: 31, default: 15, step: 1}
+    hour: {type: numeric, min: 0, max: 23, default: 12, step: 1}
+    day_of_week: {type: numeric, min: 0, max: 6, default: 3, step: 1}
+    is_holiday: {type: categorical, options: ["False", "True"], default: "False"}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: histogram, x: Appliances}
+    - {type: scatter, x: T_out, y: Appliances}
+    - {type: bar, x: hour, y: Appliances, agg: mean}
+
+model:
+  task_type: regression
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "Wh"
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

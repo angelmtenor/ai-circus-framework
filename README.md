@@ -49,8 +49,16 @@ below). Two kinds exist today:
 
 | Kind | Examples | Services involved |
 |---|---|---|
-| `tabular_ml` | `churn` (customer churn), `mpm` (machine predictive maintenance) — dashboard + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
+| `tabular_ml` | `churn`, `mpm`, `supply_chain`, `supermarket_sales`, `electric_motor`, `energy_building` — real public datasets (Kaggle/UCI/AWS, credited in each `scenario.yaml`'s `credits` field), each with a dashboard + SHAP explainability + chat | `etl-tabular` → `training` → `prediction`, plus `assistant` for chat-over-data |
 | `conversational_rag` | `ai_circus_reference` — agentic chatbot over this repo's own dev/ML/GenAI reference notes, fetched straight from GitHub and vectorized | `etl-vectorize` → `rag-agent` |
+
+Every `tabular_ml` scenario except `ai_circus_reference` is ported from a real public dataset
+rather than original content — see each scenario's `credits.source`/`credits.url` (also
+surfaced in `ui-react`'s Data tab). `churn`/`mpm`/`supply_chain` are ports of
+`mlops_templates`' scenarios of the same name; `supply_chain`/`supermarket_sales`/
+`electric_motor`/`energy_building` are ports of `smart-data-science`'s
+`scenario_supply_chain.py`/`scenario_supermarket_sales.py`/`scenario_electric_motor.py`/
+`scenario_energy_building.py`.
 
 A tenant (Logto **Organization**, or the shared admin credential — see below) only sees the
 scenarios its members have been granted the matching `scenario:<slug>` role for — enforced
@@ -181,8 +189,10 @@ service's directory while the infra containers stay up via `make up-infra`.
 1. Register an API resource for the framework's backend; note its identifier for
    `LOGTO_API_RESOURCE_INDICATOR` in `.env`.
 2. Enable **Organizations**; each customer/team you want isolated is one Organization (tenant).
-3. Create organization roles named `scenario:churn` / `scenario:mpm` /
-   `scenario:ai_circus_reference` (one per `scenarios/*/scenario.yaml`'s `role_required`).
+3. Create organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
+   `role_required` (`scenario:churn`, `scenario:mpm`, `scenario:supply_chain`,
+   `scenario:supermarket_sales`, `scenario:electric_motor`, `scenario:energy_building`,
+   `scenario:ai_circus_reference`).
 4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (see `AGENTS.md`'s reasoning: managed
    auth over custom auth).
