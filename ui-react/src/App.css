@@ -750,6 +750,22 @@ select:focus {
   padding: 0;
 }
 
+.chat-bubble h1,
+.chat-bubble h2,
+.chat-bubble h3,
+.chat-bubble h4,
+.chat-bubble h5,
+.chat-bubble h6 {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.chat-bubble a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .chat-turn--user .chat-bubble {
   background: var(--panel-2);
   border: 1px solid var(--border);

@@ -1,19 +1,36 @@
 /**
- * Minimal markdown-ish renderer for chat replies — bold/inline-code, fenced code
- * blocks, bullet/numbered lists, and pipe tables. No remark/react-markdown dependency
- * for a handful of block types the assistant/rag-agent LLMs already write naturally.
+ * Minimal markdown-ish renderer for chat replies — headers, bold/inline-code, fenced
+ * code blocks, bullet/numbered lists, pipe tables, and links. No remark/react-markdown
+ * dependency for a handful of block types the assistant/rag-agent LLMs already write
+ * naturally.
  */
 
 import type { ReactNode } from "react";
 
+const LINK_PATTERN = /\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+/** Only http(s)/mailto — never render a javascript: (or other) URI as a clickable href. */
+function isSafeUrl(url: string): boolean {
+  return /^(https?:|mailto:)/i.test(url) || url.startsWith("/") || url.startsWith("#");
+}
+
 function renderInline(text: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g).filter(Boolean);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith("`") && part.endsWith("`")) {
       return <code key={i}>{part.slice(1, -1)}</code>;
+    }
+    const link = LINK_PATTERN.exec(part);
+    LINK_PATTERN.lastIndex = 0; // stateful global regex — reset after each use
+    if (link && isSafeUrl(link[2])) {
+      return (
+        <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer">
+          {link[1]}
+        </a>
+      );
     }
     return part;
   });
@@ -62,6 +79,14 @@ export function renderMarkdown(text: string): ReactNode {
     const line = lines[i];
 
     if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.*)/.exec(line.trim());
+    if (heading) {
+      const Tag = `h${heading[1].length}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+      blocks.push(<Tag key={key++}>{renderInline(heading[2])}</Tag>);
       i++;
       continue;
     }
@@ -125,7 +150,11 @@ export function renderMarkdown(text: string): ReactNode {
     }
 
     const paraLines: string[] = [];
-    while (i < lines.length && lines[i].trim() !== "" && !/^[-*]\s+|^\d+\.\s+|^```|^\|/.test(lines[i].trim())) {
+    while (
+      i < lines.length &&
+      lines[i].trim() !== "" &&
+      !/^[-*]\s+|^\d+\.\s+|^```|^\||^#{1,6}\s+/.test(lines[i].trim())
+    ) {
       paraLines.push(lines[i]);
       i++;
     }
