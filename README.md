@@ -179,6 +179,21 @@ that makes step 3 of Getting Started concrete.
 
 <p align="center"><img src="docs/screenshots/settings.png" alt="Settings — LLM provider status" width="850"></p>
 
+### Themes
+
+The whole app is skinned from one `Theme` object (colors + a logo, see `ui-react/src/themes/`) —
+switching themes in **Settings → Appearance** is instant, no rebuild. Two ship today: **Tron**
+(the neon default) and **Getronics**, a light corporate theme built from Getronics' own public
+brand palette.
+
+<p align="center"><img src="docs/screenshots/getronics-theme.png" alt="Getronics theme" width="850"></p>
+
+> **Disclaimer:** I currently work at Getronics. I built the Getronics theme — using only
+> public brand colors pulled from getronics.com's own published CSS, no confidential or internal
+> material — to show what this kind of open-source foundation can look like when skinned for an
+> enterprise. It's a personal demo, not an official Getronics product or endorsement. For
+> enterprise-grade work along these lines, reach me at **angel.martinez-tenor@getronics.com**.
+
 ### Conversational assistant
 
 A real LangChain tool-calling agent, not a fixed "always retrieve" pipeline — it decides whether
