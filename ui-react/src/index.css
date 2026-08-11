@@ -43,6 +43,7 @@
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);
+  accent-color: var(--accent);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
