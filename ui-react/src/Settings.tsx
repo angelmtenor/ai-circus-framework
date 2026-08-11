@@ -204,19 +204,6 @@ export function Settings({
                     <div className="settings-card-model">
                       model: <code>{p.model ?? "—"}</code>
                     </div>
-                    {p.api_base && (
-                      <div className="settings-card-model">
-                        base: <code>{p.api_base}</code>
-                      </div>
-                    )}
-                    <p className="panel-hint">{p.hint}</p>
-                    <div className="settings-card-envvars">
-                      {p.env_vars.map((v) => (
-                        <code key={v} className="settings-envvar">
-                          {v}
-                        </code>
-                      ))}
-                    </div>
                     <button
                       className="btn-secondary"
                       onClick={() => runTest(p.provider)}
@@ -235,6 +222,22 @@ export function Settings({
                         )}
                       </div>
                     )}
+                    <details className="settings-card-details">
+                      <summary>Details</summary>
+                      {p.api_base && (
+                        <div className="settings-card-model">
+                          base: <code>{p.api_base}</code>
+                        </div>
+                      )}
+                      <p className="panel-hint">{p.hint}</p>
+                      <div className="settings-card-envvars">
+                        {p.env_vars.map((v) => (
+                          <code key={v} className="settings-envvar">
+                            {v}
+                          </code>
+                        ))}
+                      </div>
+                    </details>
                   </div>
                 );
               })}

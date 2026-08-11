@@ -215,33 +215,9 @@ surfaced in the Data tab.
 
 ## Architecture
 
-```
-                        ┌─────────────┐
-                  ┌────▶│   Traefik   │◀──── single ingress point (*.localhost)
-                  │     └─────────────┘
-      ┌───────────┼───────────────────────┬─────────────────────┐
-      │           │                       │                     │
-┌─────▼─────┐ ┌───▼─────────────┐ ┌───────▼───┐       ┌─────────▼────┐
-│ ui-react  │ │platform-registry│ │llm-gateway│       │ prediction /  │
-│(Logto OIDC)│ │ (tenants/roles) │ │ (LiteLLM) │       │ assistant /   │
-└───────────┘ └───────┬─────────┘ └─────┬─────┘       │ rag-agent     │
-                       │                 │             └──────┬───────┘
-                 ┌─────▼─────┐     ┌─────▼─────┐              │
-                 │  Postgres  │     │  Qdrant   │◀─────────────┘
-                 │(logto+     │     │(per-tenant│
-                 │ platform)  │     │collections│
-                 └─────┬──────┘     └───────────┘
-                       │
-                 ┌─────▼─────┐            ┌──────────────┐
-                 │   Logto    │            │    MinIO     │◀── datasets, models,
-                 │(IDP/tenants)│            │(object store)│    documents
-                 └────────────┘            └──────┬───────┘
-                                                   │
-                                      ┌────────────┴────────────┐
-                                      │ etl-tabular / training / │
-                                      │      etl-vectorize      │
-                                      └──────────────────────────┘
-```
+<p align="center">
+  <img src="docs/screenshots/architecture.png" alt="ai-circus-framework architecture diagram" width="900">
+</p>
 
 Runs today via `docker compose up`; designed — not yet built — to migrate to
 minikube/Kubernetes later (see [Kubernetes path](#kubernetes-path-documented-not-yet-built)).

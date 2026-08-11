@@ -1233,6 +1233,35 @@ select:focus {
   color: var(--red);
 }
 
+.settings-card-details {
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.settings-card-details summary {
+  cursor: pointer;
+  color: var(--dim);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition: color 0.15s, text-shadow 0.15s;
+}
+
+.settings-card-details summary:hover {
+  color: var(--accent-2);
+  text-shadow: var(--glow-accent-soft);
+}
+
+.settings-card-details[open] summary {
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.settings-card-details .settings-card-model:first-of-type {
+  margin-top: 0;
+}
+
 .topbar-settings {
   display: inline-flex;
   align-items: center;

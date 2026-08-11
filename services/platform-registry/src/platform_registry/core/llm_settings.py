@@ -189,7 +189,11 @@ def test_provider(base_url: str, master_key: str, provider: str) -> dict[str, ob
                     "messages": [{"role": "user", "content": "Reply with exactly one word: ok"}],
                     "max_tokens": 5,
                 },
-                timeout=30.0,
+                # 10s, not litellm's own (much longer) provider-level retry/timeout budget —
+                # an unreachable Ollama base is the common case this guards against: without
+                # this, a single dead local Ollama container can make "Test"/"Test All" hang
+                # far longer than any of the real cloud providers ever would.
+                timeout=10.0,
             )
         except httpx.HTTPError as exc:
             return {"ok": False, "error": str(exc), "latency_ms": None}
