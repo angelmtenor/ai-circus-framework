@@ -66,6 +66,25 @@ provider wiring, the React frontend, infra).
 - **At least one LLM provider** — a free API key (Google Gemini's free tier is easiest) *or* the
   bundled local Ollama fallback (see step 3 below). Chat features simply won't answer without one.
 
+### The fast path
+
+```bash
+git clone <this-repo-url> && cd ai-circus-framework
+make bootstrap   # copies .env.example -> .env — add an LLM key first if you have one (step 3 below)
+make all         # infra + services + both pipelines + an end-to-end admin-tenant check
+```
+
+`make all` runs every step below in the right order, waits for each container to actually be
+ready (not just started) before moving to the next, and finishes by curling the admin tenant
+through the same path the browser's login screen uses — so a broken setup fails loudly here,
+with logs to check, instead of as a "Failed to fetch" in the UI later. Safe to re-run any time.
+If something's clearly broken (stale volumes, half-applied `.env` change), `make reset-all` tears
+everything down — **including data in postgres/logto/qdrant/minio** — and reruns `make all` from a
+clean slate; that's also the right thing to run before sharing this repo, to prove it boots clean.
+
+The rest of this section is the same sequence broken into individual steps, useful if you want
+finer control (e.g. iterating on one service without rebuilding everything).
+
 ### 1. Clone and bootstrap the environment
 
 ```bash
@@ -100,8 +119,9 @@ every provider's live status and lets you switch the *active* model instantly, w
 ### 4. Start everything else and load some data
 
 ```bash
-make up          # every backend service + both UIs
-make pipeline    # (re)runs the ETL -> training pipeline for the tabular_ml scenarios
+make up                              # every backend service + both UIs
+make pipeline                        # (re)runs the ETL -> training pipeline for the tabular_ml scenarios
+docker compose up --build etl-vectorize   # vectorizes the conversational_rag scenario's reference docs
 ```
 
 ### 5. Open the app
@@ -112,6 +132,27 @@ For a quick look without configuring an identity provider at all, expand **Admin
 the login screen and use the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by default) — it
 comes pre-granted access to every scenario. For real multi-user/multi-tenant login, see
 "First-time Logto setup" further down.
+
+There's also an **Engineering demo login**, the same bypass mechanism scoped to a narrower demo
+tenant — entitled to only the three engineering scenarios (Predictive Maintenance, Electric Motor
+Speed, Building Energy Consumption), not every scenario. Its key is `.env`'s
+`ENGINEERING_DEMO_API_KEY` (`ai-circus-engineering-2026` by default; leave it blank to disable this
+login option). It's provisioned automatically wherever `ADMIN_API_KEY` is — no separate setup step
+— and `make verify` (part of `make all`) checks that it's scoped correctly: entitled to exactly
+those three scenarios, and rejected (403) on any other. This is meant as a template for adding
+your own narrower demo tenants: pick a name, an env var, and a scenario slug set in
+`services/platform-registry/src/platform_registry/core/seed.py`'s `ENGINEERING_DEMO_SCENARIOS`.
+
+> **"Failed to fetch" after logging in?** That's the browser's network-level error, not an
+> application error — it means a request never reached a server at all. Run `make verify`
+> (or just `make all` again) to pinpoint which service isn't answering; the most common causes
+> are: (1) you tested right after `make up`, before every container was actually ready — `make
+> all`/`make verify` wait for that, plain `docker compose up -d` doesn't; (2) `postgres-data` (or
+> another) volume already existed from an earlier partial run, so its one-time init script never
+> reran — `make reset-all` fixes this; (3) something else on the machine is already bound to port
+> 80 (Traefik's entrypoint) or 8010 (platform-registry); (4) the app was opened via an origin other
+> than `http://react.localhost` (e.g. plain `http://localhost`) — every backend's CORS allow-list
+> is keyed to that exact hostname.
 
 Local (non-Docker) development: each generated service under `services/*/` has its own
 `make run` — run it directly with `uv run` from inside that service's directory while the infra
@@ -257,7 +298,9 @@ expensive to retrofit once single-tenant assumptions are baked in.
 - **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of
-  the entitlement check.
+  the entitlement check. `ENGINEERING_DEMO_API_KEY` is the same mechanism scoped to a narrower
+  `engineering-demo` tenant, entitled to only the engineering scenarios — a template for adding
+  more scoped demo tenants without touching Logto.
 
 ### Shared code
 

@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +53,10 @@ class EnvConfig(BaseSettings):
     ADMIN_API_KEY: SecretStr = Field(
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
+    ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
+        description="Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building",
+        default=None,
+    )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
     LOGTO_ISSUER: str | None = Field(
         description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
@@ -67,7 +72,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "851e8138be3712a816acf551b96d3fd9a5f0f86c4425a66eb02b0a12f8115963"
+_SOURCE_YAML_HASH = "dd71dbde478fe57c9f190aa7f4f71da7e8710439bbb2e42f598a4ad526b345be"
 
 
 EnvConfig.model_rebuild()
@@ -103,12 +108,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

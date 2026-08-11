@@ -81,10 +81,15 @@ def test_grant_unknown_scenario_returns_404(client: TestClient) -> None:
 
 
 class _FakeAdminConfig:
-    """Stand-in for EnvConfig exposing only what `require_admin` reads."""
+    """Stand-in for EnvConfig exposing what `require_admin`/`verify_engineering_demo_key` read."""
 
-    def __init__(self, admin_api_key: str = "test-admin-key") -> None:
+    def __init__(
+        self,
+        admin_api_key: str = "test-admin-key",
+        engineering_demo_api_key: str | None = "test-engineering-demo-key",
+    ) -> None:
         self.ADMIN_API_KEY = FakeSecret(admin_api_key)
+        self.ENGINEERING_DEMO_API_KEY = FakeSecret(engineering_demo_api_key) if engineering_demo_api_key else None
 
 
 @pytest.fixture
@@ -121,6 +126,50 @@ def test_check_entitlement_does_not_require_admin_token(unauthenticated_client: 
     """The read-only entitlement check stays open to every backend service, unauthenticated."""
     response = unauthenticated_client.get("/entitlements/org-1/churn")
     assert response.status_code == 404
+
+
+def test_verify_engineering_demo_key_rejects_missing_token(unauthenticated_client: TestClient) -> None:
+    """No Authorization header at all is rejected."""
+    response = unauthenticated_client.get("/auth/verify-engineering-demo-key")
+    assert response.status_code == 401
+
+
+def test_verify_engineering_demo_key_rejects_wrong_token(unauthenticated_client: TestClient) -> None:
+    """A bearer token that doesn't match ENGINEERING_DEMO_API_KEY is rejected."""
+    response = unauthenticated_client.get(
+        "/auth/verify-engineering-demo-key", headers={"Authorization": "Bearer not-the-demo-key"}
+    )
+    assert response.status_code == 401
+
+
+def test_verify_engineering_demo_key_rejects_the_admin_key(unauthenticated_client: TestClient) -> None:
+    """The admin key doesn't also work here — the two credentials are deliberately distinct."""
+    response = unauthenticated_client.get(
+        "/auth/verify-engineering-demo-key", headers={"Authorization": "Bearer test-admin-key"}
+    )
+    assert response.status_code == 401
+
+
+def test_verify_engineering_demo_key_accepts_the_real_key(unauthenticated_client: TestClient) -> None:
+    """The configured ENGINEERING_DEMO_API_KEY is accepted."""
+    response = unauthenticated_client.get(
+        "/auth/verify-engineering-demo-key", headers={"Authorization": "Bearer test-engineering-demo-key"}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"valid": True}
+
+
+def test_verify_engineering_demo_key_rejects_everything_when_unconfigured(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ENGINEERING_DEMO_API_KEY is optional — when unset, no bearer token can match it."""
+    monkeypatch.setattr(
+        "platform_registry.api.get_env_config", lambda: _FakeAdminConfig(engineering_demo_api_key=None)
+    )
+    response = client.get(
+        "/auth/verify-engineering-demo-key", headers={"Authorization": "Bearer test-engineering-demo-key"}
+    )
+    assert response.status_code == 401
 
 
 def test_get_active_llm_model_404s_before_any_is_set(client: TestClient) -> None:

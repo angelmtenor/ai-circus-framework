@@ -93,6 +93,12 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional shared demo bearer token — checked (not enforced) by GET /auth/verify-engineering-demo-key, which the login screen's engineering-demo login uses to fail fast on a bad key"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: LLM_GATEWAY_URL
     description: "Base URL of the llm-gateway service's OpenAI-compatible + admin API"
     type: string

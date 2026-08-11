@@ -77,8 +77,20 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: DEV_ORG_ID
     description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SHARED_MODEL_ORG_ID
+    description: "Org id whose trained model artifacts every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
     type: string
     mandatory: true
     secret: false
@@ -116,6 +128,9 @@ environments:
     HTTP_PORT: "8000"
     MINIO_ACCESS_KEY: "ai_circus"
     DEV_ORG_ID: "demo"
+    # Must match training's ORG_ID default — see SHARED_MODEL_ORG_ID's description
+    # above. Same "safe to default here" reasoning as SCENARIOS below.
+    SHARED_MODEL_ORG_ID: "demo"
     # Empty = every tabular_ml scenario under SCENARIOS_DIR. Safe to default here
     # (unlike AUTH_DISABLED/ADMIN_API_KEY below): there's only one instance of this
     # service, so there's no risk of two instances silently sharing a default they

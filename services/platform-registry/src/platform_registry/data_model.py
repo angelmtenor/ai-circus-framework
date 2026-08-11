@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,13 +59,17 @@ class EnvConfig(BaseSettings):
     ADMIN_API_KEY: SecretStr = Field(
         description="Bearer token required on /llm-settings/* (shared with other services' admin-key bypass)"
     )
+    ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
+        description="Optional shared demo bearer token — checked (not enforced) by GET /auth/verify-engineering-demo-key, which the login screen's engineering-demo login uses to fail fast on a bad key",
+        default=None,
+    )
     LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible + admin API")
     LLM_GATEWAY_API_KEY: SecretStr = Field(
         description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
     )
 
 
-_SOURCE_YAML_HASH = "a6176a3626a69b7368dd07847bd89875e1f4372f8a0527c7502aa0415360fd2e"
+_SOURCE_YAML_HASH = "c85803cdec677b4576bcda8195bf069e0010bf721b78aee56482717eccd1d059"
 
 
 EnvConfig.model_rebuild()
@@ -100,12 +105,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

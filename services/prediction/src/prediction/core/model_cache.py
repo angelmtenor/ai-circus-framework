@@ -82,9 +82,18 @@ class ModelCache:
     `MAX_CACHED_TENANTS` entries (LRU eviction).
     """
 
-    def __init__(self, stores: dict[str, ObjectStore]) -> None:
-        """Bind this cache to one ObjectStore per loaded scenario_slug (own MinIO bucket each)."""
+    def __init__(self, stores: dict[str, ObjectStore], fallback_org_id: str) -> None:
+        """Bind this cache to one ObjectStore per loaded scenario_slug (own MinIO bucket each).
+
+        `fallback_org_id` is the tenant (matching training's ORG_ID) every other
+        tenant's model lookup falls back to until it has its own artifacts in MinIO —
+        without this, any tenant besides the one training actually ran for (e.g. the
+        admin/engineering-demo bypass tenants, or a brand-new Logto organization) would
+        404 on every predict call, contradicting this cache's own "shared by every
+        tenant" premise.
+        """
         self._stores = stores
+        self.fallback_org_id = fallback_org_id
         self._cache: OrderedDict[tuple[str, str], ModelArtifacts] = OrderedDict()
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
@@ -109,20 +118,31 @@ class ModelCache:
 
         with self._lock_for(key):
             if key not in self._cache:  # re-check: another thread may have just populated it
-                logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", *key)
                 store = self._stores[scenario_slug]
+                # Tenants without their own trained artifacts yet (any org besides the
+                # one training actually ran for) share the baseline org's model —
+                # see __init__'s fallback_org_id docstring.
+                load_org_id = org_id if store.exists(org_id, MODEL_METADATA_KEY) else self.fallback_org_id
+                if load_org_id != org_id:
+                    logger.info(
+                        "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
+                        org_id,
+                        scenario_slug,
+                        load_org_id,
+                    )
+                logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug)
                 # Read metadata first — it's the manifest training writes last, once
                 # every artifact below it has been confirmed uploaded — so an
                 # interrupted retrain shows up here as a checksum mismatch rather than
                 # a silent mix of old/new artifacts.
-                metadata = json.loads(store.get(org_id, MODEL_METADATA_KEY))
+                metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
                 checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
-                pipeline = _load_checked(store, org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
-                explainer = _load_checked(store, org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
+                pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
+                explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
                 pipeline_lower = pipeline_upper = None
                 if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
-                    pipeline_lower = _load_checked(store, org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
-                    pipeline_upper = _load_checked(store, org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+                    pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
+                    pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
                 if len(self._cache) >= MAX_CACHED_TENANTS:
                     evicted_key, _ = self._cache.popitem(last=False)
                     logger.info("Model cache full — evicted org={} scenario={}", *evicted_key)

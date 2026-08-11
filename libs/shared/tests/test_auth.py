@@ -8,7 +8,13 @@ from dataclasses import dataclass
 import pytest
 
 from ai_circus_shared import auth as auth_module
-from ai_circus_shared.auth import ADMIN_ORG_ID, Identity, TokenValidationError, resolve_caller_identity
+from ai_circus_shared.auth import (
+    ADMIN_ORG_ID,
+    ENGINEERING_DEMO_ORG_ID,
+    Identity,
+    TokenValidationError,
+    resolve_caller_identity,
+)
 from ai_circus_shared.entitlements import EntitlementDeniedError
 
 
@@ -22,6 +28,7 @@ class FakeSettings:
     LOGTO_API_RESOURCE_INDICATOR: str | None = "https://api.ai-circus-framework.local"
     LOGTO_JWKS_URL: str | None = "http://logto.localhost/oidc/jwks"
     ADMIN_API_KEY: str | None = "ai-circus-2026"
+    ENGINEERING_DEMO_API_KEY: str | None = "ai-circus-engineering-2026"
     PLATFORM_REGISTRY_URL: str = "http://platform-registry:8000"
 
 
@@ -66,6 +73,44 @@ def test_admin_api_key_still_goes_through_entitlement_check(monkeypatch: pytest.
 
     with pytest.raises(EntitlementDeniedError):
         resolve_caller_identity(authorization="Bearer ai-circus-2026", scenario_slug="mpm", settings=FakeSettings())
+
+
+def test_engineering_demo_api_key_resolves_to_engineering_demo_org(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An exact ENGINEERING_DEMO_API_KEY bearer match resolves to ENGINEERING_DEMO_ORG_ID, not admin/Logto."""
+    _allow_entitlement(monkeypatch)
+
+    identity = resolve_caller_identity(
+        authorization="Bearer ai-circus-engineering-2026", scenario_slug="mpm", settings=FakeSettings()
+    )
+
+    assert identity.org_id == ENGINEERING_DEMO_ORG_ID
+    assert identity.subject == "engineering-demo"
+
+
+def test_engineering_demo_api_key_still_goes_through_entitlement_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Engineering-demo access is a real (scoped) entitlement, not a bypass — deny it and confirm 403-equivalent."""
+    _deny_entitlement(monkeypatch)
+
+    with pytest.raises(EntitlementDeniedError):
+        resolve_caller_identity(
+            authorization="Bearer ai-circus-engineering-2026", scenario_slug="churn", settings=FakeSettings()
+        )
+
+
+def test_no_engineering_demo_api_key_configured_skips_that_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A falsy ENGINEERING_DEMO_API_KEY never matches — falls through to (here, mocked) Logto validation instead."""
+
+    def raise_invalid(*_args: object, **_kwargs: object) -> Identity:
+        raise TokenValidationError("bad signature")
+
+    monkeypatch.setattr(auth_module, "validate_token", raise_invalid)
+
+    with pytest.raises(TokenValidationError):
+        resolve_caller_identity(
+            authorization="Bearer ai-circus-engineering-2026",
+            scenario_slug="churn",
+            settings=FakeSettings(ADMIN_API_KEY=None, ENGINEERING_DEMO_API_KEY=None),
+        )
 
 
 def test_wrong_admin_api_key_falls_through_to_logto_path(monkeypatch: pytest.MonkeyPatch) -> None:

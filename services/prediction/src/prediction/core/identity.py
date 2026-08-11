@@ -40,6 +40,9 @@ def resolve_identity(scenario_slug: str, authorization: str | None = Header(defa
         LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
         LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
         ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
+        ENGINEERING_DEMO_API_KEY=(
+            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+        ),
         PLATFORM_REGISTRY_URL=config.PLATFORM_REGISTRY_URL,
     )
     try:

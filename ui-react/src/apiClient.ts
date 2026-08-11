@@ -146,6 +146,17 @@ export async function verifyAdminKey(baseUrl: string, adminKey: string): Promise
   return response.status !== 401;
 }
 
+/**
+ * Confirms an engineering-demo key is real before the login screen commits to it —
+ * same reasoning as verifyAdminKey above, against platform-registry's dedicated
+ * verify-engineering-demo-key endpoint (this key isn't admin-gated, so it can't use
+ * /llm-settings/active-model).
+ */
+export async function verifyEngineeringDemoKey(baseUrl: string, demoKey: string): Promise<boolean> {
+  const response = await fetch(`${baseUrl}/auth/verify-engineering-demo-key`, { headers: headers(demoKey) });
+  return response.status !== 401;
+}
+
 export async function predict(
   baseUrl: string,
   scenarioSlug: string,

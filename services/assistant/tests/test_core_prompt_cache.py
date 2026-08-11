@@ -62,6 +62,10 @@ class FakeObjectStore:
         self.get_calls.append((org_id, path))
         return self._objects[org_id, path]
 
+    def exists(self, org_id: str, path: str) -> bool:
+        """Mirror ObjectStore.exists() against the in-memory object map."""
+        return (org_id, path) in self._objects
+
 
 @pytest.fixture
 def stores() -> dict[str, FakeObjectStore]:
@@ -79,7 +83,7 @@ def test_get_builds_prompt_on_first_call(
     stores: dict[str, FakeObjectStore], definitions: dict[str, ScenarioDefinition]
 ) -> None:
     """A cache miss loads metadata and builds the grounding system prompt."""
-    cache = SystemPromptCache(stores, definitions)
+    cache = SystemPromptCache(stores, definitions, fallback_org_id="fallback-org")
 
     prompt = cache.get("org-1", "churn")
 
@@ -92,7 +96,7 @@ def test_get_caches_across_calls(
     stores: dict[str, FakeObjectStore], definitions: dict[str, ScenarioDefinition]
 ) -> None:
     """A second call for the same (org, scenario) doesn't hit the store again."""
-    cache = SystemPromptCache(stores, definitions)
+    cache = SystemPromptCache(stores, definitions, fallback_org_id="fallback-org")
 
     cache.get("org-1", "churn")
     cache.get("org-1", "churn")
@@ -100,11 +104,24 @@ def test_get_caches_across_calls(
     assert len(stores["churn"].get_calls) == 1
 
 
+def test_get_falls_back_to_shared_baseline_org_when_tenant_has_no_model(
+    stores: dict[str, FakeObjectStore], definitions: dict[str, ScenarioDefinition]
+) -> None:
+    """A tenant with no trained model of its own (e.g. the admin/engineering-demo
+    bypass orgs) gets the fallback org's grounding metadata instead of a KeyError.
+    """
+    cache = SystemPromptCache(stores, definitions, fallback_org_id="org-1")
+
+    prompt = cache.get("new-tenant-with-no-model", "churn")
+
+    assert "random_forest" in prompt
+
+
 def test_different_scenarios_are_cached_independently(
     stores: dict[str, FakeObjectStore], definitions: dict[str, ScenarioDefinition]
 ) -> None:
     """Same org, different scenario_slug — each builds from its own store/definition."""
-    cache = SystemPromptCache(stores, definitions)
+    cache = SystemPromptCache(stores, definitions, fallback_org_id="fallback-org")
 
     churn_prompt = cache.get("org-1", "churn")
     mpm_prompt = cache.get("org-1", "mpm")

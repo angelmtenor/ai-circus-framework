@@ -39,9 +39,16 @@ TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 0
 
 
-def load_normalized(store: ObjectStore, org_id: str) -> pd.DataFrame:
-    """Load the tenant's cleaned (not yet one-hot-encoded) dataset."""
-    return pd.read_parquet(io.BytesIO(store.get(org_id, NORMALIZED_DATASET_KEY)))
+def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd.DataFrame:
+    """Load the tenant's cleaned (not yet one-hot-encoded) dataset.
+
+    Mirrors ModelCache.get()'s fallback: a tenant without its own copy of the dataset
+    in MinIO yet (e.g. the admin/engineering-demo bypass orgs, or a brand-new Logto
+    organization) gets `fallback_org_id`'s (matching training's ORG_ID) instead of a
+    404 — every tenant otherwise 500s on the Data tab until it's retrained its own.
+    """
+    load_org_id = org_id if store.exists(org_id, NORMALIZED_DATASET_KEY) else fallback_org_id
+    return pd.read_parquet(io.BytesIO(store.get(load_org_id, NORMALIZED_DATASET_KEY)))
 
 
 @dataclass(frozen=True)

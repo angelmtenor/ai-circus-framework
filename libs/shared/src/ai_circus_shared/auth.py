@@ -35,6 +35,13 @@ ORG_CLAIM = "organization_id"
 # real, auditable, self-maintaining entitlement row for the admin credential below.
 ADMIN_ORG_ID = "admin"
 
+# A second, narrower demo tenant — auto-granted (at seed time, see
+# platform-registry/core/seed.py's ENGINEERING_DEMO_SCENARIOS) only the engineering
+# tabular_ml scenarios (mpm, electric_motor, energy_building), not every scenario.
+# Same bypass mechanism as ADMIN_ORG_ID (an exact ENGINEERING_DEMO_API_KEY bearer
+# match), just scoped by which scenarios are seeded for this org id.
+ENGINEERING_DEMO_ORG_ID = "engineering-demo"
+
 
 @dataclass(frozen=True)
 class Identity:
@@ -105,6 +112,7 @@ class AuthSettings(Protocol):
     LOGTO_API_RESOURCE_INDICATOR: str | None
     LOGTO_JWKS_URL: str | None
     ADMIN_API_KEY: str | None
+    ENGINEERING_DEMO_API_KEY: str | None
     PLATFORM_REGISTRY_URL: str
 
 
@@ -128,6 +136,7 @@ class AuthSettingsAdapter:
     LOGTO_API_RESOURCE_INDICATOR: str | None
     LOGTO_JWKS_URL: str | None
     ADMIN_API_KEY: str | None
+    ENGINEERING_DEMO_API_KEY: str | None
     PLATFORM_REGISTRY_URL: str
 
 
@@ -141,11 +150,15 @@ def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool
 def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, settings: AuthSettings) -> Identity:
     """Resolve the caller's identity, then enforce the scenario entitlement.
 
-    Three ways to resolve an identity, tried in order: (1) `AUTH_DISABLED=true` dev
+    Four ways to resolve an identity, tried in order: (1) `AUTH_DISABLED=true` dev
     bypass — a fixed identity, no token needed; (2) an exact `ADMIN_API_KEY` bearer
-    match — resolves to the `ADMIN_ORG_ID` tenant; (3) a real Logto access token.
-    Every path then goes through the *same* `check_entitlement` call — admin access
-    is a real, seeded entitlement row (see `ADMIN_ORG_ID`), not a bypass of it.
+    match — resolves to the `ADMIN_ORG_ID` tenant; (3) an exact
+    `ENGINEERING_DEMO_API_KEY` bearer match — resolves to the narrower
+    `ENGINEERING_DEMO_ORG_ID` tenant; (4) a real Logto access token. Every path then
+    goes through the *same* `check_entitlement` call — admin/engineering-demo access
+    is a real, seeded entitlement row (see `ADMIN_ORG_ID`/`ENGINEERING_DEMO_ORG_ID`),
+    not a bypass of it, so the demo key only ever unlocks whatever's actually seeded
+    for it.
 
     Raises:
         TokenValidationError: No/malformed token, or a token with no org claim.
@@ -159,6 +172,9 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
     elif settings.ADMIN_API_KEY and is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
         admin_role = f"scenario:{scenario_slug}"
         identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=frozenset({admin_role}))
+    elif settings.ENGINEERING_DEMO_API_KEY and is_admin_bearer_token(authorization, settings.ENGINEERING_DEMO_API_KEY):
+        demo_role = f"scenario:{scenario_slug}"
+        identity = Identity(subject="engineering-demo", org_id=ENGINEERING_DEMO_ORG_ID, roles=frozenset({demo_role}))
     else:
         if not authorization or not authorization.startswith("Bearer "):
             raise TokenValidationError("Missing or malformed Authorization header.")

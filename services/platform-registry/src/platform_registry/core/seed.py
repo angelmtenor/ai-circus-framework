@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_circus_shared.auth import ADMIN_ORG_ID
+from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
 from ai_circus_shared.scenario_schema import load_all
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +20,11 @@ from platform_registry.core.logger import get_logger
 from platform_registry.core.models import Entitlement, LlmSetting, Scenario
 
 logger = get_logger(__name__)
+
+# Scenarios auto-granted to ENGINEERING_DEMO_ORG_ID at seed time — the "engineering
+# demo" login is deliberately scoped to these three tabular_ml scenarios only, not
+# every scenario like ADMIN_ORG_ID (see resolve_caller_identity in ai_circus_shared.auth).
+ENGINEERING_DEMO_SCENARIOS = frozenset({"mpm", "electric_motor", "energy_building"})
 
 
 def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
@@ -77,6 +82,13 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         )
         if session.scalars(admin_stmt).first() is None:
             session.add(Entitlement(org_id=ADMIN_ORG_ID, scenario_slug=definition.slug))
+
+        if definition.slug in ENGINEERING_DEMO_SCENARIOS:
+            demo_stmt = select(Entitlement).where(
+                Entitlement.org_id == ENGINEERING_DEMO_ORG_ID, Entitlement.scenario_slug == definition.slug
+            )
+            if session.scalars(demo_stmt).first() is None:
+                session.add(Entitlement(org_id=ENGINEERING_DEMO_ORG_ID, scenario_slug=definition.slug))
 
         slugs.append(definition.slug)
 

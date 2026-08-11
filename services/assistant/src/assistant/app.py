@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     app.state.definitions = definitions
-    app.state.prompt_cache = SystemPromptCache(stores, definitions)
+    app.state.prompt_cache = SystemPromptCache(stores, definitions, fallback_org_id=config.SHARED_MODEL_ORG_ID)
     llm_api_key = config.LLM_GATEWAY_API_KEY.get_secret_value()
     app.state.llm_client = OpenAI(base_url=config.LLM_GATEWAY_URL, api_key=llm_api_key)
 

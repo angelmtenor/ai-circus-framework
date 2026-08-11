@@ -84,6 +84,12 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: DEV_ORG_ID
     description: "Org id used for every request when AUTH_DISABLED=true"
     type: string

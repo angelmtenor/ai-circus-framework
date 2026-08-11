@@ -45,3 +45,6 @@ infra/logto/data/
 project.zip
 dist/
 build/
+
+# Local demo/video assets (screenshots + narration script)
+demo/

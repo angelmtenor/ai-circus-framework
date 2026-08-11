@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from ai_circus_shared.auth import ADMIN_ORG_ID
+from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -119,13 +119,22 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
     }
 
 
+def test_seed_scenarios_auto_grants_engineering_demo_org_only_the_engineering_scenarios(session: Session) -> None:
+    """The engineering-demo org gets a real, seeded entitlement to exactly mpm/electric_motor/energy_building."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    demo_slugs = {e.scenario_slug for e in session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID)}
+    assert demo_slugs == {"mpm", "electric_motor", "energy_building"}
+
+
 def test_seed_scenarios_is_idempotent(session: Session) -> None:
-    """Re-seeding updates scenarios and admin entitlements in place, without duplicates."""
+    """Re-seeding updates scenarios and admin/engineering-demo entitlements in place, without duplicates."""
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
     assert session.query(Scenario).count() == 7
     assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 7
+    assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
 def test_seed_default_llm_setting_inserts_on_first_boot(session: Session) -> None:

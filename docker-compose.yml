@@ -163,6 +163,7 @@ services:
       # Back the admin-only /llm-settings/* endpoints (view/test/configure
       # llm-gateway's provider models) — see platform_registry/core/llm_settings.py.
       ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
@@ -220,6 +221,7 @@ services:
       # Logto is configured; see prediction/settings.yaml.
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
@@ -322,6 +324,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-llama3}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
@@ -405,6 +408,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-llama3}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
       LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks

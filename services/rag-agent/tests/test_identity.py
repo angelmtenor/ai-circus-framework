@@ -27,6 +27,7 @@ class FakeConfig:
         self.LOGTO_API_RESOURCE_INDICATOR = "https://api.ai-circus-framework.local"
         self.LOGTO_JWKS_URL = "http://logto.localhost/oidc/jwks"
         self.ADMIN_API_KEY = SecretStr("ai-circus-2026")
+        self.ENGINEERING_DEMO_API_KEY = SecretStr("ai-circus-engineering-2026")
         self.PLATFORM_REGISTRY_URL = "http://platform-registry:8000"
 
 
@@ -47,6 +48,24 @@ def test_admin_api_key_is_unwrapped_from_secretstr(monkeypatch: pytest.MonkeyPat
     assert isinstance(settings, AuthSettingsAdapter)
     assert settings.ADMIN_API_KEY == "ai-circus-2026"
     assert captured["scenario_slug"] == "docs_rag"
+
+
+def test_engineering_demo_api_key_is_unwrapped_from_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The SecretStr ENGINEERING_DEMO_API_KEY is passed to the shared function as a plain str."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
+    captured: dict[str, object] = {}
+
+    def fake_resolve(**kwargs: object) -> Identity:
+        captured.update(kwargs)
+        return Identity(subject="engineering-demo", org_id="engineering-demo", roles=frozenset())
+
+    monkeypatch.setattr(identity_module, "resolve_caller_identity", fake_resolve)
+
+    identity_module.resolve_identity(scenario_slug="mpm", authorization="Bearer ai-circus-engineering-2026")
+
+    settings = captured["settings"]
+    assert isinstance(settings, AuthSettingsAdapter)
+    assert settings.ENGINEERING_DEMO_API_KEY == "ai-circus-engineering-2026"
 
 
 def test_token_validation_error_becomes_401(monkeypatch: pytest.MonkeyPatch) -> None:

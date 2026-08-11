@@ -20,16 +20,21 @@ function LoginScreen({
   logo,
   onLogin,
   onLoginWithAdminKey,
+  onLoginWithEngineeringDemoKey,
 }: {
   logo: string;
   onLogin: (orgId: string, roles: string[]) => void;
   onLoginWithAdminKey: (adminKey: string) => Promise<void>;
+  onLoginWithEngineeringDemoKey: (demoKey: string) => Promise<void>;
 }) {
   const [orgId, setOrgId] = useState(config.devOrgId);
   const [roles, setRoles] = useState("scenario:churn,scenario:ai_circus_reference");
   const [adminKey, setAdminKey] = useState("");
   const [adminKeyError, setAdminKeyError] = useState<string | null>(null);
   const [adminKeyChecking, setAdminKeyChecking] = useState(false);
+  const [engineeringDemoKey, setEngineeringDemoKey] = useState("");
+  const [engineeringDemoKeyError, setEngineeringDemoKeyError] = useState<string | null>(null);
+  const [engineeringDemoKeyChecking, setEngineeringDemoKeyChecking] = useState(false);
 
   async function submitAdminKey() {
     setAdminKeyChecking(true);
@@ -40,6 +45,18 @@ function LoginScreen({
       setAdminKeyError((e as Error).message);
     } finally {
       setAdminKeyChecking(false);
+    }
+  }
+
+  async function submitEngineeringDemoKey() {
+    setEngineeringDemoKeyChecking(true);
+    setEngineeringDemoKeyError(null);
+    try {
+      await onLoginWithEngineeringDemoKey(engineeringDemoKey);
+    } catch (e) {
+      setEngineeringDemoKeyError((e as Error).message);
+    } finally {
+      setEngineeringDemoKeyChecking(false);
     }
   }
 
@@ -82,6 +99,30 @@ function LoginScreen({
           {adminKeyError && <p className="error">{adminKeyError}</p>}
         </details>
 
+        <details className="login-section login-details">
+          <summary>Engineering demo login</summary>
+          <p className="dev-warning">
+            Resolves to a demo tenant entitled to only the engineering scenarios (predictive maintenance, electric
+            motor, building energy).
+          </p>
+          <label>
+            Engineering demo key
+            <input
+              type="password"
+              value={engineeringDemoKey}
+              onChange={(e) => setEngineeringDemoKey(e.target.value)}
+            />
+          </label>
+          <button
+            className="btn-primary"
+            onClick={submitEngineeringDemoKey}
+            disabled={!engineeringDemoKey || engineeringDemoKeyChecking}
+          >
+            {engineeringDemoKeyChecking ? "Checking…" : "Log in as engineering demo"}
+          </button>
+          {engineeringDemoKeyError && <p className="error">{engineeringDemoKeyError}</p>}
+        </details>
+
         {!config.devMode && (
           <div className="login-section">
             <button className="btn-primary" onClick={() => onLogin("", [])}>
@@ -95,7 +136,7 @@ function LoginScreen({
 }
 
 export default function App() {
-  const { identity, loading, logIn, logInWithAdminKey, logOut } = useIdentity();
+  const { identity, loading, logIn, logInWithAdminKey, logInWithEngineeringDemoKey, logOut } = useIdentity();
   const { theme, themes, setThemeId } = useTheme();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
@@ -114,7 +155,15 @@ export default function App() {
   }, [identity]);
 
   if (loading) return <div className="app-loading">Loading…</div>;
-  if (!identity) return <LoginScreen logo={theme.logo} onLogin={logIn} onLoginWithAdminKey={logInWithAdminKey} />;
+  if (!identity)
+    return (
+      <LoginScreen
+        logo={theme.logo}
+        onLogin={logIn}
+        onLoginWithAdminKey={logInWithAdminKey}
+        onLoginWithEngineeringDemoKey={logInWithEngineeringDemoKey}
+      />
+    );
 
   return (
     <div className="app-shell">

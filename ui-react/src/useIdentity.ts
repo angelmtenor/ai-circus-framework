@@ -1,6 +1,6 @@
 import { useLogto } from "@logto/react";
 import { useEffect, useState } from "react";
-import { verifyAdminKey } from "./apiClient";
+import { verifyAdminKey, verifyEngineeringDemoKey } from "./apiClient";
 import { config } from "./config";
 
 export type Identity = {
@@ -11,11 +11,15 @@ export type Identity = {
 
 const DEV_STORAGE_KEY = "ai-circus-framework:dev-identity";
 const ADMIN_STORAGE_KEY = "ai-circus-framework:admin-identity";
+const ENGINEERING_DEMO_STORAGE_KEY = "ai-circus-framework:engineering-demo-identity";
 // Must match ai_circus_shared.auth.ADMIN_ORG_ID — the backend resolves any request
 // bearing a matching ADMIN_API_KEY bearer token to this org id regardless of what
 // the client sends, but list_scenarios(org_id=...) needs the right value to show
 // the same entitlements.
 const ADMIN_ORG_ID = "admin";
+// Must match ai_circus_shared.auth.ENGINEERING_DEMO_ORG_ID — same reasoning as
+// ADMIN_ORG_ID above, for the narrower engineering-demo bearer key.
+const ENGINEERING_DEMO_ORG_ID = "engineering-demo";
 
 /**
  * Resolves the caller's identity — DEV_MODE bypass (mirrors the backend services'
@@ -31,6 +35,7 @@ export function useIdentity(): {
   loading: boolean;
   logIn: (orgId: string, roles: string[]) => void;
   logInWithAdminKey: (adminKey: string) => Promise<void>;
+  logInWithEngineeringDemoKey: (demoKey: string) => Promise<void>;
   logOut: () => void;
 } {
   const { isAuthenticated, isLoading, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
@@ -48,6 +53,13 @@ export function useIdentity(): {
     const storedAdmin = sessionStorage.getItem(ADMIN_STORAGE_KEY);
     if (storedAdmin) {
       setIdentity(JSON.parse(storedAdmin));
+      setLoading(false);
+      return;
+    }
+
+    const storedEngineeringDemo = sessionStorage.getItem(ENGINEERING_DEMO_STORAGE_KEY);
+    if (storedEngineeringDemo) {
+      setIdentity(JSON.parse(storedEngineeringDemo));
       setLoading(false);
       return;
     }
@@ -101,12 +113,25 @@ export function useIdentity(): {
       sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(admin));
       setIdentity(admin);
     },
+    logInWithEngineeringDemoKey: async (demoKey: string) => {
+      // Same verify-before-commit reasoning as logInWithAdminKey above, against the
+      // dedicated /auth/verify-engineering-demo-key endpoint (this key isn't admin-gated).
+      const valid = await verifyEngineeringDemoKey(config.platformRegistryUrl, demoKey);
+      if (!valid) {
+        throw new Error("Invalid engineering demo key.");
+      }
+      const engineeringDemo: Identity = { orgId: ENGINEERING_DEMO_ORG_ID, roles: [], accessToken: demoKey };
+      sessionStorage.setItem(ENGINEERING_DEMO_STORAGE_KEY, JSON.stringify(engineeringDemo));
+      setIdentity(engineeringDemo);
+    },
     logOut: () => {
       const hadAdminIdentity = sessionStorage.getItem(ADMIN_STORAGE_KEY) !== null;
+      const hadEngineeringDemoIdentity = sessionStorage.getItem(ENGINEERING_DEMO_STORAGE_KEY) !== null;
       localStorage.removeItem(DEV_STORAGE_KEY);
       sessionStorage.removeItem(ADMIN_STORAGE_KEY);
-      if (config.devMode || hadAdminIdentity) {
-        // Neither DEV_MODE nor the admin-key path involves a real Logto session.
+      sessionStorage.removeItem(ENGINEERING_DEMO_STORAGE_KEY);
+      if (config.devMode || hadAdminIdentity || hadEngineeringDemoIdentity) {
+        // Neither DEV_MODE nor the admin-key/engineering-demo-key paths involve a real Logto session.
         setIdentity(null);
         return;
       }

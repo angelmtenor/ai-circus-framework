@@ -76,6 +76,22 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/auth/verify-engineering-demo-key")
+def verify_engineering_demo_key(authorization: str | None = Header(default=None)) -> dict[str, bool]:
+    """Confirms a bearer token matches ENGINEERING_DEMO_API_KEY — mirrors require_admin's
+    ADMIN_API_KEY check. ui-react's login screen calls this before committing to the
+    engineering-demo login, the same way it already confirms an admin key via
+    /llm-settings/active-model (see apiClient.verifyAdminKey's docstring): /entitlements
+    itself has no auth check, so without this a bad key would still land on the scenario
+    picker and only fail once a scenario's own predict/chat call 401s.
+    """
+    config = get_env_config()
+    demo_key = config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+    if not demo_key or not is_admin_bearer_token(authorization, demo_key):
+        raise HTTPException(status_code=401, detail="Invalid engineering demo key.")
+    return {"valid": True}
+
+
 @router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary])
 def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)) -> list[Scenario]:
     """Return the scenarios the given tenant (Logto Organization) is entitled to."""

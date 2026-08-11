@@ -12,7 +12,8 @@ endif
 CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
-.PHONY: help bootstrap up up-infra down logs pipeline new-service sync-shared check-all clean ollama-up
+.PHONY: help bootstrap up up-infra down logs pipeline new-service sync-shared check-all clean ollama-up \
+	all reset-all wait-infra wait-services verify
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -45,6 +46,117 @@ pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start pre
 
 ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; pulls llama3.2:3b, ~2GB, on first run)
 	@docker compose --profile ollama up -d ollama ollama-pull
+
+# ── One-shot setup / troubleshooting ────────────────────────────────────────────
+#
+# `all` exists because the individual steps above have a real ordering dependency
+# (`up` before `pipeline`, both after `up-infra`'s containers are actually healthy —
+# not just "started") that's easy to get wrong on a fresh clone, especially on a
+# machine other than the one the repo was first set up on. `verify` reproduces the
+# exact request the browser's login screen makes, so a "Failed to fetch" in the UI
+# can be diagnosed here, with logs, before it's ever a browser mystery.
+
+all: ## One-shot: bootstrap .env, start infra+services, run both pipelines, verify the admin tenant end-to-end (safe to re-run any time; use this instead of the individual up-infra/up/pipeline steps unless you need finer control)
+	@$(MAKE) bootstrap
+	@$(MAKE) up-infra
+	@$(MAKE) wait-infra
+	@$(MAKE) up
+	@$(MAKE) wait-services
+	@$(MAKE) pipeline
+	@echo "▶ vectorizing the conversational_rag scenario's reference docs..."
+	@docker compose up --build etl-vectorize
+	@$(MAKE) verify
+	@echo ""
+	@echo "🎉 ai-circus-framework is up — open http://react.localhost, expand 'Admin key login', and use the ADMIN_API_KEY from .env."
+	@if [ -z "$$OPENAI_API_KEY$$GOOGLE_API_KEY$$AZURE_OPENAI_API_KEY$$DEEPSEEK_API_KEY$$GROQ_API_KEY$$OPENROUTER_API_KEY$$ANTHROPIC_API_KEY" ]; then \
+		echo "ℹ️  No LLM provider key set in .env — chat (assistant/rag-agent) won't answer yet."; \
+		echo "   Add one provider key to .env then 'make up', or run 'make ollama-up' for a free local fallback."; \
+	fi
+
+reset-all: ## Nuke containers + volumes + per-service build artifacts, then rebuild fresh via `make all` — the fastest way back to a known-good state, and what to run before sharing this repo so it's proven from a clean slate
+	@echo "🧹 tearing down containers + volumes (postgres/logto/qdrant/minio data all reset)..."
+	@docker compose down -v
+	@$(MAKE) all
+
+wait-infra: ## Wait for postgres+logto to report healthy (internal step of `make all`; also handy standalone if `make up-infra` seems stuck)
+	@echo "⏳ waiting for postgres..."
+	@i=0; until [ "$$(docker compose ps postgres --format '{{.Health}}' 2>/dev/null)" = "healthy" ]; do \
+		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ postgres never became healthy — check: docker compose logs postgres"; exit 1; }; \
+		sleep 2; \
+	done
+	@echo "⏳ waiting for logto (first boot seeds its own DB — can take a couple of minutes)..."
+	@i=0; until [ "$$(docker compose ps logto --format '{{.Health}}' 2>/dev/null)" = "healthy" ]; do \
+		i=$$((i+1)); [ $$i -ge 90 ] && { echo "❌ logto never became healthy — check: docker compose logs logto"; exit 1; }; \
+		sleep 2; \
+	done
+	@echo "✓ infra healthy"
+
+wait-services: ## Wait for platform-registry and every Traefik-routed backend to answer real requests (internal step of `make all`)
+	@echo "⏳ waiting for platform-registry..."
+	@i=0; until curl -sf "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/healthz" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ platform-registry never came up — check: docker compose logs platform-registry"; exit 1; }; \
+		sleep 2; \
+	done
+	@for host in prediction assistant rag-agent; do \
+		echo "⏳ waiting for $$host.localhost (via Traefik)..."; \
+		i=0; until curl -sf "http://$$host.localhost/healthz" >/dev/null 2>&1; do \
+			i=$$((i+1)); \
+			[ $$i -ge 60 ] && { echo "❌ $$host.localhost never answered — check: docker compose logs $$host, and that 'getent hosts $$host.localhost' resolves to 127.0.0.1"; exit 1; }; \
+			sleep 2; \
+		done; \
+	done
+	@echo "⏳ waiting for react.localhost..."
+	@i=0; until curl -sf "http://react.localhost/" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ react.localhost never answered — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; }; \
+		sleep 2; \
+	done
+	@echo "✓ all services answering"
+
+verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant end-to-end — the exact calls the login screen makes — catches "Failed to fetch"-class setup issues before you open a browser
+	@echo "🔎 verifying admin tenant end-to-end..."
+	@key="$${ADMIN_API_KEY:-ai-circus-2026}"; \
+	code=$$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/llm-settings/active-model"); \
+	if [ "$$code" = "401" ]; then \
+		echo "❌ ADMIN_API_KEY in .env doesn't match what platform-registry is running with — after editing .env, run 'make up' to recreate it"; exit 1; \
+	fi; \
+	echo "  ✓ admin key accepted by platform-registry ($$code)"
+	@n=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
+	if [ "$$n" -gt 0 ]; then echo "  ✓ admin tenant is entitled to $$n scenario(s)"; \
+	else echo "❌ admin tenant has 0 entitled scenarios — scenario seeding may have failed, check: docker compose logs platform-registry"; exit 1; fi
+	@for host in prediction assistant rag-agent; do \
+		code=$$(curl -s -o /dev/null -w '%{http_code}' "http://$$host.localhost/healthz"); \
+		if [ "$$code" = "200" ]; then echo "  ✓ $$host.localhost reachable ($$code)"; \
+		else echo "❌ $$host.localhost -> $$code — this is the exact failure behind a browser 'Failed to fetch'. Check: docker compose ps, docker compose logs $$host, and 'getent hosts $$host.localhost'"; exit 1; fi; \
+	done
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://react.localhost/"); \
+	if [ "$$code" = "200" ]; then echo "  ✓ react.localhost reachable ($$code)"; \
+	else echo "❌ react.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
+	@echo "✓ admin tenant verified — http://react.localhost is ready for 'Admin key login'"
+	@demo_key="$${ENGINEERING_DEMO_API_KEY:-}"; \
+	if [ -z "$$demo_key" ]; then \
+		echo "ℹ️  ENGINEERING_DEMO_API_KEY not set in .env — skipping engineering-demo tenant checks"; \
+		exit 0; \
+	fi; \
+	echo "🔎 verifying engineering-demo tenant is scoped correctly..."; \
+	code=$$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $$demo_key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/auth/verify-engineering-demo-key"); \
+	if [ "$$code" != "200" ]; then \
+		echo "❌ ENGINEERING_DEMO_API_KEY in .env doesn't match what platform-registry is running with ($$code) — after editing .env, run 'make up' to recreate it"; exit 1; \
+	fi; \
+	echo "  ✓ engineering demo key accepted by platform-registry ($$code)"; \
+	slugs=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/engineering-demo" | grep -o '"slug":"[a-z_]*"' | sort); \
+	expected=$$(printf '"slug":"electric_motor"\n"slug":"energy_building"\n"slug":"mpm"'); \
+	if [ "$$slugs" = "$$expected" ]; then \
+		echo "  ✓ engineering-demo tenant is entitled to exactly mpm/electric_motor/energy_building"; \
+	else \
+		echo "❌ engineering-demo tenant entitlements don't match — expected mpm/electric_motor/energy_building, got:"; echo "$$slugs"; exit 1; \
+	fi; \
+	code=$$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $$demo_key" -H "Content-Type: application/json" -d '{"records":[]}' "http://prediction.localhost/predict/churn"); \
+	if [ "$$code" = "403" ]; then \
+		echo "  ✓ engineering-demo key correctly denied access to an out-of-scope scenario (churn -> 403)"; \
+	else \
+		echo "❌ engineering-demo key was NOT denied access to churn (got $$code, expected 403) — scoping enforcement is broken"; exit 1; \
+	fi; \
+	echo "✓ engineering-demo tenant verified — scoped to exactly mpm/electric_motor/energy_building"
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 

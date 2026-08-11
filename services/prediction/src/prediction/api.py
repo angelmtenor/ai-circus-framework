@@ -167,7 +167,7 @@ def dataset_sample_endpoint(
     assert identity.org_id is not None
     assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
     store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id)
+    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
     columns = [*definition.dataset.feature_columns, definition.dataset.target]
     sample = dataset_core.sample_rows(df, columns, limit)
     return DatasetSampleOut(columns=sample.columns, rows=sample.rows, total_rows=sample.total_rows)
@@ -187,7 +187,7 @@ def dataset_evaluation_endpoint(
     assert identity.org_id is not None
     artifacts = model_cache.get(identity.org_id, definition.slug)
     store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id)
+    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
     result = dataset_core.evaluate(artifacts, df, limit)
     return DatasetEvaluationOut(
         task_type=result.task_type,
@@ -217,7 +217,7 @@ def dataset_explainability_endpoint(
     assert identity.org_id is not None
     artifacts = model_cache.get(identity.org_id, definition.slug)
     store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id)
+    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
     feature_importance, sample_size = dataset_core.shap_importance(artifacts, df, limit)
     return DatasetExplainabilityOut(
         feature_importance=[FeatureImportanceOut(**f) for f in feature_importance],

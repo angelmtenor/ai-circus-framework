@@ -27,10 +27,21 @@ logger = get_logger(__name__)
 class SystemPromptCache:
     """Lazily builds and caches the grounding system prompt per (org_id, scenario_slug)."""
 
-    def __init__(self, stores: dict[str, ObjectStore], definitions: dict[str, ScenarioDefinition]) -> None:
-        """Bind this cache to one ObjectStore + ScenarioDefinition per loaded scenario_slug."""
+    def __init__(
+        self,
+        stores: dict[str, ObjectStore],
+        definitions: dict[str, ScenarioDefinition],
+        fallback_org_id: str,
+    ) -> None:
+        """Bind this cache to one ObjectStore + ScenarioDefinition per loaded scenario_slug.
+
+        `fallback_org_id` mirrors prediction's ModelCache: the tenant (matching
+        training's ORG_ID) every other tenant's metadata lookup falls back to until it
+        has its own trained model in MinIO.
+        """
         self._stores = stores
         self._definitions = definitions
+        self._fallback_org_id = fallback_org_id
         self._cache: dict[tuple[str, str], str] = {}
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
@@ -50,7 +61,18 @@ class SystemPromptCache:
 
         with self._lock_for(key):
             if key not in self._cache:
-                logger.info("Building system prompt for org={} scenario={} (cache miss)", *key)
-                metadata = json.loads(self._stores[scenario_slug].get(org_id, MODEL_METADATA_KEY))
+                store = self._stores[scenario_slug]
+                # Tenants without their own trained model yet share the baseline org's
+                # metadata — see __init__'s fallback_org_id docstring.
+                load_org_id = org_id if store.exists(org_id, MODEL_METADATA_KEY) else self._fallback_org_id
+                if load_org_id != org_id:
+                    logger.info(
+                        "No model metadata for org={} scenario={} yet — falling back to shared baseline org={}",
+                        org_id,
+                        scenario_slug,
+                        load_org_id,
+                    )
+                logger.info("Building system prompt for org={} scenario={} (cache miss)", org_id, scenario_slug)
+                metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
                 self._cache[key] = build_system_prompt(self._definitions[scenario_slug], metadata)
         return self._cache[key]

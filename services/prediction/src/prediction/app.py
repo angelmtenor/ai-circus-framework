@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     app.state.definitions = definitions
-    app.state.model_cache = ModelCache(stores)
+    app.state.model_cache = ModelCache(stores, fallback_org_id=config.SHARED_MODEL_ORG_ID)
 
     yield
 

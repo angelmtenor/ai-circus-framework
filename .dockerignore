@@ -1,0 +1,27 @@
+# Every service's Dockerfile builds with `context: .` (repo root) so libs/shared can
+# be COPYed alongside each services/<name>/ — without this file, every `docker build`
+# re-sends the entire repo (every service's own .venv, ui-react's node_modules, .git)
+# as build context, multiplied by however many images are being built. None of these
+# are ever COPYed into an image (Dockerfiles copy specific src/pyproject.toml/settings.yaml
+# paths only; scenarios/ is bind-mounted read-only at runtime, never baked in).
+
+.git/
+**/.venv/
+**/node_modules/
+**/dist/
+**/.vite/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/htmlcov/
+**/coverage.xml
+**/coverage.json
+**/.coverage
+scenarios/**/data/
+scenarios/**/model/
+infra/postgres/data/
+infra/qdrant/storage/
+infra/minio/data/
+infra/logto/data/

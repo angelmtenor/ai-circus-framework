@@ -41,6 +41,7 @@ class FakeEnvConfig:
         self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
         self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
         self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
+        self.SHARED_MODEL_ORG_ID = "demo"
 
 
 def build_validation_error() -> ValidationError:

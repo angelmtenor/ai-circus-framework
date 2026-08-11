@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,7 +57,14 @@ class EnvConfig(BaseSettings):
     ADMIN_API_KEY: SecretStr = Field(
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
+    ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
+        description="Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building",
+        default=None,
+    )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
+    SHARED_MODEL_ORG_ID: str = Field(
+        description="Org id whose trained model metadata every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
+    )
     LOGTO_ISSUER: str | None = Field(
         description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
         default=None,
@@ -71,7 +79,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "413f402d5cf697a3425b021a7311d4c4378dba6223980738b73ed93372fb1a46"
+_SOURCE_YAML_HASH = "f8b77d2e6ba744d0190dd1c636dd842b3c204f19e51f5db8e75e7f4bb17fc8fb"
 
 
 EnvConfig.model_rebuild()
@@ -107,12 +115,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":
