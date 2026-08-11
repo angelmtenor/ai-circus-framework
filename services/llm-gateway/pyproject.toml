@@ -8,7 +8,7 @@ description = "ai-circus-framework llm-gateway service"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
-authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
+authors = [{ name = "Angel Martinez-Tenor", email = "angelmtenor@gmail.com" }]
 keywords = [
     "python",
     "packaging",
@@ -39,9 +39,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ai-circus-framework/llm-gateway"
-Repository = "https://github.com/ai-circus-framework/llm-gateway"
-BugTracker = "https://github.com/ai-circus-framework/llm-gateway/issues"
+Homepage = "https://github.com/angelmtenor/ai-circus-framework/tree/main/services/llm-gateway"
+Repository = "https://github.com/angelmtenor/ai-circus-framework"
+BugTracker = "https://github.com/angelmtenor/ai-circus-framework/issues"
 
 [dependency-groups]
 dev = [

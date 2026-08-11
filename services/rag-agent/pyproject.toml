@@ -8,7 +8,7 @@ description = "ai-circus-framework rag-agent service"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
-authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
+authors = [{ name = "Angel Martinez-Tenor", email = "angelmtenor@gmail.com" }]
 keywords = [
     "python",
     "packaging",
@@ -41,9 +41,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ai-circus-framework/rag-agent"
-Repository = "https://github.com/ai-circus-framework/rag-agent"
-BugTracker = "https://github.com/ai-circus-framework/rag-agent/issues"
+Homepage = "https://github.com/angelmtenor/ai-circus-framework/tree/main/services/rag-agent"
+Repository = "https://github.com/angelmtenor/ai-circus-framework"
+BugTracker = "https://github.com/angelmtenor/ai-circus-framework/issues"
 
 [dependency-groups]
 dev = [

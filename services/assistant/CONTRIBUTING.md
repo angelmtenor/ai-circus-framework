@@ -29,13 +29,17 @@ To set up your local development environment:
 1. **Fork the repository** on GitHub.
 2. **Clone your fork**:
    ```bash
-   git clone https://github.com/ai-circus-framework/assistant
+   git clone https://github.com/angelmtenor/ai-circus-framework
    ```
-3. **Run setup**:
+3. **Move into this service** (this is a monorepo — every service lives under `services/`):
+   ```bash
+   cd ai-circus-framework/services/assistant
+   ```
+4. **Run setup**:
    ```bash
    make setup
    ```
-4. **Create a feature branch**:
+5. **Create a feature branch**:
    ```bash
    git checkout -b descriptive-feature-name
    ```
