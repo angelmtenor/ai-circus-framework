@@ -29,6 +29,53 @@ button {
   cursor: pointer;
 }
 
+/* Explicit track/thumb styling for range sliders — the browser's own unstyled
+   track defaults to a near-black grey regardless of theme (only the thumb picks up
+   accent-color, set globally in index.css), which reads as a rendering bug on any
+   light theme. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
 input,
 select {
   font-family: inherit;

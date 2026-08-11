@@ -15,6 +15,7 @@ export const CHART_COLORS = {
   border: "var(--border)",
   text: "var(--text)",
   dim: "var(--dim)",
+  accent: "var(--accent)",
   green: "var(--green)",
   blue: "var(--blue)",
   amber: "var(--amber)",
@@ -49,7 +50,7 @@ export function BarList({
   signed = true,
   positiveColor = CHART_COLORS.red,
   negativeColor = CHART_COLORS.green,
-  neutralColor = CHART_COLORS.blue,
+  neutralColor = CHART_COLORS.accent,
   valueFormatter = (v: number) => v.toFixed(3),
 }: {
   items: { label: string; value: number }[];

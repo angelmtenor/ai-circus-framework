@@ -138,6 +138,13 @@ export default function App() {
             </span>
           </div>
         )}
+        {showSettings && (
+          <div className="topbar-scenario">
+            <button className="topbar-back" onClick={() => setShowSettings(false)}>
+              <Icon name="back" size={14} /> Scenarios
+            </button>
+          </div>
+        )}
         <div className="topbar-spacer" />
         <button
           className={`topbar-settings ${showSettings ? "active" : ""}`}
