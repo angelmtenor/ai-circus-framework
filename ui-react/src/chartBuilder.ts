@@ -159,7 +159,7 @@ function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[
   if (is3d) candidateRows = withFiniteNumber(candidateRows, cfg.z);
 
   const sceneOrAxes: PlotlyLayout = is3d
-    ? { scene: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, zaxis: { title: cfg.z } } }
+    ? { scene: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, zaxis: { title: cfg.z }, dragmode: "orbit" } }
     : { xaxis: { title: cfg.x }, yaxis: { title: cfg.y } };
 
   // Continuous gradient: one trace, marker.color driven by a Plotly colorscale

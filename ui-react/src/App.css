@@ -572,13 +572,24 @@ select:focus {
   padding: 0.35rem 0.5rem;
 }
 
-.chart-card-remove {
+.chart-card-header-actions {
   margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.chart-card-maximize,
+.chart-card-remove {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--dim);
   border-radius: 8px;
   padding: 0.3rem 0.5rem;
+}
+
+.chart-card-maximize:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .chart-card-remove:hover {
@@ -591,6 +602,26 @@ select:focus {
   align-items: center;
   gap: 0.4rem;
   align-self: flex-start;
+}
+
+/* ── Maximized chart card ─────────────────────────────────────────────────── */
+
+.chart-card-maximize-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  z-index: 50;
+}
+
+.panel-card--maximized {
+  width: min(96vw, 1400px);
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
 }
 
 /* ── Feature form ──────────────────────────────────────────────────────────── */

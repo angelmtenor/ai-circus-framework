@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react";
 import Plotly from "plotly.js-dist-min";
 import createPlotlyComponent from "react-plotly.js/factory";
 import type { PlotlyDatum, PlotlyLayout } from "./plotly";
@@ -7,6 +8,7 @@ import { useTheme } from "./useTheme";
 // rather than react-plotly.js's own default export, which pulls the separate,
 // heavier "plotly.js" package instead — see plotly.d.ts for why.
 const Plot = createPlotlyComponent(Plotly);
+const PlotlyResize = Plotly as unknown as { Plots: { resize: (gd: HTMLDivElement) => void } };
 
 function mergeAxis(themeAxis: unknown, chartAxis: unknown): PlotlyLayout {
   return { ...(themeAxis as PlotlyLayout | undefined), ...(chartAxis as PlotlyLayout | undefined) };
@@ -55,24 +57,60 @@ export function PlotlyChart({
 }: {
   data: PlotlyDatum[];
   layout?: PlotlyLayout;
-  height?: number;
+  /** Number (px) or any CSS height value (e.g. "70vh" for a maximized card). Applied
+   * via style, plus an explicit resize (see the effect below) so the plot's internal
+   * canvas/camera math is recalibrated to match — not react-plotly.js's own
+   * `useResizeHandler` or `config.responsive`, see why below. */
+  height?: number | string;
 }) {
   const { theme } = useTheme();
+  const gdRef = useRef<HTMLDivElement | null>(null);
+  // react-plotly.js re-runs Plotly.react() (a full update, not just a resize) whenever
+  // any prop's *reference* changes — including layout/style, which were previously
+  // recreated as fresh object literals on every render. Since Plotly.react() commits
+  // whatever camera/zoom is in `layout` right now, and a gl3d drag only writes the
+  // in-progress camera back once the gesture ends (mouseup), a re-render mid-drag
+  // (e.g. a sibling card's own state changing) would call Plotly.react() with the
+  // *last-committed* camera and visibly snap the still-uncommitted drag back to it.
+  // Memoizing on the actual content, not just object identity, keeps these stable
+  // across unrelated re-renders so Plotly.react() only fires when the chart itself
+  // truly changed.
+  const mergedLayout = useMemo(
+    () => ({
+      ...mergeLayout(theme.plotlyLayout, layout ?? {}),
+      autosize: true,
+      // A fixed uirevision tells Plotly "same interaction session, keep what the user
+      // set" instead of resetting camera/zoom/pan on every legitimate layout update too.
+      uirevision: "keep",
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(theme.plotlyLayout), JSON.stringify(layout)],
+  );
+  const style = useMemo(() => ({ width: "100%", height }), [height]);
+
+  // Deliberately not `config.responsive`/`useResizeHandler` — both keep a resize
+  // listener permanently active (a ResizeObserver on the plot's own container for the
+  // former, a window "resize" listener for the latter) for the plot's whole lifetime.
+  // A gl3d orbit drag only writes its camera back into Plotly's own state on mouse-up;
+  // any resize firing while the button is still held forces a redraw from that
+  // not-yet-updated state, which is what made a held drag visibly snap back toward
+  // where it started. Resizing only explicitly, exactly when `height` itself changes
+  // (grid card ⇄ maximized overlay), keeps the canvas calibrated for that transition
+  // without any listener left running during ordinary interaction.
+  useEffect(() => {
+    if (gdRef.current) PlotlyResize.Plots.resize(gdRef.current);
+  }, [height]);
+
   return (
     <Plot
       data={data}
-      layout={{
-        ...mergeLayout(theme.plotlyLayout, layout ?? {}),
-        height,
-        autosize: true,
-        // Without this, Plotly.react() resets any user-driven camera rotation/zoom/pan
-        // back to its default on every re-render whose layout object is a fresh
-        // reference (e.g. a sibling chart card's config changing) — a fixed
-        // uirevision tells it "same interaction session, keep what the user set".
-        uirevision: "keep",
-      }}
-      config={{ displayModeBar: false, responsive: true }}
+      layout={mergedLayout}
+      config={{ displayModeBar: false }}
+      style={style}
       className="plotly-chart"
+      onInitialized={(_figure: unknown, gd: HTMLDivElement) => {
+        gdRef.current = gd;
+      }}
     />
   );
 }

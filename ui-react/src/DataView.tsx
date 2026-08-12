@@ -318,9 +318,10 @@ function ChartCard({
   const colorByOptions = cfg.type === "scatter" || cfg.type === "scatter3d" ? allOptions : categoricalOptions;
 
   const { data, layout } = useMemo(() => buildChart(rows, cfg, palette), [rows, cfg, palette]);
+  const [maximized, setMaximized] = useState(false);
 
-  return (
-    <div className="panel-card">
+  const card = (
+    <div className={`panel-card${maximized ? " panel-card--maximized" : ""}`} onClick={(e) => maximized && e.stopPropagation()}>
       <div className="chart-card-header">
         <label>
           Chart type
@@ -394,13 +395,33 @@ function ChartCard({
             </select>
           </label>
         )}
-        {onRemove && (
-          <button className="chart-card-remove" onClick={onRemove} title="Remove chart">
-            <Icon name="close" size={14} />
+        <div className="chart-card-header-actions">
+          <button
+            className="chart-card-maximize"
+            onClick={() => setMaximized((m) => !m)}
+            title={maximized ? "Restore" : "Maximize"}
+          >
+            <Icon name={maximized ? "restore" : "maximize"} size={14} />
           </button>
-        )}
+          {onRemove && (
+            <button className="chart-card-remove" onClick={onRemove} title="Remove chart">
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
       </div>
-      {data.length > 0 ? <PlotlyChart data={data} layout={layout} /> : <p className="panel-hint">Choose fields above to render this chart.</p>}
+      {data.length > 0 ? (
+        <PlotlyChart data={data} layout={layout} height={maximized ? "70vh" : 320} />
+      ) : (
+        <p className="panel-hint">Choose fields above to render this chart.</p>
+      )}
+    </div>
+  );
+
+  if (!maximized) return card;
+  return (
+    <div className="chart-card-maximize-overlay" onClick={() => setMaximized(false)}>
+      {card}
     </div>
   );
 }

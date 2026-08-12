@@ -17,4 +17,6 @@ export type PlotParams = {
   className?: string;
   useResizeHandler?: boolean;
   onError?: (err: unknown) => void;
+  onInitialized?: (figure: unknown, graphDiv: HTMLDivElement) => void;
+  onUpdate?: (figure: unknown, graphDiv: HTMLDivElement) => void;
 };
