@@ -164,13 +164,6 @@ select:focus {
   color: var(--dim);
 }
 
-.login-details summary {
-  cursor: pointer;
-  color: var(--dim);
-  font-size: 0.85rem;
-  padding-top: 1.1rem;
-}
-
 .dev-warning {
   color: var(--amber);
   font-size: 0.78rem;

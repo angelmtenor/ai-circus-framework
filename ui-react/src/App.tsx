@@ -41,34 +41,24 @@ function LoginScreen({
 }) {
   const [orgId, setOrgId] = useState(config.devOrgId);
   const [roles, setRoles] = useState("scenario:churn,scenario:ai_circus_reference");
-  const [adminKey, setAdminKey] = useState("");
-  const [adminKeyError, setAdminKeyError] = useState<string | null>(null);
-  const [adminKeyChecking, setAdminKeyChecking] = useState(false);
-  const [engineeringDemoKey, setEngineeringDemoKey] = useState("");
-  const [engineeringDemoKeyError, setEngineeringDemoKeyError] = useState<string | null>(null);
-  const [engineeringDemoKeyChecking, setEngineeringDemoKeyChecking] = useState(false);
+  const [loginUser, setLoginUser] = useState<"admin" | "engineering-demo">("admin");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginChecking, setLoginChecking] = useState(false);
 
-  async function submitAdminKey() {
-    setAdminKeyChecking(true);
-    setAdminKeyError(null);
+  async function submitLogin() {
+    setLoginChecking(true);
+    setLoginError(null);
     try {
-      await onLoginWithAdminKey(adminKey);
+      if (loginUser === "admin") {
+        await onLoginWithAdminKey(password);
+      } else {
+        await onLoginWithEngineeringDemoKey(password);
+      }
     } catch (e) {
-      setAdminKeyError((e as Error).message);
+      setLoginError((e as Error).message);
     } finally {
-      setAdminKeyChecking(false);
-    }
-  }
-
-  async function submitEngineeringDemoKey() {
-    setEngineeringDemoKeyChecking(true);
-    setEngineeringDemoKeyError(null);
-    try {
-      await onLoginWithEngineeringDemoKey(engineeringDemoKey);
-    } catch (e) {
-      setEngineeringDemoKeyError((e as Error).message);
-    } finally {
-      setEngineeringDemoKeyChecking(false);
+      setLoginChecking(false);
     }
   }
 
@@ -100,49 +90,38 @@ function LoginScreen({
             </div>
           )}
 
-          <details className="login-section login-details">
-            <summary>Admin key login</summary>
-            <p className="dev-warning">Resolves to the admin tenant, auto-entitled to every scenario.</p>
+          <div className="login-section">
             <label>
-              Admin key
-              <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
+              User
+              <select value={loginUser} onChange={(e) => setLoginUser(e.target.value as "admin" | "engineering-demo")}>
+                <option value="admin">admin</option>
+                <option value="engineering-demo">demo engineering</option>
+              </select>
             </label>
-            <button className="btn-primary" onClick={submitAdminKey} disabled={!adminKey || adminKeyChecking}>
-              {adminKeyChecking ? "Checking…" : "Log in as admin"}
-            </button>
-            {adminKeyError && <p className="error">{adminKeyError}</p>}
-          </details>
-
-          <details className="login-section login-details">
-            <summary>Engineering demo login</summary>
             <p className="dev-warning">
-              Resolves to a demo tenant entitled to only the engineering scenarios (predictive maintenance, electric
-              motor, building energy).
+              {loginUser === "admin"
+                ? "Resolves to the admin tenant, auto-entitled to every scenario."
+                : "Resolves to a demo tenant entitled to only the engineering scenarios (predictive maintenance, electric motor, building energy)."}
             </p>
             <label>
-              Engineering demo key
-              <input
-                type="password"
-                value={engineeringDemoKey}
-                onChange={(e) => setEngineeringDemoKey(e.target.value)}
-              />
+              Password
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </label>
-            <button
-              className="btn-primary"
-              onClick={submitEngineeringDemoKey}
-              disabled={!engineeringDemoKey || engineeringDemoKeyChecking}
-            >
-              {engineeringDemoKeyChecking ? "Checking…" : "Log in as engineering demo"}
+            <button className="btn-primary" onClick={submitLogin} disabled={!password || loginChecking}>
+              {loginChecking ? "Checking…" : "Log in"}
             </button>
-            {engineeringDemoKeyError && <p className="error">{engineeringDemoKeyError}</p>}
-          </details>
+            {loginError && <p className="error">{loginError}</p>}
+          </div>
 
-          {!config.devMode && (
+          {!config.devMode && config.logtoAppId && (
             <div className="login-section">
               <button className="btn-primary" onClick={() => onLogin("", [])}>
                 Log in with Logto
               </button>
             </div>
+          )}
+          {!config.devMode && !config.logtoAppId && (
+            <p className="dev-warning">Single sign-on via Logto isn't configured yet — use the login above.</p>
           )}
         </div>
       </div>
