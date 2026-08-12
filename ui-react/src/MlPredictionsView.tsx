@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCopilotReadable } from "@copilotkit/react-core";
 import { predict, datasetSample, type ScenarioSummary, type DatasetSample } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
@@ -44,6 +45,15 @@ function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; 
 
   const isRegression = scenario.task_type === "regression";
   const contributionItems = result ? mapContributions(record, result.contributions) : [];
+
+  // Live "what's on screen" context for the chat agent — the *current* prediction,
+  // not the scenario's static grounding (see assistant's build_system_prompt). Only
+  // populated once a prediction has actually been run, so "explain this prediction"
+  // has real values to reference; null beforehand is itself meaningful (nothing run yet).
+  useCopilotReadable({
+    description: `The individual ${scenario.title} prediction currently shown to the user: input feature values, the model's predicted value, and each feature's SHAP contribution. Use this if asked to explain "this" or "the current" prediction.`,
+    value: result ? { input: record, ...result } : null,
+  });
 
   return (
     <div className="tab-panel">
@@ -106,6 +116,14 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
   const [ranked, setRanked] = useState<RankedRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Capped to the top 20 rows — enough for the agent to describe trends/outliers
+  // without ballooning every chat request with a potentially 500-row batch result.
+  // Called unconditionally (before the early return below) — React Hooks rule.
+  useCopilotReadable({
+    description: `Ranked batch predictions for ${scenario.title} currently shown to the user (top rows by predicted value, out of ${ranked?.length ?? 0} total). Use this if asked about "these results" or trends across the current batch.`,
+    value: ranked ? ranked.slice(0, 20).map((r) => ({ ...r.record, prediction: r.prediction, top_feature: r.top?.label })) : null,
+  });
 
   async function load() {
     setError(null);

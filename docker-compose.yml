@@ -340,6 +340,8 @@ services:
         condition: service_started
       llm-gateway:
         condition: service_started
+      prediction:
+        condition: service_started
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 512m

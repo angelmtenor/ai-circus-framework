@@ -10,7 +10,9 @@ any scenario-specific hardcoded column list.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
+import numpy as np
 import pandas as pd
 import shap
 from lightgbm import LGBMClassifier, LGBMRegressor
@@ -181,3 +183,49 @@ def fit_quantile_pipelines(
 def transformed_feature_names(pipeline: Pipeline) -> list[str]:
     """Return the output feature names of the pipeline's preprocessor step."""
     return list(pipeline.named_steps["preprocessor"].get_feature_names_out())
+
+
+def _aggregate_by_feature(names: list[str], values: np.ndarray, feature_columns: list[str]) -> list[dict[str, Any]]:
+    """Aggregate per-transformed-(one-hot)-column values back to the original feature
+    they came from (e.g. `cat__Geography_France` -> `Geography`), summed and ranked
+    descending. Mirrors prediction/core/dataset.py's identically-named helper — kept
+    as a small duplicate rather than a new libs/shared dependency, since it's the
+    only numpy-dependent code either service would need to share for this.
+    """
+    totals: dict[str, float] = {}
+    for name, value in zip(names, values, strict=True):
+        unprefixed = name.split("__", 1)[-1]
+        original = next((f for f in feature_columns if unprefixed.startswith(f)), unprefixed)
+        totals[original] = totals.get(original, 0.0) + float(value)
+
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
+    return [{"feature": name, "importance": round(value, 4)} for name, value in ranked]
+
+
+def global_shap_importance(
+    pipeline: Pipeline,
+    explainer: shap.Explainer,
+    x: pd.DataFrame,
+    feature_columns: list[str],
+    sample_size: int = 500,
+) -> list[dict[str, Any]]:
+    """Global feature importance (mean(|SHAP value|) per feature) computed once at
+    training time, over a sample of the full dataset the final pipeline was refit on.
+
+    Written into MODEL_METADATA_KEY so `assistant`'s grounding prompt can cite real
+    per-feature magnitudes without a live round-trip to prediction's own (identically
+    computed, but on-demand) `/dataset/{slug}/explainability` endpoint — that endpoint
+    stays as the dashboard's live/re-computable path; this is a cached snapshot for chat.
+    """
+    if len(x) > sample_size:
+        idx = np.linspace(0, len(x) - 1, sample_size, dtype=int)
+        x = x.iloc[idx]
+
+    x_transformed = pipeline.named_steps["preprocessor"].transform(x)
+    # pyrefly: ignore [missing-attribute]
+    shap_values = np.asarray(explainer.shap_values(x_transformed))
+    if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
+        shap_values = shap_values[:, :, 1]
+
+    mean_abs = np.abs(shap_values).mean(axis=0)
+    return _aggregate_by_feature(transformed_feature_names(pipeline), mean_abs, feature_columns)

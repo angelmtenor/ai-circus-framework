@@ -1,6 +1,7 @@
-"""Tests for the /chat/{scenario_slug} FastAPI endpoint, with all dependencies
-overridden by fakes — including a fake tool-calling chat model, so these tests
-exercise the real agent loop (see core/agent.py) rather than mocking it away.
+"""Tests for the rag-agent FastAPI app: /healthz, /model/{scenario_slug}, the
+/agui/{scenario_slug} streaming endpoint's auth/routing (not its full event
+stream — that's exercised against a real LLM via Docker, see the phase-3 plan's
+verification section), and the _llm/_llm_model_name dependencies.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from ai_circus_shared.scenario_schema import ChatConfig, VectorStoreConfig
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from rag_agent import api as api_module
@@ -91,49 +92,20 @@ def test_model_endpoint_returns_the_active_model_without_sending_a_message() -> 
     assert response.json() == {"model": "gemini-flash"}
 
 
-def test_chat_calls_the_tool_for_an_in_domain_question_and_returns_sources() -> None:
-    """POST /chat/{scenario_slug} retrieves and returns sources for an in-domain question."""
-    tool_call = ToolCall(name="retrieve_docs", args={"query": "overdraft fee"}, id="call_1")
-    llm = FakeToolCallingModel(
-        responses=[
-            AIMessage(content="", tool_calls=[tool_call]),
-            AIMessage(content="The overdraft fee is $25."),
-        ]
-    )
-    client = _client_with(llm)
-
-    response = client.post("/chat/docs_rag", json={"message": "what is the overdraft fee?"})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["reply"] == "The overdraft fee is $25."
-    assert body["sources"] == [{"source": "raw/account_policies.md", "score": 0.9}]
-    assert body["model"] == "gemini-flash"
-
-
-def test_chat_skips_the_tool_for_chitchat_and_returns_no_sources() -> None:
-    """POST /chat/{scenario_slug} answers chitchat directly, without retrieval."""
-    llm = FakeToolCallingModel(responses=[AIMessage(content="Hi there! How can I help?")])
-    client = _client_with(llm)
-
-    response = client.post("/chat/docs_rag", json={"message": "hi, how are you?"})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["reply"] == "Hi there! How can I help?"
-    assert body["sources"] == []
-    assert body["model"] == "gemini-flash"
-
-
-def test_chat_unknown_scenario_returns_404() -> None:
-    """A scenario_slug this instance doesn't serve 404s, distinct from an auth failure."""
+def test_agui_unknown_scenario_returns_404() -> None:
+    """A scenario_slug this instance doesn't serve 404s, distinct from an auth failure — same
+    `_scenario_definition` dependency as every other route, exercised for real (not overridden).
+    """
     app = FastAPI()
     app.include_router(router)
     app.state.definitions = {}  # exercises the real _scenario_definition lookup, not an override
     app.dependency_overrides[resolve_identity] = lambda: Identity(subject="user-1", org_id="org-1", roles=frozenset())
     client = TestClient(app)
 
-    response = client.post("/chat/does-not-exist", json={"message": "hi"})
+    response = client.post(
+        "/agui/does-not-exist",
+        json={"threadId": "t", "runId": "r", "messages": [], "tools": [], "context": [], "state": {}},
+    )
 
     assert response.status_code == 404
 

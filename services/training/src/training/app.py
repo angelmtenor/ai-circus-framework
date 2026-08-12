@@ -41,6 +41,7 @@ from training.core.logger import configure_logger, get_logger
 from training.core.training import (
     build_explainer,
     fit_quantile_pipelines,
+    global_shap_importance,
     select_best_candidate,
     split_features,
     train_candidate,
@@ -91,6 +92,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     # Refit the selected model on the full dataset for the final artifact.
     best.pipeline.fit(x, y)
     explainer = build_explainer(best.pipeline, x)
+    feature_importance = global_shap_importance(best.pipeline, explainer, x, definition.dataset.feature_columns)
 
     checksums: dict[str, str] = {}
 
@@ -104,6 +106,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
 
     has_intervals = definition.model.task_type == "regression"
     if has_intervals:
+        # pyrefly: ignore [bad-argument-type]
         pipeline_lower, pipeline_upper = fit_quantile_pipelines(numeric_features, categorical_features, x, y)
         lower_bytes = _dump(pipeline_lower)
         store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_bytes)
@@ -125,6 +128,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "candidates_evaluated": [c.name for c in candidates],
         "feature_columns": definition.dataset.feature_columns,
         "transformed_feature_names": transformed_feature_names(best.pipeline),
+        "global_feature_importance": feature_importance,
         "target": definition.dataset.target,
         "has_intervals": has_intervals,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,

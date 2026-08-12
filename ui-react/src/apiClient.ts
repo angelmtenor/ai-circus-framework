@@ -63,14 +63,6 @@ export type PredictionResult = {
   prediction_upper: number | null;
 };
 
-export type ChatMessage = { role: string; content: string };
-
-export type ChatResult = {
-  reply: string;
-  sources?: { source: string; score: number }[];
-  model: string;
-};
-
 export type DatasetSample = {
   columns: string[];
   rows: Record<string, string | number | null>[];
@@ -246,21 +238,6 @@ export async function setActiveLlmModel(
   });
   const body = await asJson<{ model_name: string }>(response);
   return body.model_name;
-}
-
-export async function chat(
-  baseUrl: string,
-  scenarioSlug: string,
-  message: string,
-  history: ChatMessage[],
-  accessToken: string | null,
-): Promise<ChatResult> {
-  const response = await fetch(`${baseUrl}/chat/${scenarioSlug}`, {
-    method: "POST",
-    headers: headers(accessToken),
-    body: JSON.stringify({ message, history }),
-  });
-  return asJson(response);
 }
 
 /**

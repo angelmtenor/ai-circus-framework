@@ -92,8 +92,8 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert fake_logger.error_messages
 
 
-async def test_lifespan_sets_up_prompt_cache_and_llm_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The lifespan handler connects a store per resolved scenario and stashes cache+client on app.state."""
+async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lifespan handler connects a store per resolved scenario and stashes cache+client dict on app.state."""
 
     class FakeDataset:
         bucket = "scenario-churn"
@@ -111,7 +111,9 @@ async def test_lifespan_sets_up_prompt_cache_and_llm_client(monkeypatch: pytest.
 
     async with app.lifespan(app.app):
         assert app.app.state.prompt_cache._stores == {"churn": "fake-store"}
-        assert str(app.app.state.llm_client.base_url) == "http://llm-gateway:4000"
+        # Empty until the AG-UI route's _chat_llm dependency lazily builds+caches a
+        # ChatOpenAI client for whichever model_name the first request resolves to.
+        assert app.app.state.chat_llm_clients == {}
 
     assert connect_calls == [
         {

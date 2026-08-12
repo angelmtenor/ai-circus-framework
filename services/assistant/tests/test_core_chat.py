@@ -1,13 +1,10 @@
-"""Tests for the chat-over-tabular-data prompt building and completion call."""
+"""Tests for the chat-over-tabular-data grounding system prompt."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
 from ai_circus_shared.scenario_schema import ChatConfig, ScenarioDefinition, TabularServices
 
-from assistant.core.chat import build_system_prompt, chat
+from assistant.core.chat import build_system_prompt
 
 DEFINITION = ScenarioDefinition(
     slug="churn",
@@ -57,33 +54,27 @@ def test_build_system_prompt_uses_r2_wording_for_regression() -> None:
     assert "ActualShippingDays" in prompt
 
 
-def test_chat_sends_system_history_and_message_and_returns_reply() -> None:
-    """chat() assembles the full message list and returns the completion's reply text."""
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="The top feature is Age."))]
-    )
-    history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+def test_build_system_prompt_cites_global_shap_importance_when_present() -> None:
+    """When training has computed global_feature_importance, the prompt cites it by name and score."""
+    metadata = {**METADATA, "global_feature_importance": [{"feature": "Age", "importance": 0.127}]}
 
-    reply = chat(fake_client, "gpt-4o-mini", "system prompt", history, "what matters most?")
+    prompt = build_system_prompt(DEFINITION, metadata)
 
-    assert reply == "The top feature is Age."
-    _, kwargs = fake_client.chat.completions.create.call_args
-    assert kwargs["model"] == "gpt-4o-mini"
-    assert kwargs["messages"] == [
-        {"role": "system", "content": "system prompt"},
-        *history,
-        {"role": "user", "content": "what matters most?"},
-    ]
+    assert "Age (0.1270)" in prompt
+    assert "global SHAP importance" in prompt
 
 
-def test_chat_returns_empty_string_for_none_content() -> None:
-    """A completion with no content (e.g. a refusal) returns an empty string, not None."""
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=None))]
-    )
+def test_build_system_prompt_omits_importance_sentence_when_absent() -> None:
+    """Metadata written before global_feature_importance existed degrades gracefully, not with an error."""
+    prompt = build_system_prompt(DEFINITION, METADATA)
 
-    reply = chat(fake_client, "gpt-4o-mini", "system prompt", [], "hi")
+    assert "global SHAP importance" not in prompt
 
-    assert reply == ""
+
+def test_build_system_prompt_names_the_prediction_service_tools() -> None:
+    """The prompt tells the model to call the real-data tools instead of claiming it lacks data."""
+    prompt = build_system_prompt(DEFINITION, METADATA)
+
+    assert "get_dataset_sample" in prompt
+    assert "get_predictions_vs_actuals" in prompt
+    assert "predict_records" in prompt

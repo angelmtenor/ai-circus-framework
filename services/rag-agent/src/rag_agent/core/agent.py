@@ -15,10 +15,12 @@ from __future__ import annotations
 from typing import Any
 
 from ai_circus_shared.scenario_schema import VectorStoreConfig
+from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import BaseTool, StructuredTool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
@@ -30,11 +32,13 @@ SYSTEM_PROMPT_TEMPLATE = (
     "— not for chitchat, greetings, or clearly unrelated questions, which you should "
     "answer directly without calling any tool. When retrieve_docs returns relevant "
     "excerpts, answer using ONLY those excerpts and cite the source file for each "
-    "claim. If it returns no relevant documents, say so plainly rather than guessing."
+    "claim. If it returns no relevant documents, say so plainly rather than guessing.\n\n"
+    "If a render_chart or render_table tool is available and the question calls for "
+    "showing a plot or tabular data, call it instead of describing the data in prose."
 )
 
 
-def _build_retrieve_tool(
+def build_retrieve_tool(
     qdrant: QdrantClient,
     embedder: SentenceTransformer,
     vector_store: VectorStoreConfig,
@@ -68,28 +72,29 @@ def _build_retrieve_tool(
     return tool, captured
 
 
-def _to_lc_messages(history: list[dict[str, str]]) -> list[HumanMessage | AIMessage]:
-    """Convert the API's plain role/content history into LangChain message objects."""
-    return [
-        HumanMessage(content=turn["content"]) if turn["role"] == "user" else AIMessage(content=turn["content"])
-        for turn in history
-    ]
+def build_agui_agent(llm: BaseChatModel, tools: list[BaseTool], chat_context: str) -> CompiledStateGraph:
+    """Build the graph backing the AG-UI endpoint (see api.py's `agui_endpoint`).
 
+    `CopilotKitMiddleware` is what turns a tool call matching one of the *frontend*'s
+    own declared actions (arriving per-request as `RunAgentInput.tools`, e.g.
+    render_chart/render_table registered via useCopilotAction in ui-react) into an
+    AG-UI TOOL_CALL event for the client to render, instead of LangGraph's ToolNode
+    trying — and failing — to execute a tool with no real Python implementation.
+    `CopilotKitState` is the state schema that middleware expects to write into.
 
-def run_chat(
-    llm: BaseChatModel,
-    qdrant: QdrantClient,
-    embedder: SentenceTransformer,
-    vector_store: VectorStoreConfig,
-    org_id: str,
-    chat_context: str,
-    history: list[dict[str, str]],
-    message: str,
-) -> tuple[str, list[dict[str, Any]]]:
-    """Run one agent turn; return (reply, sources) — sources is empty if no tool call happened."""
-    tool, captured = _build_retrieve_tool(qdrant, embedder, vector_store, org_id)
-    agent = create_agent(llm, tools=[tool], system_prompt=SYSTEM_PROMPT_TEMPLATE.format(context=chat_context.strip()))
-
-    result = agent.invoke({"messages": [*_to_lc_messages(history), HumanMessage(content=message)]})
-    reply = result["messages"][-1].content
-    return reply, captured.get("sources", [])
+    A checkpointer is mandatory here (confirmed empirically: `ag_ui_langgraph`'s agent
+    calls `graph.aget_state()` mid-stream, which raises `ValueError: No checkpointer
+    set` on an uncheckpointed graph) — but only to satisfy that internal call within a
+    single run, not for cross-request memory: the AG-UI client resends the full message
+    history on every run, so a fresh in-memory checkpointer per request is correct, not
+    a corner cut.
+    """
+    return create_agent(
+        llm,
+        tools=tools,
+        system_prompt=SYSTEM_PROMPT_TEMPLATE.format(context=chat_context.strip()),
+        middleware=[CopilotKitMiddleware()],
+        # pyrefly: ignore [bad-argument-type]
+        state_schema=CopilotKitState,
+        checkpointer=InMemorySaver(),
+    )

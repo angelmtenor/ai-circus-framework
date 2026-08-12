@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { CopilotKit } from "@copilotkit/react-core";
 import type { ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
@@ -6,6 +7,8 @@ import { DataView } from "./DataView";
 import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
 import { Icon } from "./Icon";
+import { useChatGenerativeUiActions } from "./chatGenerativeUi";
+import { useScenarioAgent } from "./useScenarioAgent";
 
 type Tab = "data" | "predict" | "explore";
 
@@ -21,8 +24,37 @@ type Tab = "data" | "predict" | "explore";
  * performance). The assistant chat is a single persistent dock here rather than
  * duplicated per tab, since it's the same scenario-grounded conversation regardless
  * of which tab is open.
+ *
+ * The whole workspace (not just the chat dock) is wrapped in one <CopilotKit> so
+ * MlPredictionsView/ExploreModelView's useCopilotReadable calls share their current
+ * on-screen state with the same agent instance the dock chat talks to — "what's the
+ * user looking at right now" context, independent of the scenario's static
+ * chat.context grounding (see the assistant service's build_system_prompt).
  */
 export function TabularView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+  const agent = useScenarioAgent(config.assistantUrl, scenario.slug, accessToken);
+  // See RagView.tsx's identical note: must be memoized, or every re-render of
+  // TabularView (tab switches, prediction results, etc.) resets CopilotKit's
+  // internal action/context registry — confirmed empirically before this fix.
+  const selfManagedAgents = useMemo(() => ({ [scenario.slug]: agent }), [scenario.slug, agent]);
+
+  return (
+    <CopilotKit selfManagedAgents={selfManagedAgents}>
+      <TabularViewContent scenario={scenario} accessToken={accessToken} agent={agent} />
+    </CopilotKit>
+  );
+}
+
+function TabularViewContent({
+  scenario,
+  accessToken,
+  agent,
+}: {
+  scenario: ScenarioSummary;
+  accessToken: string | null;
+  agent: ReturnType<typeof useScenarioAgent>;
+}) {
+  useChatGenerativeUiActions();
   const [tab, setTab] = useState<Tab>("data");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
@@ -71,6 +103,7 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
               </div>
             </div>
             <ChatPanel
+              agent={agent}
               baseUrl={config.assistantUrl}
               scenarioSlug={scenario.slug}
               sampleQuestions={scenario.sample_questions}

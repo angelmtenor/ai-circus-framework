@@ -24,7 +24,9 @@ classifiers = [
 ]
 
 dependencies = [
+    "ag-ui-protocol>=0.1.19",
     "ai-circus-shared",
+    "copilotkit>=0.1.94",
     "fastapi>=0.141.1",
     "langchain>=0.3",
     "langchain-openai>=0.3",

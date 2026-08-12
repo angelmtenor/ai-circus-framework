@@ -1,21 +1,123 @@
-import { useEffect, useRef, useState } from "react";
-import { chat, chatModel, type ChatMessage } from "./apiClient";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { randomUUID, type HttpAgent } from "@ag-ui/client";
+import type { Context as AguiContext, Message as AguiMessage, Tool as AguiTool } from "@ag-ui/core";
+import { useCopilotKit } from "@copilotkit/react-core/v2";
+import { schemaToJsonSchema } from "@copilotkit/shared";
+import { zodToJsonSchema as zodToJsonSchemaImpl } from "zod-to-json-schema";
+
+function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): Record<string, unknown> {
+  return zodToJsonSchemaImpl(schema as never, options as never) as Record<string, unknown>;
+}
+import { chatModel } from "./apiClient";
 import { renderMarkdown } from "./markdown";
 
 /**
- * A minimal chat UI calling a scenario's /chat/{scenarioSlug} endpoint directly.
+ * Chat UI driven directly by an @ag-ui/client HttpAgent (see RagView.tsx/TabularView.tsx,
+ * which construct one per scenario and pass it down) rather than CopilotKit's own
+ * useCopilotChat hook. That hook's current version routes through a GraphQL "Copilot
+ * Runtime" (@copilotkit/runtime-client-gql) meant for a Node.js backend; HttpAgent
+ * speaks the AG-UI wire protocol straight to our Python /agui/{scenario_slug}
+ * endpoint — verified directly, no extra service.
  *
- * A future AG-UI runtime bridge to rag-agent (CopilotKit's <CopilotChat>, streaming
- * agent state, generative UI) is a documented follow-up (see root README "Reserved
- * for later") — CopilotKit's packages aren't installed until that's actually built,
- * to avoid dragging in their bundle weight for an unused integration point.
+ * CopilotKit is still used for useCopilotAction/useCopilotReadable (see
+ * chatGenerativeUi.tsx and the workspace views' useCopilotReadable calls) — but read
+ * back here via useCopilotKit().copilotkit (the v2 CopilotKitCore instance), not the
+ * legacy useCopilotContext(). Confirmed by reading the installed package's own
+ * source: both hooks now register into CopilotKitCore (`copilotkit.addTool`/
+ * `copilotkit.addContext`), not the legacy CopilotContext — useCopilotContext().actions
+ * stays permanently empty for any action that (like ours) has a `handler`, so tools
+ * silently never reached the model until this was fixed.
  *
- * Replies are rendered through a small markdown subset (bold/code/lists/tables, see
- * markdown.tsx), plus a ```chart fenced-JSON convention (chatCharts.tsx) that reuses
- * the dashboard's SVG chart primitives. The backends don't emit ```chart yet — their
- * system prompts need to be taught the convention before an LLM reply will use it.
+ * `agent.messages` (kept in sync via onMessagesChanged) is the single source of
+ * truth for the transcript — includes token-by-token streamed content, so replies
+ * render incrementally exactly like ChatGPT/Claude, not "wait for the full reply".
  */
+
+type CopilotKitCoreTool = {
+  name: string;
+  description?: string;
+  parameters?: unknown;
+  available?: boolean;
+  render?: (props: { args: unknown; status: string; name: string }) => React.ReactNode;
+};
+
+function toolsFromCore(tools: readonly CopilotKitCoreTool[]): AguiTool[] {
+  return tools
+    .filter((t) => t.available !== false)
+    .map((t) => ({
+      name: t.name,
+      description: t.description ?? "",
+      // `parameters` is a Zod v3 schema (getZodParameters' output, see useFrontendTool
+      // in @copilotkit/react-core) — zod-to-json-schema converts it for the wire, since
+      // AG-UI's Tool.parameters needs real JSON Schema, not a Zod object.
+      parameters: (t.parameters ? schemaToJsonSchema(t.parameters as never, { zodToJsonSchema }) : { type: "object", properties: {} }) as Record<
+        string,
+        unknown
+      >,
+    }));
+}
+
+function contextFromCore(context: Record<string, { description: string; value: string }>): AguiContext[] {
+  return Object.values(context).map((c) => ({ description: c.description, value: c.value }));
+}
+
+const SOURCE_TAG = /\[Source:\s*([^\]]+)\]/g;
+
+/** Best-effort: retrieve_docs' tool result content embeds "[Source: file]" markers
+ * (see rag-agent's build_retrieve_tool) — extracted here rather than carried as a
+ * separate structured field, since AG-UI's ToolMessage only has a plain `content`
+ * string. Returns null if no tool ran at all (message list has no tool results yet),
+ * vs. an empty array if retrieve_docs ran but found nothing — same distinction the
+ * old REST response made. */
+function extractSources(messages: AguiMessage[]): string[] | null {
+  const toolResults = messages.filter((m): m is AguiMessage & { role: "tool"; content: string } => m.role === "tool");
+  if (toolResults.length === 0) return null;
+  const sources = new Set<string>();
+  for (const m of toolResults) {
+    for (const match of m.content.matchAll(SOURCE_TAG)) sources.add(match[1].trim());
+  }
+  return [...sources];
+}
+
+/**
+ * Frontend tools (render_chart/render_table, registered in chatGenerativeUi.tsx) are
+ * dispatched by ChatPanel itself, not by CopilotKit's own runtime (see that file's
+ * top-of-file note) — so nothing ever sends the model a `ToolMessage` answering those
+ * tool calls. Left unanswered, the *next* turn's resent full history has a dangling
+ * tool_call, which CopilotKit's LangGraph middleware strips out before the next model
+ * call (it has no adjacent ToolMessage) — silently rewriting history and reshuffling
+ * where that turn's chart/table appears in the transcript on replay. Backfilling a
+ * synthetic ToolMessage per unanswered frontend tool call, right after each run,
+ * keeps history complete so nothing gets stripped or reordered on the next turn.
+ */
+function answerUnansweredFrontendToolCalls(agent: HttpAgent, frontendToolNames: ReadonlySet<string>): void {
+  const answered = new Set(
+    agent.messages.filter((m): m is AguiMessage & { role: "tool" } => m.role === "tool").map((m) => m.toolCallId),
+  );
+  for (const m of agent.messages) {
+    if (m.role !== "assistant" || !m.toolCalls) continue;
+    for (const call of m.toolCalls) {
+      if (!frontendToolNames.has(call.function.name) || answered.has(call.id)) continue;
+      agent.addMessage({ id: randomUUID(), role: "tool", toolCallId: call.id, content: "Displayed to the user." });
+    }
+  }
+}
+
+const TOOL_ACTIVITY_LABELS: Record<string, string> = {
+  get_dataset_sample: "Fetching real dataset rows…",
+  get_predictions_vs_actuals: "Fetching predictions vs. actuals…",
+  predict_records: "Running the model…",
+  retrieve_docs: "Searching documents…",
+  render_chart: "Drawing chart…",
+  render_table: "Building table…",
+};
+
+function toolActivityLabel(name: string): string {
+  return TOOL_ACTIVITY_LABELS[name] ?? `Calling ${name}…`;
+}
+
 export function ChatPanel({
+  agent,
   baseUrl,
   scenarioSlug,
   sampleQuestions,
@@ -24,29 +126,26 @@ export function ChatPanel({
   title,
   onModel,
 }: {
+  agent: HttpAgent;
   baseUrl: string;
   scenarioSlug: string;
   sampleQuestions: string[];
   accessToken: string | null;
   variant?: "dock" | "full";
   title?: string;
-  /** Called once the active model is known, so a parent header can show it upfront. */
   onModel?: (model: string) => void;
 }) {
-  const [history, setHistory] = useState<(ChatMessage & { model?: string })[]>([]);
+  const { copilotkit } = useCopilotKit();
+  const [messages, setMessages] = useState<AguiMessage[]>(agent.messages);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [sources, setSources] = useState<{ source: string; score: number }[] | null>(null);
+  const [activity, setActivity] = useState<string | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to the latest turn whenever the conversation changes — covers the user's
-  // own message landing immediately, the typing indicator appearing, and the reply
-  // arriving, not just the end of send().
   useEffect(() => {
     historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: "smooth" });
-  }, [history, sending]);
+  }, [messages, sending]);
 
-  // Known upfront, before the first message, so the header can show it right away.
   useEffect(() => {
     chatModel(baseUrl, scenarioSlug, accessToken)
       .then((model) => onModel?.(model))
@@ -54,39 +153,80 @@ export function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseUrl, scenarioSlug, accessToken]);
 
+  useEffect(() => {
+    const { unsubscribe } = agent.subscribe({
+      onMessagesChanged: ({ messages }) => setMessages([...messages]),
+      // Live "what the agent is doing" status, straight off the AG-UI event stream —
+      // fires as soon as a tool call starts/resolves, well before the final reply
+      // (which may be seconds away for a multi-tool-call turn) starts streaming.
+      onToolCallStartEvent: ({ event }) => setActivity(toolActivityLabel(event.toolCallName)),
+      onToolCallResultEvent: () => setActivity("Thinking…"),
+      onTextMessageStartEvent: () => setActivity(null),
+      onRunFinishedEvent: () => setActivity(null),
+      onRunErrorEvent: () => setActivity(null),
+    });
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent]);
+
   async function send(text: string) {
     if (!text.trim() || sending) return;
     setMessage("");
     setSending(true);
-    setHistory((h) => [...h, { role: "user", content: text }]);
+    setActivity(null);
+    agent.addMessage({ id: randomUUID(), role: "user", content: text });
     try {
-      const result = await chat(baseUrl, scenarioSlug, text, history, accessToken);
-      setHistory((h) => [...h, { role: "assistant", content: result.reply, model: result.model }]);
-      setSources(result.sources ?? null);
+      const tools = toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]);
+      const context = contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>);
+      await agent.runAgent({ tools, context });
+      const frontendToolNames = new Set(
+        (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
+      );
+      answerUnansweredFrontendToolCalls(agent, frontendToolNames);
     } catch (error) {
-      setHistory((h) => [...h, { role: "assistant", content: `⚠️ ${(error as Error).message}` }]);
-      setSources(null);
+      agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
     } finally {
       setSending(false);
+      setActivity(null);
     }
   }
+
+  const sources = useMemo(() => extractSources(messages), [messages]);
+  // An assistant message with neither content nor a tool call is an intermediate
+  // placeholder from the agent's own multi-step loop (e.g. the turn where it only
+  // decided to call a tool, before the tool result and final reply arrived) — not
+  // a real reply to show as its own empty bubble.
+  const visible = messages.filter(
+    (m) => m.role === "user" || (m.role === "assistant" && (m.content || (m.toolCalls && m.toolCalls.length > 0))),
+  );
 
   return (
     <div className={`chat-panel chat-panel--${variant}`}>
       {title && <div className="chat-panel-title">{title}</div>}
       <div className="chat-history" ref={historyRef}>
-        {history.length === 0 && (
+        {visible.length === 0 && (
           <div className="chat-empty">
             <span className="chat-empty-icon">💬</span>
             <p>Ask a question to get started.</p>
           </div>
         )}
-        {history.map((turn, i) => (
-          <div key={i} className={`chat-turn chat-turn--${turn.role}`}>
+        {visible.map((turn) => (
+          <div key={turn.id} className={`chat-turn chat-turn--${turn.role}`}>
             <div className="chat-avatar">{turn.role === "user" ? "🧑" : "🤖"}</div>
             <div>
-              <div className="chat-bubble">{renderMarkdown(turn.content)}</div>
-              {turn.model && <div className="chat-model">{turn.model}</div>}
+              {typeof turn.content === "string" && turn.content && <div className="chat-bubble">{renderMarkdown(turn.content)}</div>}
+              {turn.role === "assistant" &&
+                turn.toolCalls?.map((call) => {
+                  const tool = (copilotkit.tools as CopilotKitCoreTool[]).find((t) => t.name === call.function.name);
+                  if (!tool?.render) return null;
+                  let args: unknown;
+                  try {
+                    args = JSON.parse(call.function.arguments);
+                  } catch {
+                    return null;
+                  }
+                  return <div key={call.id}>{tool.render({ args, status: "complete", name: call.function.name })}</div>;
+                })}
             </div>
           </div>
         ))}
@@ -94,22 +234,26 @@ export function ChatPanel({
           <div className="chat-turn chat-turn--assistant">
             <div className="chat-avatar">🤖</div>
             <div className="chat-bubble chat-bubble--typing">
-              <span />
-              <span />
-              <span />
+              {activity ? (
+                <span className="chat-activity">{activity}</span>
+              ) : (
+                <>
+                  <span />
+                  <span />
+                  <span />
+                </>
+              )}
             </div>
           </div>
         )}
       </div>
       {sources !== null &&
         (sources.length > 0 ? (
-          <div className="chat-sources">
-            📎 Sources: {sources.map((s) => `${s.source} (${s.score.toFixed(2)})`).join(", ")}
-          </div>
+          <div className="chat-sources">📎 Sources: {sources.join(", ")}</div>
         ) : (
           <div className="chat-sources">(answered directly, without consulting the documents)</div>
         ))}
-      {sampleQuestions.length > 0 && history.length === 0 && (
+      {sampleQuestions.length > 0 && visible.length === 0 && (
         <div className="chat-samples">
           {sampleQuestions.map((question) => (
             <button key={question} className="chat-sample" onClick={() => send(question)} disabled={sending}>

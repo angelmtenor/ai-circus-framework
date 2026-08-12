@@ -3,7 +3,7 @@ app.py
 ------
 
 Entry point for assistant: a long-running FastAPI service serving
-POST /chat/{scenario_slug} for every tabular_ml scenario in SCENARIOS (empty/unset =
+POST /agui/{scenario_slug} for every tabular_ml scenario in SCENARIOS (empty/unset =
 all), shared across every tenant (grounding system prompts are loaded and cached per
 (org, scenario) from MinIO on first request — see core/prompt_cache.py; all
 completions go through llm-gateway, never a raw provider SDK).
@@ -23,7 +23,6 @@ from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 from pydantic import ValidationError
 
 from assistant import get_env_config
@@ -56,8 +55,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.definitions = definitions
     app.state.prompt_cache = SystemPromptCache(stores, definitions, fallback_org_id=config.SHARED_MODEL_ORG_ID)
-    llm_api_key = config.LLM_GATEWAY_API_KEY.get_secret_value()
-    app.state.llm_client = OpenAI(base_url=config.LLM_GATEWAY_URL, api_key=llm_api_key)
+    # LangChain ChatOpenAI client backing the AG-UI route's create_agent (see
+    # core/agent.py) — only a LangChain/LangGraph agent can participate in generative
+    # UI. Cached per model_name, same reasoning as rag-agent's llm_clients — which
+    # model to use can change without a restart.
+    app.state.chat_llm_clients = {}
 
     yield
 

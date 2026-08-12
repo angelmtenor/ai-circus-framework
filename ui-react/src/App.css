@@ -995,6 +995,12 @@ select:focus {
   animation-delay: 0.3s;
 }
 
+.chat-activity {
+  font-size: 0.8rem;
+  color: var(--dim);
+  animation: chat-typing 1.6s infinite ease-in-out;
+}
+
 @keyframes chat-typing {
   0%,
   80%,
@@ -1016,6 +1022,18 @@ select:focus {
 .chat-table td {
   border: 1px solid var(--border);
   padding: 0.25rem 0.5rem;
+}
+
+.chat-table th {
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-table-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--dim);
+  margin: 0.2rem 0;
 }
 
 .chat-bubble code {

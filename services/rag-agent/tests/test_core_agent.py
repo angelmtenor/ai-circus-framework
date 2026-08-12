@@ -1,101 +1,81 @@
-"""Tests for the agentic RAG chat: the LLM decides whether to call retrieve_docs."""
+"""Tests for the agentic RAG chat: the retrieve_docs tool and the AG-UI agent builder."""
 
 from __future__ import annotations
 
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolCall
+from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from rag_agent.core.agent import run_chat
+from rag_agent.core.agent import build_agui_agent, build_retrieve_tool
 from rag_agent.core.retrieval import RetrievedChunk
 
 VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3)
 
 
-class FakeToolCallingModel(BaseChatModel):
-    """A minimal fake chat model that supports tool binding and returns fixed responses in order."""
+class FakeChatModel(BaseChatModel):
+    """A minimal fake chat model — enough for create_agent's binding, never actually invoked here."""
 
-    responses: list[AIMessage]
-    calls: int = 0
-
-    def bind_tools(self, tools: object, **kwargs: object) -> FakeToolCallingModel:
+    def bind_tools(self, tools: object, **kwargs: object) -> FakeChatModel:
         """Tool binding is a no-op here — the fake ignores the tool schema entirely."""
         return self
 
     def _generate(
         self, messages: object, stop: object = None, run_manager: object = None, **kwargs: object
     ) -> ChatResult:
-        """Return the next canned response in sequence."""
-        message = self.responses[self.calls]
-        self.calls += 1
-        return ChatResult(generations=[ChatGeneration(message=message)])
+        """Never called in these tests — build_agui_agent only compiles the graph, it doesn't run it."""
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=""))])
 
     @property
     def _llm_type(self) -> str:
         """Identify this fake model type for LangChain's internals."""
-        return "fake-tool-calling-model"
+        return "fake-chat-model"
 
 
-def test_chitchat_question_answers_directly_without_calling_the_tool(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
-    """A chitchat message never triggers retrieval — sources come back empty."""
-    monkeypatch.setattr(
-        "rag_agent.core.agent.retrieve",
-        lambda *_a, **_kw: (_ for _ in ()).throw(AssertionError("retrieve() should not be called for chitchat")),
-    )
-    model = FakeToolCallingModel(responses=[AIMessage(content="Hi there! How can I help?")])
-
-    reply, sources = run_chat(model, object(), object(), VECTOR_STORE, "org-1", "bank policies", [], "hi there!")
-
-    assert reply == "Hi there! How can I help?"
-    assert sources == []
-
-
-def test_in_domain_question_calls_the_tool_and_returns_sources(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
-    """An in-domain question triggers retrieval; the response is grounded and sources are returned."""
+def test_build_retrieve_tool_returns_content_and_sources(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
+    """A query that matches real chunks returns cited content and captures its sources."""
     monkeypatch.setattr(
         "rag_agent.core.agent.retrieve",
         lambda *_a, **_kw: [RetrievedChunk(text="ATM limit is $1000.", source="policy.md", score=0.9)],
     )
-    tool_call = ToolCall(name="retrieve_docs", args={"query": "ATM withdrawal limit"}, id="call_1")
-    model = FakeToolCallingModel(
-        responses=[
-            AIMessage(content="", tool_calls=[tool_call]),
-            AIMessage(content="The ATM limit is $1000, per policy.md."),
-        ]
-    )
+    tool, captured = build_retrieve_tool(object(), object(), VECTOR_STORE, "org-1")
 
-    reply, sources = run_chat(
-        model, object(), object(), VECTOR_STORE, "org-1", "bank policies", [], "what's the ATM withdrawal limit?"
-    )
+    result = tool.func("ATM withdrawal limit")
 
-    assert reply == "The ATM limit is $1000, per policy.md."
-    assert sources == [{"source": "policy.md", "score": 0.9}]
+    assert result[0] == "[Source: policy.md]\nATM limit is $1000."
+    assert result[1] == [{"source": "policy.md", "score": 0.9}]
+    assert captured["sources"] == [{"source": "policy.md", "score": 0.9}]
 
 
-def test_tool_call_with_no_matching_chunks_returns_empty_sources(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
-    """The tool is called but finds nothing — sources is an empty list, not omitted."""
+def test_build_retrieve_tool_reports_no_results_without_erroring(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
+    """A query with no matching chunks returns a plain "not found" message and empty sources."""
     monkeypatch.setattr("rag_agent.core.agent.retrieve", lambda *_a, **_kw: [])
-    tool_call = ToolCall(name="retrieve_docs", args={"query": "unrelated"}, id="call_1")
-    model = FakeToolCallingModel(
-        responses=[
-            AIMessage(content="", tool_calls=[tool_call]),
-            AIMessage(content="I couldn't find anything relevant to that in the documents."),
-        ]
+    tool, captured = build_retrieve_tool(object(), object(), VECTOR_STORE, "org-1")
+
+    result = tool.func("unrelated question")
+
+    assert result == ("No relevant documents were found for this query.", [])
+    assert captured["sources"] == []
+
+
+def test_build_retrieve_tool_is_scoped_to_the_calling_org(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
+    """Each tool closes over the org_id it was built for — retrieve() is called with that tenant, not another."""
+    seen_org_ids: list[str] = []
+    monkeypatch.setattr(
+        "rag_agent.core.agent.retrieve",
+        lambda _qdrant, _embedder, _vector_store, org_id, _query: (seen_org_ids.append(org_id) or []),
     )
+    tool, _captured = build_retrieve_tool(object(), object(), VECTOR_STORE, "org-42")
 
-    reply, sources = run_chat(model, object(), object(), VECTOR_STORE, "org-1", "bank policies", [], "what about X?")
+    tool.func("anything")
 
-    assert "couldn't find" in reply
-    assert sources == []
+    assert seen_org_ids == ["org-42"]
 
 
-def test_prior_history_is_forwarded_to_the_model(monkeypatch) -> None:  # ruff: ignore[missing-type-function-argument]
-    """Prior conversation turns are converted to LangChain messages ahead of the new question."""
-    monkeypatch.setattr("rag_agent.core.agent.retrieve", lambda *_a, **_kw: [])
-    model = FakeToolCallingModel(responses=[AIMessage(content="Sure, following up on that...")])
-    history = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello, how can I help?"}]
+def test_build_agui_agent_compiles_with_the_given_tools() -> None:
+    """build_agui_agent compiles without error and binds the given tools onto the graph."""
+    tool, _captured = build_retrieve_tool(object(), object(), VECTOR_STORE, "org-1")
 
-    reply, _sources = run_chat(model, object(), object(), VECTOR_STORE, "org-1", "bank policies", history, "and then?")
+    graph = build_agui_agent(FakeChatModel(), [tool], "bank policies")
 
-    assert reply == "Sure, following up on that..."
+    assert graph is not None

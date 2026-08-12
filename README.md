@@ -30,7 +30,8 @@ teaching for a long time, not a methodology invented for this repo:
   predictions as first-class citizens, not an afterthought bolted on at the end.
 - Later — **GenAI** layered on top, with interactive dashboards for exploring models and data.
 - **Now** — taking that same agnostic-scenario philosophy into agentic, tool-calling GenAI, with
-  an eye on **AG-UI** (via CopilotKit) for the frontend/agent interaction layer next.
+  **AG-UI** (via CopilotKit) now wired end to end for `ui-react`'s chat — streaming replies and
+  real generative UI (the chatbot renders live charts/tables, not just prose).
 
 The constant across all of it: build **vendor-agnostic**, scenario-driven foundations, keep them
 open source, and let the plumbing (auth, storage, ingress, entitlements) be boring and correct so
@@ -378,9 +379,9 @@ Traefik Kubernetes CRD). No Helm chart exists yet.
 
 Kubernetes/Helm manifests, a custom in-app admin screen, a task queue for on-demand
 tenant-triggered jobs, distributed tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
-voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis) for
-multi-replica deployments, and a real **AG-UI**/CopilotKit runtime bridge for `ui-react`'s chat
-(`ChatPanel` calls `rag-agent` directly for now).
+voice/multimodal agents (Pipecat), per-tenant billing/metering, and a shared cache (e.g. Redis)
+for multi-replica deployments. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat,
+previously listed here, is built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`.)
 
 ## Contributing
 

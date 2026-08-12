@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useCopilotReadable } from "@copilotkit/react-core";
 import {
   predict,
   datasetSample,
@@ -34,6 +35,11 @@ function GlobalImportanceSection({ scenario, accessToken }: { scenario: Scenario
       setLoading(false);
     }
   }
+
+  useCopilotReadable({
+    description: `Global SHAP feature importance for the ${scenario.title} model, if the user has computed it — which features matter most overall, distinct from any single prediction's explanation.`,
+    value: data ? { feature_importance: data.feature_importance, sample_size: data.sample_size } : null,
+  });
 
   return (
     <div className="panel-card">
@@ -104,6 +110,11 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
 
   const yLabel = scenario.task_type === "regression" ? `Prediction (${scenario.target_units ?? ""})` : "Probability";
 
+  useCopilotReadable({
+    description: `The current partial-dependence sweep for ${scenario.title}, if the user has run one — how the model's prediction responds as "${feature}" varies, other features held at the values shown.`,
+    value: sweep ? { held_at: record, ...sweep } : null,
+  });
+
   return (
     <>
       <div className="panel-card">
@@ -173,6 +184,11 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
       setLoading(false);
     }
   }
+
+  useCopilotReadable({
+    description: `The held-out evaluation metrics for the ${scenario.title} model currently shown to the user, if loaded.`,
+    value: evaluation ? { metrics: evaluation.metrics, n: evaluation.n, task_type: evaluation.task_type } : null,
+  });
 
   if (!evaluation) {
     return (

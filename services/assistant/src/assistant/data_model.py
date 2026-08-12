@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +47,9 @@ class EnvConfig(BaseSettings):
         description="Model name to request from llm-gateway (must be in its litellm_config.yaml model_list)"
     )
     PLATFORM_REGISTRY_URL: str = Field(description="Base URL of the platform-registry service's entitlement-check API")
+    PREDICTION_SERVICE_URL: str = Field(
+        description="Base URL of the prediction service's dataset/predict API (backs the chat agent's data tools)"
+    )
     AUTH_DISABLED: str = Field(
         description="DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
     )
@@ -58,12 +60,12 @@ class EnvConfig(BaseSettings):
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
     ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
-        description="Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building",
+        description="Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)",
         default=None,
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
     SHARED_MODEL_ORG_ID: str = Field(
-        description="Org id whose trained model metadata every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
+        description="Org id every tenant's model falls back to until it has its own (matches training's ORG_ID)"
     )
     LOGTO_ISSUER: str | None = Field(
         description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
@@ -79,7 +81,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "f8b77d2e6ba744d0190dd1c636dd842b3c204f19e51f5db8e75e7f4bb17fc8fb"
+_SOURCE_YAML_HASH = "a4abd1b1b52fd08eb899716213a4d25d4d10022481d33c4acc02b1e1e8c5fcfd"
 
 
 EnvConfig.model_rebuild()
@@ -115,12 +117,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

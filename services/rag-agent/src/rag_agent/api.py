@@ -5,11 +5,17 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import httpx
+from ag_ui.core import RunAgentInput
+from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
+from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -17,41 +23,10 @@ from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 
 from rag_agent import get_env_config
-from rag_agent.core.agent import run_chat
+from rag_agent.core.agent import build_agui_agent, build_retrieve_tool
 from rag_agent.core.identity import resolve_identity
 
 router = APIRouter()
-
-
-class ChatMessage(BaseModel):
-    """One turn of prior conversation history."""
-
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    """Request body for POST /chat/{scenario_slug}."""
-
-    message: str
-    history: list[ChatMessage] = []
-
-
-class SourceOut(BaseModel):
-    """One retrieved chunk's source and similarity score, returned for transparency."""
-
-    source: str
-    score: float
-
-
-class ChatResponse(BaseModel):
-    """Response body for POST /chat/{scenario_slug}. `sources` is empty if the agent
-    judged the question off-topic and answered without calling the retrieval tool.
-    """
-
-    reply: str
-    sources: list[SourceOut]
-    model: str
 
 
 class ModelResponse(BaseModel):
@@ -129,22 +104,44 @@ def model_endpoint(
     return ModelResponse(model=model_name)
 
 
-@router.post("/chat/{scenario_slug}", response_model=ChatResponse)
-def chat_endpoint(
-    body: ChatRequest,
+@router.post("/agui/{scenario_slug}")
+async def agui_endpoint(
+    scenario_slug: str,
+    input_data: RunAgentInput,
+    request: Request,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     qdrant: QdrantClient = Depends(_qdrant),
     embedders: dict[str, SentenceTransformer] = Depends(_embedders),
     llm: BaseChatModel = Depends(_llm),
-    model_name: str = Depends(_llm_model_name),
-) -> ChatResponse:
-    """Answer a question, retrieving from the caller's tenant's vectorized documents only if in-domain."""
+) -> StreamingResponse:
+    """AG-UI (CopilotKit) streaming endpoint: an SSE stream of AG-UI events, driven by
+    a `create_agent` graph built fresh per request (see build_agui_agent). Same
+    `resolve_identity`/`_scenario_definition` dependency chain as every other route in
+    this service — enforced here explicitly (see below), not by a shared framework
+    hook. `input_data.tools` carries the frontend's own useCopilotAction declarations
+    (e.g. render_chart/render_table); `build_agui_agent`'s CopilotKitMiddleware is what
+    lets the model call those without a server-side implementation, surfacing them to
+    the client as generative-UI tool-call events instead of a failed execution.
+
+    Deliberately not wired through `add_langgraph_fastapi_endpoint` (the library's own
+    turnkey router): that helper reads no headers besides `accept`, so it cannot enforce
+    this platform's per-request entitlement check — see the "Auth/tenancy" decision in
+    the phase-3 plan. This route re-implements just enough of it (no `.clone()` needed,
+    since the agent is already built fresh per request) to keep every request going
+    through the same auth/entitlement chain as every other route.
+    """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
     assert definition.vector_store is not None  # guaranteed by kind="conversational_rag" filter
     embedder = embedders[definition.slug]
-    history = [{"role": m.role, "content": m.content} for m in body.history]
-    reply, sources = run_chat(
-        llm, qdrant, embedder, definition.vector_store, identity.org_id, definition.chat.context, history, body.message
-    )
-    return ChatResponse(reply=reply, sources=[SourceOut(**s) for s in sources], model=model_name)
+    tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
+    graph = build_agui_agent(llm, [tool], definition.chat.context)
+    agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph)
+
+    encoder = EventEncoder(accept=request.headers.get("accept", ""))
+
+    async def event_generator() -> AsyncIterator[str]:
+        async for event in agent.run(input_data):
+            yield encoder.encode(event)
+
+    return StreamingResponse(event_generator(), media_type=encoder.get_content_type())

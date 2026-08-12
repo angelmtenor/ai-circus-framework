@@ -10,11 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@copilotkit/react-core": "^1.67.1",
+    "@copilotkit/react-ui": "^1.67.1",
     "@logto/react": "^4.0.14",
     "plotly.js-dist-min": "^3.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-plotly.js": "^4.1.0"
+    "react-plotly.js": "^4.1.0",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

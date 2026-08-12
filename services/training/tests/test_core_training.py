@@ -9,8 +9,10 @@ from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 
 from training.core.training import (
+    _aggregate_by_feature,
     build_explainer,
     build_pipeline,
+    global_shap_importance,
     select_best_candidate,
     split_features,
     train_candidate,
@@ -206,6 +208,49 @@ def test_build_explainer_uses_linear_explainer_for_linear_regression(synthetic_r
 
     shap_values = explainer.shap_values(pipeline.named_steps["preprocessor"].transform(x_train))
     assert shap_values.shape[0] == len(x_train)
+
+
+def test_aggregate_by_feature_sums_one_hot_columns_back_to_original() -> None:
+    """Multiple one-hot columns from the same original feature are summed, not kept separate."""
+    names = ["num__numeric_feature", "cat__category_feature_A", "cat__category_feature_B"]
+    values = np.array([0.5, 0.1, 0.2])
+
+    ranked = _aggregate_by_feature(names, values, ["numeric_feature", "category_feature"])
+
+    assert ranked[0] == {"feature": "numeric_feature", "importance": 0.5}
+    assert ranked[1] == {"feature": "category_feature", "importance": pytest.approx(0.3)}
+
+
+def test_global_shap_importance_ranks_features_for_classifier(synthetic_data: tuple) -> None:
+    """Global SHAP importance covers every original feature, ranked descending, for a real fitted pipeline."""
+    x_train, _x_test, y_train, _y_test = synthetic_data
+    pipeline = build_pipeline(
+        ["numeric_feature"], ["category_feature"], LGBMClassifier(n_estimators=10, random_state=0, verbosity=-1)
+    )
+    pipeline.fit(x_train, y_train)
+    explainer = build_explainer(pipeline, x_train)
+
+    result = global_shap_importance(pipeline, explainer, x_train, ["numeric_feature", "category_feature"])
+
+    assert {item["feature"] for item in result} == {"numeric_feature", "category_feature"}
+    importances = [item["importance"] for item in result]
+    assert importances == sorted(importances, reverse=True)
+    # numeric_feature is the only signal correlated with the synthetic target — it should dominate.
+    assert result[0]["feature"] == "numeric_feature"
+
+
+def test_global_shap_importance_respects_sample_size_cap(synthetic_data: tuple) -> None:
+    """A sample_size smaller than the dataset doesn't error and still ranks every feature."""
+    x_train, _x_test, y_train, _y_test = synthetic_data
+    pipeline = build_pipeline(
+        ["numeric_feature"], ["category_feature"], LGBMClassifier(n_estimators=10, random_state=0, verbosity=-1)
+    )
+    pipeline.fit(x_train, y_train)
+    explainer = build_explainer(pipeline, x_train)
+
+    result = global_shap_importance(pipeline, explainer, x_train, ["numeric_feature", "category_feature"], sample_size=10)
+
+    assert {item["feature"] for item in result} == {"numeric_feature", "category_feature"}
 
 
 def test_transformed_feature_names_include_one_hot_columns(synthetic_data: tuple) -> None:

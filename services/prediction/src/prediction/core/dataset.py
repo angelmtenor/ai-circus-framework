@@ -122,6 +122,13 @@ def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: in
 class EvaluationResult:
     """A held-out evaluation of one tenant's deployed pipeline, ready to render as a
     metrics/feature-importance/predicted-vs-actual dashboard.
+
+    `feature_values` carries the same held-out rows' raw feature columns, aligned
+    index-for-index with `actuals`/`predictions` — lets a caller (e.g. the chat
+    agent's charting tool) color or facet an actual-vs-predicted plot by a real
+    feature (torque, current, etc.) without having to line up two independently
+    sampled row sets that don't share an index (see `sample_rows`, which draws from
+    the *full* dataframe via its own `np.linspace`, not this held-out split).
     """
 
     task_type: str
@@ -134,6 +141,7 @@ class EvaluationResult:
     predictions: list[float]
     prediction_lower: list[float] | None
     prediction_upper: list[float] | None
+    feature_values: dict[str, list[Any]]
 
 
 def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> EvaluationResult:
@@ -198,6 +206,11 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
             })
         breakdown.sort(key=lambda b: b["n"], reverse=True)
 
+    feature_values = {
+        column: [v.item() if isinstance(v, np.generic) else v for v in x_test[column].to_numpy()]
+        for column in feature_columns
+    }
+
     return EvaluationResult(
         task_type=task_type,
         target=target,
@@ -209,4 +222,5 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
         predictions=[round(float(v), 4) for v in predictions],
         prediction_lower=[round(float(v), 4) for v in lower] if lower is not None else None,
         prediction_upper=[round(float(v), 4) for v in upper] if upper is not None else None,
+        feature_values=feature_values,
     )

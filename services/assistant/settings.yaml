@@ -77,6 +77,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: PREDICTION_SERVICE_URL
+    description: "Base URL of the prediction service's dataset/predict API (backs the chat agent's data tools)"
+    type: string
+    mandatory: true
+    secret: false
+
   - name: AUTH_DISABLED
     description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
     type: string
@@ -96,7 +102,7 @@ env_variables:
     secret: true
 
   - name: ENGINEERING_DEMO_API_KEY
-    description: "Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building"
+    description: "Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)"
     type: string
     mandatory: false
     secret: true
@@ -108,7 +114,7 @@ env_variables:
     secret: false
 
   - name: SHARED_MODEL_ORG_ID
-    description: "Org id whose trained model metadata every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
+    description: "Org id every tenant's model falls back to until it has its own (matches training's ORG_ID)"
     type: string
     mandatory: true
     secret: false
@@ -163,6 +169,7 @@ environments:
     MINIO_ENDPOINT: "http://minio.localhost"
     LLM_GATEWAY_URL: "http://llm-gateway.localhost"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
+    PREDICTION_SERVICE_URL: "http://prediction.localhost"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
@@ -170,6 +177,7 @@ environments:
     MINIO_ENDPOINT: "http://minio:9000"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+    PREDICTION_SERVICE_URL: "http://prediction:8000"
 
   staging: {}
     # Staging environment profile — overrides go here

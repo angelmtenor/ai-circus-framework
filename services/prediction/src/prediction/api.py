@@ -76,6 +76,9 @@ class DatasetEvaluationOut(BaseModel):
     actual dashboard. Feature importance lives separately (see
     /dataset/{slug}/explainability) to avoid showing two different notions of
     "importance" in the same place.
+
+    `feature_values` are the same held-out rows' raw feature columns, aligned
+    index-for-index with `actuals`/`predictions` (see EvaluationResult's docstring).
     """
 
     task_type: str
@@ -88,6 +91,7 @@ class DatasetEvaluationOut(BaseModel):
     predictions: list[float]
     prediction_lower: list[float] | None = None
     prediction_upper: list[float] | None = None
+    feature_values: dict[str, list[object]]
 
 
 class DatasetExplainabilityOut(BaseModel):
@@ -200,6 +204,7 @@ def dataset_evaluation_endpoint(
         predictions=result.predictions,
         prediction_lower=result.prediction_lower,
         prediction_upper=result.prediction_upper,
+        feature_values=result.feature_values,
     )
 
 
