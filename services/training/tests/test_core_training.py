@@ -61,6 +61,21 @@ def test_split_features_separates_by_dtype() -> None:
     assert categorical == ["b"]
 
 
+def test_split_features_treats_boolean_columns_as_categorical() -> None:
+    """A bool-dtype column (e.g. is_holiday) is classified categorical, not numeric.
+
+    pandas' is_numeric_dtype() returns True for bool columns; without an explicit
+    exclusion, a boolean feature would be routed through the numeric imputer/scaler
+    instead of one-hot encoding, breaking scenarios like energy_building.
+    """
+    df = pd.DataFrame({"a": [1, 2], "b": pd.Categorical(["x", "y"]), "is_holiday": [True, False]})
+
+    numeric, categorical = split_features(df, ["a", "b", "is_holiday"])
+
+    assert numeric == ["a"]
+    assert categorical == ["b", "is_holiday"]
+
+
 def test_build_pipeline_fits_and_predicts(synthetic_data: tuple) -> None:
     """A built pipeline can be fit and produce predictions on held-out data."""
     x_train, x_test, y_train, _y_test = synthetic_data

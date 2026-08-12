@@ -57,7 +57,11 @@ class TrainedCandidate:
 
 def split_features(df: pd.DataFrame, feature_columns: list[str]) -> tuple[list[str], list[str]]:
     """Split feature columns into (numeric, categorical) by dtype."""
-    numeric = [c for c in feature_columns if pd.api.types.is_numeric_dtype(df[c])]
+
+    def is_numeric(column: str) -> bool:
+        return pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])
+
+    numeric = [c for c in feature_columns if is_numeric(c)]
     categorical = [c for c in feature_columns if c not in numeric]
     return numeric, categorical
 

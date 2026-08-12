@@ -58,7 +58,8 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     df = selected.drop_duplicates().dropna()
 
     for column in dataset.feature_columns:
-        if not pd.api.types.is_numeric_dtype(df[column]):
+        is_numeric = pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])
+        if not is_numeric:
             df[column] = df[column].astype("category")
 
     logger.info(

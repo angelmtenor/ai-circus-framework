@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FeatureSpec } from "./apiClient";
 
-export type DatasetRow = Record<string, string | number | null>;
+export type DatasetRow = Record<string, string | number | boolean | null>;
 
 type NumericFilter = { type: "numeric"; min: number; max: number };
 type CategoricalFilter = { type: "categorical"; selected: Set<string> };
@@ -18,11 +18,16 @@ function initialFilters(featureColumns: string[], featureSchema: Record<string, 
   return filters;
 }
 
+function normalizeCategorical(value: string | number | boolean): string {
+  if (typeof value === "boolean") return value ? "True" : "False";
+  return String(value);
+}
+
 function passesFilter(row: DatasetRow, feature: string, filter: Filter): boolean {
   const value = row[feature];
   if (value === null || value === undefined) return true;
   if (filter.type === "numeric") return Number(value) >= filter.min && Number(value) <= filter.max;
-  return filter.selected.has(String(value));
+  return filter.selected.has(normalizeCategorical(value));
 }
 
 /**

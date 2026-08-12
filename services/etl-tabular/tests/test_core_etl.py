@@ -108,6 +108,32 @@ def test_clean_drops_protected_columns_duplicates_and_casts_categories() -> None
     assert pd.api.types.is_numeric_dtype(cleaned["Age"])
 
 
+def test_clean_casts_boolean_feature_columns_to_category() -> None:
+    """A bool-dtype feature column (e.g. is_holiday) is treated as categorical, not numeric.
+
+    pandas' is_numeric_dtype() returns True for bool columns, so a naive check would
+    leave them uncast — silently mismatching the "True"/"False" string options declared
+    in feature_schema and breaking downstream filtering/training.
+    """
+    dataset = DATASET.model_copy(
+        update={
+            "feature_columns": ["CreditScore", "IsHoliday"],
+            "feature_schema": {
+                "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
+                "IsHoliday": {"type": "categorical", "options": ["False", "True"], "default": "False"},
+            },
+        }
+    )
+    df = pd.DataFrame(
+        {"CreditScore": [600, 650, 700], "IsHoliday": [True, False, True], "Exited": [0, 1, 0]},
+        index=pd.Index([1, 2, 3], name="CustomerId"),
+    )
+
+    cleaned = clean(df, dataset)
+
+    assert cleaned["IsHoliday"].dtype.name == "category"
+
+
 def test_save_normalized_writes_parquet_readable_back(scenario_dir: Path) -> None:
     """save_normalized round-trips a DataFrame through MinIO as parquet."""
     store = FakeObjectStore()
