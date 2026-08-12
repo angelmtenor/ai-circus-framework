@@ -19,7 +19,7 @@ from langchain_core.messages import AIMessage, ToolCall
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from rag_agent import api as api_module
-from rag_agent.api import _embedders, _llm, _qdrant, _scenario_definition, router
+from rag_agent.api import _embedders, _llm, _llm_model_name, _qdrant, _scenario_definition, router
 from rag_agent.core.identity import resolve_identity
 from tests.conftest import FakeSecret
 
@@ -71,6 +71,7 @@ def _client_with(llm: FakeToolCallingModel) -> TestClient:
     )
     app.dependency_overrides[_embedders] = lambda: {"docs_rag": SimpleNamespace(encode=lambda _q, **_kw: [0.1, 0.2])}
     app.dependency_overrides[_llm] = lambda: llm
+    app.dependency_overrides[_llm_model_name] = lambda: "gemini-flash"
     return TestClient(app)
 
 
@@ -78,6 +79,16 @@ def test_healthz() -> None:
     """/healthz reports ok."""
     client = _client_with(FakeToolCallingModel(responses=[]))
     assert client.get("/healthz").json() == {"status": "ok"}
+
+
+def test_model_endpoint_returns_the_active_model_without_sending_a_message() -> None:
+    """GET /model/{scenario_slug} lets the UI show the model before the first chat turn."""
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.get("/model/docs_rag")
+
+    assert response.status_code == 200
+    assert response.json() == {"model": "gemini-flash"}
 
 
 def test_chat_calls_the_tool_for_an_in_domain_question_and_returns_sources() -> None:
@@ -97,6 +108,7 @@ def test_chat_calls_the_tool_for_an_in_domain_question_and_returns_sources() -> 
     body = response.json()
     assert body["reply"] == "The overdraft fee is $25."
     assert body["sources"] == [{"source": "raw/account_policies.md", "score": 0.9}]
+    assert body["model"] == "gemini-flash"
 
 
 def test_chat_skips_the_tool_for_chitchat_and_returns_no_sources() -> None:
@@ -110,6 +122,7 @@ def test_chat_skips_the_tool_for_chitchat_and_returns_no_sources() -> None:
     body = response.json()
     assert body["reply"] == "Hi there! How can I help?"
     assert body["sources"] == []
+    assert body["model"] == "gemini-flash"
 
 
 def test_chat_unknown_scenario_returns_404() -> None:
@@ -140,17 +153,15 @@ def _fake_request() -> SimpleNamespace:
     return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(llm_clients={})))
 
 
-def test_llm_uses_platform_registrys_live_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_llm_model_name_uses_platform_registrys_live_active_model(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Settings page's live picker wins over the instance's static LLM_MODEL default."""
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
     monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", lambda self, *, admin_api_key: "gemini-flash")
 
-    llm = _llm(_fake_request())
-
-    assert llm.model_name == "gemini-flash"
+    assert _llm_model_name() == "gemini-flash"
 
 
-def test_llm_falls_back_to_static_default_when_platform_registry_is_unreachable(
+def test_llm_model_name_falls_back_to_static_default_when_platform_registry_is_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A platform-registry hiccup shouldn't break chat — fall back to the static LLM_MODEL."""
@@ -161,19 +172,25 @@ def test_llm_falls_back_to_static_default_when_platform_registry_is_unreachable(
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
     monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", _raise)
 
-    llm = _llm(_fake_request())
+    assert _llm_model_name() == "llama3"
 
-    assert llm.model_name == "llama3"
+
+def test_llm_builds_a_client_for_the_given_model_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The chat model client is built against the resolved model_name."""
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+
+    llm = _llm(_fake_request(), model_name="gemini-flash")
+
+    assert llm.model_name == "gemini-flash"
 
 
 def test_llm_caches_the_client_per_model_name(monkeypatch: pytest.MonkeyPatch) -> None:
     """Repeat calls for the same active model reuse one client instead of rebuilding it."""
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
-    monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", lambda self, *, admin_api_key: "gemini-flash")
     request = _fake_request()
 
-    first = _llm(request)
-    second = _llm(request)
+    first = _llm(request, model_name="gemini-flash")
+    second = _llm(request, model_name="gemini-flash")
 
     assert first is second
     assert set(request.app.state.llm_clients) == {"gemini-flash"}

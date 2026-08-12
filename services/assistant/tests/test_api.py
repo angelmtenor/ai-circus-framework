@@ -51,12 +51,20 @@ def test_healthz(client: TestClient) -> None:
     assert client.get("/healthz").json() == {"status": "ok"}
 
 
+def test_model_endpoint_returns_the_active_model_without_sending_a_message(client: TestClient) -> None:
+    """GET /model/{scenario_slug} lets the UI show the model before the first chat turn."""
+    response = client.get("/model/churn")
+
+    assert response.status_code == 200
+    assert response.json() == {"model": "gpt-4o-mini"}
+
+
 def test_chat_returns_reply(client: TestClient, fake_llm_client: MagicMock) -> None:
     """POST /chat/{scenario_slug} returns the completion's reply text."""
     response = client.post("/chat/churn", json={"message": "what matters most?"})
 
     assert response.status_code == 200
-    assert response.json() == {"reply": "Age is the strongest predictor."}
+    assert response.json() == {"reply": "Age is the strongest predictor.", "model": "gpt-4o-mini"}
     _, kwargs = fake_llm_client.chat.completions.create.call_args
     assert kwargs["messages"][0] == {"role": "system", "content": "system prompt"}
     assert kwargs["messages"][-1] == {"role": "user", "content": "what matters most?"}

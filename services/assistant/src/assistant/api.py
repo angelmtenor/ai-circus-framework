@@ -39,6 +39,13 @@ class ChatResponse(BaseModel):
     """Response body for POST /chat/{scenario_slug}."""
 
     reply: str
+    model: str
+
+
+class ModelResponse(BaseModel):
+    """Response body for GET /model/{scenario_slug}."""
+
+    model: str
 
 
 def _prompt_cache(request: Request) -> SystemPromptCache:
@@ -83,6 +90,18 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/model/{scenario_slug}", response_model=ModelResponse)
+def model_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    llm_model: str = Depends(_llm_model),
+) -> ModelResponse:
+    """The model that would answer this scenario's next chat message, so the UI can
+    show it upfront rather than only after the first reply.
+    """
+    return ModelResponse(model=llm_model)
+
+
 @router.post("/chat/{scenario_slug}", response_model=ChatResponse)
 def chat_endpoint(
     body: ChatRequest,
@@ -97,4 +116,4 @@ def chat_endpoint(
     system_prompt = prompt_cache.get(identity.org_id, definition.slug)
     history = [{"role": m.role, "content": m.content} for m in body.history]
     reply = run_chat(llm_client, llm_model, system_prompt, history, body.message)
-    return ChatResponse(reply=reply)
+    return ChatResponse(reply=reply, model=llm_model)

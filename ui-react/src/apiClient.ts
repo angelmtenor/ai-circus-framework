@@ -68,6 +68,7 @@ export type ChatMessage = { role: string; content: string };
 export type ChatResult = {
   reply: string;
   sources?: { source: string; score: number }[];
+  model: string;
 };
 
 export type DatasetSample = {
@@ -260,4 +261,14 @@ export async function chat(
     body: JSON.stringify({ message, history }),
   });
   return asJson(response);
+}
+
+/**
+ * The model that would answer this scenario's next chat message — lets the UI show
+ * it before the first reply, not just alongside each answer.
+ */
+export async function chatModel(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<string> {
+  const response = await fetch(`${baseUrl}/model/${scenarioSlug}`, { headers: headers(accessToken) });
+  const body = await asJson<{ model: string }>(response);
+  return body.model;
 }

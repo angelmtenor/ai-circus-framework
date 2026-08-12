@@ -943,6 +943,12 @@ select:focus {
   padding: 0.55rem 0.85rem;
 }
 
+.chat-model {
+  font-size: 0.7rem;
+  color: var(--dim);
+  margin: 0.1rem 0 0.3rem;
+}
+
 .chat-bubble--typing {
   display: flex;
   gap: 0.25rem;
@@ -1201,6 +1207,17 @@ select:focus {
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text);
+}
+
+.chat-model-badge {
+  margin-left: 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  vertical-align: middle;
 }
 
 .chat-dock-header-actions {

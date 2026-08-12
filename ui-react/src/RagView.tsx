@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
@@ -9,12 +10,17 @@ import { ChatPanel } from "./ChatPanel";
  * here — the chat itself (with cited sources per reply) is the exploration surface.
  */
 export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+  const [chatModel, setChatModel] = useState<string | null>(null);
+
   return (
     <div className="workspace workspace--rag">
       <div className="rag-hero">
         <div className="rag-hero-icon">{scenario.icon}</div>
         <div>
-          <h2>{scenario.title}</h2>
+          <h2>
+            {scenario.title}
+            {chatModel && <span className="chat-model-badge">{chatModel}</span>}
+          </h2>
           <p>{scenario.description}</p>
         </div>
       </div>
@@ -25,6 +31,7 @@ export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; 
           sampleQuestions={scenario.sample_questions}
           accessToken={accessToken}
           variant="full"
+          onModel={setChatModel}
         />
       </div>
     </div>

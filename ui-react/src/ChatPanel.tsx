@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { chat, type ChatMessage } from "./apiClient";
+import { chat, chatModel, type ChatMessage } from "./apiClient";
 import { renderMarkdown } from "./markdown";
 
 /**
@@ -22,6 +22,7 @@ export function ChatPanel({
   accessToken,
   variant = "dock",
   title,
+  onModel,
 }: {
   baseUrl: string;
   scenarioSlug: string;
@@ -29,8 +30,10 @@ export function ChatPanel({
   accessToken: string | null;
   variant?: "dock" | "full";
   title?: string;
+  /** Called once the active model is known, so a parent header can show it upfront. */
+  onModel?: (model: string) => void;
 }) {
-  const [history, setHistory] = useState<ChatMessage[]>([]);
+  const [history, setHistory] = useState<(ChatMessage & { model?: string })[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sources, setSources] = useState<{ source: string; score: number }[] | null>(null);
@@ -43,6 +46,14 @@ export function ChatPanel({
     historyRef.current?.scrollTo({ top: historyRef.current.scrollHeight, behavior: "smooth" });
   }, [history, sending]);
 
+  // Known upfront, before the first message, so the header can show it right away.
+  useEffect(() => {
+    chatModel(baseUrl, scenarioSlug, accessToken)
+      .then((model) => onModel?.(model))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseUrl, scenarioSlug, accessToken]);
+
   async function send(text: string) {
     if (!text.trim() || sending) return;
     setMessage("");
@@ -50,7 +61,7 @@ export function ChatPanel({
     setHistory((h) => [...h, { role: "user", content: text }]);
     try {
       const result = await chat(baseUrl, scenarioSlug, text, history, accessToken);
-      setHistory((h) => [...h, { role: "assistant", content: result.reply }]);
+      setHistory((h) => [...h, { role: "assistant", content: result.reply, model: result.model }]);
       setSources(result.sources ?? null);
     } catch (error) {
       setHistory((h) => [...h, { role: "assistant", content: `⚠️ ${(error as Error).message}` }]);
@@ -73,7 +84,10 @@ export function ChatPanel({
         {history.map((turn, i) => (
           <div key={i} className={`chat-turn chat-turn--${turn.role}`}>
             <div className="chat-avatar">{turn.role === "user" ? "🧑" : "🤖"}</div>
-            <div className="chat-bubble">{renderMarkdown(turn.content)}</div>
+            <div>
+              <div className="chat-bubble">{renderMarkdown(turn.content)}</div>
+              {turn.model && <div className="chat-model">{turn.model}</div>}
+            </div>
           </div>
         ))}
         {sending && (

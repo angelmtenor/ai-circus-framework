@@ -51,6 +51,13 @@ class ChatResponse(BaseModel):
 
     reply: str
     sources: list[SourceOut]
+    model: str
+
+
+class ModelResponse(BaseModel):
+    """Response body for GET /model/{scenario_slug}."""
+
+    model: str
 
 
 def _qdrant(request: Request) -> QdrantClient:
@@ -61,19 +68,24 @@ def _embedders(request: Request) -> dict[str, SentenceTransformer]:
     return request.app.state.embedders
 
 
-def _llm(request: Request) -> BaseChatModel:
-    """The chat model to use: live from platform-registry's admin Settings picker
-    (applies on the very next chat request, no restart), falling back to this
-    instance's static LLM_MODEL if platform-registry is unreachable. Cached per
-    model_name on app.state so repeat requests for the same model reuse one client.
+def _llm_model_name() -> str:
+    """The model name to send to llm-gateway: live from platform-registry's admin
+    Settings picker (applies on the very next chat request, no restart), falling back
+    to this instance's static LLM_MODEL if platform-registry is unreachable.
     """
     config = get_env_config()
     registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
     try:
-        model_name = registry.get_active_llm_model(admin_api_key=config.ADMIN_API_KEY.get_secret_value())
+        return registry.get_active_llm_model(admin_api_key=config.ADMIN_API_KEY.get_secret_value())
     except httpx.HTTPError:
-        model_name = config.LLM_MODEL
+        return config.LLM_MODEL
 
+
+def _llm(request: Request, model_name: str = Depends(_llm_model_name)) -> BaseChatModel:
+    """The chat model to use, cached per model_name on app.state so repeat requests
+    for the same model reuse one client.
+    """
+    config = get_env_config()
     llm_clients: dict[str, ChatOpenAI] = request.app.state.llm_clients
     if model_name not in llm_clients:
         llm_clients[model_name] = ChatOpenAI(
@@ -105,6 +117,18 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/model/{scenario_slug}", response_model=ModelResponse)
+def model_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_name: str = Depends(_llm_model_name),
+) -> ModelResponse:
+    """The model that would answer this scenario's next chat message, so the UI can
+    show it upfront rather than only after the first reply.
+    """
+    return ModelResponse(model=model_name)
+
+
 @router.post("/chat/{scenario_slug}", response_model=ChatResponse)
 def chat_endpoint(
     body: ChatRequest,
@@ -113,6 +137,7 @@ def chat_endpoint(
     qdrant: QdrantClient = Depends(_qdrant),
     embedders: dict[str, SentenceTransformer] = Depends(_embedders),
     llm: BaseChatModel = Depends(_llm),
+    model_name: str = Depends(_llm_model_name),
 ) -> ChatResponse:
     """Answer a question, retrieving from the caller's tenant's vectorized documents only if in-domain."""
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
@@ -122,4 +147,4 @@ def chat_endpoint(
     reply, sources = run_chat(
         llm, qdrant, embedder, definition.vector_store, identity.org_id, definition.chat.context, history, body.message
     )
-    return ChatResponse(reply=reply, sources=[SourceOut(**s) for s in sources])
+    return ChatResponse(reply=reply, sources=[SourceOut(**s) for s in sources], model=model_name)

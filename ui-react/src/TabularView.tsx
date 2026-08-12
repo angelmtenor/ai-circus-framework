@@ -26,6 +26,7 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
   const [tab, setTab] = useState<Tab>("data");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
+  const [chatModel, setChatModel] = useState<string | null>(null);
 
   return (
     <div className="workspace">
@@ -54,6 +55,7 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
             <div className="chat-dock-header">
               <span>
                 <Icon name="chat" /> Ask about {scenario.title}
+                {chatModel && <span className="chat-model-badge">{chatModel}</span>}
               </span>
               <div className="chat-dock-header-actions">
                 <button
@@ -68,7 +70,14 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
                 </button>
               </div>
             </div>
-            <ChatPanel baseUrl={config.assistantUrl} scenarioSlug={scenario.slug} sampleQuestions={scenario.sample_questions} accessToken={accessToken} variant="dock" />
+            <ChatPanel
+              baseUrl={config.assistantUrl}
+              scenarioSlug={scenario.slug}
+              sampleQuestions={scenario.sample_questions}
+              accessToken={accessToken}
+              variant="dock"
+              onModel={setChatModel}
+            />
           </div>
         </div>
       )}
