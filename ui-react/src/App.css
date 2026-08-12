@@ -99,10 +99,16 @@ select:focus {
 .login-shell {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 0%, var(--panel-2) 0%, var(--bg) 60%);
+}
+
+.login-shell-content {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: radial-gradient(circle at 50% 0%, var(--panel-2) 0%, var(--bg) 60%);
 }
 
 .login-card {
@@ -191,6 +197,12 @@ select:focus {
   background: var(--bg);
 }
 
+.app-header-group {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -198,9 +210,32 @@ select:focus {
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+}
+
+.ai-disclosure-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem;
+  background: var(--panel-2);
+  color: var(--dim);
+  font-size: 0.75rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-disclosure-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  color: var(--accent-2);
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
 }
 
 .topbar-brand {

@@ -16,6 +16,18 @@ import "./App.css";
 // to every org.
 const ADMIN_ORG_ID = "admin";
 
+// EU AI Act Art. 50(1): systems that interact directly with natural persons must
+// disclose that clearly, at the latest by the time of first interaction — hence a
+// persistent, non-dismissible banner rather than a one-time/cookie-style notice.
+function AiDisclosureBanner() {
+  return (
+    <div className="ai-disclosure-banner" role="status">
+      <span className="ai-disclosure-badge">AI</span>
+      You are interacting with an AI system. Responses are generated automatically and may be inaccurate.
+    </div>
+  );
+}
+
 function LoginScreen({
   logo,
   onLogin,
@@ -62,74 +74,77 @@ function LoginScreen({
 
   return (
     <div className="login-shell">
-      <div className="login-card">
-        <div className="login-brand">
-          <img src={logo} alt="AI Circus" className="login-brand-icon" />
-          <h1>ai-circus-framework</h1>
-          <p className="login-tagline">Explainable ML &amp; document Q&amp;A, one scenario at a time.</p>
+      <AiDisclosureBanner />
+      <div className="login-shell-content">
+        <div className="login-card">
+          <div className="login-brand">
+            <img src={logo} alt="AI Circus" className="login-brand-icon" />
+            <h1>ai-circus-framework</h1>
+            <p className="login-tagline">Explainable ML &amp; document Q&amp;A, one scenario at a time.</p>
+          </div>
+
+          {config.devMode && (
+            <div className="login-section">
+              <p className="dev-warning">DEV_MODE is on — this bypasses real login. Never enable it beyond local iteration.</p>
+              <label>
+                Org id
+                <input value={orgId} onChange={(e) => setOrgId(e.target.value)} />
+              </label>
+              <label>
+                Roles (comma-separated)
+                <input value={roles} onChange={(e) => setRoles(e.target.value)} />
+              </label>
+              <button className="btn-primary" onClick={() => onLogin(orgId, roles.split(",").map((r) => r.trim()).filter(Boolean))}>
+                Log in (dev)
+              </button>
+            </div>
+          )}
+
+          <details className="login-section login-details">
+            <summary>Admin key login</summary>
+            <p className="dev-warning">Resolves to the admin tenant, auto-entitled to every scenario.</p>
+            <label>
+              Admin key
+              <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
+            </label>
+            <button className="btn-primary" onClick={submitAdminKey} disabled={!adminKey || adminKeyChecking}>
+              {adminKeyChecking ? "Checking…" : "Log in as admin"}
+            </button>
+            {adminKeyError && <p className="error">{adminKeyError}</p>}
+          </details>
+
+          <details className="login-section login-details">
+            <summary>Engineering demo login</summary>
+            <p className="dev-warning">
+              Resolves to a demo tenant entitled to only the engineering scenarios (predictive maintenance, electric
+              motor, building energy).
+            </p>
+            <label>
+              Engineering demo key
+              <input
+                type="password"
+                value={engineeringDemoKey}
+                onChange={(e) => setEngineeringDemoKey(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn-primary"
+              onClick={submitEngineeringDemoKey}
+              disabled={!engineeringDemoKey || engineeringDemoKeyChecking}
+            >
+              {engineeringDemoKeyChecking ? "Checking…" : "Log in as engineering demo"}
+            </button>
+            {engineeringDemoKeyError && <p className="error">{engineeringDemoKeyError}</p>}
+          </details>
+
+          {!config.devMode && (
+            <div className="login-section">
+              <button className="btn-primary" onClick={() => onLogin("", [])}>
+                Log in with Logto
+              </button>
+            </div>
+          )}
         </div>
-
-        {config.devMode && (
-          <div className="login-section">
-            <p className="dev-warning">DEV_MODE is on — this bypasses real login. Never enable it beyond local iteration.</p>
-            <label>
-              Org id
-              <input value={orgId} onChange={(e) => setOrgId(e.target.value)} />
-            </label>
-            <label>
-              Roles (comma-separated)
-              <input value={roles} onChange={(e) => setRoles(e.target.value)} />
-            </label>
-            <button className="btn-primary" onClick={() => onLogin(orgId, roles.split(",").map((r) => r.trim()).filter(Boolean))}>
-              Log in (dev)
-            </button>
-          </div>
-        )}
-
-        <details className="login-section login-details">
-          <summary>Admin key login</summary>
-          <p className="dev-warning">Resolves to the admin tenant, auto-entitled to every scenario.</p>
-          <label>
-            Admin key
-            <input type="password" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
-          </label>
-          <button className="btn-primary" onClick={submitAdminKey} disabled={!adminKey || adminKeyChecking}>
-            {adminKeyChecking ? "Checking…" : "Log in as admin"}
-          </button>
-          {adminKeyError && <p className="error">{adminKeyError}</p>}
-        </details>
-
-        <details className="login-section login-details">
-          <summary>Engineering demo login</summary>
-          <p className="dev-warning">
-            Resolves to a demo tenant entitled to only the engineering scenarios (predictive maintenance, electric
-            motor, building energy).
-          </p>
-          <label>
-            Engineering demo key
-            <input
-              type="password"
-              value={engineeringDemoKey}
-              onChange={(e) => setEngineeringDemoKey(e.target.value)}
-            />
-          </label>
-          <button
-            className="btn-primary"
-            onClick={submitEngineeringDemoKey}
-            disabled={!engineeringDemoKey || engineeringDemoKeyChecking}
-          >
-            {engineeringDemoKeyChecking ? "Checking…" : "Log in as engineering demo"}
-          </button>
-          {engineeringDemoKeyError && <p className="error">{engineeringDemoKeyError}</p>}
-        </details>
-
-        {!config.devMode && (
-          <div className="login-section">
-            <button className="btn-primary" onClick={() => onLogin("", [])}>
-              Log in with Logto
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -167,48 +182,51 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <button
-          className="topbar-brand"
-          onClick={() => {
-            setSelected(null);
-            setShowSettings(false);
-          }}
-        >
-          <img src={theme.logo} alt="AI Circus" className="topbar-brand-icon" />
-        </button>
-        {selected && !showSettings && (
-          <div className="topbar-scenario">
-            <button className="topbar-back" onClick={() => setSelected(null)}>
-              <Icon name="back" size={14} /> Scenarios
-            </button>
-            <span className="topbar-scenario-name">
-              {selected.icon} {selected.title}
-            </span>
-          </div>
-        )}
-        {showSettings && (
-          <div className="topbar-scenario">
-            <button className="topbar-back" onClick={() => setShowSettings(false)}>
-              <Icon name="back" size={14} /> Scenarios
-            </button>
-          </div>
-        )}
-        <div className="topbar-spacer" />
-        <button
-          className={`topbar-settings ${showSettings ? "active" : ""}`}
-          onClick={() => {
-            setShowSettings((s) => !s);
-            setSelected(null);
-          }}
-        >
-          <Icon name="gear" size={14} /> Settings
-        </button>
-        <span className="topbar-org">{identity.orgId}</span>
-        <button className="topbar-logout" onClick={logOut}>
-          Log out
-        </button>
-      </header>
+      <div className="app-header-group">
+        <AiDisclosureBanner />
+        <header className="topbar">
+          <button
+            className="topbar-brand"
+            onClick={() => {
+              setSelected(null);
+              setShowSettings(false);
+            }}
+          >
+            <img src={theme.logo} alt="AI Circus" className="topbar-brand-icon" />
+          </button>
+          {selected && !showSettings && (
+            <div className="topbar-scenario">
+              <button className="topbar-back" onClick={() => setSelected(null)}>
+                <Icon name="back" size={14} /> Scenarios
+              </button>
+              <span className="topbar-scenario-name">
+                {selected.icon} {selected.title}
+              </span>
+            </div>
+          )}
+          {showSettings && (
+            <div className="topbar-scenario">
+              <button className="topbar-back" onClick={() => setShowSettings(false)}>
+                <Icon name="back" size={14} /> Scenarios
+              </button>
+            </div>
+          )}
+          <div className="topbar-spacer" />
+          <button
+            className={`topbar-settings ${showSettings ? "active" : ""}`}
+            onClick={() => {
+              setShowSettings((s) => !s);
+              setSelected(null);
+            }}
+          >
+            <Icon name="gear" size={14} /> Settings
+          </button>
+          <span className="topbar-org">{identity.orgId}</span>
+          <button className="topbar-logout" onClick={logOut}>
+            Log out
+          </button>
+        </header>
+      </div>
       <main className="app-main">
         {showSettings ? (
           <Settings
