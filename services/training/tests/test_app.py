@@ -34,6 +34,7 @@ class FakeLogger:
         """Initialize in-memory message collectors used by tests."""
         self.success_messages: list[tuple[object, ...]] = []
         self.error_messages: list[tuple[object, ...]] = []
+        self.exception_messages: list[tuple[object, ...]] = []
 
     def success(self, *args: object) -> None:
         """Record success log calls."""
@@ -42,6 +43,10 @@ class FakeLogger:
     def error(self, *args: object) -> None:
         """Record error log calls."""
         self.error_messages.append(args)
+
+    def exception(self, *args: object) -> None:
+        """Record exception log calls."""
+        self.exception_messages.append(args)
 
 
 class FakeEnvConfig:
@@ -145,6 +150,35 @@ def fake_regression_definition() -> object:
     return FakeDefinition()
 
 
+@pytest.fixture
+def fake_broken_definition() -> object:
+    """A scenario definition whose feature_columns references a column absent from the
+    shared normalized dataset — deterministically fails during `_train_one` (KeyError
+    on `df.loc[:, feature_columns]`) without depending on any real dtype/model bug.
+    """
+
+    class FakeDefinition:
+        dataset = TabularDataset(
+            bucket="scenario-broken",
+            raw_object="raw/x.csv",
+            seed_file="sample_data/x.csv",
+            index_col="id",
+            target="target",
+            feature_columns=["numeric_feature", "missing_feature"],
+            feature_schema={
+                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
+                "missing_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
+            },
+        )
+        model = TabularModel(
+            task_type="classification",
+            candidates=["lightgbm"],
+            accuracy_gain_threshold_for_complexity=0.02,
+        )
+
+    return FakeDefinition()
+
+
 def build_validation_error() -> ValidationError:
     """Create a Pydantic validation error for testing startup failures."""
 
@@ -217,6 +251,39 @@ def test_main_trains_regression_scenario_without_stratify(
     assert metadata["model_name"] == "lightgbm"
     assert metadata["task_type"] == "regression"
     assert fake_logger.success_messages
+
+
+def test_main_continues_after_one_scenario_fails_and_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch, fake_definition: object, fake_broken_definition: object
+) -> None:
+    """One scenario's training failure (e.g. a data/dtype bug) must not cost every
+    scenario after it its model artifacts — but the run should still exit non-zero so
+    operators/CI notice the failure instead of it going silent.
+    """
+    fake_logger = FakeLogger()
+    store = FakeObjectStore()
+    df = _synthetic_normalized_dataset()
+    buffer = io.BytesIO()
+    df.to_parquet(buffer)
+    store.put("demo", NORMALIZED_DATASET_KEY, buffer.getvalue())
+
+    monkeypatch.setattr(app, "logger", fake_logger)
+    monkeypatch.setattr(app, "configure_logger", lambda: None)
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
+    monkeypatch.setattr(
+        app,
+        "resolve_scenarios",
+        lambda *_a, **_kw: {"broken": fake_broken_definition, "churn": fake_definition},
+    )
+    monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
+
+    with pytest.raises(SystemExit) as exc_info:
+        app.main()
+
+    assert exc_info.value.code == 1
+    assert fake_logger.exception_messages  # the failure was logged, not silently swallowed
+    # "churn" (processed after "broken") still got its model artifacts saved.
+    assert ("demo", MODEL_PIPELINE_KEY) in store.objects
 
 
 def test_main_exits_if_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

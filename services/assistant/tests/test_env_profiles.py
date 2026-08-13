@@ -36,7 +36,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.LOG_LEVEL == "INFO"
     assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
-    assert config.LLM_GATEWAY_URL == "http://llm-gateway.localhost"
+    assert config.LLM_GATEWAY_URL == "http://localhost:4000"
     assert config.PLATFORM_REGISTRY_URL == "http://localhost:8010"
 
 

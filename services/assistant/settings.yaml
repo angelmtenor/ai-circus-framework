@@ -167,7 +167,9 @@ environments:
   local:
     SCENARIOS_DIR: "../../scenarios"
     MINIO_ENDPOINT: "http://minio.localhost"
-    LLM_GATEWAY_URL: "http://llm-gateway.localhost"
+    # Loopback-bound host port (not Traefik — see root docker-compose.yml's
+    # llm-gateway comment for why it must never be on the public entrypoint).
+    LLM_GATEWAY_URL: "http://localhost:4000"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
     PREDICTION_SERVICE_URL: "http://prediction.localhost"
 

@@ -129,20 +129,21 @@ docker compose up --build etl-vectorize   # vectorizes the conversational_rag sc
 
 **[http://react.localhost](http://react.localhost)**
 
-For a quick look without configuring an identity provider at all, expand **Admin key login** on
-the login screen and use the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by default) — it
-comes pre-granted access to every scenario. For real multi-user/multi-tenant login, see
-"First-time Logto setup" further down.
+For a quick look without configuring an identity provider at all, use the login screen's **User**
+dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by
+default) as the password — it comes pre-granted access to every scenario. For real
+multi-user/multi-tenant login, see "First-time Logto setup" further down.
 
-There's also an **Engineering demo login**, the same bypass mechanism scoped to a narrower demo
-tenant — entitled to only the three engineering scenarios (Predictive Maintenance, Electric Motor
-Speed, Building Energy Consumption), not every scenario. Its key is `.env`'s
-`ENGINEERING_DEMO_API_KEY` (`ai-circus-engineering-2026` by default; leave it blank to disable this
-login option). It's provisioned automatically wherever `ADMIN_API_KEY` is — no separate setup step
-— and `make verify` (part of `make all`) checks that it's scoped correctly: entitled to exactly
-those three scenarios, and rejected (403) on any other. This is meant as a template for adding
-your own narrower demo tenants: pick a name, an env var, and a scenario slug set in
-`services/platform-registry/src/platform_registry/core/seed.py`'s `ENGINEERING_DEMO_SCENARIOS`.
+The dropdown's other option, **demo engineering**, is the same bypass mechanism scoped to a
+narrower demo tenant — entitled to only the three engineering scenarios (Predictive Maintenance,
+Electric Motor Speed, Building Energy Consumption), not every scenario. Its key/password is
+`.env`'s `ENGINEERING_DEMO_API_KEY` (`ai-circus-engineering-2026` by default; leave it blank to
+disable this login option). It's provisioned automatically wherever `ADMIN_API_KEY` is — no
+separate setup step — and `make verify` (part of `make all`) checks that it's scoped correctly:
+entitled to exactly those three scenarios, and rejected (403) on any other. This is meant as a
+template for adding your own narrower demo tenants: pick a name, an env var, and a scenario slug
+set in `services/platform-registry/src/platform_registry/core/seed.py`'s
+`ENGINEERING_DEMO_SCENARIOS`.
 
 > **"Failed to fetch" after logging in?** That's the browser's network-level error, not an
 > application error — it means a request never reached a server at all. Run `make verify`
@@ -151,7 +152,8 @@ your own narrower demo tenants: pick a name, an env var, and a scenario slug set
 > all`/`make verify` wait for that, plain `docker compose up -d` doesn't; (2) `postgres-data` (or
 > another) volume already existed from an earlier partial run, so its one-time init script never
 > reran — `make reset-all` fixes this; (3) something else on the machine is already bound to port
-> 80 (Traefik's entrypoint) or 8010 (platform-registry); (4) the app was opened via an origin other
+> 80 (Traefik's entrypoint), 8010 (platform-registry), 6333 (Qdrant), or 4000 (llm-gateway) —
+> the latter three are loopback-only, for local non-Docker dev; (4) the app was opened via an origin other
 > than `http://react.localhost` (e.g. plain `http://localhost`) — every backend's CORS allow-list
 > is keyed to that exact hostname.
 
@@ -294,8 +296,15 @@ expensive to retrofit once single-tenant assumptions are baked in.
 - **Scenario/entitlement registry**: `platform-registry` owns a Postgres schema
   (`tenants`/`scenarios`/`entitlements`); `scenarios/*.yaml` is only the human-editable seed
   format, not read directly by any other service.
-- **Ingress**: **Traefik** is the only container with a published port; every other service is
-  reached through it by hostname — a 1:1 mapping onto a Kubernetes Ingress later.
+- **Ingress**: **Traefik** is the only container reachable from outside the host — a 1:1 mapping
+  onto a Kubernetes Ingress later. A few services additionally publish a **loopback-only** port
+  (`platform-registry`, `qdrant`, `llm-gateway`) purely so services running outside Docker (local,
+  non-container dev) can still reach them directly; none of those three has auth strong enough to
+  be safe on Traefik's public entrypoint, so they must never gain a `traefik.enable=true` label.
+- **`infra/{postgres,logto,qdrant,minio,traefik}/`**: reserved per-service config directories —
+  today only `infra/postgres/` has content (a multi-database init script); the others' config is
+  inline in `docker-compose.yml` (command args/env/labels) until each grows enough to warrant its
+  own files.
 - **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of

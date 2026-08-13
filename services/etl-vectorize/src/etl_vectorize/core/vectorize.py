@@ -108,9 +108,19 @@ def build_points(docs: dict[str, str], documents: DocumentsConfig, model: Senten
 
 
 def upsert_points(client: QdrantClient, name: str, points: list[PointStruct], vector_size: int) -> None:
-    """Create the tenant's collection if it doesn't exist yet, then upsert the given points."""
-    if not client.collection_exists(name):
-        client.create_collection(name, vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE))
+    """(Re-)create the tenant's collection from scratch, then upsert the given points.
+
+    `run_vectorize` reloads and re-embeds every document under the tenant's raw
+    prefix on every run (not just changed ones), and each chunk gets a fresh random
+    point id — upserting onto whatever's already in the collection would duplicate
+    every unchanged chunk on each re-run and leave orphaned points forever for any
+    document that was removed or renamed since the last run. Deleting the collection
+    first makes each run's result an exact reflection of the tenant's current raw
+    documents, including the (empty) case where every document was removed.
+    """
+    if client.collection_exists(name):
+        client.delete_collection(name)
+    client.create_collection(name, vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE))
     client.upsert(collection_name=name, points=points)
 
 
@@ -127,11 +137,10 @@ def run_vectorize(
     ensure_raw_docs(store, org_id, documents, scenario_dir)
     docs = load_raw_docs(store, org_id, documents)
     points = build_points(docs, documents, model)
-    if points:
-        vector_size = model.get_embedding_dimension()
-        if vector_size is None:
-            raise RuntimeError("Embedding model did not report a sentence embedding dimension.")
-        name = qdrant_collection_name(vector_store, org_id)
-        upsert_points(qdrant, name, points, vector_size)
+    vector_size = model.get_embedding_dimension()
+    if vector_size is None:
+        raise RuntimeError("Embedding model did not report a sentence embedding dimension.")
+    name = qdrant_collection_name(vector_store, org_id)
+    upsert_points(qdrant, name, points, vector_size)
     logger.success("Vectorized {} document(s) into {} chunk(s) for org={}", len(docs), len(points), org_id)
     return len(points)

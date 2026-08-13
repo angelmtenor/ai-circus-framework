@@ -157,8 +157,21 @@ def main() -> None:
         )
         sys.exit(1)
 
+    failed_slugs: list[str] = []
     for slug, definition in definitions.items():
-        _train_one(config, slug, definition)
+        try:
+            _train_one(config, slug, definition)
+        except Exception:
+            # One scenario's data/training bug (e.g. a dtype the pipeline can't
+            # handle) must not cost every scenario after it its model artifacts —
+            # log and keep going, then fail the run at the end so CI/operators
+            # still notice.
+            logger.exception("Training failed for scenario={} — continuing with remaining scenarios", slug)
+            failed_slugs.append(slug)
+
+    if failed_slugs:
+        logger.error("Training failed for {} scenario(s): {}", len(failed_slugs), ", ".join(failed_slugs))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

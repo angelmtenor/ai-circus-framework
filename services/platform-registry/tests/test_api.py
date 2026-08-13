@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from platform_registry.api import require_admin
+from platform_registry.api import require_admin, require_org_match
 from platform_registry.app import app
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Base, Scenario
@@ -45,6 +45,7 @@ def client() -> Generator[TestClient]:
 
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[require_admin] = lambda: None
+    app.dependency_overrides[require_org_match] = lambda: None
     try:
         yield TestClient(app)
     finally:
@@ -81,15 +82,26 @@ def test_grant_unknown_scenario_returns_404(client: TestClient) -> None:
 
 
 class _FakeAdminConfig:
-    """Stand-in for EnvConfig exposing what `require_admin`/`verify_engineering_demo_key` read."""
+    """Stand-in for EnvConfig exposing what `require_admin`/`require_org_match`/
+    `verify_engineering_demo_key` read.
+    """
 
     def __init__(
         self,
         admin_api_key: str = "test-admin-key",
         engineering_demo_api_key: str | None = "test-engineering-demo-key",
+        auth_disabled: str = "false",
+        dev_org_id: str = "demo",
     ) -> None:
         self.ADMIN_API_KEY = FakeSecret(admin_api_key)
         self.ENGINEERING_DEMO_API_KEY = FakeSecret(engineering_demo_api_key) if engineering_demo_api_key else None
+        self.AUTH_DISABLED = auth_disabled
+        self.DEV_ORG_ID = dev_org_id
+        # Logto unconfigured here (no test exercises a real Logto token) — resolve_org_identity
+        # raises RuntimeError if this path is ever reached without AUTH_DISABLED/an admin key.
+        self.LOGTO_ISSUER = None
+        self.LOGTO_API_RESOURCE_INDICATOR = None
+        self.LOGTO_JWKS_URL = None
 
 
 @pytest.fixture
@@ -98,6 +110,16 @@ def unauthenticated_client(client: TestClient, monkeypatch: pytest.MonkeyPatch) 
     backed by a fake config so the admin-gate check doesn't need every mandatory env var.
     """
     del app.dependency_overrides[require_admin]
+    monkeypatch.setattr("platform_registry.api.get_env_config", lambda: _FakeAdminConfig())
+    return client
+
+
+@pytest.fixture
+def org_match_client(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """Same wiring as `client`, but with the real `require_org_match` dependency
+    restored — for testing GET /entitlements/{org_id}'s own auth gate specifically.
+    """
+    del app.dependency_overrides[require_org_match]
     monkeypatch.setattr("platform_registry.api.get_env_config", lambda: _FakeAdminConfig())
     return client
 
@@ -123,9 +145,32 @@ def test_grant_entitlement_succeeds_with_admin_token(unauthenticated_client: Tes
 
 
 def test_check_entitlement_does_not_require_admin_token(unauthenticated_client: TestClient) -> None:
-    """The read-only entitlement check stays open to every backend service, unauthenticated."""
+    """The org/scenario entitlement check stays open to every backend service,
+    unauthenticated — it's called server-to-server, never from a browser (see
+    require_org_match's docstring for why GET /entitlements/{org_id} is different).
+    """
     response = unauthenticated_client.get("/entitlements/org-1/churn")
     assert response.status_code == 404
+
+
+def test_list_entitled_scenarios_rejects_unauthenticated_caller(org_match_client: TestClient) -> None:
+    """No Authorization header at all is rejected before any org comparison."""
+    response = org_match_client.get("/entitlements/org-1")
+    assert response.status_code == 401
+
+
+def test_list_entitled_scenarios_rejects_mismatched_org(org_match_client: TestClient) -> None:
+    """A caller authenticated as one org can't list a DIFFERENT org's scenario catalog —
+    the cross-tenant metadata disclosure this dependency exists to close.
+    """
+    response = org_match_client.get("/entitlements/org-1", headers={"Authorization": "Bearer test-admin-key"})
+    assert response.status_code == 403
+
+
+def test_list_entitled_scenarios_allows_matching_org(org_match_client: TestClient) -> None:
+    """The admin bearer token resolves to the 'admin' org, which may list ITS OWN catalog."""
+    response = org_match_client.get("/entitlements/admin", headers={"Authorization": "Bearer test-admin-key"})
+    assert response.status_code == 200
 
 
 def test_verify_engineering_demo_key_rejects_missing_token(unauthenticated_client: TestClient) -> None:

@@ -31,7 +31,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
     assert config.MINIO_ENDPOINT == "http://minio.localhost"
-    assert config.QDRANT_URL == "http://qdrant.localhost"
+    assert config.QDRANT_URL == "http://localhost:6333"
 
 
 def test_get_env_config_docker_profile() -> None:

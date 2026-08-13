@@ -67,7 +67,7 @@ all: ## One-shot: bootstrap .env, start infra+services, run both pipelines, veri
 	@docker compose up --build etl-vectorize
 	@$(MAKE) verify
 	@echo ""
-	@echo "🎉 ai-circus-framework is up — open http://react.localhost, expand 'Admin key login', and use the ADMIN_API_KEY from .env."
+	@echo "🎉 ai-circus-framework is up — open http://react.localhost, pick 'admin' from the User dropdown, and use the ADMIN_API_KEY from .env as the password."
 	@if [ -z "$$OPENAI_API_KEY$$GOOGLE_API_KEY$$AZURE_OPENAI_API_KEY$$DEEPSEEK_API_KEY$$GROQ_API_KEY$$OPENROUTER_API_KEY$$ANTHROPIC_API_KEY" ]; then \
 		echo "ℹ️  No LLM provider key set in .env — chat (assistant/rag-agent) won't answer yet."; \
 		echo "   Add one provider key to .env then 'make up', or run 'make ollama-up' for a free local fallback."; \
@@ -120,7 +120,8 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		echo "❌ ADMIN_API_KEY in .env doesn't match what platform-registry is running with — after editing .env, run 'make up' to recreate it"; exit 1; \
 	fi; \
 	echo "  ✓ admin key accepted by platform-registry ($$code)"
-	@n=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
+	@key="$${ADMIN_API_KEY:-ai-circus-2026}"; \
+	n=$$(curl -s -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
 	if [ "$$n" -gt 0 ]; then echo "  ✓ admin tenant is entitled to $$n scenario(s)"; \
 	else echo "❌ admin tenant has 0 entitled scenarios — scenario seeding may have failed, check: docker compose logs platform-registry"; exit 1; fi
 	@for host in prediction assistant rag-agent; do \
@@ -131,7 +132,7 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://react.localhost/"); \
 	if [ "$$code" = "200" ]; then echo "  ✓ react.localhost reachable ($$code)"; \
 	else echo "❌ react.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
-	@echo "✓ admin tenant verified — http://react.localhost is ready for 'Admin key login'"
+	@echo "✓ admin tenant verified — http://react.localhost is ready for the 'admin' User dropdown login"
 	@demo_key="$${ENGINEERING_DEMO_API_KEY:-}"; \
 	if [ -z "$$demo_key" ]; then \
 		echo "ℹ️  ENGINEERING_DEMO_API_KEY not set in .env — skipping engineering-demo tenant checks"; \
@@ -143,7 +144,7 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		echo "❌ ENGINEERING_DEMO_API_KEY in .env doesn't match what platform-registry is running with ($$code) — after editing .env, run 'make up' to recreate it"; exit 1; \
 	fi; \
 	echo "  ✓ engineering demo key accepted by platform-registry ($$code)"; \
-	slugs=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/engineering-demo" | grep -o '"slug":"[a-z_]*"' | sort); \
+	slugs=$$(curl -s -H "Authorization: Bearer $$demo_key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/engineering-demo" | grep -o '"slug":"[a-z_]*"' | sort); \
 	expected=$$(printf '"slug":"electric_motor"\n"slug":"energy_building"\n"slug":"mpm"'); \
 	if [ "$$slugs" = "$$expected" ]; then \
 		echo "  ✓ engineering-demo tenant is entitled to exactly mpm/electric_motor/energy_building"; \

@@ -8,11 +8,18 @@ and horizontally scalable, and the backend swaps 1:1 to real S3/GCS later.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 from typing import BinaryIO
 
 import boto3
 from botocore.client import Config as BotoConfig
+
+# Every call site in this codebase passes a validated `Identity.org_id` (never raw
+# client input) and a fixed, config-derived `path` — but `_key()` has no guard of its
+# own, so a future caller passing user-controlled input into either argument would
+# have no defense-in-depth against building a key outside the intended tenant prefix.
+_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @dataclass(frozen=True)
@@ -47,7 +54,12 @@ class ObjectStore:
         return cls(bucket=bucket, _client=client)
 
     def _key(self, tenant_org_id: str, path: str) -> str:
-        return f"tenant-{tenant_org_id}/{path.lstrip('/')}"
+        if not _SAFE_ORG_ID.match(tenant_org_id):
+            raise ValueError(f"Invalid tenant_org_id {tenant_org_id!r}: must match {_SAFE_ORG_ID.pattern}.")
+        normalized = path.lstrip("/")
+        if any(segment == ".." for segment in normalized.split("/")):
+            raise ValueError(f"Invalid path {path!r}: '..' path segments are not allowed.")
+        return f"tenant-{tenant_org_id}/{normalized}"
 
     def put(self, tenant_org_id: str, path: str, data: bytes | BinaryIO) -> str:
         """Upload bytes/a file-like object under a tenant-scoped key; return the key."""

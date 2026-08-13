@@ -35,8 +35,8 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.LOG_LEVEL == "INFO"
     assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
-    assert config.QDRANT_URL == "http://qdrant.localhost"
-    assert config.LLM_GATEWAY_URL == "http://llm-gateway.localhost"
+    assert config.QDRANT_URL == "http://localhost:6333"
+    assert config.LLM_GATEWAY_URL == "http://localhost:4000"
     assert config.PLATFORM_REGISTRY_URL == "http://localhost:8010"
 
 
@@ -84,7 +84,7 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
 
     config = get_env_config(env="local")
 
-    assert config.QDRANT_URL == "http://qdrant.localhost"
+    assert config.QDRANT_URL == "http://localhost:6333"
 
 
 def test_admin_api_key_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
