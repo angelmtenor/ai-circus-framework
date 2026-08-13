@@ -397,6 +397,11 @@ services:
       APP_ENVIRONMENT: docker
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # MUST match rag-agent's below — see .env.example's Embeddings section.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -416,6 +421,11 @@ services:
       context: .
       dockerfile: services/rag-agent/Dockerfile
     environment:
+      # MUST match etl-vectorize's above — see .env.example's Embeddings section.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       APP_ENVIRONMENT: docker
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Defaults to "llama3", which only answers once you've run `make ollama-up`

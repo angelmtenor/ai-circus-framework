@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -44,9 +45,36 @@ class EnvConfig(BaseSettings):
     QDRANT_URL: str = Field(
         description="Qdrant endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
     )
+    EMBEDDING_PROVIDER: str | None = Field(
+        description="Embedding backend: 'local' (sentence-transformers, no API key), 'gemini', or 'voyage'",
+        default="local",
+    )
+    EMBEDDING_MODEL: str | None = Field(
+        description="Model name override for the active EMBEDDING_PROVIDER; unset = that provider's own default",
+        default=None,
+    )
+    GOOGLE_API_KEY: SecretStr | None = Field(
+        description="Google API key (only needed if EMBEDDING_PROVIDER=gemini)", default=None
+    )
+    VOYAGE_API_KEY: SecretStr | None = Field(
+        description="Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage)", default=None
+    )
+
+    @field_validator("EMBEDDING_PROVIDER", mode="after")
+    @classmethod
+    def validate_embedding_provider(cls, v: Any) -> Any:
+        """Validate field format via regex."""
+        if v is None:
+            return v
+        val = v.get_secret_value() if hasattr(v, "get_secret_value") else str(v)
+        if not val:
+            return None
+        if not re.match(r"^(local|gemini|voyage)$", val):
+            raise ValueError("EMBEDDING_PROVIDER must be one of: local, gemini, voyage")
+        return v
 
 
-_SOURCE_YAML_HASH = "9cebf4044b19711c96987bf39e9f8112a7f10cfcc677d7c667fa4418e121c0e4"
+_SOURCE_YAML_HASH = "50d4d578c593bc7d8673a1e32393b48648bf6a8fe766a2d666d21dcbdbfecae3"
 
 
 EnvConfig.model_rebuild()

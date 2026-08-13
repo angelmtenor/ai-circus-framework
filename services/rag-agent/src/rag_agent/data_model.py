@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,7 +54,7 @@ class EnvConfig(BaseSettings):
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
     ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
-        description="Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building",
+        description="Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building)",
         default=None,
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
@@ -69,9 +70,36 @@ class EnvConfig(BaseSettings):
         description="Expected token audience — the API resource registered in Logto for this platform's backend",
         default=None,
     )
+    EMBEDDING_PROVIDER: str | None = Field(
+        description="Embedding backend: 'local', 'gemini', or 'voyage' — MUST match etl-vectorize's setting",
+        default="local",
+    )
+    EMBEDDING_MODEL: str | None = Field(
+        description="Model override for EMBEDDING_PROVIDER; unset = its default — MUST match etl-vectorize's setting",
+        default=None,
+    )
+    GOOGLE_API_KEY: SecretStr | None = Field(
+        description="Google API key (only needed if EMBEDDING_PROVIDER=gemini)", default=None
+    )
+    VOYAGE_API_KEY: SecretStr | None = Field(
+        description="Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage)", default=None
+    )
+
+    @field_validator("EMBEDDING_PROVIDER", mode="after")
+    @classmethod
+    def validate_embedding_provider(cls, v: Any) -> Any:
+        """Validate field format via regex."""
+        if v is None:
+            return v
+        val = v.get_secret_value() if hasattr(v, "get_secret_value") else str(v)
+        if not val:
+            return None
+        if not re.match(r"^(local|gemini|voyage)$", val):
+            raise ValueError("EMBEDDING_PROVIDER must be one of: local, gemini, voyage")
+        return v
 
 
-_SOURCE_YAML_HASH = "eb60eedd81fadd796dbaf467ee544a2d6fd1e6b046c89c5301a1844e9dec6907"
+_SOURCE_YAML_HASH = "198db4c8deb065ba3cf223948575bda020ff67b23473aa38082ef7f02ebf0e3b"
 
 
 EnvConfig.model_rebuild()

@@ -11,6 +11,7 @@ import httpx
 from ag_ui.core import RunAgentInput
 from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
@@ -20,7 +21,6 @@ from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 from rag_agent import get_env_config
 from rag_agent.core.agent import build_agui_agent, build_retrieve_tool
@@ -39,8 +39,8 @@ def _qdrant(request: Request) -> QdrantClient:
     return request.app.state.qdrant
 
 
-def _embedders(request: Request) -> dict[str, SentenceTransformer]:
-    return request.app.state.embedders
+def _embedder(request: Request) -> EmbeddingProvider:
+    return request.app.state.embedder
 
 
 def _llm_model_name() -> str:
@@ -112,7 +112,7 @@ async def agui_endpoint(
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     qdrant: QdrantClient = Depends(_qdrant),
-    embedders: dict[str, SentenceTransformer] = Depends(_embedders),
+    embedder: EmbeddingProvider = Depends(_embedder),
     llm: BaseChatModel = Depends(_llm),
 ) -> StreamingResponse:
     """AG-UI (CopilotKit) streaming endpoint: an SSE stream of AG-UI events, driven by
@@ -133,7 +133,6 @@ async def agui_endpoint(
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
     assert definition.vector_store is not None  # guaranteed by kind="conversational_rag" filter
-    embedder = embedders[definition.slug]
     tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
     graph = build_agui_agent(llm, [tool], definition.chat.context)
     agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph)

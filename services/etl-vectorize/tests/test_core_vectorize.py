@@ -67,13 +67,11 @@ class FakeObjectStore:
 
 
 class FakeEmbeddingModel:
-    """Deterministic stand-in for SentenceTransformer — one fixed-size vector per chunk."""
+    """Deterministic stand-in for an EmbeddingProvider — one fixed-size vector per chunk."""
 
-    def get_embedding_dimension(self) -> int:
-        """Return a small fixed vector size."""
-        return 4
+    dimension = 4
 
-    def encode(self, chunks: list[str], normalize_embeddings: bool = True) -> list[list[float]]:
+    def encode_documents(self, chunks: list[str]) -> list[list[float]]:
         """Return a distinct-but-deterministic vector per chunk (by length)."""
         return [[float(len(c) % 4), 0.0, 0.0, 1.0] for c in chunks]
 
@@ -217,7 +215,8 @@ def test_run_vectorize_end_to_end(scenario_dir: Path) -> None:
 def test_run_vectorize_does_not_duplicate_points_on_rerun(scenario_dir: Path) -> None:
     """Re-running against the same (unchanged) documents must not grow the collection —
     each chunk gets a fresh random point id, so upserting onto a not-cleared
-    collection would duplicate every chunk on every run."""
+    collection would duplicate every chunk on every run.
+    """
     store = FakeObjectStore()
     qdrant = FakeQdrantClient()
 
@@ -229,7 +228,8 @@ def test_run_vectorize_does_not_duplicate_points_on_rerun(scenario_dir: Path) ->
 
 def test_run_vectorize_removes_points_for_deleted_documents(scenario_dir: Path) -> None:
     """A document removed from the tenant's raw docs since the last run must not
-    leave its old chunks retrievable forever."""
+    leave its old chunks retrievable forever.
+    """
     store = FakeObjectStore()
     qdrant = FakeQdrantClient()
 

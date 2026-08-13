@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
@@ -22,7 +23,6 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 from rag_agent.core.retrieval import retrieve
 
@@ -44,7 +44,7 @@ SYSTEM_PROMPT_TEMPLATE = (
 
 def build_retrieve_tool(
     qdrant: QdrantClient,
-    embedder: SentenceTransformer,
+    embedder: EmbeddingProvider,
     vector_store: VectorStoreConfig,
     org_id: str,
 ) -> tuple[StructuredTool, dict[str, list[dict[str, Any]]]]:
@@ -67,7 +67,9 @@ def build_retrieve_tool(
         # Delimited so the LLM can distinguish retrieved (untrusted) document text
         # from its own instructions — see SYSTEM_PROMPT_TEMPLATE's indirect-prompt-
         # injection guard. A document's content should never be treated as a command.
-        content = "\n\n".join(f'<retrieved_document source="{c.source}">\n{c.text}\n</retrieved_document>' for c in chunks)
+        content = "\n\n".join(
+            f'<retrieved_document source="{c.source}">\n{c.text}\n</retrieved_document>' for c in chunks
+        )
         return content, sources
 
     tool = StructuredTool.from_function(
