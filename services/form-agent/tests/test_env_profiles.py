@@ -1,0 +1,104 @@
+"""
+test_env_profiles.py
+--------------------
+
+Tests for the environment-aware configuration loading.
+
+Author: ai-circus-framework contributors
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from form_agent.data_model import get_env_config
+
+
+@pytest.fixture(autouse=True)
+def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear the lru_cache and set the mandatory fields with no profile default."""
+    get_env_config.cache_clear()
+    monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "test-minio-secret")
+    # LLM_MODEL intentionally has no settings.yaml default (see settings.yaml) — it
+    # must come from a real env var, same as AUTH_DISABLED/ADMIN_API_KEY below.
+    monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
+    # AUTH_DISABLED and ADMIN_API_KEY intentionally have no settings.yaml default (see
+    # settings.yaml) — they must come from real env vars.
+    monkeypatch.setenv("AUTH_DISABLED", "false")
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
+
+
+def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no APP_ENVIRONMENT set, the 'local' profile is used."""
+    monkeypatch.delenv("APP_ENVIRONMENT", raising=False)
+
+    config = get_env_config()
+
+    assert config.LOG_LEVEL == "INFO"
+    assert config.SCENARIOS == ""
+    assert config.SCENARIOS_DIR == "../../scenarios"
+    assert config.QDRANT_URL == "http://localhost:6333"
+    assert config.MINIO_ENDPOINT == "http://minio.localhost"
+    assert config.PLATFORM_REGISTRY_URL == "http://localhost:8010"
+
+
+def test_get_env_config_docker_profile() -> None:
+    """The 'docker' profile points at in-network hostnames and the mounted scenarios dir."""
+    config = get_env_config(env="docker")
+
+    assert config.SCENARIOS_DIR == "/app/scenarios"
+    assert config.QDRANT_URL == "http://qdrant:6333"
+    assert config.MINIO_ENDPOINT == "http://minio:9000"
+    assert config.PLATFORM_REGISTRY_URL == "http://platform-registry:8000"
+
+
+@pytest.mark.parametrize("profile", ["local", "docker"])
+def test_get_env_config_reads_app_environment(monkeypatch: pytest.MonkeyPatch, profile: str) -> None:
+    """APP_ENVIRONMENT selects the active profile; base defaults always apply.
+
+    `staging`/`production` are intentionally left as empty placeholder profiles in
+    settings.yaml (nothing is deployed there yet), so they're not covered here.
+    """
+    monkeypatch.setenv("APP_ENVIRONMENT", profile)
+
+    config = get_env_config()
+
+    assert config.LOG_LEVEL == "INFO"
+
+
+def test_auth_disabled_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUTH_DISABLED must come from the actual process env, not a settings.yaml default."""
+    monkeypatch.setenv("AUTH_DISABLED", "true")
+
+    config = get_env_config()
+
+    assert config.AUTH_DISABLED == "true"
+
+
+def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit `env=` argument takes priority over the APP_ENVIRONMENT variable."""
+    monkeypatch.setenv("APP_ENVIRONMENT", "docker")
+
+    config = get_env_config(env="local")
+
+    assert config.QDRANT_URL == "http://localhost:6333"
+
+
+def test_admin_api_key_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADMIN_API_KEY must come from the actual process env, not a settings.yaml default."""
+    monkeypatch.setenv("ADMIN_API_KEY", "a-different-key")
+
+    config = get_env_config()
+
+    assert config.ADMIN_API_KEY.get_secret_value() == "a-different-key"
+
+
+def test_scenarios_yaml_default_beats_a_real_env_var_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Documents a known, accepted residual limitation — see etl-tabular/settings.yaml's comment."""
+    monkeypatch.setenv("SCENARIOS", "service_request,other_form")
+
+    config = get_env_config()
+
+    assert config.SCENARIOS == ""

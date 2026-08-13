@@ -5,6 +5,7 @@ import { useTheme } from "./useTheme";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
 import { TabularView } from "./TabularView";
 import { RagView } from "./RagView";
+import { AssistedFormView } from "./AssistedFormView";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { Settings } from "./Settings";
 import { Icon } from "./Icon";
@@ -231,11 +232,16 @@ export default function App() {
             {!scenariosLoading && selected?.kind === "conversational_rag" && (
               <RagView scenario={selected} accessToken={identity.accessToken} />
             )}
-            {!scenariosLoading && selected && selected.kind !== "tabular_ml" && selected.kind !== "conversational_rag" && (
-              <div className="app-loading">
-                {selected.title} ({selected.kind}) doesn't have a workspace view yet.
-              </div>
+            {!scenariosLoading && selected?.kind === "assisted_form" && (
+              <AssistedFormView scenario={selected} accessToken={identity.accessToken} />
             )}
+            {!scenariosLoading &&
+              selected &&
+              !["tabular_ml", "conversational_rag", "assisted_form"].includes(selected.kind) && (
+                <div className="app-loading">
+                  {selected.title} ({selected.kind}) doesn't have a workspace view yet.
+                </div>
+              )}
           </>
         )}
       </main>

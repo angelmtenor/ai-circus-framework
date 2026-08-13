@@ -89,8 +89,20 @@ function extractSources(messages: AguiMessage[]): string[] | null {
  * where that turn's chart/table appears in the transcript on replay. Backfilling a
  * synthetic ToolMessage per unanswered frontend tool call, right after each run,
  * keeps history complete so nothing gets stripped or reordered on the next turn.
+ *
+ * `onFrontendToolCall`, when given, fires once per call right before it's marked
+ * answered — the one place a tool call is guaranteed to be processed exactly once
+ * (this same `answered` dedup is what makes render_chart/render_table idempotent
+ * across repeated runs). This is the only path a scenario has to let the assistant
+ * write into its own dashboard state (e.g. assisted_form's update_form_fields) rather
+ * than only draw inside the chat bubble — ChatPanel itself stays generic, unaware of
+ * what any particular tool call means.
  */
-function answerUnansweredFrontendToolCalls(agent: HttpAgent, frontendToolNames: ReadonlySet<string>): void {
+function answerUnansweredFrontendToolCalls(
+  agent: HttpAgent,
+  frontendToolNames: ReadonlySet<string>,
+  onFrontendToolCall?: (name: string, args: unknown) => void,
+): void {
   const answered = new Set(
     agent.messages.filter((m): m is AguiMessage & { role: "tool" } => m.role === "tool").map((m) => m.toolCallId),
   );
@@ -98,6 +110,13 @@ function answerUnansweredFrontendToolCalls(agent: HttpAgent, frontendToolNames: 
     if (m.role !== "assistant" || !m.toolCalls) continue;
     for (const call of m.toolCalls) {
       if (!frontendToolNames.has(call.function.name) || answered.has(call.id)) continue;
+      if (onFrontendToolCall) {
+        try {
+          onFrontendToolCall(call.function.name, JSON.parse(call.function.arguments));
+        } catch {
+          // Malformed tool-call arguments shouldn't break history bookkeeping below.
+        }
+      }
       agent.addMessage({ id: randomUUID(), role: "tool", toolCallId: call.id, content: "Displayed to the user." });
     }
   }
@@ -125,6 +144,7 @@ export function ChatPanel({
   variant = "dock",
   title,
   onModel,
+  onFrontendToolCall,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -134,6 +154,10 @@ export function ChatPanel({
   variant?: "dock" | "full";
   title?: string;
   onModel?: (model: string) => void;
+  // Fires once per frontend tool call the agent makes (e.g. assisted_form's
+  // update_form_fields) — the only way a scenario's own dashboard state can be
+  // written from the conversation; see answerUnansweredFrontendToolCalls above.
+  onFrontendToolCall?: (name: string, args: unknown) => void;
 }) {
   const { copilotkit } = useCopilotKit();
   const [messages, setMessages] = useState<AguiMessage[]>(agent.messages);
@@ -182,7 +206,7 @@ export function ChatPanel({
       const frontendToolNames = new Set(
         (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
       );
-      answerUnansweredFrontendToolCalls(agent, frontendToolNames);
+      answerUnansweredFrontendToolCalls(agent, frontendToolNames, onFrontendToolCall);
     } catch (error) {
       agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
     } finally {

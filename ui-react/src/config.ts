@@ -25,6 +25,7 @@ export const config = {
   predictionUrl: import.meta.env.VITE_PREDICTION_URL ?? "http://prediction.localhost",
   assistantUrl: import.meta.env.VITE_ASSISTANT_URL ?? "http://assistant.localhost",
   ragAgentUrl: import.meta.env.VITE_RAG_AGENT_URL ?? "http://rag-agent.localhost",
+  formAgentUrl: import.meta.env.VITE_FORM_AGENT_URL ?? "http://form-agent.localhost",
   logtoEndpoint: import.meta.env.VITE_LOGTO_ENDPOINT ?? "http://logto.localhost",
   logtoAppId: import.meta.env.VITE_LOGTO_APP_ID ?? "",
   logtoApiResource: import.meta.env.VITE_LOGTO_API_RESOURCE_INDICATOR ?? "https://api.ai-circus-framework.local",

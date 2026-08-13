@@ -31,6 +31,32 @@ export type ChartSpec = {
   agg?: ChartAgg;
 };
 
+// Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's FormFieldSpec/
+// FormConfig — drives ui-react's generic assisted_form renderer (see FormPanel.tsx).
+// `validation` is a small, reusable set of primitives; scenario-specific detail
+// (e.g. an ID number's format) is plain data (`pattern`), never new UI code.
+export type FormFieldType = "text" | "textarea" | "email" | "tel" | "select" | "date";
+export type FormFieldValidation = "none" | "email" | "phone" | "pattern" | "min_length";
+export type RequiredIf = { field: string; in_values: string[] };
+export type FormFieldSpec = {
+  id: string;
+  label: string;
+  type: FormFieldType;
+  required: boolean;
+  required_if?: RequiredIf | null;
+  options?: string[] | null;
+  validation: FormFieldValidation;
+  pattern?: string | null;
+  min_length?: number | null;
+  helper_text?: string | null;
+};
+export type FormConfig = {
+  title: string;
+  fields: FormFieldSpec[];
+  classification_field?: string | null;
+  classification_options?: string[] | null;
+};
+
 export type ScenarioSummary = {
   slug: string;
   kind: string;
@@ -52,6 +78,8 @@ export type ScenarioSummary = {
   target_units?: string | null;
   // tabular_ml only — the dataset column being predicted (not itself a feature).
   target?: string | null;
+  // assisted_form only — drives ui-react's generic form renderer (see FormPanel.tsx).
+  form?: FormConfig | null;
 };
 
 export type PredictionResult = {
@@ -255,4 +283,30 @@ export async function chatModel(baseUrl: string, scenarioSlug: string, accessTok
   const response = await fetch(`${baseUrl}/model/${scenarioSlug}`, { headers: headers(accessToken) });
   const body = await asJson<{ model: string }>(response);
   return body.model;
+}
+
+export type SubmissionError = { errors: Record<string, string> };
+
+/**
+ * Submit an assisted_form scenario's form. The backend (form-agent) is the final
+ * validation authority — see ai_circus_shared.form_validation — so a 422 here can
+ * happen even though FormPanel's own client-side check already passed; that's a
+ * feedback bug in the client-side mirror, not something to paper over.
+ */
+export async function submitForm(
+  baseUrl: string,
+  scenarioSlug: string,
+  fields: Record<string, string>,
+  accessToken: string | null,
+): Promise<{ case_number: string } | SubmissionError> {
+  const response = await fetch(`${baseUrl}/submissions/${scenarioSlug}`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ fields }),
+  });
+  if (response.status === 422) {
+    const body = await asJson<{ detail: SubmissionError }>(response);
+    return body.detail;
+  }
+  return asJson<{ case_number: string }>(response);
 }

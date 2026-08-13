@@ -1,0 +1,125 @@
+# Seed definition for the "service_request" scenario — an assisted_form example:
+# a fictional local-government service desk where the assistant fills the form live
+# from the conversation, classifying the request via RAG over a small catalog.
+# Loaded into the `platform` Postgres schema by services/platform-registry at bootstrap.
+
+slug: service_request
+kind: assisted_form
+title: "Public Service Request Portal"
+description: >
+  Report an issue or request a service from a fictional local government — a broken
+  streetlight, a missed trash pickup, a permit application — and let the assistant
+  fill out the form for you as you describe it. Grounded in a small catalog of
+  request types (RAG), which also drives which fields are actually required.
+role_required: "scenario:service_request"
+icon: "🏛️"
+
+# Grounds form-agent's system prompt (build_form_system_prompt) — the domain framing
+# only; the field catalog itself comes entirely from `form` below.
+chat:
+  context: >
+    A local government's public service request desk. Residents report issues
+    (streetlight outages, missed waste collection, noise complaints) or request
+    services (address registration, minor construction permits, residency
+    certificates). Be concise and practical, and never invent contact/identity
+    details the resident didn't actually provide.
+  sample_questions:
+    - "There's a broken streetlight on Main Street, near the library."
+    - "What do I need to register a new address?"
+    - "I want to apply for a minor construction permit for a backyard shed."
+
+form:
+  title: "Service request"
+  # The field the catalog below classifies into. Required fields beyond the base
+  # set (see `address`'s required_if) depend on which type this resolves to.
+  classification_field: request_type
+  classification_options:
+    - address_registration
+    - streetlight_outage
+    - waste_collection_issue
+    - minor_construction_permit
+    - noise_complaint
+    - residency_certificate
+  fields:
+    - id: request_type
+      label: "Request type"
+      type: select
+      required: true
+      options:
+        - address_registration
+        - streetlight_outage
+        - waste_collection_issue
+        - minor_construction_permit
+        - noise_complaint
+        - residency_certificate
+      helper_text: "Resolved automatically from your description — override it here if it's wrong."
+
+    - id: full_name
+      label: "Full name"
+      type: text
+      required: true
+
+    - id: id_type
+      label: "ID type"
+      type: select
+      required: true
+      options:
+        - "National ID"
+        - "Passport"
+
+    - id: id_number
+      label: "ID number"
+      type: text
+      required: true
+      validation: pattern
+      pattern: "^[A-Za-z0-9-]{5,20}$"
+      helper_text: "5-20 letters, digits, or dashes."
+
+    - id: phone
+      label: "Phone number"
+      type: tel
+      required: true
+      validation: phone
+
+    - id: email
+      label: "Email address"
+      type: email
+      required: true
+      validation: email
+
+    - id: address
+      label: "Address / location"
+      type: text
+      required_if:
+        field: request_type
+        in_values: [streetlight_outage, waste_collection_issue, noise_complaint]
+      helper_text: "Street address or nearest cross-street — required for on-site issues."
+
+    - id: description
+      label: "Description"
+      type: textarea
+      required: true
+      validation: min_length
+      min_length: 20
+      helper_text: "At least 20 characters — include useful details like dates or reference numbers."
+
+documents:
+  bucket: "scenario-service-request"
+  raw_prefix: "raw/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 800
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+
+vector_store:
+  backend: qdrant
+  # One collection per tenant: "{collection_prefix}__{tenant_org_id}"
+  collection_prefix: "service_request"
+  top_k: 3
+
+services:
+  etl: etl-vectorize
+  agent: form-agent
