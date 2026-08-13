@@ -40,6 +40,10 @@ class FakeEnvConfig:
         self.MINIO_ACCESS_KEY = "ai_circus"
         self.MINIO_SECRET_KEY = FakeSecret("s3cret")
         self.QDRANT_URL = "http://qdrant:6333"
+        self.EMBEDDING_PROVIDER = "local"
+        self.EMBEDDING_MODEL = None
+        self.GOOGLE_API_KEY = None
+        self.VOYAGE_API_KEY = None
 
 
 @dataclass
@@ -84,7 +88,7 @@ def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatc
 
     connect_calls: list[dict[str, object]] = []
     qdrant_calls: list[dict[str, object]] = []
-    model_calls: list[str] = []
+    provider_calls: list[dict[str, object]] = []
     vectorize_calls: list[tuple[object, ...]] = []
 
     monkeypatch.setattr(app, "logger", fake_logger)
@@ -97,7 +101,9 @@ def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatc
         staticmethod(lambda **kwargs: connect_calls.append(kwargs) or "fake-store"),
     )
     monkeypatch.setattr(app, "QdrantClient", lambda **kwargs: qdrant_calls.append(kwargs) or "fake-qdrant")
-    monkeypatch.setattr(app, "SentenceTransformer", lambda name: model_calls.append(name) or "fake-model-instance")
+    monkeypatch.setattr(
+        app, "build_embedding_provider", lambda **kwargs: provider_calls.append(kwargs) or "fake-provider"
+    )
     monkeypatch.setattr(app, "run_vectorize", lambda *args: vectorize_calls.append(args))
 
     app.main()
@@ -111,10 +117,10 @@ def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatc
         }
     ]
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
-    assert model_calls == ["fake-model"]
+    assert provider_calls == [{"provider": "local", "model_name": None, "google_api_key": None, "voyage_api_key": None}]
     expected_dir = app.Path("/scenarios/docs_rag")
     assert vectorize_calls == [
-        ("fake-store", "fake-qdrant", "fake-model-instance", "demo", fake_documents, fake_vector_store, expected_dir)
+        ("fake-store", "fake-qdrant", "fake-provider", "demo", fake_documents, fake_vector_store, expected_dir)
     ]
     assert fake_logger.success_messages
 

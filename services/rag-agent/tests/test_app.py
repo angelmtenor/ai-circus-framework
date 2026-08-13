@@ -40,6 +40,10 @@ class FakeEnvConfig:
         self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
         self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
         self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
+        self.EMBEDDING_PROVIDER = "local"
+        self.EMBEDDING_MODEL = None
+        self.GOOGLE_API_KEY = None
+        self.VOYAGE_API_KEY = None
 
 
 def build_validation_error() -> ValidationError:
@@ -90,40 +94,39 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert fake_logger.error_messages
 
 
-async def test_lifespan_sets_up_qdrant_embedders_and_llm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The lifespan handler resolves scenarios and stashes clients/embedders on app.state."""
+async def test_lifespan_sets_up_qdrant_embedder_and_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The lifespan handler resolves scenarios and stashes clients/embedder on app.state."""
 
     class FakeVectorStore:
         pass
 
-    class FakeEmbedding:
-        model = "fake-embedding-model"
-
     class FakeDocuments:
-        embedding = FakeEmbedding()
+        pass
 
     class FakeDefinition:
         documents = FakeDocuments()
         vector_store = FakeVectorStore()
 
     qdrant_calls: list[dict[str, object]] = []
-    model_calls: list[str] = []
+    provider_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"docs_rag": FakeDefinition()})
     monkeypatch.setattr(app, "QdrantClient", lambda **kwargs: qdrant_calls.append(kwargs) or "fake-qdrant")
-    monkeypatch.setattr(app, "SentenceTransformer", lambda name: model_calls.append(name) or "fake-model")
+    monkeypatch.setattr(
+        app, "build_embedding_provider", lambda **kwargs: provider_calls.append(kwargs) or "fake-embedder"
+    )
 
     async with app.lifespan(app.app):
         assert app.app.state.qdrant == "fake-qdrant"
-        assert app.app.state.embedders == {"docs_rag": "fake-model"}
+        assert app.app.state.embedder == "fake-embedder"
         assert set(app.app.state.definitions) == {"docs_rag"}
         # No client built eagerly here anymore — api._llm() builds one per model_name,
         # lazily, once it knows (from platform-registry) which model is actually active.
         assert app.app.state.llm_clients == {}
 
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
-    assert model_calls == ["fake-embedding-model"]
+    assert provider_calls == [{"provider": "local", "model_name": None, "google_api_key": None, "voyage_api_key": None}]
 
 
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

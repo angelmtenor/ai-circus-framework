@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.scenario_schema import VectorStoreConfig, qdrant_collection_name
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class RetrievedChunk:
 
 def retrieve(
     qdrant: QdrantClient,
-    model: SentenceTransformer,
+    provider: EmbeddingProvider,
     vector_store: VectorStoreConfig,
     org_id: str,
     query: str,
@@ -33,7 +33,7 @@ def retrieve(
     if not qdrant.collection_exists(name):
         return []
 
-    query_vector = [float(v) for v in model.encode(query, normalize_embeddings=True)]
+    query_vector = provider.encode_query(query)
     results = qdrant.query_points(collection_name=name, query=query_vector, limit=vector_store.top_k).points
 
     chunks = []

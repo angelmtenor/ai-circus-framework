@@ -19,12 +19,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 from qdrant_client import QdrantClient
-from sentence_transformers import SentenceTransformer
 
 from rag_agent import get_env_config
 from rag_agent.api import router
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Resolve SCENARIOS to their definitions, load one embedder per scenario, connect Qdrant/llm-gateway."""
+    """Resolve SCENARIOS to their definitions, build the shared embedder, connect Qdrant/llm-gateway."""
     config = get_env_config()
     definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="conversational_rag")
     if not definitions:
@@ -43,13 +43,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             f"No conversational_rag scenario matched SCENARIOS={config.SCENARIOS!r} under {config.SCENARIOS_DIR!r}."
         )
 
-    embedders = {}
-    for slug, definition in definitions.items():
-        assert definition.documents is not None  # guaranteed by kind="conversational_rag" filter
-        embedders[slug] = SentenceTransformer(definition.documents.embedding.model)
+    # One provider shared by every scenario this instance serves — it must be the
+    # same provider/model etl-vectorize embedded documents with, or retrieval
+    # silently breaks (see ai_circus_shared.embeddings' module docstring).
+    embedder = build_embedding_provider(
+        provider=config.EMBEDDING_PROVIDER or "local",
+        model_name=config.EMBEDDING_MODEL,
+        google_api_key=config.GOOGLE_API_KEY.get_secret_value() if config.GOOGLE_API_KEY else None,
+        voyage_api_key=config.VOYAGE_API_KEY.get_secret_value() if config.VOYAGE_API_KEY else None,
+    )
 
     app.state.definitions = definitions
-    app.state.embedders = embedders
+    app.state.embedder = embedder
     app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
     # One ChatOpenAI client per model_name, built lazily by api._llm() as requests pick
     # different models from platform-registry's live Settings picker — not a single

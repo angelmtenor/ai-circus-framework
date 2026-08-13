@@ -15,6 +15,7 @@ import uuid
 from pathlib import Path
 
 import httpx
+from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.scenario_schema import (
     DocumentsConfig,
     GithubDocsSource,
@@ -24,7 +25,6 @@ from ai_circus_shared.scenario_schema import (
 from ai_circus_shared.storage import ObjectStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
-from sentence_transformers import SentenceTransformer
 
 from etl_vectorize.core.chunking import chunk_text
 from etl_vectorize.core.logger import get_logger
@@ -93,16 +93,15 @@ def load_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig) -
     return {key: store.get(org_id, key).decode("utf-8") for key in keys}
 
 
-def build_points(docs: dict[str, str], documents: DocumentsConfig, model: SentenceTransformer) -> list[PointStruct]:
+def build_points(docs: dict[str, str], documents: DocumentsConfig, provider: EmbeddingProvider) -> list[PointStruct]:
     """Chunk + embed every document; return Qdrant points ready to upsert."""
     points = []
     for source, text in docs.items():
         chunks = chunk_text(text, documents.chunking.chunk_size, documents.chunking.chunk_overlap)
         if not chunks:
             continue
-        embeddings = model.encode(chunks, normalize_embeddings=True)
-        for chunk, embedding in zip(chunks, embeddings, strict=True):
-            vector = [float(v) for v in embedding]
+        embeddings = provider.encode_documents(chunks)
+        for chunk, vector in zip(chunks, embeddings, strict=True):
             points.append(PointStruct(id=str(uuid.uuid4()), vector=vector, payload={"text": chunk, "source": source}))
     return points
 
@@ -127,7 +126,7 @@ def upsert_points(client: QdrantClient, name: str, points: list[PointStruct], ve
 def run_vectorize(
     store: ObjectStore,
     qdrant: QdrantClient,
-    model: SentenceTransformer,
+    provider: EmbeddingProvider,
     org_id: str,
     documents: DocumentsConfig,
     vector_store: VectorStoreConfig,
@@ -136,11 +135,8 @@ def run_vectorize(
     """Run the full extract -> chunk -> embed -> load pipeline; return the upserted point count."""
     ensure_raw_docs(store, org_id, documents, scenario_dir)
     docs = load_raw_docs(store, org_id, documents)
-    points = build_points(docs, documents, model)
-    vector_size = model.get_embedding_dimension()
-    if vector_size is None:
-        raise RuntimeError("Embedding model did not report a sentence embedding dimension.")
+    points = build_points(docs, documents, provider)
     name = qdrant_collection_name(vector_store, org_id)
-    upsert_points(qdrant, name, points, vector_size)
+    upsert_points(qdrant, name, points, provider.dimension)
     logger.success("Vectorized {} document(s) into {} chunk(s) for org={}", len(docs), len(points), org_id)
     return len(points)

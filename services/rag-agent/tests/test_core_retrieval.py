@@ -12,9 +12,9 @@ VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag",
 
 
 class FakeEmbeddingModel:
-    """Deterministic stand-in for SentenceTransformer."""
+    """Deterministic stand-in for an EmbeddingProvider."""
 
-    def encode(self, text: str, normalize_embeddings: bool = True) -> list[float]:
+    def encode_query(self, text: str) -> list[float]:
         """Return a fixed vector regardless of input."""
         return [0.1, 0.2, 0.3]
 

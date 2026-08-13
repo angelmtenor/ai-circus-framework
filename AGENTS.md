@@ -40,3 +40,21 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
 - **New service scaffolding:** always go through `./scripts/new_service.sh <name>` (real
   cookiecutter generation from `ai-circus-template`) — never hand-write a service's
   `pyproject.toml`/`Dockerfile`/`settings.yaml` from scratch.
+
+## 🌳 5. Branching Strategy — git-flow
+- **Model:** `main` (production-ready, tagged releases) and `develop` (integration branch) are
+  permanent; `feature/*`, `release/*`, and `hotfix/*` are ephemeral. Use the `git flow` CLI (AVH
+  edition) rather than hand-rolled merges — run `git flow init -d` once per clone if it hasn't
+  been initialized yet.
+- **Feature work:** branch from `develop` as `feature/<name>`; finish with
+  `git flow feature finish <name>` (merges into `develop`, deletes the branch). Never merge a
+  feature branch straight into `main`.
+- **Releases:** cut `release/<version>` from `develop` with `git flow release start vX.Y.Z`;
+  `git flow release finish vX.Y.Z` merges it into both `main` and `develop` and tags it.
+  Versioning follows SemVer.
+- **Hotfixes:** for a production-only fix, branch `hotfix/<name>` from `main`; finish with
+  `git flow hotfix finish <name>` (merges into both `main` and `develop`, tags it).
+- **Agents:** the "No Pushing" rule in section 3 applies here too — prepare and surface the exact
+  `git flow`/`git push` commands (including the version/tag to use) for the human operator to run
+  or explicitly approve; never run `git push`, `git flow feature finish`, `git flow release
+  finish`, or `git flow hotfix finish` unprompted.
