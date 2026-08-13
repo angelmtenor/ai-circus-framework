@@ -6,7 +6,7 @@
 # Kubernetes Ingress when this platform moves there (see README "Kubernetes path").
 #
 # App services (platform-registry, etl-*, training, prediction, llm-gateway,
-# assistant, rag-agent, ui-react) are appended here as they're built
+# assistant, rag-agent, form-agent, ui-react) are appended here as they're built
 # (see the build order in the project plan) — this file currently wires the infra
 # layer: postgres, logto, qdrant, minio, traefik.
 
@@ -460,6 +460,57 @@ services:
       - "traefik.http.routers.rag-agent.rule=Host(`rag-agent.localhost`)"
       - "traefik.http.routers.rag-agent.entrypoints=web"
       - "traefik.http.services.rag-agent.loadbalancer.server.port=8000"
+
+  # Long-running: form-filling assistant (see form-agent/core/agent.py) for every
+  # assisted_form scenario in SCENARIOS (empty/unset = all). Classifies the request
+  # via RAG only for scenarios that configure it (same embedder/Qdrant pattern as
+  # rag-agent above); always answered via llm-gateway. Submissions are persisted to
+  # MinIO (see form-agent/core/submissions.py).
+  form-agent:
+    build:
+      context: .
+      dockerfile: services/form-agent/Dockerfile
+    environment:
+      # MUST match etl-vectorize's above — see .env.example's Embeddings section.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      APP_ENVIRONMENT: docker
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # See rag-agent's own comment above for why this default only answers once
+      # you've run `make ollama-up`, and what to set it to instead.
+      LLM_MODEL: ${LLM_MODEL:-llama3}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # ui-react calls this API directly from the browser — react.localhost is the
+      # Traefik-served build, localhost:5173 the Vite dev server.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      platform-registry:
+        condition: service_started
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.form-agent.rule=Host(`form-agent.localhost`)"
+      - "traefik.http.routers.form-agent.entrypoints=web"
+      - "traefik.http.services.form-agent.loadbalancer.server.port=8000"
 
   ui-react:
     build:

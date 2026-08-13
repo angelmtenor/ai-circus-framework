@@ -3,7 +3,9 @@ app.py
 ------
 
 Entry point for etl-vectorize: a one-shot job that, for every conversational_rag
-scenario in SCENARIOS (empty/unset = all), extracts the tenant's documents from MinIO
+scenario in SCENARIOS (empty/unset = all) plus every assisted_form scenario that
+configures a document catalog (`form.classification_field` set), extracts the
+tenant's documents from MinIO
 (bootstrapping them on first run from either a tracked sample_docs/ folder or a public
 GitHub repo folder — see `documents.seed_prefix`/`documents.github_source`), chunks and
 embeds them, and upserts the result into the tenant's Qdrant collection. Runs once
@@ -43,10 +45,20 @@ def main() -> None:
         sys.exit(1)
 
     scenarios_dir = Path(config.SCENARIOS_DIR)
-    definitions = resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="conversational_rag")
+    # assisted_form scenarios are optional here: only those that configure RAG
+    # classification (`form.classification_field`) set `documents` at all — a plain
+    # slot-filling assisted_form scenario has nothing for this job to vectorize.
+    form_definitions = {
+        slug: d
+        for slug, d in resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="assisted_form").items()
+        if d.documents is not None
+    }
+    definitions = {**resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="conversational_rag"), **form_definitions}
     if not definitions:
         logger.error(
-            "No conversational_rag scenario matched SCENARIOS={!r} under {!r}.", config.SCENARIOS, config.SCENARIOS_DIR
+            "No conversational_rag or documents-configured assisted_form scenario matched SCENARIOS={!r} under {!r}.",
+            config.SCENARIOS,
+            config.SCENARIOS_DIR,
         )
         sys.exit(1)
 

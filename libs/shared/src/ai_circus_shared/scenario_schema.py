@@ -175,6 +175,82 @@ class RagServices(BaseModel):
     agent: str
 
 
+class RequiredIf(BaseModel):
+    """Generic conditional-requirement rule for a `FormFieldSpec`: the field becomes
+    required only when *another* field (any field, not necessarily the scenario's
+    classification field) currently holds one of `in_values`. Kept generic — not tied
+    to classification — so a future `assisted_form` scenario can condition any field
+    on any other field without a shared-schema change.
+    """
+
+    field: str
+    in_values: list[str]
+
+
+class FormFieldSpec(BaseModel):
+    """One field in an `assisted_form` scenario's form — drives ui-react's generic
+    form renderer the same way `FeatureUI` drives the tabular_ml prediction form.
+
+    `validation` is a small set of generic, reusable primitives (never a
+    country/domain-specific rule baked into shared code) — `pattern`/`min_length`
+    supply the scenario-specific detail as plain data.
+    """
+
+    id: str
+    label: str
+    type: Literal["text", "textarea", "email", "tel", "select", "date"]
+    required: bool = False
+    required_if: RequiredIf | None = None
+    options: list[str] | None = None  # for type="select"
+    validation: Literal["none", "email", "phone", "pattern", "min_length"] = "none"
+    pattern: str | None = None  # for validation="pattern"
+    min_length: int | None = None  # for validation="min_length"
+    helper_text: str | None = None
+
+    @model_validator(mode="after")
+    def _validation_params_present(self) -> FormFieldSpec:
+        if self.validation == "pattern" and not self.pattern:
+            raise ValueError(f"field {self.id!r}: validation='pattern' requires `pattern`.")
+        if self.validation == "min_length" and self.min_length is None:
+            raise ValueError(f"field {self.id!r}: validation='min_length' requires `min_length`.")
+        if self.type == "select" and not self.options:
+            raise ValueError(f"field {self.id!r}: type='select' requires `options`.")
+        return self
+
+
+class FormConfig(BaseModel):
+    """Form config for an `assisted_form` scenario.
+
+    `classification_field`/`classification_options` are optional: set them only when
+    the scenario wants the assistant to categorize the request via RAG (see
+    `documents`/`vector_store`, reused as-is from `conversational_rag`) — a scenario
+    with no such concept (a plain contact/intake form) simply omits both, and its
+    agent runs with no retrieval tool at all.
+    """
+
+    title: str
+    fields: list[FormFieldSpec]
+    classification_field: str | None = None
+    classification_options: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _classification_field_is_a_real_field(self) -> FormConfig:
+        if self.classification_field is None:
+            return self
+        if self.classification_field not in {f.id for f in self.fields}:
+            raise ValueError(f"classification_field {self.classification_field!r} is not among `fields`.")
+        if not self.classification_options:
+            raise ValueError("classification_field is set but classification_options is empty.")
+        return self
+
+
+class FormServices(BaseModel):
+    """Names of the services that implement an `assisted_form` scenario."""
+
+    etl: str
+    agent: str
+
+
 class ChatConfig(BaseModel):
     """Personalizes the scenario's chat assistant, regardless of `kind`.
 
@@ -204,7 +280,7 @@ class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
     slug: str
-    kind: Literal["tabular_ml", "conversational_rag"]
+    kind: Literal["tabular_ml", "conversational_rag", "assisted_form"]
     title: str
     description: str
     role_required: str
@@ -216,7 +292,21 @@ class ScenarioDefinition(BaseModel):
     model: TabularModel | None = None
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
-    services: TabularServices | RagServices
+    form: FormConfig | None = None
+    services: TabularServices | RagServices | FormServices
+
+    @model_validator(mode="after")
+    def _classification_needs_a_retrieval_source(self) -> ScenarioDefinition:
+        """A form that classifies via RAG needs something to retrieve against —
+        fail fast at load time rather than the agent silently having no tool for it.
+        """
+        needs_retrieval = self.form is not None and self.form.classification_field is not None
+        if needs_retrieval and (self.documents is None or self.vector_store is None):
+            raise ValueError(
+                "form.classification_field is set but documents/vector_store is missing — "
+                "classification needs a document catalog to retrieve against."
+            )
+        return self
 
     @classmethod
     def load(cls, path: Path) -> ScenarioDefinition:

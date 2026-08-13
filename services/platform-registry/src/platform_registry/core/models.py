@@ -57,6 +57,9 @@ class Scenario(Base):
     # tabular_ml only — the dataset column being predicted (not a feature itself), so
     # UIs can offer it in dataset-exploration views without treating it as a model input.
     target: Mapped[str | None] = mapped_column(String(64), default=None)
+    # assisted_form only — drives both UIs' generic form renderer (see
+    # ai_circus_shared.scenario_schema.FormConfig).
+    form: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 
