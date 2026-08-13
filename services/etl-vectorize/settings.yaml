@@ -59,6 +59,34 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: EMBEDDING_PROVIDER
+    description: "Embedding backend: 'local' (sentence-transformers, no API key), 'gemini', or 'voyage'"
+    type: string
+    mandatory: false
+    default: "local"
+    secret: false
+    validation:
+      regex: "^(local|gemini|voyage)$"
+      error_message: "EMBEDDING_PROVIDER must be one of: local, gemini, voyage"
+
+  - name: EMBEDDING_MODEL
+    description: "Model name override for the active EMBEDDING_PROVIDER; unset = that provider's own default"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOOGLE_API_KEY
+    description: "Google API key (only needed if EMBEDDING_PROVIDER=gemini)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: VOYAGE_API_KEY
+    description: "Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage)"
+    type: string
+    mandatory: false
+    secret: true
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file

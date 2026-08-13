@@ -36,6 +36,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "electric_motor",
         "energy_building",
         "ai_circus_reference",
+        "service_request",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -82,6 +83,19 @@ def test_seed_scenarios_conversational_rag_has_no_feature_fields(session: Sessio
     assert len(scenario.sample_questions) > 0
 
 
+def test_seed_scenarios_populates_form_config_for_assisted_form_only(session: Session) -> None:
+    """assisted_form scenarios get `form`; other kinds don't."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    service_request = session.get(Scenario, "service_request")
+    assert service_request.form["classification_field"] == "request_type"
+    field_ids = {f["id"] for f in service_request.form["fields"]}
+    assert {"full_name", "email", "address"} <= field_ids
+
+    assert session.get(Scenario, "churn").form is None
+    assert session.get(Scenario, "ai_circus_reference").form is None
+
+
 def test_seed_scenarios_populates_target(session: Session) -> None:
     """tabular_ml scenarios get the predicted column's name; conversational_rag ones don't."""
     seed_scenarios(session, SCENARIOS_DIR)
@@ -116,6 +130,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "electric_motor",
         "energy_building",
         "ai_circus_reference",
+        "service_request",
     }
 
 
@@ -132,8 +147,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 7
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 7
+    assert session.query(Scenario).count() == 8
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 8
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

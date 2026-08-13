@@ -77,6 +77,8 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
             existing.task_type = None
             existing.target_units = None
 
+        existing.form = definition.form.model_dump() if definition.form is not None else None
+
         admin_stmt = select(Entitlement).where(
             Entitlement.org_id == ADMIN_ORG_ID, Entitlement.scenario_slug == definition.slug
         )

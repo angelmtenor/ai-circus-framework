@@ -20,7 +20,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from rag_agent import api as api_module
-from rag_agent.api import _embedders, _llm, _llm_model_name, _qdrant, _scenario_definition, router
+from rag_agent.api import _embedder, _llm, _llm_model_name, _qdrant, _scenario_definition, router
 from rag_agent.core.identity import resolve_identity
 from tests.conftest import FakeSecret
 
@@ -70,7 +70,7 @@ def _client_with(llm: FakeToolCallingModel) -> TestClient:
         collection_exists=lambda _name: True,
         query_points=lambda **_kwargs: SimpleNamespace(points=[fake_point]),
     )
-    app.dependency_overrides[_embedders] = lambda: {"docs_rag": SimpleNamespace(encode=lambda _q, **_kw: [0.1, 0.2])}
+    app.dependency_overrides[_embedder] = lambda: SimpleNamespace(encode_query=lambda _q: [0.1, 0.2])
     app.dependency_overrides[_llm] = lambda: llm
     app.dependency_overrides[_llm_model_name] = lambda: "gemini-flash"
     return TestClient(app)

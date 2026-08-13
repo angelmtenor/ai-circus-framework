@@ -63,7 +63,7 @@ def test_build_retrieve_tool_is_scoped_to_the_calling_org(monkeypatch) -> None: 
     seen_org_ids: list[str] = []
     monkeypatch.setattr(
         "rag_agent.core.agent.retrieve",
-        lambda _qdrant, _embedder, _vector_store, org_id, _query: (seen_org_ids.append(org_id) or []),
+        lambda _qdrant, _embedder, _vector_store, org_id, _query: seen_org_ids.append(org_id) or [],
     )
     tool, _captured = build_retrieve_tool(object(), object(), VECTOR_STORE, "org-42")
 

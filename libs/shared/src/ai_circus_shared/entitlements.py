@@ -70,6 +70,10 @@ class ScenarioSummary(BaseModel):
     target_units: str | None = None
     # tabular_ml only — the dataset column being predicted (not itself a feature).
     target: str | None = None
+    # assisted_form only — drives ui-react's generic form renderer (see
+    # scenario_schema.FormConfig); a plain dict here, not the pydantic model, matching
+    # feature_schema's own wire/ORM-facing shape above.
+    form: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
