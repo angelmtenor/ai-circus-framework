@@ -18,6 +18,11 @@ const CATEGORIES: Category[] = [
     match: (s) => s.kind === "conversational_rag",
   },
   {
+    key: "assisted_form",
+    label: "Assisted Forms",
+    match: (s) => s.kind === "assisted_form",
+  },
+  {
     key: "specific_agents",
     label: "Specific Agents",
     match: (s) => s.kind === "agent",
