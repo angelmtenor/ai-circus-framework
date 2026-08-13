@@ -134,6 +134,37 @@ def test_clean_casts_boolean_feature_columns_to_category() -> None:
     assert cleaned["IsHoliday"].dtype.name == "category"
 
 
+def test_clean_boolean_feature_column_stays_categorical_through_parquet_round_trip() -> None:
+    """A `category` dtype whose categories are themselves bool doesn't survive a
+    parquet round-trip: pyarrow silently reads it back as plain `bool` (see pandas
+    issue with categorical(bool) columns), which then breaks training's
+    dtype-based numeric/categorical split (SimpleImputer rejects bool outright).
+    clean() must cast bool -> str -> category, not bool -> category directly, so the
+    dtype actually survives being written to and read back from MinIO.
+    """
+    dataset = DATASET.model_copy(
+        update={
+            "feature_columns": ["CreditScore", "IsHoliday"],
+            "feature_schema": {
+                "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
+                "IsHoliday": {"type": "categorical", "options": ["False", "True"], "default": "False"},
+            },
+        }
+    )
+    df = pd.DataFrame(
+        {"CreditScore": [600, 650, 700], "IsHoliday": [True, False, True], "Exited": [0, 1, 0]},
+        index=pd.Index([1, 2, 3], name="CustomerId"),
+    )
+
+    cleaned = clean(df, dataset)
+    buffer = io.BytesIO()
+    cleaned.to_parquet(buffer)
+    buffer.seek(0)
+    restored = pd.read_parquet(buffer)
+
+    assert restored["IsHoliday"].dtype.name == "category"
+
+
 def test_save_normalized_writes_parquet_readable_back(scenario_dir: Path) -> None:
     """save_normalized round-trips a DataFrame through MinIO as parquet."""
     store = FakeObjectStore()

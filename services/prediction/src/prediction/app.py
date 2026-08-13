@@ -20,14 +20,15 @@ from pathlib import Path
 import uvicorn
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from prediction import get_env_config
 from prediction.api import router
 from prediction.core.logger import configure_logger, get_logger
-from prediction.core.model_cache import ModelCache
+from prediction.core.model_cache import ModelCache, ModelUnavailableError
 
 logger = get_logger(__name__)
 
@@ -60,6 +61,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="prediction", lifespan=lifespan)
 app.include_router(router)
+
+
+@app.exception_handler(ModelUnavailableError)
+def _model_unavailable_handler(request: Request, exc: ModelUnavailableError) -> JSONResponse:
+    """Registered (rather than a bare try/except at each call site) so it's applied
+    uniformly across every route, and — critically — an exception handler runs inside
+    CORSMiddleware's wrapped app, so the response still carries CORS headers. An
+    unhandled exception here would instead surface to the browser as an opaque
+    "Failed to fetch" (Starlette's ServerErrorMiddleware sits *outside* CORSMiddleware,
+    so its default 500 response skips CORS headers entirely).
+    """
+    logger.warning("{}: {}", request.url.path, exc)
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 def main() -> None:

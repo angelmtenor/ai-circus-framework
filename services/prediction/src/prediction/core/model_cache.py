@@ -36,11 +36,27 @@ from prediction.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-class CorruptArtifactError(RuntimeError):
+class ModelUnavailableError(RuntimeError):
+    """Base for errors meaning a scenario's model artifacts can't be served right now
+    (not yet trained, or corrupt) — as opposed to a bug. api.py registers one handler
+    for this base class so callers get a clean 503 instead of an unhandled 500 (which
+    would skip CORSMiddleware entirely and surface to the browser as an opaque
+    "Failed to fetch").
+    """
+
+
+class CorruptArtifactError(ModelUnavailableError):
     """Raised when a MinIO artifact's bytes don't match its metadata checksum —
     i.e. it was partially overwritten by an interrupted retrain, or corrupted/tampered
     with in storage. Refuse to deserialize it rather than joblib.load()'ing unknown
     bytes.
+    """
+
+
+class ModelNotTrainedError(ModelUnavailableError):
+    """Raised when no trained model artifacts exist for a scenario, for either the
+    tenant's own org or the shared fallback org (e.g. `training` never ran, or errored
+    out, for this scenario) — as opposed to `store.get()` bubbling up a raw MinIO 404.
     """
 
 
@@ -134,14 +150,20 @@ class ModelCache:
             # Tenants without their own trained artifacts yet (any org besides the
             # one training actually ran for) share the baseline org's model —
             # see __init__'s fallback_org_id docstring.
-            load_org_id = org_id if store.exists(org_id, MODEL_METADATA_KEY) else self.fallback_org_id
-            if load_org_id != org_id:
+            own_exists = store.exists(org_id, MODEL_METADATA_KEY)
+            load_org_id = org_id if own_exists else self.fallback_org_id
+            if not own_exists:
                 logger.info(
                     "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
                     org_id,
                     scenario_slug,
                     load_org_id,
                 )
+                if not store.exists(load_org_id, MODEL_METADATA_KEY):
+                    raise ModelNotTrainedError(
+                        f"No trained model artifacts for scenario={scenario_slug!r} "
+                        f"(org={org_id!r}, fallback org={load_org_id!r} also has none — has `training` run for it?)."
+                    )
             logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug)
             # Read metadata first — it's the manifest training writes last, once
             # every artifact below it has been confirmed uploaded — so an

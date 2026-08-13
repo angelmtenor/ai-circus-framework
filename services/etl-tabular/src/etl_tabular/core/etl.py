@@ -60,6 +60,13 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     for column in dataset.feature_columns:
         is_numeric = pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])
         if not is_numeric:
+            # bool columns go through str first: a `category` dtype whose categories
+            # are themselves bool doesn't survive a parquet round-trip — pyarrow reads
+            # it back as plain `bool` (losing the category cast entirely), which then
+            # breaks training's categorical-feature pipeline (SimpleImputer rejects
+            # bool dtype outright).
+            if pd.api.types.is_bool_dtype(df[column]):
+                df[column] = df[column].astype(str)
             df[column] = df[column].astype("category")
 
     logger.info(
