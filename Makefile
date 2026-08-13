@@ -120,7 +120,8 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		echo "❌ ADMIN_API_KEY in .env doesn't match what platform-registry is running with — after editing .env, run 'make up' to recreate it"; exit 1; \
 	fi; \
 	echo "  ✓ admin key accepted by platform-registry ($$code)"
-	@n=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
+	@key="$${ADMIN_API_KEY:-ai-circus-2026}"; \
+	n=$$(curl -s -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
 	if [ "$$n" -gt 0 ]; then echo "  ✓ admin tenant is entitled to $$n scenario(s)"; \
 	else echo "❌ admin tenant has 0 entitled scenarios — scenario seeding may have failed, check: docker compose logs platform-registry"; exit 1; fi
 	@for host in prediction assistant rag-agent; do \
@@ -143,7 +144,7 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		echo "❌ ENGINEERING_DEMO_API_KEY in .env doesn't match what platform-registry is running with ($$code) — after editing .env, run 'make up' to recreate it"; exit 1; \
 	fi; \
 	echo "  ✓ engineering demo key accepted by platform-registry ($$code)"; \
-	slugs=$$(curl -s "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/engineering-demo" | grep -o '"slug":"[a-z_]*"' | sort); \
+	slugs=$$(curl -s -H "Authorization: Bearer $$demo_key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/engineering-demo" | grep -o '"slug":"[a-z_]*"' | sort); \
 	expected=$$(printf '"slug":"electric_motor"\n"slug":"energy_building"\n"slug":"mpm"'); \
 	if [ "$$slugs" = "$$expected" ]; then \
 		echo "  ✓ engineering-demo tenant is entitled to exactly mpm/electric_motor/energy_building"; \
