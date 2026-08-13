@@ -42,7 +42,7 @@ def test_build_retrieve_tool_returns_content_and_sources(monkeypatch) -> None:  
 
     result = tool.func("ATM withdrawal limit")
 
-    assert result[0] == "[Source: policy.md]\nATM limit is $1000."
+    assert result[0] == '<retrieved_document source="policy.md">\nATM limit is $1000.\n</retrieved_document>'
     assert result[1] == [{"source": "policy.md", "score": 0.9}]
     assert captured["sources"] == [{"source": "policy.md", "score": 0.9}]
 

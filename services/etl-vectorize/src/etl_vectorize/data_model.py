@@ -46,7 +46,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "14b4f7d8f168528a9a9624cdacec8ae9859ea42d5aa37f0fd7088ced280e521c"
+_SOURCE_YAML_HASH = "9cebf4044b19711c96987bf39e9f8112a7f10cfcc677d7c667fa4418e121c0e4"
 
 
 EnvConfig.model_rebuild()

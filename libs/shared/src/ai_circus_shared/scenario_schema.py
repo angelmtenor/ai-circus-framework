@@ -69,6 +69,21 @@ class TabularDataset(BaseModel):
     # there) — optional; an empty list falls back to the UI's own generic default.
     default_charts: list[ChartSpec] = []
 
+    @model_validator(mode="after")
+    def _protected_features_actually_excluded(self) -> TabularDataset:
+        """Fail fast if a column listed as protected (Responsible AI) also appears in
+        `feature_columns` — etl_tabular.core.etl.clean() trusts this list is accurate
+        when it logs "dropped protected columns", so a scenario.yaml authoring mistake
+        here must not silently ship a model trained on a column it claims to exclude.
+        """
+        leaked = set(self.protected_features_excluded) & set(self.feature_columns)
+        if leaked:
+            raise ValueError(
+                f"protected_features_excluded columns {sorted(leaked)} also appear in "
+                "feature_columns — they would not actually be excluded from training."
+            )
+        return self
+
 
 class TabularModel(BaseModel):
     """Model-selection config for a `tabular_ml` scenario (Green Code policy)."""

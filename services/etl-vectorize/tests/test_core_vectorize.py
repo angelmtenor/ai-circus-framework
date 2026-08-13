@@ -95,6 +95,11 @@ class FakeQdrantClient:
         self.collections[name] = []
         self.created_with[name] = vectors_config.size
 
+    def delete_collection(self, name: str) -> None:
+        """Drop a collection entirely."""
+        del self.collections[name]
+        del self.created_with[name]
+
     def upsert(self, collection_name: str, points: list) -> None:
         """Append points to the named collection."""
         self.collections[collection_name].extend(points)
@@ -207,6 +212,36 @@ def test_run_vectorize_end_to_end(scenario_dir: Path) -> None:
     assert count > 0
     assert qdrant.collections["docs_rag__org-1"]
     assert qdrant.created_with["docs_rag__org-1"] == 4
+
+
+def test_run_vectorize_does_not_duplicate_points_on_rerun(scenario_dir: Path) -> None:
+    """Re-running against the same (unchanged) documents must not grow the collection —
+    each chunk gets a fresh random point id, so upserting onto a not-cleared
+    collection would duplicate every chunk on every run."""
+    store = FakeObjectStore()
+    qdrant = FakeQdrantClient()
+
+    first_count = run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", DOCUMENTS, VECTOR_STORE, scenario_dir)
+    run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", DOCUMENTS, VECTOR_STORE, scenario_dir)
+
+    assert len(qdrant.collections["docs_rag__org-1"]) == first_count
+
+
+def test_run_vectorize_removes_points_for_deleted_documents(scenario_dir: Path) -> None:
+    """A document removed from the tenant's raw docs since the last run must not
+    leave its old chunks retrievable forever."""
+    store = FakeObjectStore()
+    qdrant = FakeQdrantClient()
+
+    run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", DOCUMENTS, VECTOR_STORE, scenario_dir)
+    for key in store.list("org-1", DOCUMENTS.raw_prefix):
+        if key.endswith("doc2.md"):
+            del store._objects["org-1"][key]
+
+    run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", DOCUMENTS, VECTOR_STORE, scenario_dir)
+
+    remaining_sources = {p.payload["source"] for p in qdrant.collections["docs_rag__org-1"]}
+    assert remaining_sources == {"raw/doc1.md"}
 
 
 def test_run_vectorize_is_isolated_per_tenant(scenario_dir: Path) -> None:

@@ -142,7 +142,7 @@ export default function App() {
     if (!identity) return;
     setScenariosLoading(true);
     setScenariosError(null);
-    listEntitledScenarios(config.platformRegistryUrl, identity.orgId)
+    listEntitledScenarios(config.platformRegistryUrl, identity.orgId, identity.accessToken)
       .then(setScenarios)
       .catch((e) => setScenariosError((e as Error).message))
       .finally(() => setScenariosLoading(false));

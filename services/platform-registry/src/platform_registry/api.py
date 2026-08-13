@@ -2,14 +2,23 @@
 - Title:    Entitlement & scenario-metadata API
 - Author:   ai-circus-framework contributors
 
-Not exposed through Traefik — only other backend services on the docker network call
-this. Each of those services is responsible for validating the end user's Logto token
-(see ai_circus_shared.auth) *before* calling here to confirm the tenant is entitled.
+Its entitlement-mutation and /llm-settings/* routes are admin-only infrastructure,
+called by other backend services or an operator, and are NOT exposed through Traefik.
+The entitlement-*read* routes are different: ui-react calls GET /entitlements/{org_id}
+directly from the browser (see this service's settings.yaml header) to render the
+scenario picker, so `require_org_match` below gives them their own auth — the same
+identity resolution every other service uses (see ai_circus_shared.auth) — rather than
+trusting the caller to have validated the org_id in the URL against anything.
 """
 
 from __future__ import annotations
 
-from ai_circus_shared.auth import is_admin_bearer_token
+from ai_circus_shared.auth import (
+    AuthSettingsAdapter,
+    TokenValidationError,
+    is_admin_bearer_token,
+    resolve_org_identity,
+)
 from ai_circus_shared.entitlements import ScenarioSummary
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
@@ -32,6 +41,41 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
     config = get_env_config()
     if not is_admin_bearer_token(authorization, config.ADMIN_API_KEY.get_secret_value()):
         raise HTTPException(status_code=401, detail="Admin bearer token required.")
+
+
+def require_org_match(org_id: str, authorization: str | None = Header(default=None)) -> None:
+    """Gate GET /entitlements/{org_id}[/...] on the caller actually being that org.
+
+    `org_id` is injected from the route's path parameter of the same name (FastAPI
+    resolves path params into a `Depends()` sub-dependency by parameter name,
+    regardless of which function in the dependency tree declares them — the same
+    pattern prediction/assistant/rag-agent's `resolve_identity` already relies on for
+    `scenario_slug`). Without this, any caller could enumerate any other tenant's
+    scenario catalog by changing `org_id` in the URL — the whole point of this check.
+
+    Deliberately uses `resolve_org_identity`, not `resolve_caller_identity`: these
+    endpoints ARE the entitlement check, so calling through the latter would have
+    platform-registry call back into its own API.
+    """
+    config = get_env_config()
+    settings = AuthSettingsAdapter(
+        AUTH_DISABLED=config.AUTH_DISABLED,
+        DEV_ORG_ID=config.DEV_ORG_ID,
+        LOGTO_ISSUER=config.LOGTO_ISSUER,
+        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
+        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
+        ENGINEERING_DEMO_API_KEY=(
+            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+        ),
+        PLATFORM_REGISTRY_URL="",  # unused by resolve_org_identity — no entitlement check here
+    )
+    try:
+        identity = resolve_org_identity(authorization=authorization, settings=settings)
+    except TokenValidationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    if identity.org_id != org_id:
+        raise HTTPException(status_code=403, detail=f"Not authorized to read org {org_id!r}'s entitlements.")
 
 
 class LlmProviderOut(BaseModel):
@@ -92,7 +136,7 @@ def verify_engineering_demo_key(authorization: str | None = Header(default=None)
     return {"valid": True}
 
 
-@router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary])
+@router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary], dependencies=[Depends(require_org_match)])
 def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)) -> list[Scenario]:
     """Return the scenarios the given tenant (Logto Organization) is entitled to."""
     stmt = select(Scenario).join(Entitlement).where(Entitlement.org_id == org_id)
@@ -101,7 +145,17 @@ def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)
 
 @router.get("/entitlements/{org_id}/{scenario_slug}")
 def check_entitlement(org_id: str, scenario_slug: str, session: Session = Depends(get_session)) -> dict[str, bool]:
-    """Return 200 if the tenant is entitled to the scenario, 404 otherwise."""
+    """Return 200 if the tenant is entitled to the scenario, 404 otherwise.
+
+    Deliberately NOT gated by `require_org_match`, unlike `list_entitled_scenarios`
+    above: this one is called server-to-server by every other backend service's
+    `resolve_caller_identity` (see `ai_circus_shared.entitlements.
+    PlatformRegistryClient.check_entitlement`) *after* that service has already
+    validated the end user's token itself — adding an org-match check here would
+    require those internal calls to also carry a bearer token, which they don't
+    (and don't need to: this route isn't reachable from a browser — see module
+    docstring — only from the trusted internal docker network).
+    """
     stmt = select(Entitlement).where(Entitlement.org_id == org_id, Entitlement.scenario_slug == scenario_slug)
     if session.scalars(stmt).first() is None:
         raise HTTPException(status_code=404, detail=f"Org {org_id!r} is not entitled to scenario {scenario_slug!r}.")

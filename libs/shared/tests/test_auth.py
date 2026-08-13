@@ -14,6 +14,7 @@ from ai_circus_shared.auth import (
     Identity,
     TokenValidationError,
     resolve_caller_identity,
+    resolve_org_identity,
 )
 from ai_circus_shared.entitlements import EntitlementDeniedError
 
@@ -194,3 +195,59 @@ def test_logto_not_configured_raises_runtime_error() -> None:
             scenario_slug="churn",
             settings=FakeSettings(ADMIN_API_KEY=None, LOGTO_ISSUER=None),
         )
+
+
+class TestResolveOrgIdentity:
+    """resolve_org_identity: same four resolution paths as resolve_caller_identity, but
+    with no trailing check_entitlement call — for platform-registry's own
+    `/entitlements/{org_id}` reads, where that call would recurse into its own API."""
+
+    def test_auth_disabled_returns_fixed_dev_identity(self) -> None:
+        identity = resolve_org_identity(authorization=None, settings=FakeSettings(AUTH_DISABLED="true"))
+        assert identity.org_id == "demo"
+
+    def test_admin_api_key_resolves_to_admin_org(self) -> None:
+        identity = resolve_org_identity(authorization="Bearer ai-circus-2026", settings=FakeSettings())
+        assert identity.org_id == ADMIN_ORG_ID
+        assert identity.subject == "admin"
+
+    def test_engineering_demo_api_key_resolves_to_engineering_demo_org(self) -> None:
+        identity = resolve_org_identity(authorization="Bearer ai-circus-engineering-2026", settings=FakeSettings())
+        assert identity.org_id == ENGINEERING_DEMO_ORG_ID
+
+    def test_never_calls_the_entitlement_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No PlatformRegistryClient.check_entitlement call — that's the whole point."""
+
+        def fail(self: object, **_kwargs: object) -> None:
+            raise AssertionError("resolve_org_identity must not call check_entitlement")
+
+        monkeypatch.setattr(auth_module.PlatformRegistryClient, "check_entitlement", fail)
+        resolve_org_identity(authorization="Bearer ai-circus-2026", settings=FakeSettings())
+
+    def test_missing_authorization_header_raises_token_validation_error(self) -> None:
+        with pytest.raises(TokenValidationError):
+            resolve_org_identity(authorization=None, settings=FakeSettings())
+
+    def test_real_token_resolves_to_its_org_claim(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            auth_module,
+            "validate_token",
+            lambda *_a, **_kw: Identity(subject="user-1", org_id="org-1", roles=frozenset()),
+        )
+        identity = resolve_org_identity(authorization="Bearer good-token", settings=FakeSettings())
+        assert identity.org_id == "org-1"
+
+    def test_token_with_no_org_claim_raises_token_validation_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            auth_module,
+            "validate_token",
+            lambda *_a, **_kw: Identity(subject="user-1", org_id=None, roles=frozenset()),
+        )
+        with pytest.raises(TokenValidationError):
+            resolve_org_identity(authorization="Bearer good-token", settings=FakeSettings())
+
+    def test_logto_not_configured_raises_runtime_error(self) -> None:
+        with pytest.raises(RuntimeError):
+            resolve_org_identity(
+                authorization="Bearer anything", settings=FakeSettings(ADMIN_API_KEY=None, LOGTO_ISSUER=None)
+            )
