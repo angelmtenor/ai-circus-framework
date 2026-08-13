@@ -139,6 +139,9 @@ export default function App() {
   const [scenariosError, setScenariosError] = useState<string | null>(null);
 
   useEffect(() => {
+    setSelected(null);
+    setScenarios([]);
+    setShowSettings(false);
     if (!identity) return;
     setScenariosLoading(true);
     setScenariosError(null);
