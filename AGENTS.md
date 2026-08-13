@@ -21,9 +21,10 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
   filesystem access that bypasses `.gitignore`.
 
 ## 📚 2. Context Discovery Requirement
-- Read `/home/amartinez3/.claude/plans/swirling-nibbling-cocoa.md` (the approved project plan)
-  before making architectural changes — it records the reasoning behind the tenancy/storage/
-  ingress/scenario-registry decisions, not just the "what".
+- If your Claude Code plans directory has an approved project plan for this repo, read it before
+  making architectural changes — it records the reasoning behind the tenancy/storage/ingress/
+  scenario-registry decisions, not just the "what". (This plan lives in a per-contributor local
+  path, e.g. `~/.claude/plans/`, not in the repo — it won't exist for every clone/contributor.)
 - If the task touches a specific service, read that service's own `AGENTS.md`/`SKILLS.md` first.
 
 ## 👥 3. Human-in-the-Loop Protocol

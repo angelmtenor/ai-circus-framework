@@ -106,6 +106,14 @@ services:
     image: qdrant/qdrant:v1.19.0
     volumes:
       - qdrant-storage:/qdrant/storage
+    ports:
+      # Loopback-only (like platform-registry below), for rag-agent/etl-vectorize
+      # running outside Docker (local, non-container dev) to still reach it. Qdrant
+      # has no built-in auth of its own — it must NEVER be routed through Traefik's
+      # public entrypoint (0.0.0.0), which would let anyone who can reach this host
+      # on port 80 read/write every tenant's vectors directly, bypassing rag-agent's
+      # entitlement checks and per-tenant collection naming entirely.
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 1g
@@ -116,11 +124,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.qdrant.rule=Host(`qdrant.localhost`)"
-      - "traefik.http.routers.qdrant.entrypoints=web"
-      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
 
   # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
   minio:
@@ -165,6 +168,15 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Back require_org_match (see platform_registry/api.py) — GET /entitlements/*
+      # is called directly from ui-react's browser code (see below), so it needs the
+      # same identity resolution every other service uses, not just a "trust the
+      # caller" assumption. DEV ONLY passthrough — leave AUTH_DISABLED unset
+      # (defaults to "false") once Logto is configured; see settings.yaml.
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
@@ -266,14 +278,18 @@ services:
       # so this is only reachable once you run `make ollama-up`. Override in .env to
       # point at an Ollama instance you run yourself instead.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
+    ports:
+      # Loopback-only (like platform-registry/qdrant above) — no caller in ui-react
+      # ever hits llm-gateway directly (only assistant/rag-agent/platform-registry do,
+      # over the internal docker network), so there's no reason to put its OpenAI-
+      # compatible endpoint or LiteLLM's own admin/spend UI on the public Traefik
+      # entrypoint: it's gated only by a single shared LITELLM_MASTER_KEY with no
+      # rate limiting, an unnecessary internet-reachable cost/credential-stuffing
+      # target for a service that only needs to be reachable from this host.
+      - "127.0.0.1:${LLM_GATEWAY_PORT:-4000}:4000"
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 512m
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.llm-gateway.rule=Host(`llm-gateway.localhost`)"
-      - "traefik.http.routers.llm-gateway.entrypoints=web"
-      - "traefik.http.services.llm-gateway.loadbalancer.server.port=4000"
 
   # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — OPTIONAL
   # (profile "ollama"): `docker compose up`/`make up` never starts this, to avoid

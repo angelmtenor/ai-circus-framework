@@ -67,9 +67,25 @@ class EnvConfig(BaseSettings):
     LLM_GATEWAY_API_KEY: SecretStr = Field(
         description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
     )
+    AUTH_DISABLED: str = Field(
+        description="DEV ONLY: skip token checks on entitlement reads. Must be false beyond local iteration."
+    )
+    DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
+    LOGTO_ISSUER: str | None = Field(
+        description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
+        default=None,
+    )
+    LOGTO_JWKS_URL: str | None = Field(
+        description="Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)",
+        default=None,
+    )
+    LOGTO_API_RESOURCE_INDICATOR: str | None = Field(
+        description="Expected token audience — the API resource registered in Logto for this platform's backend",
+        default=None,
+    )
 
 
-_SOURCE_YAML_HASH = "c85803cdec677b4576bcda8195bf069e0010bf721b78aee56482717eccd1d059"
+_SOURCE_YAML_HASH = "a45eb96e6ded4f2c33fc0c19be4491f7e152507d9be1f17c2ae52084bc0684f5"
 
 
 EnvConfig.model_rebuild()

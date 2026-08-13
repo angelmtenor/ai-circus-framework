@@ -121,18 +121,25 @@ async function asJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function listEntitledScenarios(baseUrl: string, orgId: string): Promise<ScenarioSummary[]> {
-  const response = await fetch(`${baseUrl}/entitlements/${orgId}`);
+export async function listEntitledScenarios(
+  baseUrl: string,
+  orgId: string,
+  accessToken: string | null,
+): Promise<ScenarioSummary[]> {
+  const response = await fetch(`${baseUrl}/entitlements/${orgId}`, { headers: headers(accessToken) });
   return asJson<ScenarioSummary[]>(response);
 }
 
 /**
- * Confirms an admin key is real before the login screen commits to it. `/entitlements`
- * has no auth check at all (see platform_registry.api's module docstring — it trusts
- * the caller to have validated already), so a bad key would otherwise sail straight
- * through to the scenario picker and only fail once a scenario's own chat/predict
- * call 401s. `/llm-settings/active-model` is admin-gated: 401 means a bad key; 200 or
- * 404 ("no active model set yet") both mean the bearer token cleared that gate.
+ * Confirms an admin key is real before the login screen commits to it — cheap
+ * fail-fast so a bad key doesn't sail through to the scenario picker only to error
+ * on every scenario's own chat/predict call. `/entitlements/{org_id}` itself now also
+ * enforces (server-side, see platform_registry.api.require_org_match) that the
+ * caller's resolved identity actually matches the requested org, but a wrong admin
+ * key would otherwise still resolve to *some* org via Logto/fallthrough — this check
+ * confirms the key itself is real. `/llm-settings/active-model` is admin-gated: 401
+ * means a bad key; 200 or 404 ("no active model set yet") both mean the bearer token
+ * cleared that gate.
  */
 export async function verifyAdminKey(baseUrl: string, adminKey: string): Promise<boolean> {
   const response = await fetch(`${baseUrl}/llm-settings/active-model`, { headers: headers(adminKey) });

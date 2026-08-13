@@ -81,7 +81,9 @@ environments:
   local:
     SCENARIOS_DIR: "../../scenarios"
     MINIO_ENDPOINT: "http://minio.localhost"
-    QDRANT_URL: "http://qdrant.localhost"
+    # Loopback-bound host port (not Traefik — see root docker-compose.yml's qdrant
+    # comment for why it must never be on the public entrypoint).
+    QDRANT_URL: "http://localhost:6333"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:

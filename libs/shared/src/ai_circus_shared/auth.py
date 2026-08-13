@@ -90,6 +90,9 @@ def validate_token(token: str, *, issuer: str, audience: str, jwks_url: str) -> 
             algorithms=["RS256", "ES384"],
             issuer=issuer,
             audience=audience,
+            # PyJWT only verifies exp/iat *if present* in the token — require them
+            # outright so a token that simply omits `exp` can't skip expiry checking.
+            options={"require": ["exp", "iat"]},
         )
     except jwt.PyJWTError as exc:
         raise TokenValidationError(str(exc)) from exc
@@ -145,6 +148,49 @@ def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool
     if not authorization or not authorization.startswith("Bearer "):
         return False
     return secrets.compare_digest(authorization.removeprefix("Bearer "), admin_api_key)
+
+
+def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -> Identity:
+    """Resolve the caller's identity WITHOUT enforcing any scenario entitlement.
+
+    For platform-registry's own `/entitlements/{org_id}` reads: those endpoints ARE
+    the entitlement check, so routing them through `resolve_caller_identity` would
+    have platform-registry call back into its own API via `check_entitlement` — this
+    covers the same four resolution paths (dev bypass / admin key / engineering-demo
+    key / real Logto token) without that trailing call. Deliberately NOT a refactor
+    of `resolve_caller_identity` into a shared helper — keeping the two independent
+    avoids any risk of changing that function's already-tested behavior for
+    prediction/assistant/rag-agent.
+
+    Raises:
+        TokenValidationError: No/malformed token, or a token with no org claim.
+        RuntimeError: AUTH_DISABLED is false but Logto isn't configured.
+    """
+    if settings.AUTH_DISABLED.lower() == "true":
+        identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=frozenset())
+    elif settings.ADMIN_API_KEY and is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
+        identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=frozenset())
+    elif settings.ENGINEERING_DEMO_API_KEY and is_admin_bearer_token(authorization, settings.ENGINEERING_DEMO_API_KEY):
+        identity = Identity(subject="engineering-demo", org_id=ENGINEERING_DEMO_ORG_ID, roles=frozenset())
+    else:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise TokenValidationError("Missing or malformed Authorization header.")
+        if not (settings.LOGTO_ISSUER and settings.LOGTO_API_RESOURCE_INDICATOR and settings.LOGTO_JWKS_URL):
+            raise RuntimeError(
+                "LOGTO_ISSUER/LOGTO_API_RESOURCE_INDICATOR/LOGTO_JWKS_URL must be set "
+                "unless AUTH_DISABLED=true or a matching ADMIN_API_KEY was supplied."
+            )
+        token = authorization.removeprefix("Bearer ")
+        identity = validate_token(
+            token,
+            issuer=settings.LOGTO_ISSUER,
+            audience=settings.LOGTO_API_RESOURCE_INDICATOR,
+            jwks_url=settings.LOGTO_JWKS_URL,
+        )
+
+    if identity.org_id is None:
+        raise TokenValidationError("Token has no organization (tenant) claim.")
+    return identity
 
 
 def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, settings: AuthSettings) -> Identity:

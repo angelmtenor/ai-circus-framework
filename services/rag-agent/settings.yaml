@@ -140,8 +140,10 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     SCENARIOS_DIR: "../../scenarios"
-    QDRANT_URL: "http://qdrant.localhost"
-    LLM_GATEWAY_URL: "http://llm-gateway.localhost"
+    # Loopback-bound host ports (not Traefik — see root docker-compose.yml's qdrant/
+    # llm-gateway comments for why neither belongs on the public entrypoint).
+    QDRANT_URL: "http://localhost:6333"
+    LLM_GATEWAY_URL: "http://localhost:4000"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
 
   # Running as a container inside docker-compose's `ai-circus` network.

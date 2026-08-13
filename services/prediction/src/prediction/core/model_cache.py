@@ -36,11 +36,27 @@ from prediction.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-class CorruptArtifactError(RuntimeError):
+class ModelUnavailableError(RuntimeError):
+    """Base for errors meaning a scenario's model artifacts can't be served right now
+    (not yet trained, or corrupt) — as opposed to a bug. api.py registers one handler
+    for this base class so callers get a clean 503 instead of an unhandled 500 (which
+    would skip CORSMiddleware entirely and surface to the browser as an opaque
+    "Failed to fetch").
+    """
+
+
+class CorruptArtifactError(ModelUnavailableError):
     """Raised when a MinIO artifact's bytes don't match its metadata checksum —
     i.e. it was partially overwritten by an interrupted retrain, or corrupted/tampered
     with in storage. Refuse to deserialize it rather than joblib.load()'ing unknown
     bytes.
+    """
+
+
+class ModelNotTrainedError(ModelUnavailableError):
+    """Raised when no trained model artifacts exist for a scenario, for either the
+    tenant's own org or the shared fallback org (e.g. `training` never ran, or errored
+    out, for this scenario) — as opposed to `store.get()` bubbling up a raw MinIO 404.
     """
 
 
@@ -95,6 +111,13 @@ class ModelCache:
         self._stores = stores
         self.fallback_org_id = fallback_org_id
         self._cache: OrderedDict[tuple[str, str], ModelArtifacts] = OrderedDict()
+        # Guards every read/write of `self._cache` itself (hit-path bump, insert,
+        # eviction). Distinct from the per-key locks below, which only serialize the
+        # expensive MinIO load+joblib.load work so concurrent loads of *different*
+        # keys don't block each other — without this separate guard, a fast-path hit
+        # on one key could run unsynchronized against another key's slow-path
+        # eviction (`popitem`), raising a spurious KeyError under concurrent load.
+        self._cache_guard = threading.Lock()
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
 
@@ -112,45 +135,61 @@ class ModelCache:
     def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
         """Return the tenant's model artifacts for this scenario, loading+caching on first call."""
         key = (org_id, scenario_slug)
-        if key in self._cache:
-            self._cache.move_to_end(key)
-            return self._cache[key]
+        with self._cache_guard:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
 
         with self._lock_for(key):
-            if key not in self._cache:  # re-check: another thread may have just populated it
-                store = self._stores[scenario_slug]
-                # Tenants without their own trained artifacts yet (any org besides the
-                # one training actually ran for) share the baseline org's model —
-                # see __init__'s fallback_org_id docstring.
-                load_org_id = org_id if store.exists(org_id, MODEL_METADATA_KEY) else self.fallback_org_id
-                if load_org_id != org_id:
-                    logger.info(
-                        "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
-                        org_id,
-                        scenario_slug,
-                        load_org_id,
-                    )
-                logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug)
-                # Read metadata first — it's the manifest training writes last, once
-                # every artifact below it has been confirmed uploaded — so an
-                # interrupted retrain shows up here as a checksum mismatch rather than
-                # a silent mix of old/new artifacts.
-                metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
-                checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
-                pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
-                explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
-                pipeline_lower = pipeline_upper = None
-                if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
-                    pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
-                    pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
-                if len(self._cache) >= MAX_CACHED_TENANTS:
-                    evicted_key, _ = self._cache.popitem(last=False)
-                    logger.info("Model cache full — evicted org={} scenario={}", *evicted_key)
-                self._cache[key] = ModelArtifacts(
-                    pipeline=pipeline,
-                    explainer=explainer,
-                    metadata=metadata,
-                    pipeline_lower=pipeline_lower,
-                    pipeline_upper=pipeline_upper,
+            with self._cache_guard:  # re-check: another thread may have just populated it
+                if key in self._cache:
+                    self._cache.move_to_end(key)
+                    return self._cache[key]
+
+            store = self._stores[scenario_slug]
+            # Tenants without their own trained artifacts yet (any org besides the
+            # one training actually ran for) share the baseline org's model —
+            # see __init__'s fallback_org_id docstring.
+            own_exists = store.exists(org_id, MODEL_METADATA_KEY)
+            load_org_id = org_id if own_exists else self.fallback_org_id
+            if not own_exists:
+                logger.info(
+                    "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
+                    org_id,
+                    scenario_slug,
+                    load_org_id,
                 )
-        return self._cache[key]
+                if not store.exists(load_org_id, MODEL_METADATA_KEY):
+                    raise ModelNotTrainedError(
+                        f"No trained model artifacts for scenario={scenario_slug!r} "
+                        f"(org={org_id!r}, fallback org={load_org_id!r} also has none — has `training` run for it?)."
+                    )
+            logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug)
+            # Read metadata first — it's the manifest training writes last, once
+            # every artifact below it has been confirmed uploaded — so an
+            # interrupted retrain shows up here as a checksum mismatch rather than
+            # a silent mix of old/new artifacts.
+            metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
+            checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
+            pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
+            explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
+            pipeline_lower = pipeline_upper = None
+            if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
+                pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
+                pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+            artifacts = ModelArtifacts(
+                pipeline=pipeline,
+                explainer=explainer,
+                metadata=metadata,
+                pipeline_lower=pipeline_lower,
+                pipeline_upper=pipeline_upper,
+            )
+            with self._cache_guard:
+                if key not in self._cache:
+                    if len(self._cache) >= MAX_CACHED_TENANTS:
+                        evicted_key, _ = self._cache.popitem(last=False)
+                        logger.info("Model cache full — evicted org={} scenario={}", *evicted_key)
+                        with self._locks_guard:
+                            self._locks.pop(evicted_key, None)
+                    self._cache[key] = artifacts
+                return self._cache[key]

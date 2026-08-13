@@ -15,7 +15,7 @@ from ai_circus_shared.tabular_ml import (
     artifact_checksum,
 )
 
-from prediction.core.model_cache import MAX_CACHED_TENANTS, CorruptArtifactError, ModelCache
+from prediction.core.model_cache import MAX_CACHED_TENANTS, CorruptArtifactError, ModelCache, ModelNotTrainedError
 
 
 class FakeObjectStore:
@@ -198,6 +198,23 @@ def test_get_caches_the_fallback_result_under_the_requesting_org(stores: dict[st
     cache.get("new-tenant-with-no-model", "churn")
 
     assert len(stores["churn"].get_calls) == calls_after_first
+
+
+def test_get_raises_model_not_trained_when_neither_tenant_nor_fallback_has_artifacts(
+    stores: dict[str, FakeObjectStore],
+) -> None:
+    """If `training` never ran (or errored out) for a scenario, neither the tenant's
+    own org nor the shared fallback org has model artifacts. This must surface as a
+    clear ModelNotTrainedError — not a raw, unhandled MinIO 404 (which api.py can't
+    turn into a clean HTTP response, since it isn't expecting that exception type).
+    """
+    empty_store = FakeObjectStore()
+    cache = ModelCache({"untrained-scenario": empty_store}, fallback_org_id="fallback-org")
+
+    with pytest.raises(ModelNotTrainedError):
+        cache.get("org-1", "untrained-scenario")
+
+    assert empty_store.get_calls == []  # never attempted to load a nonexistent artifact
 
 
 def test_get_skips_intervals_when_only_one_quantile_checksum_is_present(stores: dict[str, FakeObjectStore]) -> None:

@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
+from ai_circus_shared.auth import Identity
+from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
 import prediction.app as app
+from prediction.api import _model_cache, _scenario_definition
+from prediction.core.identity import resolve_identity
+from prediction.core.model_cache import ModelNotTrainedError, ModelUnavailableError
 from tests.conftest import FakeSecret
 
 
@@ -119,6 +126,45 @@ async def test_lifespan_sets_up_model_cache_from_resolved_scenarios(monkeypatch:
             "secret_key": "s3cret",
         }
     ]
+
+
+def test_model_unavailable_error_gets_503_with_cors_headers_not_a_bare_500() -> None:
+    """A missing-model-artifacts error must come back as a clean 503 *with* CORS
+    headers — not an unhandled 500. Starlette's ServerErrorMiddleware (which builds
+    the default 500 response for any exception with no registered handler) sits
+    *outside* CORSMiddleware, so that default response carries no CORS headers at
+    all — the browser then reports the whole request as a generic "Failed to fetch"
+    instead of a readable error. Registering `_model_unavailable_handler` for
+    ModelUnavailableError keeps the response inside CORSMiddleware's wrapped app.
+    """
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+
+    from prediction.api import router
+
+    class FailingModelCache:
+        def get(self, org_id: str, scenario_slug: str) -> None:
+            raise ModelNotTrainedError(f"No trained model artifacts for scenario={scenario_slug!r}.")
+
+    test_app = FastAPI()
+    test_app.include_router(router)
+    test_app.add_exception_handler(ModelUnavailableError, app._model_unavailable_handler)
+    test_app.add_middleware(
+        CORSMiddleware, allow_origins=["http://react.localhost"], allow_methods=["*"], allow_headers=["*"]
+    )
+    test_app.dependency_overrides[resolve_identity] = lambda: Identity(
+        subject="user-1", org_id="org-1", roles=frozenset()
+    )
+    test_app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="mpm")
+    test_app.dependency_overrides[_model_cache] = lambda: FailingModelCache()
+
+    response = TestClient(test_app).post(
+        "/predict/mpm", json={"records": [{}]}, headers={"Origin": "http://react.localhost"}
+    )
+
+    assert response.status_code == 503
+    assert response.headers["access-control-allow-origin"] == "http://react.localhost"
+    assert "No trained model artifacts" in response.json()["detail"]
 
 
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

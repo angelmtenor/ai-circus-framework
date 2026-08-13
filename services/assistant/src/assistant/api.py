@@ -15,6 +15,7 @@ from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -116,7 +117,11 @@ async def agui_endpoint(
     per-request entitlement check).
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
-    system_prompt = prompt_cache.get(identity.org_id, definition.slug)
+    # prompt_cache.get() does blocking MinIO I/O on a cache miss; this route is
+    # `async def` (needed for StreamingResponse below), so FastAPI won't threadpool
+    # it automatically — off the event loop explicitly, or a cold-start miss for one
+    # tenant stalls every other tenant's concurrent request on this instance.
+    system_prompt = await run_in_threadpool(prompt_cache.get, identity.org_id, definition.slug)
     config = get_env_config()
     prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
     tools = build_prediction_tools(
