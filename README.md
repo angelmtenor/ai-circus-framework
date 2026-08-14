@@ -5,7 +5,8 @@
 > snapshot rather than a finished product.
 
 A scalable, multi-tenant microservices platform for building and demoing data-science and
-GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, ...) behind a real login.
+GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form intake flows,
+...) behind a real login.
 
 <p align="center">
   <img src="docs/screenshots/scenarios.png" alt="ai-circus-framework scenario gallery" width="850">
@@ -122,7 +123,8 @@ every provider's live status and lets you switch the *active* model instantly, w
 ```bash
 make up                              # every backend service + both UIs
 make pipeline                        # (re)runs the ETL -> training pipeline for the tabular_ml scenarios
-docker compose up --build etl-vectorize   # vectorizes the conversational_rag scenario's reference docs
+docker compose up --build etl-vectorize   # vectorizes every conversational_rag scenario's reference docs,
+                                           # plus any assisted_form scenario's RAG catalog (e.g. service_request)
 ```
 
 ### 5. Open the app
@@ -172,11 +174,39 @@ containers stay up via `make up-infra`.
 3. Create organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
    `role_required` (`scenario:churn`, `scenario:mpm`, `scenario:supply_chain`,
    `scenario:supermarket_sales`, `scenario:electric_motor`, `scenario:energy_building`,
-   `scenario:ai_circus_reference`).
+   `scenario:ai_circus_reference`, `scenario:service_request`).
 4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (managed auth over custom auth, on purpose).
 5. Add users to an Organization and assign them the relevant `scenario:*` role(s) — that
    assignment *is* what grants access to a scenario.
+
+### Public deployment
+
+Deploying this as-is to a public VM or behind a public minikube
+Ingress is still just `make up` — there's no separate compose file or `up` variant — but it
+needs a few `.env` values changed first, since `APP_ENVIRONMENT: docker` in
+`docker-compose.yml` is identical for local dev and a real deployment and so can't be used to
+tell them apart:
+
+1. Rotate (or blank, to disable the shortcut outright) `ADMIN_API_KEY`/
+   `ENGINEERING_DEMO_API_KEY` away from their shipped demo values, and confirm
+   `AUTH_DISABLED=false`.
+2. Regenerate the Basic Auth credential Traefik puts in front of Logto's Admin Console and
+   MinIO's console — both are otherwise purely-administrative UIs, always reachable on the
+   Traefik entrypoint (Logto's Admin Console in particular lets *whoever reaches it first*
+   become the identity-system owner, so it's gated even locally, just with a shipped demo
+   credential you must rotate here):
+   ```bash
+   make generate-console-auth   # prints a one-time password — save it, it isn't stored anywhere
+   ```
+3. Set `DEPLOYMENT_TARGET=public` in `.env` — this arms every service's boot-time refusal to
+   start if you missed step 1 (see `libs/shared/src/ai_circus_shared/deployment_guard.py`), so
+   a mistake here is a startup crash with a clear message, not a silent hole.
+4. `make check-public-ready` sanity-checks all three steps above without starting/stopping
+   anything, then deploy with the usual `make up` (or `make all`).
+
+MinIO's S3 API route (as opposed to its console) is deliberately left without Basic Auth — see
+the comment on its Traefik labels in `docker-compose.yml` for why.
 
 ---
 
@@ -245,11 +275,34 @@ a question needs retrieval at all, grounded in the scenario's own reference docu
 
 <p align="center"><img src="docs/screenshots/rag-chat.png" alt="Conversational RAG chat" width="850"></p>
 
+Inside any `tabular_ml` scenario, that same assistant is also wired to the live model via
+**AG-UI** (CopilotKit) generative UI: it can call the real `prediction` API on your behalf and
+render the result as an actual chart or sortable table in the chat — not markdown pasted into
+prose — using the exact same Plotly/table components as the Data tab.
+
+<p align="center">
+  <img src="docs/screenshots/chat-generative-ui.png" alt="Assistant running a live prediction and rendering a SHAP chart and a data table via AG-UI" width="850">
+</p>
+
+### Assisted forms
+
+A third scenario kind, alongside `tabular_ml` and `conversational_rag`: a generic form rendered
+entirely from a scenario's `form:` config, paired with a chat assistant that can fill fields in
+live as you describe your request in plain language — classifying it via RAG over a small
+reference catalog, and highlighting which fields it just filled in versus what's still missing.
+**Public Service Request Portal** (`service_request`) is the reference example: report a
+streetlight outage, request an address registration, or apply for a permit, and watch the form
+fill itself in as you type.
+
+<p align="center">
+  <img src="docs/screenshots/assisted-form.png" alt="Assisted form workspace — the assistant fills in the Public Service Request Portal form live from conversation" width="850">
+</p>
+
 ---
 
 ## Scenario catalog
 
-Two kinds of scenario exist today — adding a new one is a YAML file, never new UI or container
+Three kinds of scenario exist today — adding a new one is a YAML file, never new UI or container
 code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 
 | Scenario | Kind / task | What it predicts | Source |
@@ -261,6 +314,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
 | **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression | Appliance energy use (Wh) | UCI — Appliances Energy Prediction |
 | **AI Circus Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
+| **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 
 Every `tabular_ml` scenario above is ported from a real public dataset rather than original
 content — full credit/link lives in each `scenarios/<slug>/scenario.yaml`'s `credits` field and is
@@ -268,7 +322,8 @@ surfaced in the Data tab.
 
 **One consolidated service instance serves every scenario of a given kind** — `prediction` and
 `assistant` both load every `tabular_ml` scenario from the same running container, routed by a
-`{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario.
+`{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
+and `form-agent` does the same for every `assisted_form` scenario.
 
 ---
 
@@ -357,10 +412,13 @@ though, is instant from **Settings**.
   generation from `ai-circus-template`, wires in `libs/shared`, and adapts the Dockerfile for this
   repo's build-context conventions. Then add it to `docker-compose.yml`.
 - **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`mpm` for `tabular_ml`,
-  `ai_circus_reference` for `conversational_rag`) with a `chat:` block (`context` +
-  `sample_questions`), restart `platform-registry` (it seeds on startup), and create the matching
-  Logto role. **No new container, no UI code** — the existing `prediction`/`assistant` or
-  `rag-agent` instance picks it up automatically, and `ui-react` renders its form/chat generically.
+  `ai_circus_reference` for `conversational_rag`, `service_request` for `assisted_form`) with a
+  `chat:` block (`context` + `sample_questions`), restart `platform-registry` (it seeds on
+  startup), and create the matching Logto role. **No new container, no UI code** — the existing
+  `prediction`/`assistant`, `rag-agent`, or `form-agent` instance picks it up automatically, and
+  `ui-react` renders its form/chat generically. An `assisted_form` scenario additionally needs a
+  `form:` block (field catalog + validation rules) and, if it's RAG-classified like
+  `service_request`, a `documents:`/`vector_store:` block for `etl-vectorize` to index.
 
 ## Testing & CI
 

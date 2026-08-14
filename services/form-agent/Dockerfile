@@ -17,13 +17,16 @@ RUN uv sync --project services/form-agent --frozen --no-cache --no-dev
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime
 WORKDIR /app
+RUN useradd --create-home --shell /bin/bash app
 
-COPY --from=builder /app/services/form-agent/.venv services/form-agent/.venv
-COPY --from=builder /app/services/form-agent/src   services/form-agent/src
-COPY --from=builder /app/services/form-agent/pyproject.toml services/form-agent/pyproject.toml
-COPY --from=builder /app/services/form-agent/settings.yaml  services/form-agent/settings.yaml
+COPY --from=builder --chown=app:app /app/services/form-agent/.venv services/form-agent/.venv
+COPY --from=builder --chown=app:app /app/services/form-agent/src   services/form-agent/src
+COPY --from=builder --chown=app:app /app/services/form-agent/pyproject.toml services/form-agent/pyproject.toml
+COPY --from=builder --chown=app:app /app/services/form-agent/settings.yaml  services/form-agent/settings.yaml
 
 ENV PATH="/app/services/form-agent/.venv/bin:$PATH"
 WORKDIR /app/services/form-agent
+
+USER app
 
 CMD ["python", "-m", "form_agent.app"]
