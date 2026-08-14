@@ -12,8 +12,8 @@ endif
 CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
-.PHONY: help bootstrap up up-infra down logs pipeline new-service sync-shared check-all clean ollama-up \
-	all reset-all wait-infra wait-services verify
+.PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
+	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -21,8 +21,12 @@ help: ## Show this help message
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-bootstrap: ## Create .env from .env.example if missing
+bootstrap: ## Create .env from .env.example, and console.htpasswd from its .example, if missing
 	@if [ ! -f .env ] && [ -f .env.example ]; then echo "📝 Creating .env from .env.example..."; cp .env.example .env; fi
+	@if [ ! -f infra/traefik/console.htpasswd ] && [ -f infra/traefik/console.htpasswd.example ]; then \
+		echo "📝 Creating infra/traefik/console.htpasswd from its .example (demo credential — rotate with 'make generate-console-auth' before a public deployment)..."; \
+		cp infra/traefik/console.htpasswd.example infra/traefik/console.htpasswd; \
+	fi
 	@echo "✓ Edit .env (Logto/LLM/MinIO secrets) before running 'make up'"
 
 # ── Compose lifecycle ─────────────────────────────────────────────────────────
@@ -46,6 +50,37 @@ pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start pre
 
 ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; pulls llama3.2:3b, ~2GB, on first run)
 	@docker compose --profile ollama up -d ollama ollama-pull
+
+# ── Public deployment (Hetzner/Contabo/any public VM, or minikube behind a public
+# Ingress) — no separate compose file or `up` variant: `make up` already serves both
+# local dev and a real deployment, differentiated purely by .env (same as
+# ADMIN_API_KEY/MINIO_ROOT_PASSWORD/etc. always have been). See README "Public
+# deployment" for the full checklist; the two commands below cover the parts that
+# are easy to forget.
+
+generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.logto/console.minio — usage: make generate-console-auth [CONSOLE_USER=admin]
+	@./scripts/generate_console_auth.sh "$(CONSOLE_USER)"
+
+check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped demo values before a public deployment (does not start/stop anything)
+	@ok=1; \
+	if [ "$${DEPLOYMENT_TARGET:-local}" != "public" ]; then \
+		echo "❌ DEPLOYMENT_TARGET is not 'public' in .env — every service's boot-time guard is a no-op until it is"; ok=0; \
+	fi; \
+	if [ "$${ADMIN_API_KEY:-ai-circus-2026}" = "ai-circus-2026" ]; then \
+		echo "❌ ADMIN_API_KEY is still the shipped demo default — rotate it or blank it in .env"; ok=0; \
+	fi; \
+	if [ "$${ENGINEERING_DEMO_API_KEY:-}" = "ai-circus-engineering-2026" ]; then \
+		echo "❌ ENGINEERING_DEMO_API_KEY is still the shipped demo default — rotate it or blank it in .env"; ok=0; \
+	fi; \
+	if [ "$${AUTH_DISABLED:-false}" = "true" ]; then \
+		echo "❌ AUTH_DISABLED=true in .env — this bypasses Logto entirely, never set it for a public deployment"; ok=0; \
+	fi; \
+	if [ ! -f infra/traefik/console.htpasswd ]; then \
+		echo "❌ infra/traefik/console.htpasswd is missing — run 'make generate-console-auth'"; ok=0; \
+	elif [ -f infra/traefik/console.htpasswd.example ] && cmp -s infra/traefik/console.htpasswd infra/traefik/console.htpasswd.example; then \
+		echo "❌ infra/traefik/console.htpasswd still holds the shipped demo credential — run 'make generate-console-auth'"; ok=0; \
+	fi; \
+	if [ "$$ok" = "1" ]; then echo "✓ looks ready for a public deployment — run 'make up' (or 'make all') on the target host"; else exit 1; fi
 
 # ── One-shot setup / troubleshooting ────────────────────────────────────────────
 #

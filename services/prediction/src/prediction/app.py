@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI, Request
@@ -86,6 +87,18 @@ def main() -> None:
         logger.error("Configuration error: Mandatory environment variable(s) missing or invalid:")
         for error in e.errors():
             logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
+        sys.exit(1)
+
+    try:
+        enforce_safe_for_public_deployment(
+            admin_api_key=config.ADMIN_API_KEY.get_secret_value(),
+            engineering_demo_api_key=(
+                config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+            ),
+            auth_disabled=config.AUTH_DISABLED,
+        )
+    except RuntimeError as e:
+        logger.error(str(e))
         sys.exit(1)
 
     # ui-react calls this API directly from the browser (never via cookies, always a
