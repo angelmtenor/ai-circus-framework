@@ -51,8 +51,8 @@ pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start pre
 ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; pulls llama3.2:3b, ~2GB, on first run)
 	@docker compose --profile ollama up -d ollama ollama-pull
 
-# ── Public deployment (Hetzner/Contabo/any public VM, or minikube behind a public
-# Ingress) — no separate compose file or `up` variant: `make up` already serves both
+# ── Public deployment (any public VM, or minikube behind a public Ingress) — no
+# separate compose file or `up` variant: `make up` already serves both
 # local dev and a real deployment, differentiated purely by .env (same as
 # ADMIN_API_KEY/MINIO_ROOT_PASSWORD/etc. always have been). See README "Public
 # deployment" for the full checklist; the two commands below cover the parts that

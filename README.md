@@ -182,7 +182,7 @@ containers stay up via `make up-infra`.
 
 ### Public deployment
 
-Deploying this as-is to a public VM (Hetzner, Contabo, ...) or behind a public minikube
+Deploying this as-is to a public VM or behind a public minikube
 Ingress is still just `make up` — there's no separate compose file or `up` variant — but it
 needs a few `.env` values changed first, since `APP_ENVIRONMENT: docker` in
 `docker-compose.yml` is identical for local dev and a real deployment and so can't be used to
