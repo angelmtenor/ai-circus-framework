@@ -10,13 +10,13 @@ Author: ai-circus-framework contributors
 
 from __future__ import annotations
 
-import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -29,12 +29,6 @@ from platform_registry.core.models import Base
 from platform_registry.core.seed import seed_default_llm_setting, seed_scenarios
 
 logger = get_logger(__name__)
-
-# The root .env.example's shipped ADMIN_API_KEY value — self-documented there as an
-# intentionally public demo credential, fine for the "local"/"docker" dev profiles
-# but never for a real deployment.
-_DEMO_ADMIN_API_KEY = "ai-circus-2026"
-_DEV_PROFILES = {"local", "docker"}
 
 
 @asynccontextmanager
@@ -71,13 +65,16 @@ def main() -> None:
             logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
         sys.exit(1)
 
-    active_profile = os.getenv("APP_ENVIRONMENT", "local")
-    if active_profile not in _DEV_PROFILES and config.ADMIN_API_KEY.get_secret_value() == _DEMO_ADMIN_API_KEY:
-        logger.error(
-            "ADMIN_API_KEY is still the shipped demo default in APP_ENVIRONMENT={!r} — "
-            "rotate it before running outside local/docker dev.",
-            active_profile,
+    try:
+        enforce_safe_for_public_deployment(
+            admin_api_key=config.ADMIN_API_KEY.get_secret_value(),
+            engineering_demo_api_key=(
+                config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+            ),
+            auth_disabled=config.AUTH_DISABLED,
         )
+    except RuntimeError as e:
+        logger.error(str(e))
         sys.exit(1)
 
     # ui-react calls this API directly from the browser (never via cookies, always a

@@ -180,6 +180,34 @@ containers stay up via `make up-infra`.
 5. Add users to an Organization and assign them the relevant `scenario:*` role(s) — that
    assignment *is* what grants access to a scenario.
 
+### Public deployment
+
+Deploying this as-is to a public VM or behind a public minikube
+Ingress is still just `make up` — there's no separate compose file or `up` variant — but it
+needs a few `.env` values changed first, since `APP_ENVIRONMENT: docker` in
+`docker-compose.yml` is identical for local dev and a real deployment and so can't be used to
+tell them apart:
+
+1. Rotate (or blank, to disable the shortcut outright) `ADMIN_API_KEY`/
+   `ENGINEERING_DEMO_API_KEY` away from their shipped demo values, and confirm
+   `AUTH_DISABLED=false`.
+2. Regenerate the Basic Auth credential Traefik puts in front of Logto's Admin Console and
+   MinIO's console — both are otherwise purely-administrative UIs, always reachable on the
+   Traefik entrypoint (Logto's Admin Console in particular lets *whoever reaches it first*
+   become the identity-system owner, so it's gated even locally, just with a shipped demo
+   credential you must rotate here):
+   ```bash
+   make generate-console-auth   # prints a one-time password — save it, it isn't stored anywhere
+   ```
+3. Set `DEPLOYMENT_TARGET=public` in `.env` — this arms every service's boot-time refusal to
+   start if you missed step 1 (see `libs/shared/src/ai_circus_shared/deployment_guard.py`), so
+   a mistake here is a startup crash with a clear message, not a silent hole.
+4. `make check-public-ready` sanity-checks all three steps above without starting/stopping
+   anything, then deploy with the usual `make up` (or `make all`).
+
+MinIO's S3 API route (as opposed to its console) is deliberately left without Basic Auth — see
+the comment on its Traefik labels in `docker-compose.yml` for why.
+
 ---
 
 ## Tour of the platform

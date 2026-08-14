@@ -42,6 +42,13 @@ services:
       - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Basic Auth credential for the admin-basicauth middleware below (logto/minio
+      # labels) — gitignored, seeded from console.htpasswd.example by `make
+      # bootstrap`, rotated by `make generate-console-auth` before a public
+      # deployment. Always mounted (not just for public deploys): the two routers it
+      # gates (admin.logto, console.minio) are purely administrative and otherwise
+      # unauthenticated-until-configured, so the extra layer costs nothing locally.
+      - ./infra/traefik/console.htpasswd:/etc/traefik/console.htpasswd:ro
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 256m
@@ -100,6 +107,12 @@ services:
       - "traefik.http.routers.logto-admin.entrypoints=web"
       - "traefik.http.routers.logto-admin.service=logto-admin"
       - "traefik.http.services.logto-admin.loadbalancer.server.port=3002"
+      # Whoever reaches this Admin Console first, before "First-time Logto setup"
+      # (README) is done, becomes the identity-system owner — Basic Auth (see
+      # traefik's console.htpasswd mount above) closes that off regardless of how
+      # fast setup happens, on top of Logto's own login.
+      - "traefik.http.middlewares.admin-basicauth.basicauth.usersfile=/etc/traefik/console.htpasswd"
+      - "traefik.http.routers.logto-admin.middlewares=admin-basicauth"
 
   # ── Vector store (conversational_rag scenarios; one collection per tenant) ────
   qdrant:
@@ -152,6 +165,14 @@ services:
       - "traefik.http.routers.minio-console.entrypoints=web"
       - "traefik.http.routers.minio-console.service=minio-console"
       - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      # Same admin-basicauth middleware as logto-admin above (defined once there;
+      # referenced here via the @docker provider suffix since it's cross-container).
+      # Deliberately NOT applied to minio-api: no service reaches MinIO's S3 API via
+      # Traefik in the "docker" profile (they all use MINIO_ENDPOINT=http://minio:9000
+      # over the internal network) — this route exists only for local, non-Docker dev
+      # to reach it as minio.localhost, and Basic Auth would break that (S3 clients
+      # don't send it). It's still gated by a real MINIO_ROOT_USER/PASSWORD.
+      - "traefik.http.routers.minio-console.middlewares=admin-basicauth@docker"
 
   # ── Backend services (each generated via `scripts/new_service.sh`) ────────────
   platform-registry:
@@ -160,6 +181,12 @@ services:
       dockerfile: services/platform-registry/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      # local (default) vs public — arms the boot-time refusal to start with a
+      # demo ADMIN_API_KEY/ENGINEERING_DEMO_API_KEY/AUTH_DISABLED=true once set to
+      # "public" (see ai_circus_shared.deployment_guard and README's "Public
+      # deployment"). A different axis than APP_ENVIRONMENT above, which only picks
+      # this service's own settings.yaml profile.
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       LOG_LEVEL: INFO
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -227,6 +254,7 @@ services:
       dockerfile: services/prediction/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
@@ -329,6 +357,7 @@ services:
       dockerfile: services/assistant/Dockerfile
     environment:
       APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
@@ -427,6 +456,7 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Defaults to "llama3", which only answers once you've run `make ollama-up`
       # (see docker-compose.yml's `ollama` service — off by default). Set at least
@@ -477,6 +507,7 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}

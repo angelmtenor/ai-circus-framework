@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.*.example
+infra/traefik/*.htpasswd
 
 # Python
 __pycache__/
