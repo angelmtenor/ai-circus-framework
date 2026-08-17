@@ -133,9 +133,13 @@ class GithubDocsSource(BaseModel):
 class DocumentsConfig(BaseModel):
     """Source-document config for a `conversational_rag` scenario.
 
-    Exactly one of `seed_prefix` (a tracked local folder, relative to the scenario's
-    directory) or `github_source` (a public GitHub repo folder) provides the demo
-    bootstrap documents — see `etl_vectorize.core.vectorize.ensure_raw_docs`.
+    At least one of `seed_prefix` (a tracked local folder, relative to the scenario's
+    directory) or `github_source` (a public GitHub repo folder) must provide the demo
+    bootstrap documents — see `etl_vectorize.core.vectorize.ensure_raw_docs`. When both
+    are set, `github_source` is tried first and `seed_prefix` is the offline/rate-limit
+    fallback if that fetch fails, so upstream stays the source of truth without a
+    GitHub outage or unauthenticated-rate-limit hit taking the scenario's RAG index
+    down entirely.
     """
 
     bucket: str
@@ -146,9 +150,9 @@ class DocumentsConfig(BaseModel):
     embedding: DocumentEmbedding
 
     @model_validator(mode="after")
-    def _exactly_one_seed_source(self) -> DocumentsConfig:
-        if (self.seed_prefix is None) == (self.github_source is None):
-            raise ValueError("DocumentsConfig requires exactly one of seed_prefix or github_source.")
+    def _at_least_one_seed_source(self) -> DocumentsConfig:
+        if self.seed_prefix is None and self.github_source is None:
+            raise ValueError("DocumentsConfig requires at least one of seed_prefix or github_source.")
         return self
 
 

@@ -13,7 +13,8 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help setup install check update qa ssl-check test unused-packages all build clean zip \
-        generate-data-model run hello-world sync-entitlements run-container build-container build-container-clean
+        generate-data-model run hello-world sync-entitlements provision-owner-user run-container \
+        build-container build-container-clean
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 
@@ -98,3 +99,6 @@ hello-world: ## Run hello world demonstration tool
 
 sync-entitlements: ## Pull-sync Logto Organization roles into local entitlements
 	@uv run platform-registry-sync-entitlements
+
+provision-owner-user: ## One-time (or after a reset): create/find a real Logto Organization + user for LOGTO_OWNER_EMAIL, entitled to every scenario, and sync entitlements
+	@uv run platform-registry-provision-owner

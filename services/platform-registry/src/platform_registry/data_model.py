@@ -53,6 +53,14 @@ class EnvConfig(BaseSettings):
         description="Machine-to-machine application secret for calling Logto's Management API (sync tool only)",
         default=None,
     )
+    LOGTO_OWNER_EMAIL: str | None = Field(
+        description="Email for the real Logto user the provision-owner tool creates/finds (provision tool only)",
+        default=None,
+    )
+    LOGTO_OWNER_PASSWORD: SecretStr | None = Field(
+        description="Password for the real Logto user the provision-owner tool creates (provision tool only)",
+        default=None,
+    )
     CORS_ALLOWED_ORIGINS: str = Field(
         description="Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
     )
@@ -85,7 +93,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "a45eb96e6ded4f2c33fc0c19be4491f7e152507d9be1f17c2ae52084bc0684f5"
+_SOURCE_YAML_HASH = "2b6c6fee7c766efd8e00fda3a9cc2318e22da76fd2b1921fd80adda1c0c8ddc5"
 
 
 EnvConfig.model_rebuild()

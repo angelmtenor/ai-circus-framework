@@ -42,6 +42,14 @@ DOCUMENTS_FROM_GITHUB = DocumentsConfig(
     chunking=DocumentChunking(strategy="recursive_character", chunk_size=200, chunk_overlap=20),
     embedding=DocumentEmbedding(model="fake-model"),
 )
+DOCUMENTS_FROM_GITHUB_WITH_LOCAL_FALLBACK = DocumentsConfig(
+    bucket="scenario-ai-circus-reference",
+    raw_prefix="raw/",
+    seed_prefix="sample_docs",
+    github_source=GithubDocsSource(repo="owner/repo", path="reference", ref="develop"),
+    chunking=DocumentChunking(strategy="recursive_character", chunk_size=200, chunk_overlap=20),
+    embedding=DocumentEmbedding(model="fake-model"),
+)
 VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=5)
 
 
@@ -176,6 +184,46 @@ def test_ensure_raw_docs_bootstraps_from_github_source_when_missing(monkeypatch:
 
     assert store.get("org-1", "raw/a.md") == b"content a"
     assert store.get("org-1", "raw/b.md") == b"content b"
+
+
+def test_ensure_raw_docs_falls_back_to_seed_folder_when_github_fetch_fails(
+    scenario_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If github_source is set alongside a seed_prefix fallback, a failed GitHub fetch
+    (rate limit, outage, ...) bootstraps from the local seed folder instead of raising.
+    """
+    store = FakeObjectStore()
+
+    def raise_rate_limited(source: GithubDocsSource) -> dict[str, bytes]:
+        raise httpx.HTTPStatusError(
+            "429 Too Many Requests", request=httpx.Request("GET", "https://x"), response=httpx.Response(429)
+        )
+
+    monkeypatch.setattr(vectorize, "fetch_github_docs", raise_rate_limited)
+
+    ensure_raw_docs(store, "org-1", DOCUMENTS_FROM_GITHUB_WITH_LOCAL_FALLBACK, scenario_dir)
+
+    keys = store.list("org-1", DOCUMENTS_FROM_GITHUB_WITH_LOCAL_FALLBACK.raw_prefix)
+    assert set(keys) == {"raw/doc1.md", "raw/doc2.md"}
+
+
+def test_ensure_raw_docs_reraises_github_failure_when_no_local_fallback_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a seed_prefix fallback configured, a failed GitHub fetch must still raise —
+    silently leaving the tenant with zero documents would be worse than a loud failure.
+    """
+    store = FakeObjectStore()
+
+    def raise_rate_limited(source: GithubDocsSource) -> dict[str, bytes]:
+        raise httpx.HTTPStatusError(
+            "429 Too Many Requests", request=httpx.Request("GET", "https://x"), response=httpx.Response(429)
+        )
+
+    monkeypatch.setattr(vectorize, "fetch_github_docs", raise_rate_limited)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        ensure_raw_docs(store, "org-1", DOCUMENTS_FROM_GITHUB, Path("/does/not/exist"))
 
 
 def test_load_raw_docs_reads_every_uploaded_file(scenario_dir: Path) -> None:

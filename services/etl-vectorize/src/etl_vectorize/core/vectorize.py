@@ -53,11 +53,22 @@ def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
         return docs
 
 
+def _bootstrap_from_seed_dir(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
+    """Upload every file in the scenario's tracked local seed folder to MinIO."""
+    assert documents.seed_prefix is not None  # only called when set
+    seed_dir = scenario_dir / documents.seed_prefix
+    for path in sorted(seed_dir.glob("*")):
+        if path.is_file():
+            store.put(org_id, f"{documents.raw_prefix}{path.name}", path.read_bytes())
+
+
 def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
     """Upload the scenario's bootstrap documents to MinIO if the tenant has none yet —
     from a public GitHub repo folder (`documents.github_source`) or a tracked local
     `sample_docs/`-style folder (`documents.seed_prefix`); `DocumentsConfig` guarantees
-    exactly one of the two is set.
+    at least one of the two is set. If both are set, `github_source` is tried first and
+    a failure (rate limit, outage, no network) falls back to `seed_prefix` instead of
+    leaving the tenant with zero documents — see `DocumentsConfig`'s docstring.
     """
     if store.list(org_id, documents.raw_prefix):
         return
@@ -70,21 +81,30 @@ def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig,
             documents.github_source.repo,
             documents.github_source.path,
         )
-        for name, content in fetch_github_docs(documents.github_source).items():
+        try:
+            docs = fetch_github_docs(documents.github_source)
+        except httpx.HTTPError as e:
+            if documents.seed_prefix is None:
+                raise
+            logger.warning(
+                "GitHub fetch failed ({}) — falling back to tracked local seed folder {}.",
+                e,
+                scenario_dir / documents.seed_prefix,
+            )
+            _bootstrap_from_seed_dir(store, org_id, documents, scenario_dir)
+            return
+        for name, content in docs.items():
             store.put(org_id, f"{documents.raw_prefix}{name}", content)
         return
 
     assert documents.seed_prefix is not None  # guaranteed by DocumentsConfig's validator
-    seed_dir = scenario_dir / documents.seed_prefix
     logger.warning(
         "No documents found for org={} under {} — bootstrapping from tracked seed folder {} (demo convenience).",
         org_id,
         documents.raw_prefix,
-        seed_dir,
+        scenario_dir / documents.seed_prefix,
     )
-    for path in sorted(seed_dir.glob("*")):
-        if path.is_file():
-            store.put(org_id, f"{documents.raw_prefix}{path.name}", path.read_bytes())
+    _bootstrap_from_seed_dir(store, org_id, documents, scenario_dir)
 
 
 def load_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig) -> dict[str, str]:

@@ -81,6 +81,21 @@ env_variables:
     mandatory: false
     secret: true
 
+  # Only needed for the `platform-registry-provision-owner` tool (one-off creation of
+  # a real Logto Organization + user entitled to every scenario) — the main API and
+  # every other tool can run without these being set.
+  - name: LOGTO_OWNER_EMAIL
+    description: "Email for the real Logto user the provision-owner tool creates/finds (provision tool only)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_OWNER_PASSWORD
+    description: "Password for the real Logto user the provision-owner tool creates (provision tool only)"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: CORS_ALLOWED_ORIGINS
     description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
     type: string
