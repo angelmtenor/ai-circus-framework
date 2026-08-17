@@ -7,6 +7,12 @@ export type Identity = {
   orgId: string;
   roles: string[];
   accessToken: string | null;
+  // What the topbar shows — the org id itself for admin/engineering-demo/dev (a
+  // human-readable string we chose), but the signed-in user's email for a real
+  // Logto login (Organizations get an opaque auto-generated id, not a friendly
+  // name, so showing orgId there would just be a confusing string like
+  // "kgq3gjurzesp").
+  label: string;
 };
 
 const DEV_STORAGE_KEY = "ai-circus-framework:dev-identity";
@@ -33,14 +39,20 @@ const ENGINEERING_DEMO_ORG_ID = "engineering-demo";
 export function useIdentity(): {
   identity: Identity | null;
   loading: boolean;
+  logtoError: string | null;
   logIn: (orgId: string, roles: string[]) => void;
   logInWithAdminKey: (adminKey: string) => Promise<void>;
   logInWithEngineeringDemoKey: (demoKey: string) => Promise<void>;
   logOut: () => void;
 } {
-  const { isAuthenticated, isLoading, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
+  const { isAuthenticated, isLoading, error, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [loading, setLoading] = useState(true);
+  // Surfaced on the login screen instead of only `console.error`'d by the SDK
+  // (see useLogto's proxy/handleError) — this whole real-Logto path went
+  // unverified against a live tenant until now, so failures here need to be
+  // visible without opening browser devtools.
+  const [logtoError, setLogtoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (config.devMode) {
@@ -65,30 +77,56 @@ export function useIdentity(): {
     }
 
     if (isLoading) return;
+    if (error) {
+      setLogtoError(error.message);
+      setLoading(false);
+      return;
+    }
     if (!isAuthenticated) {
       setLoading(false);
       return;
     }
 
     (async () => {
-      const claims = await getIdTokenClaims();
-      const orgId = claims?.organization_id as string | undefined;
-      if (!orgId) {
+      try {
+        const claims = await getIdTokenClaims();
+        // The ID token carries every org the user belongs to as an `organizations`
+        // array (there's no singular `organization_id` claim on it — that only
+        // exists on an org-scoped *access* token) — this app assumes one org per
+        // real user, same simplification as ADMIN_ORG_ID/ENGINEERING_DEMO_ORG_ID.
+        const orgId = (claims?.organizations as string[] | undefined)?.[0];
+        if (!orgId) {
+          setLogtoError(
+            `Signed in as ${claims?.username ?? claims?.sub}, but this account isn't a member of any ` +
+              "Organization yet. If you meant a different account, sign out of Logto (or use a private " +
+              "browser window) and sign in again.",
+          );
+          setLoading(false);
+          return;
+        }
+        const accessToken = await getAccessToken(config.logtoApiResource, orgId);
+        if (!accessToken) {
+          setLogtoError(`Signed in to organization ${orgId}, but couldn't obtain an API access token for it.`);
+          setLoading(false);
+          return;
+        }
+        const label = (claims?.email ?? claims?.name ?? claims?.username ?? orgId) as string;
+        setIdentity({ orgId, roles: [], accessToken, label });
         setLoading(false);
-        return;
+      } catch (e) {
+        setLogtoError((e as Error).message);
+        setLoading(false);
       }
-      const accessToken = await getAccessToken(config.logtoApiResource, orgId);
-      setIdentity({ orgId, roles: [], accessToken: accessToken ?? null });
-      setLoading(false);
     })();
-  }, [isLoading, isAuthenticated, getIdTokenClaims, getAccessToken]);
+  }, [isLoading, isAuthenticated, error, getIdTokenClaims, getAccessToken]);
 
   return {
     identity,
     loading,
+    logtoError,
     logIn: (orgId: string, roles: string[]) => {
       if (config.devMode) {
-        const dev: Identity = { orgId, roles, accessToken: null };
+        const dev: Identity = { orgId, roles, accessToken: null, label: orgId };
         localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(dev));
         setIdentity(dev);
         return;
@@ -109,7 +147,7 @@ export function useIdentity(): {
       // resolve_caller_identity does the actual matching on every subsequent request.
       // sessionStorage (not localStorage): this is a real admin credential, not a
       // dev-mode placeholder — it should not persist once the tab/browser closes.
-      const admin: Identity = { orgId: ADMIN_ORG_ID, roles: [], accessToken: adminKey };
+      const admin: Identity = { orgId: ADMIN_ORG_ID, roles: [], accessToken: adminKey, label: ADMIN_ORG_ID };
       sessionStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify(admin));
       setIdentity(admin);
     },
@@ -120,7 +158,12 @@ export function useIdentity(): {
       if (!valid) {
         throw new Error("Invalid engineering demo key.");
       }
-      const engineeringDemo: Identity = { orgId: ENGINEERING_DEMO_ORG_ID, roles: [], accessToken: demoKey };
+      const engineeringDemo: Identity = {
+        orgId: ENGINEERING_DEMO_ORG_ID,
+        roles: [],
+        accessToken: demoKey,
+        label: ENGINEERING_DEMO_ORG_ID,
+      };
       sessionStorage.setItem(ENGINEERING_DEMO_STORAGE_KEY, JSON.stringify(engineeringDemo));
       setIdentity(engineeringDemo);
     },

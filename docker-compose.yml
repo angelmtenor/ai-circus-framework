@@ -203,7 +203,12 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      # embedded in real tokens (must match for jwt.decode's issuer check), but
+      # `*.localhost` resolves to loopback inside every container's own network
+      # namespace — nothing listens there, so JWKS fetches would get connection
+      # refused. This must reach Logto over the internal docker network instead.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
@@ -264,7 +269,12 @@ services:
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      # embedded in real tokens (must match for jwt.decode's issuer check), but
+      # `*.localhost` resolves to loopback inside every container's own network
+      # namespace — nothing listens there, so JWKS fetches would get connection
+      # refused. This must reach Logto over the internal docker network instead.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
@@ -372,7 +382,12 @@ services:
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      # embedded in real tokens (must match for jwt.decode's issuer check), but
+      # `*.localhost` resolves to loopback inside every container's own network
+      # namespace — nothing listens there, so JWKS fetches would get connection
+      # refused. This must reach Logto over the internal docker network instead.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
@@ -469,7 +484,12 @@ services:
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      # embedded in real tokens (must match for jwt.decode's issuer check), but
+      # `*.localhost` resolves to loopback inside every container's own network
+      # namespace — nothing listens there, so JWKS fetches would get connection
+      # refused. This must reach Logto over the internal docker network instead.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
@@ -519,7 +539,12 @@ services:
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LOGTO_ISSUER: ${LOGTO_ISSUER}
       LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      LOGTO_JWKS_URL: ${LOGTO_ISSUER}/jwks
+      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      # embedded in real tokens (must match for jwt.decode's issuer check), but
+      # `*.localhost` resolves to loopback inside every container's own network
+      # namespace — nothing listens there, so JWKS fetches would get connection
+      # refused. This must reach Logto over the internal docker network instead.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
       # ui-react calls this API directly from the browser — react.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}

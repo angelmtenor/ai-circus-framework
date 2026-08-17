@@ -266,17 +266,20 @@ containers stay up via `make up-infra`.
    page; no custom login screen is built in this repo (managed auth over custom auth, on purpose).
 3. Everything else — registering the `LOGTO_API_RESOURCE_INDICATOR` API resource, creating
    organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
-   `role_required`, and provisioning a real user — is now one command instead of manual Console
-   clicking: set `LOGTO_OWNER_EMAIL`/`LOGTO_OWNER_PASSWORD` in `.env`, then
+   `role_required`, ui-react's SPA application (its "Log in with Logto" OIDC client), and
+   provisioning a real user — is now one command instead of manual Console clicking: set
+   `LOGTO_OWNER_EMAIL`/`LOGTO_OWNER_PASSWORD` in `.env`, then
    ```bash
    make -C services/platform-registry provision-owner-user
    ```
    Idempotent — safe to re-run any time (e.g. after redoing step 1 post-reset). It creates (or
    finds) an `owner` Organization, creates (or finds) that Logto user, adds them to the
-   Organization, assigns every `scenario:*` role, and syncs the result into local `entitlements`
-   — so signing in through Logto's hosted page with that email lands on every scenario, the same
-   as the `ADMIN_API_KEY` bypass. For any *other* user/Organization you want scoped differently,
-   do that one by hand: add them to an Organization and assign only the `scenario:*` role(s) you
+   Organization, assigns every `scenario:*` role, creates the SPA application (prints its id —
+   paste as `UI_REACT_LOGTO_APP_ID` in `.env`, then `docker compose up -d --build ui-react` to bake
+   it in), and syncs the result into local `entitlements` — so signing in through Logto's hosted
+   page with that email lands on every scenario, the same as the `ADMIN_API_KEY` bypass. For any
+   *other* user/Organization you want scoped differently, do that one by hand: add them to an
+   Organization and assign only the `scenario:*` role(s) you
    want them entitled to — that assignment *is* what grants access to a scenario.
 
 ### Public deployment
