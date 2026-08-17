@@ -257,17 +257,27 @@ containers stay up via `make up-infra`.
 `make up-infra` brings up Logto at `http://logto.localhost` (sign-in) and
 `http://admin.logto.localhost` (Admin Console). One-time, via the Admin Console:
 
-1. Register an API resource for the framework's backend; note its identifier for
-   `LOGTO_API_RESOURCE_INDICATOR` in `.env`.
-2. Enable **Organizations**; each customer/team you want isolated is one Organization (tenant).
-3. Create organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
-   `role_required` (`scenario:churn`, `scenario:mpm`, `scenario:supply_chain`,
-   `scenario:supermarket_sales`, `scenario:electric_motor`, `scenario:energy_building`,
-   `scenario:ai_circus_reference`, `scenario:service_request`).
-4. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
+1. Sign up as the Console's first user (this is what makes you the tenant owner), enable
+   **Organizations**, then create a **Machine-to-Machine** application with Management API
+   access — note its ID/secret for `LOGTO_M2M_APP_ID`/`LOGTO_M2M_APP_SECRET` in `.env`. This step
+   is Console-only (no valid credential exists yet to script it) and must be redone any time
+   Logto's own data is wiped, e.g. by `make reset-all`.
+2. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
    page; no custom login screen is built in this repo (managed auth over custom auth, on purpose).
-5. Add users to an Organization and assign them the relevant `scenario:*` role(s) — that
-   assignment *is* what grants access to a scenario.
+3. Everything else — registering the `LOGTO_API_RESOURCE_INDICATOR` API resource, creating
+   organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
+   `role_required`, and provisioning a real user — is now one command instead of manual Console
+   clicking: set `LOGTO_OWNER_EMAIL`/`LOGTO_OWNER_PASSWORD` in `.env`, then
+   ```bash
+   make -C services/platform-registry provision-owner-user
+   ```
+   Idempotent — safe to re-run any time (e.g. after redoing step 1 post-reset). It creates (or
+   finds) an `owner` Organization, creates (or finds) that Logto user, adds them to the
+   Organization, assigns every `scenario:*` role, and syncs the result into local `entitlements`
+   — so signing in through Logto's hosted page with that email lands on every scenario, the same
+   as the `ADMIN_API_KEY` bypass. For any *other* user/Organization you want scoped differently,
+   do that one by hand: add them to an Organization and assign only the `scenario:*` role(s) you
+   want them entitled to — that assignment *is* what grants access to a scenario.
 
 ### Public deployment
 
