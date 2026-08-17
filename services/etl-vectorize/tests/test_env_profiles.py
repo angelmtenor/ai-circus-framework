@@ -55,7 +55,7 @@ def test_get_env_config_reads_app_environment(monkeypatch: pytest.MonkeyPatch, p
     config = get_env_config()
 
     assert config.LOG_LEVEL == "INFO"
-    assert config.ORG_ID == "demo"
+    assert config.ORG_ID == "admin"
 
 
 def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pytest.MonkeyPatch) -> None:

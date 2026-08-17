@@ -30,8 +30,13 @@ documents:
   # Source documents fetched at bootstrap straight from the ai-circus repo's own
   # reference/ folder (kept in sync with upstream instead of copy-pasted into this
   # repo) — see etl_vectorize.core.vectorize.ensure_raw_docs / fetch_github_docs.
+  # sample_docs/ is a vendored snapshot of that same content, used only if the
+  # GitHub fetch fails (rate limit, outage, no network) — see DocumentsConfig's
+  # docstring. Re-sync it by hand after upstream reference/ changes; it's a fallback,
+  # not the source of truth.
   bucket: "scenario-ai-circus-reference"
   raw_prefix: "raw/"
+  seed_prefix: "sample_docs"
   github_source:
     repo: "angelmtenor/ai-circus"
     path: "reference"

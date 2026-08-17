@@ -193,6 +193,7 @@ ai-circus-shared = { path = "../../libs/shared" }
 [project.scripts]
 platform-registry-hello-world = "platform_registry.tools.hello_world:main"
 platform-registry-sync-entitlements = "platform_registry.tools.sync_logto_entitlements:main"
+platform-registry-provision-owner = "platform_registry.tools.provision_owner_user:main"
 platform-registry-generate-data-model = "platform_registry.core.config_generator:main"
 platform-registry-config-drift-check = "platform_registry.core.config_generator:check_env_drift"
 platform-registry-app = "platform_registry.app:main"

@@ -33,7 +33,9 @@ class EnvConfig(BaseSettings):
     SCENARIOS: str = Field(
         description="Comma-separated conversational_rag scenario slugs this run processes; empty/unset = every scenario"
     )
-    ORG_ID: str = Field(description="Tenant (Logto Organization id) whose documents this run processes")
+    ORG_ID: str = Field(
+        description="Tenant (Logto Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
+    )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
     MINIO_ENDPOINT: str = Field(
         description="MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
@@ -74,7 +76,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "50d4d578c593bc7d8673a1e32393b48648bf6a8fe766a2d666d21dcbdbfecae3"
+_SOURCE_YAML_HASH = "11ce02d9a81a2f11584bb4b3182ba36ccb78c1f1d68a27f8f47555227bb9bd7b"
 
 
 EnvConfig.model_rebuild()

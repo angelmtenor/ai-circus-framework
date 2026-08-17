@@ -31,10 +31,12 @@ model_list:
       model: deepseek/deepseek-chat
       api_key: os.environ/DEEPSEEK_API_KEY
 
-  # GroqCloud — free tier, LPU-hosted, very low latency.
+  # GroqCloud — free tier, LPU-hosted, very low latency. Groq retired every Llama 3.x
+  # model from its catalog (this used to be llama-3.3-70b-versatile) — gpt-oss-120b is
+  # the current closest-capability general-chat replacement on their free tier.
   - model_name: groq-llama
     litellm_params:
-      model: groq/llama-3.3-70b-versatile
+      model: groq/openai/gpt-oss-120b
       api_key: os.environ/GROQ_API_KEY
 
   # OpenRouter — one key routes to many vendors' models. Individual ":free"-suffixed

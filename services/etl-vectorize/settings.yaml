@@ -23,8 +23,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  # Must match ai_circus_shared.auth.ADMIN_ORG_ID (base default: "admin") for the demo
+  # bootstrap content to actually be visible to the admin-key login path every fresh
+  # `make all` lands on — a mismatch here silently leaves rag-agent/form-agent querying
+  # an empty collection for that tenant (see the DocumentsConfig fallback this seeds).
   - name: ORG_ID
-    description: "Tenant (Logto Organization id) whose documents this run processes"
+    description: "Tenant (Logto Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
     type: string
     mandatory: true
     secret: false
@@ -99,7 +103,7 @@ global_settings:
 environments:
   base:
     LOG_LEVEL: "INFO"
-    ORG_ID: "demo"
+    ORG_ID: "admin"
     MINIO_ACCESS_KEY: "ai_circus"
     # Empty = every conversational_rag scenario under SCENARIOS_DIR — see
     # etl-tabular/settings.yaml for the same default and its residual-limitation caveat.
