@@ -1,7 +1,7 @@
 # Learning Itinerary
 
 A structured path through this repo's reference notes: general-purpose tooling first, then
-data science / ML, then GenAI. The goal is to internalize the practices behind **ai-circus**
+data science / ML, then GenAI. The goal is to internalize the practices behind **AI Open Framework**
 itself, since this repo is the source material for a future **cookiecutter** template — so
 the stack, structure, and conventions described here should end up as reusable defaults, not
 one-off notes.

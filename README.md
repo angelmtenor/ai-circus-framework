@@ -1,4 +1,6 @@
-# ai-circus-framework
+# AI Open Framework
+
+> Formerly known as **ai-circus-framework**.
 
 > **🚧 Work in progress.** This is a personal, evolving open-source project — architecture,
 > scenarios, and UI are all still moving. Expect rough edges, and treat anything here as a
@@ -9,7 +11,7 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
 ...) behind a real login.
 
 <p align="center">
-  <img src="docs/screenshots/scenarios.png" alt="ai-circus-framework scenario gallery" width="850">
+  <img src="docs/screenshots/scenarios.png" alt="AI Open Framework scenario gallery" width="850">
 </p>
 
 ---
@@ -78,15 +80,14 @@ that makes step 3 of Getting Started concrete.
 
 The whole app is skinned from one `Theme` object (colors + a logo, see `ui-react/src/themes/`) —
 switching themes in **Settings → Appearance** is instant, no rebuild. Two ship today: **Tron**
-(the neon default) and **Getronics**, a light corporate theme built from Getronics' own public
-brand palette.
+(the neon dark default) and **White Tron**, the same blue/cyan branding on flat, light,
+corporate-friendly surfaces.
 
-<p align="center"><img src="docs/screenshots/getronics-theme.png" alt="Getronics theme" width="850"></p>
-
-> **Disclaimer:** I currently work at Getronics. I built the Getronics theme — using only
-> public brand colors pulled from getronics.com's own published CSS, no confidential or internal
-> material — to show what this kind of open-source foundation can look like when skinned for an
-> enterprise. It's a personal demo, not an official Getronics product or endorsement. For
+> **Note:** an earlier version of this theme picker shipped a **Getronics** theme, built from
+> Getronics' own public brand colors as a demo of skinning this framework for an enterprise —
+> that theme has been retired here in favor of the vendor-neutral **White Tron** theme above. I
+> currently work at Getronics, and a separate, Getronics-branded fork of this framework — more
+> corporate and production-ready — is under development there. That fork isn't public; for
 > enterprise-grade work along these lines, reach me at **angel.martinez-tenor@getronics.com**.
 
 ### Conversational assistant
@@ -134,7 +135,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Supermarket Weekly Sales** (`supermarket_sales`) | `tabular_ml` — regression | Weekly department sales | Kaggle — Walmart dataset |
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
 | **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression | Appliance energy use (Wh) | UCI — Appliances Energy Prediction |
-| **AI Circus Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
+| **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 
 Every `tabular_ml` scenario above is ported from a real public dataset rather than original
@@ -315,7 +316,7 @@ the comment on its Traefik labels in `docker-compose.yml` for why.
 ## Architecture
 
 <p align="center">
-  <img src="docs/screenshots/architecture.png" alt="ai-circus-framework architecture diagram" width="900">
+  <img src="docs/screenshots/architecture.png" alt="AI Open Framework architecture diagram" width="900">
 </p>
 
 Runs today via `docker compose up`; designed — not yet built — to migrate to

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" width="560" height="160" role="img" aria-label="AI Circus logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" width="560" height="160" role="img" aria-label="AI Open Framework logo">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#070b16"/>
@@ -28,6 +28,7 @@
     </g>
     <circle cx="74" cy="24" r="5" fill="#eafeff"/>
 
-    <text x="156" y="100" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="54" letter-spacing="3" fill="url(#neon)">AI CIRCUS</text>
+    <text x="156" y="72" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="38" letter-spacing="2" fill="url(#neon)">AI OPEN</text>
+    <text x="156" y="114" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="38" letter-spacing="2" fill="url(#neon)">FRAMEWORK</text>
   </g>
 </svg>

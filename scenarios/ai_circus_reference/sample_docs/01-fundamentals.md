@@ -101,5 +101,5 @@ the Python project setup below (Docker, uv, ruff, etc.).
 * [cookiecutter Documentation](https://cookiecutter.readthedocs.io/)
 * Use reproducible templates that bundle pre-commit, a Makefile, and unified tooling out of
   the box, so every new project starts standardized instead of copy-pasted.
-* **This repo (ai-circus) is being groomed into exactly such a template** — see
+* **This repo (AI Open Framework) is being groomed into exactly such a template** — see
   [00-itinerary.md](00-itinerary.md).
