@@ -1,4 +1,4 @@
-import { getronicsTheme } from "./getronics";
+import { tronLightTheme } from "./tron-light";
 import { tronTheme } from "./tron";
 import type { Theme } from "./types";
 
@@ -8,7 +8,7 @@ export type { Theme };
  * Every available theme, in picker order. Adding another is just another entry here
  * (plus its own themes/<id>.ts) — no other file changes.
  */
-export const THEMES: Theme[] = [tronTheme, getronicsTheme];
+export const THEMES: Theme[] = [tronTheme, tronLightTheme];
 
 export const DEFAULT_THEME_ID = tronTheme.id;
 

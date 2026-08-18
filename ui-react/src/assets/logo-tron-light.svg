@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" width="560" height="160" role="img" aria-label="AI Open Framework logo, White Tron theme">
+  <defs>
+    <linearGradient id="bg-wt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eef5fc"/>
+    </linearGradient>
+    <linearGradient id="brand-wt" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0072e0"/>
+      <stop offset="1" stop-color="#33c7ff"/>
+    </linearGradient>
+    <filter id="glow-wt" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="3" y="3" width="554" height="154" rx="18" fill="url(#bg-wt)" stroke="#d7e3ee" stroke-width="1.5"/>
+
+  <g filter="url(#glow-wt)">
+    <g fill="none" stroke="url(#brand-wt)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M28 118 L74 46 L120 118"/>
+      <line x1="74" y1="46" x2="74" y2="30"/>
+      <line x1="46" y1="118" x2="102" y2="118"/>
+    </g>
+    <circle cx="74" cy="24" r="5" fill="#0072e0"/>
+
+    <text x="156" y="72" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="38" letter-spacing="2" fill="url(#brand-wt)">AI OPEN</text>
+    <text x="156" y="114" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="38" letter-spacing="2" fill="url(#brand-wt)">FRAMEWORK</text>
+  </g>
+</svg>

@@ -3,7 +3,7 @@
 
 slug: ai_circus_reference
 kind: conversational_rag
-title: "AI Circus Reference Guide"
+title: "AI Open Framework Reference Guide"
 description: >
   Agent-based RAG chatbot answering questions grounded in the ai-circus project's own
   reference notes: dev environment/tooling, software engineering practices, ML/DS

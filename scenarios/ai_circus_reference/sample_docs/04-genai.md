@@ -29,7 +29,7 @@ whatever conventions get baked into the eventual cookiecutter template.
 
 * [openai/openai-python](https://github.com/openai/openai-python) — official OpenAI SDK.
 * [langchain-ai/langchain](https://github.com/langchain-ai/langchain) — LangChain core.
-* **ai-circus** (this repo) — the working example these notes describe; it's the source
+* **AI Open Framework** (this repo) — the working example these notes describe; it's the source
   material for the planned cookiecutter template (see [00-itinerary.md](00-itinerary.md)).
 
 ### Guides

@@ -73,8 +73,8 @@ function LoginScreen({
       <div className="login-shell-content">
         <div className="login-card">
           <div className="login-brand">
-            <img src={logo} alt="AI Circus" className="login-brand-icon" />
-            <h1>ai-circus-framework</h1>
+            <img src={logo} alt="AI Open Framework" className="login-brand-icon" />
+            <h1>AI Open Framework</h1>
             <p className="login-tagline">Explainable ML &amp; document Q&amp;A, one scenario at a time.</p>
           </div>
 
@@ -190,7 +190,7 @@ export default function App() {
               setShowSettings(false);
             }}
           >
-            <img src={theme.logo} alt="AI Circus" className="topbar-brand-icon" />
+            <img src={theme.logo} alt="AI Open Framework" className="topbar-brand-icon" />
           </button>
           {selected && !showSettings && (
             <div className="topbar-scenario">
