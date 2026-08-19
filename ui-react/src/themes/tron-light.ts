@@ -4,8 +4,7 @@ import type { Theme } from "./types";
 /**
  * White-background counterpart to tron.ts: same blue/cyan hue family, flat corporate
  * surfaces instead of neon glow — a light option for the same default branding rather
- * than a separate skin. Replaces the earlier Getronics-branded theme (see README's
- * "Themes" section for that history).
+ * than a separate skin.
  */
 export const tronLightTheme: Theme = {
   id: "tron-light",

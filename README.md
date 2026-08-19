@@ -83,12 +83,10 @@ switching themes in **Settings → Appearance** is instant, no rebuild. Two ship
 (the neon dark default) and **White Tron**, the same blue/cyan branding on flat, light,
 corporate-friendly surfaces.
 
-> **Note:** an earlier version of this theme picker shipped a **Getronics** theme, built from
-> Getronics' own public brand colors as a demo of skinning this framework for an enterprise —
-> that theme has been retired here in favor of the vendor-neutral **White Tron** theme above. I
-> currently work at Getronics, and a separate, Getronics-branded fork of this framework — more
-> corporate and production-ready — is under development there. That fork isn't public; for
-> enterprise-grade work along these lines, reach me at **angel.martinez-tenor@getronics.com**.
+> **Disclaimer:** I am currently Head of Data & AI at Getronics. A separate, Getronics-branded
+> fork of this framework is being developed there for production-grade use. That fork isn't
+> public; for enterprise-grade work along these lines, reach me at
+> **angel.martinez-tenor@getronics.com**.
 
 ### Conversational assistant
 
