@@ -41,7 +41,7 @@ OWNER_ORG_NAME = "owner"
 UI_APPLICATION_NAME = "ai-circus-ui-react"
 # ui-react's two local dev origins — the Traefik-served build and the Vite dev
 # server (see ui-react/src/config.ts's own fallback defaults).
-UI_REDIRECT_ORIGINS = ["http://react.localhost", "http://localhost:5173"]
+UI_REDIRECT_ORIGINS = ["http://aiopen.localhost", "http://localhost:5173"]
 
 
 def ensure_email_sign_in(client: httpx.Client) -> None:

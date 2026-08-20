@@ -102,7 +102,7 @@ all: ## One-shot: bootstrap .env, start infra+services, run both pipelines, veri
 	@docker compose up --build etl-vectorize
 	@$(MAKE) verify
 	@echo ""
-	@echo "🎉 ai-circus-framework is up — open http://react.localhost, pick 'admin' from the User dropdown, and use the ADMIN_API_KEY from .env as the password."
+	@echo "🎉 ai-circus-framework is up — open http://aiopen.localhost, pick 'admin' from the User dropdown, and use the ADMIN_API_KEY from .env as the password."
 	@if [ -z "$$OPENAI_API_KEY$$GOOGLE_API_KEY$$AZURE_OPENAI_API_KEY$$DEEPSEEK_API_KEY$$GROQ_API_KEY$$OPENROUTER_API_KEY$$ANTHROPIC_API_KEY" ]; then \
 		echo "ℹ️  No LLM provider key set in .env — chat (assistant/rag-agent) won't answer yet."; \
 		echo "   Add one provider key to .env then 'make up', or run 'make ollama-up' for a free local fallback."; \
@@ -140,9 +140,9 @@ wait-services: ## Wait for platform-registry and every Traefik-routed backend to
 			sleep 2; \
 		done; \
 	done
-	@echo "⏳ waiting for react.localhost..."
-	@i=0; until curl -sf "http://react.localhost/" >/dev/null 2>&1; do \
-		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ react.localhost never answered — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; }; \
+	@echo "⏳ waiting for aiopen.localhost..."
+	@i=0; until curl -sf "http://aiopen.localhost/" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ aiopen.localhost never answered — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; }; \
 		sleep 2; \
 	done
 	@echo "✓ all services answering"
@@ -164,10 +164,10 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		if [ "$$code" = "200" ]; then echo "  ✓ $$host.localhost reachable ($$code)"; \
 		else echo "❌ $$host.localhost -> $$code — this is the exact failure behind a browser 'Failed to fetch'. Check: docker compose ps, docker compose logs $$host, and 'getent hosts $$host.localhost'"; exit 1; fi; \
 	done
-	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://react.localhost/"); \
-	if [ "$$code" = "200" ]; then echo "  ✓ react.localhost reachable ($$code)"; \
-	else echo "❌ react.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
-	@echo "✓ admin tenant verified — http://react.localhost is ready for the 'admin' User dropdown login"
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://aiopen.localhost/"); \
+	if [ "$$code" = "200" ]; then echo "  ✓ aiopen.localhost reachable ($$code)"; \
+	else echo "❌ aiopen.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
+	@echo "✓ admin tenant verified — http://aiopen.localhost is ready for the 'admin' User dropdown login"
 	@demo_key="$${ENGINEERING_DEMO_API_KEY:-}"; \
 	if [ -z "$$demo_key" ]; then \
 		echo "ℹ️  ENGINEERING_DEMO_API_KEY not set in .env — skipping engineering-demo tenant checks"; \
