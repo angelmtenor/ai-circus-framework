@@ -112,7 +112,7 @@ env_variables:
     secret: true
 
   - name: ENGINEERING_DEMO_API_KEY
-    description: "Optional shared demo bearer token — checked (not enforced) by GET /auth/verify-engineering-demo-key, which the login screen's engineering-demo login uses to fail fast on a bad key"
+    description: "Optional shared demo bearer token, checked by GET /auth/verify-engineering-demo-key"
     type: string
     mandatory: false
     secret: true

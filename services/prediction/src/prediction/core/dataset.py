@@ -201,7 +201,7 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
         for category, group in group_df.groupby(breakdown_feature):
             breakdown.append({
                 "category": str(category),
-                "score": round(float(group["score"].mean()), 4),
+                "score": round(float(group["score"].to_numpy().mean()), 4),
                 "n": len(group),
             })
         breakdown.sort(key=lambda b: b["n"], reverse=True)

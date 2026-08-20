@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -53,12 +52,12 @@ class EnvConfig(BaseSettings):
         description="Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
     )
     ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
-        description="Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building",
+        description="Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)",
         default=None,
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
     SHARED_MODEL_ORG_ID: str = Field(
-        description="Org id whose trained model artifacts every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
+        description="Org id every tenant's model falls back to until it has its own (matches training's ORG_ID)"
     )
     LOGTO_ISSUER: str | None = Field(
         description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
@@ -74,7 +73,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "1603837673338c0e249f28a4d31657ccb37c934de796d3518299463b2a44648d"
+_SOURCE_YAML_HASH = "a9f0a2e731b2ebd2f2630ac0a535ee0b4ad60ae6d4f6bf732905ba28b138ef04"
 
 
 EnvConfig.model_rebuild()
@@ -110,12 +109,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

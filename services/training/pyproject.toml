@@ -159,7 +159,7 @@ addopts = [
     "--cov-report=xml",
     "--cov-report=json",
     "--cov-report=term-missing",
-    "--cov-fail-under=0",
+    "--cov-fail-under=82",
     "-ra",
     "-q",
 ]

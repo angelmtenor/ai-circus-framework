@@ -47,6 +47,9 @@ class FakeEnvConfig:
         self.MINIO_SECRET_KEY = FakeSecret("s3cret")
         self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
         self.SHARED_MODEL_ORG_ID = "demo"
+        self.AUTH_DISABLED = "false"
+        self.ADMIN_API_KEY = FakeSecret("admin-key")
+        self.ENGINEERING_DEMO_API_KEY = None
 
 
 def build_validation_error() -> ValidationError:
