@@ -39,7 +39,7 @@ dependencies = [
     "qdrant-client>=1.19.0",
     "sentence-transformers>=5.6.1",
     "torch>=2.0",
-    "uvicorn[standard]>=0.52.1",
+    "uvicorn[standard]>=0.52.3",
 ]
 
 [project.urls]
