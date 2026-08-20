@@ -1,0 +1,20 @@
+# CODEOWNERS (plan item E.14)
+#
+# ACTION REQUIRED — human operator: every handle below is the placeholder
+# @REPLACE_ME_OWNER. GitHub silently ignores a CODEOWNERS rule whose handle doesn't
+# resolve to a real user/team with repo access, so until you replace these with real
+# GitHub usernames or teams (e.g. @your-org/backend-team), this file has NO effect on
+# review requests or branch-protection "require review from Code Owners" — it's
+# scaffolding, not enforcement, until then.
+
+services/assistant/            @REPLACE_ME_OWNER
+services/etl-tabular/          @REPLACE_ME_OWNER
+services/etl-vectorize/        @REPLACE_ME_OWNER
+services/form-agent/           @REPLACE_ME_OWNER
+services/llm-gateway/          @REPLACE_ME_OWNER
+services/platform-registry/    @REPLACE_ME_OWNER
+services/prediction/           @REPLACE_ME_OWNER
+services/rag-agent/            @REPLACE_ME_OWNER
+services/training/             @REPLACE_ME_OWNER
+ui-react/                      @REPLACE_ME_OWNER
+libs/shared/                   @REPLACE_ME_OWNER
