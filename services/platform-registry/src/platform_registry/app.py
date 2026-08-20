@@ -10,6 +10,7 @@ Author: ai-circus-framework contributors
 
 from __future__ import annotations
 
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -17,6 +18,7 @@ from pathlib import Path
 
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
+from ai_circus_shared.observability import configure_metrics
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -49,8 +51,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="platform-registry", lifespan=lifespan)
+# FastAPI/Swagger UI docs are only useful for local iteration — staging/production
+# traffic goes through Traefik and shouldn't expose an interactive API explorer.
+_DOCS_ENABLED = os.getenv("APP_ENVIRONMENT", "local") in {"local", "docker"}
+
+app = FastAPI(
+    title="platform-registry",
+    lifespan=lifespan,
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
+)
 app.include_router(router)
+configure_metrics(app)
 
 
 def main() -> None:

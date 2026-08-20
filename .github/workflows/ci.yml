@@ -81,3 +81,122 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
+
+  # Repo-wide secret scan. Distinct from each service's own pre-commit gitleaks hook
+  # (which only scans staged files inside that service's own directory) — this one
+  # walks the full checkout, including root-level files, docs/, demo/, and commit
+  # history, using the same gitleaks version pinned in every service's
+  # .pre-commit-config.yaml (`rev: v8.30.0`) for consistent results.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # full history, not just this ref — see comment above
+      - name: Gitleaks (repo-wide secret scan)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only required if this repo is owned by a GitHub Organization (gitleaks-action
+          # enforces a license for org-owned scanning); harmless if unset for a personal repo.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_VERSION: "8.30.0" # match services/*/.pre-commit-config.yaml's gitleaks rev
+
+  # Container image vulnerability scanning (plan item C.9). Reuses discover-services'
+  # dynamic service list so a new service picked up by `new_service.sh` is scanned
+  # automatically. Images aren't pushed to a registry today, so each is built locally
+  # in-job and scanned in place rather than round-tripping through one.
+  container-scan:
+    needs: discover-services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover-services.outputs.services) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build image
+        run: docker build -t "ai-circus/${{ matrix.service }}:ci" "services/${{ matrix.service }}"
+      - name: Trivy scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: "ai-circus/${{ matrix.service }}:ci"
+          scan-type: "image"
+          format: "table"
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+  # SBOM generation (plan item C.10) — purely additive provenance artifact, no
+  # gating/failure behavior. Same discover-services matrix and local image build as
+  # container-scan above (kept as a separate job so either can be reverted on its own).
+  sbom:
+    needs: discover-services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.discover-services.outputs.services) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build image
+        run: docker build -t "ai-circus/${{ matrix.service }}:ci" "services/${{ matrix.service }}"
+      - name: Generate SBOM (SPDX JSON) and upload as workflow artifact
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: "ai-circus/${{ matrix.service }}:ci"
+          format: spdx-json
+          output-file: "sbom-${{ matrix.service }}.spdx.json"
+          artifact-name: "sbom-${{ matrix.service }}"
+
+  # Conventional Commits enforcement (plan item C.11) — styleguide.md documents the
+  # convention; this is what actually checks PR commits against it. Config lives in
+  # commitlint.config.mjs at repo root (custom type-enum matching styleguide.md's
+  # type list, since it differs from @commitlint/config-conventional's defaults).
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
+
+  # Real CI-driven integration smoke test (plan item C.12). NON-BLOCKING
+  # (continue-on-error: true) on purpose: this is the newest and heaviest job here —
+  # it boots the *entire* docker-compose stack (postgres/logto/qdrant/minio/traefik +
+  # every backend service + ui-react), using the optional `ollama` profile so no real
+  # LLM provider key/secret is needed in CI, then runs the exact curl checks `make
+  # verify` uses locally to diagnose "Failed to fetch". Per the hardening plan, land
+  # this and watch it run for a while (logto's first-boot DB seed and the Ollama
+  # model pull are the likeliest sources of timing flakiness) before dropping
+  # continue-on-error and adding it to branch protection's required checks.
+  integration-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Bootstrap .env
+        run: make bootstrap
+      - name: Start Ollama (free local LLM fallback — no provider key/secret needed)
+        run: make ollama-up
+      - name: Start infra (postgres, logto, qdrant, minio, traefik)
+        run: make up-infra
+      - name: Wait for infra to be healthy
+        run: make wait-infra
+      - name: Start all backend services + ui-react
+        run: make up
+      - name: Wait for all services to answer
+        run: make wait-services
+      - name: Verify end-to-end (same checks the browser login screen makes)
+        run: make verify
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+      - name: Tear down
+        if: always()
+        run: make down

@@ -10,13 +10,12 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -68,8 +67,7 @@ class EnvConfig(BaseSettings):
         description="Bearer token required on /llm-settings/* (shared with other services' admin-key bypass)"
     )
     ENGINEERING_DEMO_API_KEY: SecretStr | None = Field(
-        description="Optional shared demo bearer token — checked (not enforced) by GET /auth/verify-engineering-demo-key, which the login screen's engineering-demo login uses to fail fast on a bad key",
-        default=None,
+        description="Optional shared demo bearer token, checked by GET /auth/verify-engineering-demo-key", default=None
     )
     LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible + admin API")
     LLM_GATEWAY_API_KEY: SecretStr = Field(
@@ -93,7 +91,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "2b6c6fee7c766efd8e00fda3a9cc2318e22da76fd2b1921fd80adda1c0c8ddc5"
+_SOURCE_YAML_HASH = "4f2b5ac5774833c1af77df08ef5139b6f103c26225225fda45e01bc00cc6a299"
 
 
 EnvConfig.model_rebuild()
@@ -129,12 +127,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

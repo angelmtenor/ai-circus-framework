@@ -58,3 +58,13 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
   `git flow`/`git push` commands (including the version/tag to use) for the human operator to run
   or explicitly approve; never run `git push`, `git flow feature finish`, `git flow release
   finish`, or `git flow hotfix finish` unprompted.
+
+### Branch protection (recommended — apply manually, this is a GitHub setting, not a file)
+For both `main` and `develop`, under GitHub → Settings → Branches:
+- **Required status checks:** `service-check`, `ui-react`, `compose-validate`, `gitleaks`,
+  `container-scan`, `sbom`, `commitlint` (from `.github/workflows/ci.yml`). Leave
+  `integration-smoke` out of the required list for now — it runs with `continue-on-error: true`
+  until it's proven non-flaky; promote it once it is.
+- **Require a pull request before merging**, with at least one approving review.
+- **Do not allow direct pushes** to `main` or `develop` — every change lands via PR, matching the
+  git-flow model above.

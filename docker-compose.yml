@@ -209,9 +209,9 @@ services:
       # namespace — nothing listens there, so JWKS fetches would get connection
       # refused. This must reach Logto over the internal docker network instead.
       LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
-      # ui-react calls this API directly from the browser — react.localhost is the
+      # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
       # bind mount here (unlike MinIO for datasets/models) keeps edits live without
@@ -275,9 +275,9 @@ services:
       # namespace — nothing listens there, so JWKS fetches would get connection
       # refused. This must reach Logto over the internal docker network instead.
       LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
-      # ui-react calls this API directly from the browser — react.localhost is the
+      # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -388,9 +388,9 @@ services:
       # namespace — nothing listens there, so JWKS fetches would get connection
       # refused. This must reach Logto over the internal docker network instead.
       LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
-      # ui-react calls this API directly from the browser — react.localhost is the
+      # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -490,9 +490,9 @@ services:
       # namespace — nothing listens there, so JWKS fetches would get connection
       # refused. This must reach Logto over the internal docker network instead.
       LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
-      # ui-react calls this API directly from the browser — react.localhost is the
+      # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -545,9 +545,9 @@ services:
       # namespace — nothing listens there, so JWKS fetches would get connection
       # refused. This must reach Logto over the internal docker network instead.
       LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
-      # ui-react calls this API directly from the browser — react.localhost is the
+      # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://react.localhost,http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -584,6 +584,6 @@ services:
     mem_limit: 128m
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ui-react.rule=Host(`react.localhost`)"
+      - "traefik.http.routers.ui-react.rule=Host(`aiopen.localhost`)"
       - "traefik.http.routers.ui-react.entrypoints=web"
       - "traefik.http.services.ui-react.loadbalancer.server.port=80"

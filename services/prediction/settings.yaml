@@ -78,7 +78,7 @@ env_variables:
     secret: true
 
   - name: ENGINEERING_DEMO_API_KEY
-    description: "Optional shared demo bearer token — resolves to the 'engineering-demo' org, entitled to only mpm/electric_motor/energy_building"
+    description: "Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)"
     type: string
     mandatory: false
     secret: true
@@ -90,7 +90,7 @@ env_variables:
     secret: false
 
   - name: SHARED_MODEL_ORG_ID
-    description: "Org id whose trained model artifacts every tenant falls back to until it has its own in MinIO (must match training's ORG_ID)"
+    description: "Org id every tenant's model falls back to until it has its own (matches training's ORG_ID)"
     type: string
     mandatory: true
     secret: false

@@ -59,7 +59,7 @@ server), not an application bug. Run `make verify` first — it reproduces the l
 with logs. Common causes: testing right after `make up` before containers are actually healthy (use
 `make all`/`make wait-services` instead of raw `docker compose up -d`), a stale `postgres-data` volume
 from an earlier partial run (`make reset-all`), a port already bound on the host (80/8010/6333/4000), or
-opening the app via a different origin than `http://react.localhost` (CORS allow-lists are keyed to it
+opening the app via a different origin than `http://aiopen.localhost` (CORS allow-lists are keyed to it
 exactly).
 
 ## Architecture

@@ -14,6 +14,8 @@ dependencies = [
     "httpx>=0.28.1",
     "boto3>=1.35.0",
     "PyJWT[crypto]>=2.9.0",
+    "fastapi>=0.141.1",
+    "prometheus-fastapi-instrumentator>=7.0.0",
 ]
 
 [build-system]

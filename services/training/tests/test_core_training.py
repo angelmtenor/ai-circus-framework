@@ -248,7 +248,9 @@ def test_global_shap_importance_respects_sample_size_cap(synthetic_data: tuple) 
     pipeline.fit(x_train, y_train)
     explainer = build_explainer(pipeline, x_train)
 
-    result = global_shap_importance(pipeline, explainer, x_train, ["numeric_feature", "category_feature"], sample_size=10)
+    result = global_shap_importance(
+        pipeline, explainer, x_train, ["numeric_feature", "category_feature"], sample_size=10
+    )
 
     assert {item["feature"] for item in result} == {"numeric_feature", "category_feature"}
 

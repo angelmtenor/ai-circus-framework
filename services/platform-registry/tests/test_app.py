@@ -36,6 +36,8 @@ class FakeEnvConfig:
         self.POSTGRES_PASSWORD = FakeSecret()
         self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
         self.ADMIN_API_KEY = FakeSecret(admin_api_key)
+        self.ENGINEERING_DEMO_API_KEY = None
+        self.AUTH_DISABLED = "false"
 
 
 def build_validation_error() -> ValidationError:
@@ -88,12 +90,12 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_main_exits_when_demo_admin_key_used_outside_dev_profiles(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Booting with the shipped demo ADMIN_API_KEY under a staging/production
-    profile is refused, not silently allowed.
+    """Booting with the shipped demo ADMIN_API_KEY under DEPLOYMENT_TARGET=public
+    is refused, not silently allowed — see enforce_safe_for_public_deployment.
     """
     fake_logger = FakeLogger()
 
-    monkeypatch.setenv("APP_ENVIRONMENT", "staging")
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig(admin_api_key="ai-circus-2026"))

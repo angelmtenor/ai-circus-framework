@@ -83,11 +83,6 @@ switching themes in **Settings → Appearance** is instant, no rebuild. Two ship
 (the neon dark default) and **White Tron**, the same blue/cyan branding on flat, light,
 corporate-friendly surfaces.
 
-> **Disclaimer:** I am currently Head of Data & AI at Getronics. A separate, Getronics-branded
-> fork of this framework is being developed there for production-grade use. That fork isn't
-> public; for enterprise-grade work along these lines, reach me at
-> **angel.martinez-tenor@getronics.com**.
-
 ### Conversational assistant
 
 A real LangChain tool-calling agent, not a fixed "always retrieve" pipeline — it decides whether
@@ -217,7 +212,7 @@ docker compose up --build etl-vectorize   # vectorizes every conversational_rag 
 
 ### 5. Open the app
 
-**[http://react.localhost](http://react.localhost)**
+**[http://aiopen.localhost](http://aiopen.localhost)**
 
 For a quick look without configuring an identity provider at all, use the login screen's **User**
 dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by
@@ -244,7 +239,7 @@ set in `services/platform-registry/src/platform_registry/core/seed.py`'s
 > reran — `make reset-all` fixes this; (3) something else on the machine is already bound to port
 > 80 (Traefik's entrypoint), 8010 (platform-registry), 6333 (Qdrant), or 4000 (llm-gateway) —
 > the latter three are loopback-only, for local non-Docker dev; (4) the app was opened via an origin other
-> than `http://react.localhost` (e.g. plain `http://localhost`) — every backend's CORS allow-list
+> than `http://aiopen.localhost` (e.g. plain `http://localhost`) — every backend's CORS allow-list
 > is keyed to that exact hostname.
 
 Local (non-Docker) development: each generated service under `services/*/` has its own
@@ -476,3 +471,6 @@ Created and maintained by **Angel Martinez-Tenor** —
 [github.com/angelmtenor](https://github.com/angelmtenor).
 
 Licensed under the [MIT License](LICENSE).
+
+> **Disclaimer:** I am currently Head of Data & AI at Getronics. A separate, Getronics-branded
+> fork of this framework is being developed there for production-grade use.
