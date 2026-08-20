@@ -26,7 +26,7 @@ build-backend = "hatchling.build"
 packages = ["src/ai_circus_shared"]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.11.8"]
+dev = ["pytest>=8.3.5", "ruff>=0.16.3"]
 
 [tool.ruff]
 target-version = "py312"
