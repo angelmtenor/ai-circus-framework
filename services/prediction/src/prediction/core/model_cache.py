@@ -164,7 +164,9 @@ class ModelCache:
                         f"No trained model artifacts for scenario={scenario_slug!r} "
                         f"(org={org_id!r}, fallback org={load_org_id!r} also has none — has `training` run for it?)."
                     )
-            logger.info("Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug)
+            logger.info(
+                "Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug
+            )
             # Read metadata first — it's the manifest training writes last, once
             # every artifact below it has been confirmed uploaded — so an
             # interrupted retrain shows up here as a checksum mismatch rather than
@@ -175,8 +177,12 @@ class ModelCache:
             explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
             pipeline_lower = pipeline_upper = None
             if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
-                pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
-                pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+                pipeline_lower = _load_checked(
+                    store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower"
+                )
+                pipeline_upper = _load_checked(
+                    store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper"
+                )
             artifacts = ModelArtifacts(
                 pipeline=pipeline,
                 explainer=explainer,

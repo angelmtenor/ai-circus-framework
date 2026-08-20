@@ -60,11 +60,15 @@ class DatasetSampleOut(BaseModel):
 
 
 class FeatureImportanceOut(BaseModel):
+    """A single feature's global importance score."""
+
     feature: str
     importance: float
 
 
 class BreakdownItemOut(BaseModel):
+    """Evaluation score for one category of a breakdown feature."""
+
     category: str
     score: float
     n: int

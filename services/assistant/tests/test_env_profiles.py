@@ -20,10 +20,11 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     get_env_config.cache_clear()
     monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
-    # AUTH_DISABLED and ADMIN_API_KEY intentionally have no settings.yaml default (see
-    # settings.yaml) — they must come from real env vars.
+    # AUTH_DISABLED, ADMIN_API_KEY, and LLM_MODEL intentionally have no settings.yaml
+    # default (see settings.yaml) — they must come from real env vars.
     monkeypatch.setenv("AUTH_DISABLED", "false")
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
 
 
@@ -62,7 +63,20 @@ def test_get_env_config_reads_app_environment(monkeypatch: pytest.MonkeyPatch, p
     config = get_env_config()
 
     assert config.LOG_LEVEL == "INFO"
-    assert config.LLM_MODEL == "gpt-4o-mini"
+
+
+def test_llm_model_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LLM_MODEL must come from the actual process env, not a settings.yaml default.
+
+    Regression test, same class as AUTH_DISABLED's/ADMIN_API_KEY's: a profile default
+    here would always win over docker-compose's `LLM_MODEL: ${LLM_MODEL:-llama3}`
+    passthrough, silently defeating per-deployment model swaps.
+    """
+    monkeypatch.setenv("LLM_MODEL", "a-different-model")
+
+    config = get_env_config()
+
+    assert config.LLM_MODEL == "a-different-model"
 
 
 def test_auth_disabled_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:

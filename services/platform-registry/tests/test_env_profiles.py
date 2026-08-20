@@ -16,11 +16,14 @@ from platform_registry.data_model import get_env_config
 
 @pytest.fixture(autouse=True)
 def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the lru_cache and set the one mandatory secret every profile needs."""
+    """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("POSTGRES_PASSWORD", "test-password")
-    # CORS_ALLOWED_ORIGINS intentionally has no settings.yaml default (see
-    # settings.yaml) — it must come from a real env var.
+    monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
+    # ADMIN_API_KEY, AUTH_DISABLED, and CORS_ALLOWED_ORIGINS intentionally have no
+    # settings.yaml default (see settings.yaml) — they must come from real env vars.
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
+    monkeypatch.setenv("AUTH_DISABLED", "false")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
 
 

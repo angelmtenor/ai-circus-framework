@@ -44,6 +44,9 @@ class FakeEnvConfig:
         self.EMBEDDING_MODEL = None
         self.GOOGLE_API_KEY = None
         self.VOYAGE_API_KEY = None
+        self.AUTH_DISABLED = "false"
+        self.ADMIN_API_KEY = FakeSecret("admin-key")
+        self.ENGINEERING_DEMO_API_KEY = None
 
 
 def build_validation_error() -> ValidationError:

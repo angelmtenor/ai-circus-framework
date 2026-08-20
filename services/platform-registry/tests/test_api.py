@@ -208,9 +208,7 @@ def test_verify_engineering_demo_key_rejects_everything_when_unconfigured(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """ENGINEERING_DEMO_API_KEY is optional — when unset, no bearer token can match it."""
-    monkeypatch.setattr(
-        "platform_registry.api.get_env_config", lambda: _FakeAdminConfig(engineering_demo_api_key=None)
-    )
+    monkeypatch.setattr("platform_registry.api.get_env_config", lambda: _FakeAdminConfig(engineering_demo_api_key=None))
     response = client.get(
         "/auth/verify-engineering-demo-key", headers={"Authorization": "Bearer test-engineering-demo-key"}
     )

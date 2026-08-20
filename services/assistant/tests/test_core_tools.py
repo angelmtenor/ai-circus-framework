@@ -28,18 +28,22 @@ class _FakeClient:
 
     def evaluation(self, *, scenario_slug: str, authorization: str | None, limit: int) -> dict[str, Any]:
         """Record the call and either raise the configured error or return a fixed payload."""
-        self.calls.append(
-            ("evaluation", {"scenario_slug": scenario_slug, "authorization": authorization, "limit": limit})
-        )
+        self.calls.append((
+            "evaluation",
+            {"scenario_slug": scenario_slug, "authorization": authorization, "limit": limit},
+        ))
         if self.raise_error:
             raise self.raise_error
         return {"actuals": [1.0], "predictions": [1.1], "metrics": {"r2": 0.99}}
 
-    def predict(self, *, scenario_slug: str, authorization: str | None, records: list[dict[str, Any]]) -> dict[str, Any]:
+    def predict(
+        self, *, scenario_slug: str, authorization: str | None, records: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Record the call and either raise the configured error or return a fixed payload."""
-        self.calls.append(
-            ("predict", {"scenario_slug": scenario_slug, "authorization": authorization, "records": records})
-        )
+        self.calls.append((
+            "predict",
+            {"scenario_slug": scenario_slug, "authorization": authorization, "records": records},
+        ))
         if self.raise_error:
             raise self.raise_error
         return {"predictions": [{"prediction": 42.0, "contributions": {"torque": 0.5}}]}
@@ -64,9 +68,7 @@ def test_get_dataset_sample_is_scoped_to_the_calling_scenario_and_auth() -> None
     result = _tool_named(tools, "get_dataset_sample").func(limit=10)
 
     assert json.loads(result) == {"columns": ["torque"], "rows": [{"torque": 1.0}], "total_rows": 1}
-    assert client.calls == [
-        ("sample", {"scenario_slug": "motor_speed", "authorization": "Bearer tok-1", "limit": 10})
-    ]
+    assert client.calls == [("sample", {"scenario_slug": "motor_speed", "authorization": "Bearer tok-1", "limit": 10})]
 
 
 def test_get_predictions_vs_actuals_returns_real_evaluation_data() -> None:
