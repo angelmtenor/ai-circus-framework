@@ -35,14 +35,14 @@ fastapi = [
 
 [[package]]
 name = "ag-ui-protocol"
-version = "0.1.19"
+version = "0.1.20"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a7/10/4ad299267a7d04b89935aa99eef62979758fcf95aee9f8bb5d70c35b1be1/ag_ui_protocol-0.1.19.tar.gz", hash = "sha256:43c27f60d41712dcad0e9e0a203cbdf1c8e248b22417374c5c68321c448af4ea", size = 10720, upload-time = "2026-06-02T17:26:15.627Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/7a/0db4c6233ccf39654e45af0e532efa87abc0eb7828b16f9e63014881e75f/ag_ui_protocol-0.1.20.tar.gz", hash = "sha256:fadc9600f492a9dde8b2b027171bb471a899430e53291a0b882a09d3f5416145", size = 11977, upload-time = "2026-08-14T22:34:36.694Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/0a/bcad8116eb058e4b4a305e3fc37ebd7efc879deeb86b854f1c5b8b6e97dd/ag_ui_protocol-0.1.19-py3-none-any.whl", hash = "sha256:898843b1410d378824da0c6a776486288b9c5828689d0bf563118868e37f390f", size = 13490, upload-time = "2026-06-02T17:26:16.313Z" },
+    { url = "https://files.pythonhosted.org/packages/06/57/55a4a74a5580ef74d2e326f455be45256d4f11260b493174ae0a81626be4/ag_ui_protocol-0.1.20-py3-none-any.whl", hash = "sha256:a15cced52603327b0ba32e95a8aca87e9067f3e69281addfc3fecdaa16a1d485", size = 15142, upload-time = "2026-08-14T22:34:35.607Z" },
 ]
 
 [[package]]
@@ -328,7 +328,7 @@ wheels = [
 
 [[package]]
 name = "copilotkit"
-version = "0.1.94"
+version = "0.1.95"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ag-ui-langgraph", extra = ["fastapi"] },
@@ -340,9 +340,9 @@ dependencies = [
     { name = "pydantic-core" },
     { name = "toml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/e3/d40a7f8698e29efaa5eeb2064a68c1d8a51f1346390021d5cc76fc08d8a2/copilotkit-0.1.94.tar.gz", hash = "sha256:a60a56aeba8127f3eb382337e5799a9bc4b31fb506bc308045c0050abc6a4488", size = 49487, upload-time = "2026-06-04T17:41:36.766Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/aa/82/0e40dffc6df7f6ed064c61e6bd41460a02c2143a214a91e105fb134c66ea/copilotkit-0.1.95.tar.gz", hash = "sha256:997e4a183f8bf757f5c253caab2fdd847429a44f89f69757e2ba7fe07f9755af", size = 50515, upload-time = "2026-08-16T04:20:22.806Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/51/48/b22f4cbd7f8a6e2f3e80260e6aef06d845fa38f469ac4dd1bf2e14e44766/copilotkit-0.1.94-py3-none-any.whl", hash = "sha256:424e657118bebc055d5f89d1e93290773ff33c05860a3da242653ed8446affa8", size = 58434, upload-time = "2026-06-04T17:41:35.479Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/bc/17085e72a42e7c829cead4a23548303b8409b9aa9aa94c53a0fa6a9958ba/copilotkit-0.1.95-py3-none-any.whl", hash = "sha256:d24e3cd2908f9dfd26fc199e979bf301d3cbec8a9551dc0b19c104dae9878c38", size = 59499, upload-time = "2026-08-16T04:20:21.463Z" },
 ]
 
 [[package]]
@@ -1130,7 +1130,7 @@ wheels = [
 
 [[package]]
 name = "langchain-openai"
-version = "1.5.0"
+version = "1.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1138,9 +1138,9 @@ dependencies = [
     { name = "openai" },
     { name = "tiktoken" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/e7/86e71c1e40f70f81cf802ebaf060636cce7483308afab758aaa3bfc34144/langchain_openai-1.5.0.tar.gz", hash = "sha256:bf86fefc842122412a5bbf1a34fb4c993c3c9f873c43a3c57cf8fef0f0506a9e", size = 3266672, upload-time = "2026-08-13T13:14:34.379Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/ed/8dea294b76f7cbda7baa8fcee10f6f448a2157c81c905ea8893ddf9ede19/langchain_openai-1.5.1.tar.gz", hash = "sha256:e7100c89a6180e3fdf8d02b29a0f2b6c532da91428fc1b57aa93ebbc8acc0ce9", size = 3286615, upload-time = "2026-08-14T15:47:30.765Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/a2/af432496f791eb55f38f41b80491bd8c3759ab07ccc3cbc64c917824934d/langchain_openai-1.5.0-py3-none-any.whl", hash = "sha256:8b9b5f25a640883879a1cd2728a5a09a62a976d80ddf88611420025817beaf6d", size = 123579, upload-time = "2026-08-13T13:14:33.176Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/3b/cf0811ade95747439a43e3537452fefca88dddadb9f2b6e862ec8961620c/langchain_openai-1.5.1-py3-none-any.whl", hash = "sha256:a4da6e507d2e867127f0d622797bca4b7e7e98f08b3bbdc8db46f0a0695d69cb", size = 123733, upload-time = "2026-08-14T15:47:29.674Z" },
 ]
 
 [[package]]
@@ -1993,11 +1993,11 @@ wheels = [
 
 [[package]]
 name = "python-dotenv"
-version = "1.2.2"
+version = "1.2.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", hash = "sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3", size = 50135, upload-time = "2026-03-01T16:00:26.196Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/53/ed9d74092561d4b01a2ef1349d52cdbc135e526c245f366b089cfca6de49/python_dotenv-1.2.3.tar.gz", hash = "sha256:a20a594dabeaa385725aa239d5244871c143ecb356add8a20fcf23773a6c3a35", size = 58945, upload-time = "2026-08-16T16:54:54.067Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/17/c5c6b53ddc18f297992099b3d9ec16c855c0ccc83263a21fe4d1c625ec6c/python_dotenv-1.2.3-py3-none-any.whl", hash = "sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9", size = 22780, upload-time = "2026-08-16T16:54:52.473Z" },
 ]
 
 [[package]]
