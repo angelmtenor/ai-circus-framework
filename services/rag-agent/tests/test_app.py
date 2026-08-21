@@ -129,7 +129,16 @@ async def test_lifespan_sets_up_qdrant_embedder_and_llm(monkeypatch: pytest.Monk
         assert app.app.state.llm_clients == {}
 
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
-    assert provider_calls == [{"provider": "local", "model_name": None, "google_api_key": None, "voyage_api_key": None}]
+    assert provider_calls == [
+        {
+            "provider": "local",
+            "model_name": None,
+            "google_api_key": None,
+            "voyage_api_key": None,
+            "llm_gateway_url": "http://llm-gateway:4000",
+            "llm_gateway_api_key": "master-key",
+        }
+    ]
 
 
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

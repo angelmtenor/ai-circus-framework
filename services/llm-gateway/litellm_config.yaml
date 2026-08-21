@@ -88,6 +88,20 @@ model_list:
       model: ollama/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
 
+  # Local, no-API-key embedding backend for EMBEDDING_PROVIDER=local (etl-vectorize/
+  # rag-agent/form-agent — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
+  # Routed to the `local-embed` custom provider registered below, which runs a
+  # sentence-transformers model in-process (custom_handler.py) instead of each of
+  # those three services carrying their own torch + sentence-transformers install.
+  - model_name: local-embed
+    litellm_params:
+      model: local-embed/voyageai/voyage-4-nano
+
+litellm_settings:
+  custom_provider_map:
+    - provider: "local-embed"
+      custom_handler: llm_gateway.custom_handler.local_embedding_llm
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   # Persistent spend-tracking (general_settings.database_url) is deliberately NOT

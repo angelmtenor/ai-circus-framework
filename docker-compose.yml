@@ -327,7 +327,11 @@ services:
       - "127.0.0.1:${LLM_GATEWAY_PORT:-4000}:4000"
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 512m
+    # Bumped from the prior 512m: the `local-embed` model (custom_handler.py) loads a
+    # sentence-transformers/torch model in-process once EMBEDDING_PROVIDER=local is
+    # actually used — the same headroom etl-vectorize/rag-agent needed before that
+    # dependency moved here.
+    mem_limit: 1g
 
   # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — OPTIONAL
   # (profile "ollama"): `docker compose up`/`make up` never starts this, to avoid
@@ -446,6 +450,9 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      # Only reached when EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model
+      # — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -453,6 +460,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      llm-gateway:
+        condition: service_started
     networks: [ai-circus]
     mem_limit: 1g
 
