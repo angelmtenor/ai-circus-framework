@@ -31,6 +31,12 @@ DEFAULT_VOYAGE_MODEL = "voyage-3.5-lite"
 
 _HTTP_TIMEOUT_SECONDS = 30.0
 
+# GatewayEmbeddingProvider's calls are CPU-bound sentence-transformers inference on
+# llm-gateway's side (no GPU in this stack), not a fast remote API round-trip like the
+# other providers below — encoding a full etl-vectorize corpus batch in one request
+# routinely exceeds _HTTP_TIMEOUT_SECONDS even once the model is warm/cached.
+_GATEWAY_HTTP_TIMEOUT_SECONDS = 300.0
+
 
 class EmbeddingProvider(Protocol):
     """Backs both ingestion and query-time embedding for one provider/model."""
@@ -58,7 +64,7 @@ class GatewayEmbeddingProvider:
     def __init__(self, base_url: str, api_key: str, model_name: str = DEFAULT_LOCAL_MODEL) -> None:
         self._model_name = model_name
         self._client = httpx.Client(
-            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=_HTTP_TIMEOUT_SECONDS
+            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=_GATEWAY_HTTP_TIMEOUT_SECONDS
         )
         # Determined by a live probe call rather than hardcoded — see the other
         # providers' constructors for why this class of bug is worth guarding against.
