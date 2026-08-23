@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import httpx
-from ag_ui.core import RunAgentInput
+from ag_ui.core import RunAgentInput, RunErrorEvent
 from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.embeddings import EmbeddingProvider
@@ -25,14 +25,17 @@ from qdrant_client import QdrantClient
 from rag_agent import get_env_config
 from rag_agent.core.agent import build_agui_agent, build_retrieve_tool
 from rag_agent.core.identity import resolve_identity
+from rag_agent.core.logger import get_logger
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 class ModelResponse(BaseModel):
     """Response body for GET /model/{scenario_slug}."""
 
     model: str
+    provider: str | None = None
 
 
 def _qdrant(request: Request) -> QdrantClient:
@@ -54,6 +57,25 @@ def _llm_model_name() -> str:
         return registry.get_active_llm_model(admin_api_key=config.ADMIN_API_KEY.get_secret_value())
     except httpx.HTTPError:
         return config.LLM_MODEL
+
+
+def _llm_display(model_name: str = Depends(_llm_model_name)) -> tuple[str, str | None]:
+    """(model, provider label) for the UI's "model (provider)" badge — e.g.
+    `("openai/gpt-oss-120b", "GroqCloud")`. Falls back to the bare alias with no
+    provider label if platform-registry is unreachable or the alias isn't routed.
+    """
+    config = get_env_config()
+    registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
+    try:
+        display = registry.get_llm_provider_display(
+            admin_api_key=config.ADMIN_API_KEY.get_secret_value(), model_name=model_name
+        )
+    except httpx.HTTPError:
+        display = None
+    if display is None:
+        return model_name, None
+    label, model = display
+    return model, label
 
 
 def _llm(request: Request, model_name: str = Depends(_llm_model_name)) -> BaseChatModel:
@@ -96,12 +118,13 @@ def healthz() -> dict[str, str]:
 def model_endpoint(
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
-    model_name: str = Depends(_llm_model_name),
+    display: tuple[str, str | None] = Depends(_llm_display),
 ) -> ModelResponse:
-    """The model that would answer this scenario's next chat message, so the UI can
-    show it upfront rather than only after the first reply.
+    """The model (and its provider) that would answer this scenario's next chat
+    message, so the UI can show it upfront rather than only after the first reply.
     """
-    return ModelResponse(model=model_name)
+    model, provider = display
+    return ModelResponse(model=model, provider=provider)
 
 
 @router.post("/agui/{scenario_slug}")
@@ -140,7 +163,18 @@ async def agui_endpoint(
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
 
     async def event_generator() -> AsyncIterator[str]:
-        async for event in agent.run(input_data):
-            yield encoder.encode(event)
+        # Left uncaught, a mid-run exception (e.g. the LLM provider rate-limiting or
+        # rejecting an oversized request — routine on GroqCloud's free tier once a
+        # tool result makes the prompt large) aborts this generator, which just closes
+        # the connection with no terminal AG-UI event. ui-react's HttpAgent then waits
+        # forever for one, showing "Thinking…" indefinitely instead of an error — see
+        # ChatPanel.tsx's `catch` in `send()`, which already renders a `RunErrorEvent`
+        # as a chat bubble once it actually gets one.
+        try:
+            async for event in agent.run(input_data):
+                yield encoder.encode(event)
+        except Exception as exc:
+            logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)
+            yield encoder.encode(RunErrorEvent(message=str(exc)))
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())

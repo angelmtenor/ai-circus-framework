@@ -44,6 +44,8 @@ class FakeEnvConfig:
         self.EMBEDDING_MODEL = None
         self.GOOGLE_API_KEY = None
         self.VOYAGE_API_KEY = None
+        self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
+        self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
 
 
 @dataclass
@@ -117,7 +119,16 @@ def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatc
         }
     ]
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
-    assert provider_calls == [{"provider": "local", "model_name": None, "google_api_key": None, "voyage_api_key": None}]
+    assert provider_calls == [
+        {
+            "provider": "local",
+            "model_name": None,
+            "google_api_key": None,
+            "voyage_api_key": None,
+            "llm_gateway_url": "http://llm-gateway:4000",
+            "llm_gateway_api_key": "master-key",
+        }
+    ]
     expected_dir = app.Path("/scenarios/docs_rag")
     assert vectorize_calls == [
         ("fake-store", "fake-qdrant", "fake-provider", "demo", fake_documents, fake_vector_store, expected_dir)

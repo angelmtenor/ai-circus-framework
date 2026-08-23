@@ -327,7 +327,11 @@ services:
       - "127.0.0.1:${LLM_GATEWAY_PORT:-4000}:4000"
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 512m
+    # Bumped from the prior 512m: the `local-embed` model (custom_handler.py) loads a
+    # sentence-transformers/torch model in-process once EMBEDDING_PROVIDER=local is
+    # actually used — the same headroom etl-vectorize/rag-agent needed before that
+    # dependency moved here.
+    mem_limit: 1g
 
   # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — OPTIONAL
   # (profile "ollama"): `docker compose up`/`make up` never starts this, to avoid
@@ -376,7 +380,7 @@ services:
       # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
       # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
       # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
@@ -446,6 +450,9 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      # Only reached when EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model
+      # — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -453,6 +460,8 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_healthy
+      llm-gateway:
+        condition: service_started
     networks: [ai-circus]
     mem_limit: 1g
 
@@ -478,7 +487,7 @@ services:
       # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
       # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
       # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
@@ -533,7 +542,7 @@ services:
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # See rag-agent's own comment above for why this default only answers once
       # you've run `make ollama-up`, and what to set it to instead.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}

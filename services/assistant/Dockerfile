@@ -9,10 +9,12 @@ WORKDIR /app
 # as it does in local dev.
 COPY libs/shared /app/libs/shared
 COPY services/assistant/pyproject.toml services/assistant/uv.lock services/assistant/
-RUN uv sync --project services/assistant --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/assistant --frozen --no-dev --no-install-project
 
 COPY services/assistant services/assistant
-RUN uv sync --project services/assistant --frozen --no-cache --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/assistant --frozen --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime

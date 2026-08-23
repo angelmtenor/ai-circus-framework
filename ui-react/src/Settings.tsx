@@ -50,6 +50,13 @@ function AppearanceSection({
  * other secret in this repo. What IS real: live status from llm-gateway itself, and a
  * genuine round-trip completion call per provider via "Test".
  */
+/** Keys a Test result / in-flight state by (provider, model) — a provider's models
+ * can be tested independently (e.g. GroqCloud's two models can be up/down separately).
+ */
+function resultKey(provider: string, modelName: string): string {
+  return `${provider}::${modelName}`;
+}
+
 export function Settings({
   accessToken,
   isAdmin,
@@ -71,6 +78,10 @@ export function Settings({
   const [activeModel, setActiveModel] = useState<string | null>(null);
   const [savingModel, setSavingModel] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  // Which of each provider's models its card currently previews/tests — a provider
+  // with only one model never needs this, but it's simplest to always key it by
+  // provider and default every provider to its first model.
+  const [selectedModel, setSelectedModel] = useState<Record<string, string>>({});
 
   function load() {
     if (!isAdmin) return;
@@ -82,6 +93,17 @@ export function Settings({
       .then(([providerList, model]) => {
         setProviders(providerList);
         setActiveModel(model);
+        setSelectedModel((prev) => {
+          const next = { ...prev };
+          for (const p of providerList) {
+            // Prefer the currently-active model if it's one of this provider's own,
+            // so the card previewing on load matches what's actually in use.
+            if (!next[p.provider] || !p.models.some((m) => m.model_name === next[p.provider])) {
+              next[p.provider] = p.models.find((m) => m.model_name === model)?.model_name ?? p.models[0]?.model_name ?? "";
+            }
+          }
+          return next;
+        });
       })
       .catch((e) => setError((e as Error).message));
   }
@@ -102,13 +124,14 @@ export function Settings({
     }
   }
 
-  async function runTest(provider: string) {
-    setTesting(provider);
+  async function runTest(provider: string, modelName: string) {
+    const key = resultKey(provider, modelName);
+    setTesting(key);
     try {
-      const result = await testLlmProvider(config.platformRegistryUrl, provider, accessToken);
-      setResults((r) => ({ ...r, [provider]: result }));
+      const result = await testLlmProvider(config.platformRegistryUrl, provider, modelName, accessToken);
+      setResults((r) => ({ ...r, [key]: result }));
     } catch (e) {
-      setResults((r) => ({ ...r, [provider]: { ok: false, error: (e as Error).message, latency_ms: null } }));
+      setResults((r) => ({ ...r, [key]: { ok: false, error: (e as Error).message, latency_ms: null } }));
     } finally {
       setTesting(null);
     }
@@ -117,18 +140,21 @@ export function Settings({
   async function runTestAll() {
     if (!providers) return;
     setTestingAll(true);
-    // Fire one request per provider (instead of the batched test-all endpoint) and
-    // update each card as its own result lands, so the page reflects progress live
-    // rather than freezing until the slowest provider's round-trip finally resolves.
+    // Fire one request per model (not just per provider — a provider can route more
+    // than one, e.g. GroqCloud) and update each card as its own result lands, so the
+    // page reflects progress live rather than freezing until the slowest one resolves.
     await Promise.allSettled(
-      providers.map(async (p) => {
-        try {
-          const result = await testLlmProvider(config.platformRegistryUrl, p.provider, accessToken);
-          setResults((r) => ({ ...r, [p.provider]: result }));
-        } catch (e) {
-          setResults((r) => ({ ...r, [p.provider]: { ok: false, error: (e as Error).message, latency_ms: null } }));
-        }
-      }),
+      providers.flatMap((p) =>
+        p.models.map(async (m) => {
+          const key = resultKey(p.provider, m.model_name);
+          try {
+            const result = await testLlmProvider(config.platformRegistryUrl, p.provider, m.model_name, accessToken);
+            setResults((r) => ({ ...r, [key]: result }));
+          } catch (e) {
+            setResults((r) => ({ ...r, [key]: { ok: false, error: (e as Error).message, latency_ms: null } }));
+          }
+        }),
+      ),
     );
     setTestingAll(false);
   }
@@ -176,13 +202,17 @@ export function Settings({
                 disabled={savingModel}
                 onChange={(e) => saveActiveModel(e.target.value)}
               >
-                {activeModel && !providers.some((p) => p.model_name === activeModel) && (
+                {activeModel && !providers.some((p) => p.models.some((m) => m.model_name === activeModel)) && (
                   <option value={activeModel}>{activeModel} (not in litellm_config.yaml anymore)</option>
                 )}
                 {providers.map((p) => (
-                  <option key={p.provider} value={p.model_name}>
-                    {p.label} — {p.model_name}
-                  </option>
+                  <optgroup key={p.provider} label={p.label}>
+                    {p.models.map((m) => (
+                      <option key={m.model_name} value={m.model_name}>
+                        {m.model ?? m.model_name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
               {savingModel && <span className="panel-hint"> Saving…</span>}
@@ -192,24 +222,45 @@ export function Settings({
           {providers && (
             <div className="settings-grid">
               {providers.map((p) => {
-                const result = results[p.provider];
+                const current = selectedModel[p.provider] ?? p.models[0]?.model_name ?? "";
+                const model = p.models.find((m) => m.model_name === current) ?? p.models[0];
+                const key = resultKey(p.provider, current);
+                const result = results[key];
                 return (
                   <div className="panel-card settings-card" key={p.provider}>
                     <div className="settings-card-header">
                       <h3>{p.label}</h3>
-                      <span className={`settings-badge ${p.route_exists ? "settings-badge--on" : "settings-badge--off"}`}>
-                        {p.route_exists ? "routed" : "not routed"}
-                      </span>
+                      {model && (
+                        <span className={`settings-badge ${model.route_exists ? "settings-badge--on" : "settings-badge--off"}`}>
+                          {model.route_exists ? "routed" : "not routed"}
+                        </span>
+                      )}
                     </div>
-                    <div className="settings-card-model">
-                      model: <code>{p.model ?? "—"}</code>
-                    </div>
+                    {p.models.length > 1 ? (
+                      <select
+                        className="settings-model-select settings-model-select--inline"
+                        value={current}
+                        onChange={(e) => setSelectedModel((s) => ({ ...s, [p.provider]: e.target.value }))}
+                      >
+                        {p.models.map((m) => (
+                          <option key={m.model_name} value={m.model_name}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      model && (
+                        <div className="settings-card-model">
+                          model: <code>{model.model ?? "—"}</code>
+                        </div>
+                      )
+                    )}
                     <button
                       className="btn-secondary"
-                      onClick={() => runTest(p.provider)}
-                      disabled={testing === p.provider || testingAll}
+                      onClick={() => runTest(p.provider, current)}
+                      disabled={testing === key || testingAll || !model}
                     >
-                      {testing === p.provider ? "Testing…" : "▶ Test"}
+                      {testing === key ? "Testing…" : "▶ Test"}
                     </button>
                     {result && (
                       <div className={`settings-result ${result.ok ? "settings-result--ok" : "settings-result--fail"}`}>
@@ -224,9 +275,14 @@ export function Settings({
                     )}
                     <details className="settings-card-details">
                       <summary>Details</summary>
-                      {p.api_base && (
+                      {p.models.length > 1 && model && (
                         <div className="settings-card-model">
-                          base: <code>{p.api_base}</code>
+                          model: <code>{model.model ?? "—"}</code>
+                        </div>
+                      )}
+                      {model?.api_base && (
+                        <div className="settings-card-model">
+                          base: <code>{model.api_base}</code>
                         </div>
                       )}
                       <p className="panel-hint">{p.hint}</p>

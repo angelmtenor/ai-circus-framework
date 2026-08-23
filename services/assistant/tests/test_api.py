@@ -6,7 +6,7 @@ verification section), and the _llm_model dependency.
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
 from types import SimpleNamespace
 
 import httpx
@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from assistant import api as api_module
-from assistant.api import _llm_model, _prompt_cache, _scenario_definition, agui_endpoint, router
+from assistant.api import _llm_display, _llm_model, _prompt_cache, _scenario_definition, agui_endpoint, router
 from assistant.core.identity import resolve_identity
 from tests.conftest import FakeSecret
 
@@ -35,6 +35,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
     app.dependency_overrides[_prompt_cache] = lambda: SimpleNamespace(get=lambda _org_id, _slug: "system prompt")
     app.dependency_overrides[_llm_model] = lambda: "gpt-4o-mini"
+    app.dependency_overrides[_llm_display] = lambda: ("gpt-4o-mini", "OpenAI")
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -49,7 +50,7 @@ def test_model_endpoint_returns_the_active_model_without_sending_a_message(clien
     response = client.get("/model/churn")
 
     assert response.status_code == 200
-    assert response.json() == {"model": "gpt-4o-mini"}
+    assert response.json() == {"model": "gpt-4o-mini", "provider": "OpenAI"}
 
 
 def test_agui_unknown_scenario_returns_404() -> None:
@@ -98,6 +99,36 @@ def test_llm_model_falls_back_to_static_default_when_platform_registry_is_unreac
     monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", _raise)
 
     assert _llm_model() == "llama3"
+
+
+def test_llm_display_resolves_the_provider_label_and_real_model_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    """/model surfaces "model (provider)" material — the real configured model id and
+    its human-readable provider label, not the bare litellm alias.
+    """
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(
+        PlatformRegistryClient,
+        "get_llm_provider_display",
+        lambda self, *, admin_api_key, model_name: ("GroqCloud", "openai/gpt-oss-120b"),
+    )
+
+    assert _llm_display(llm_model="groq-llama") == ("openai/gpt-oss-120b", "GroqCloud")
+
+
+def test_llm_display_falls_back_to_the_bare_alias_when_platform_registry_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A platform-registry hiccup shouldn't break the /model endpoint — just drop the
+    provider label and show the bare alias.
+    """
+
+    def _raise(self: PlatformRegistryClient, *, admin_api_key: str, model_name: str) -> tuple[str, str] | None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(PlatformRegistryClient, "get_llm_provider_display", _raise)
+
+    assert _llm_display(llm_model="groq-llama") == ("groq-llama", None)
 
 
 def _fake_http_request(authorization: str | None) -> Request:
@@ -155,3 +186,38 @@ async def test_agui_endpoint_builds_prediction_tools_scoped_to_the_request(monke
     assert captured["scenario_slug"] == "motor_speed"
     assert captured["authorization"] == "Bearer tok-1"
     assert captured["tools"] == ["prediction-tool-sentinel"]
+
+
+async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider failure mid-run (e.g. GroqCloud rate-limiting an oversized request)
+    must reach the client as a RUN_ERROR event, not just abort the stream — an
+    abandoned stream leaves ui-react's HttpAgent waiting forever ("Thinking…" with no
+    way out) instead of surfacing the error (see ChatPanel.tsx's `send()`).
+    """
+
+    async def _raising_agent_run(_input: object) -> AsyncIterator[object]:
+        if False:  # pragma: no cover - makes this an async generator function
+            yield
+        raise RuntimeError("GroqException - rate_limit_exceeded")
+
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
+    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
+    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_raising_agent_run))
+
+    response = await agui_endpoint(
+        scenario_slug="motor_speed",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={}
+        ),
+        request=_fake_http_request("Bearer tok-1"),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
+        definition=SimpleNamespace(slug="motor_speed"),
+        prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
+        llm=SimpleNamespace(),
+    )
+
+    body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+
+    assert '"type":"RUN_ERROR"' in body
+    assert "rate_limit_exceeded" in body

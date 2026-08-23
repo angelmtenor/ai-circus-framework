@@ -55,6 +55,12 @@ class EnvConfig(BaseSettings):
         description="Model name override for the active EMBEDDING_PROVIDER; unset = that provider's own default",
         default=None,
     )
+    LLM_GATEWAY_URL: str = Field(
+        description="Base URL of llm-gateway's OpenAI-compatible API (only needed if EMBEDDING_PROVIDER=local)"
+    )
+    LLM_GATEWAY_API_KEY: SecretStr = Field(
+        description="API key presented to llm-gateway (its LITELLM_MASTER_KEY); needed if EMBEDDING_PROVIDER=local"
+    )
     GOOGLE_API_KEY: SecretStr | None = Field(
         description="Google API key (only needed if EMBEDDING_PROVIDER=gemini)", default=None
     )
@@ -76,7 +82,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "11ce02d9a81a2f11584bb4b3182ba36ccb78c1f1d68a27f8f47555227bb9bd7b"
+_SOURCE_YAML_HASH = "0339b00aca35172db578933f72d85aa77174d297eeb0aaaca78df0ccd4b7ea91"
 
 
 EnvConfig.model_rebuild()

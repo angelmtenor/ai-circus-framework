@@ -9,10 +9,12 @@ WORKDIR /app
 # as it does in local dev.
 COPY libs/shared /app/libs/shared
 COPY services/etl-tabular/pyproject.toml services/etl-tabular/uv.lock services/etl-tabular/
-RUN uv sync --project services/etl-tabular --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/etl-tabular --frozen --no-dev --no-install-project
 
 COPY services/etl-tabular services/etl-tabular
-RUN uv sync --project services/etl-tabular --frozen --no-cache --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/etl-tabular --frozen --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime

@@ -38,8 +38,6 @@ dependencies = [
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
     "qdrant-client>=1.19.0",
-    "sentence-transformers>=5.6.1",
-    "torch>=2.0",
     "uvicorn[standard]>=0.52.1",
 ]
 
@@ -108,25 +106,25 @@ select = [
     "YTT", # flake8-2020
 ]
 ignore = [
-    "ANN401",  # Dynamically typed expressions
-    "B007",    # Unused loop variable
-    "B008",    # Function call in argument defaults
-    "D105",    # Missing docstring in magic method
-    "D203",    # Blank line before class docstring
-    "D205",    # Blank line between summary and description
-    "D212",    # Multi-line docstring summary
-    "D415",    # First line punctuation
-    "FBT001",  # Boolean flag in function
-    "FBT002",  # Default Boolean flag
-    "G004",    # f-string in log
-    "PLR0913", # Too many arguments
-    "S101",    # Use of assert detected
-    "S404",    # Subprocess Usage
+    "any-type",  # Dynamically typed expressions
+    "unused-loop-control-variable",    # Unused loop variable
+    "function-call-in-default-argument",    # Function call in argument defaults
+    "undocumented-magic-method",    # Missing docstring in magic method
+    "incorrect-blank-line-before-class",    # Blank line before class docstring
+    "missing-blank-line-after-summary",    # Blank line between summary and description
+    "multi-line-summary-first-line",    # Multi-line docstring summary
+    "missing-terminal-punctuation",    # First line punctuation
+    "boolean-type-hint-positional-argument",  # Boolean flag in function
+    "boolean-default-value-positional-argument",  # Default Boolean flag
+    "logging-f-string",    # f-string in log
+    "too-many-arguments", # Too many arguments
+    "assert",    # Use of assert detected
+    "suspicious-subprocess-import",    # Subprocess Usage
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/__init__.py" = ["D104", "F401"]
-"tests/**" = ["S101", "D103", "D100", "D104", "SLF001", "B018"]
+"**/__init__.py" = ["undocumented-public-package", "unused-import"]
+"tests/**" = ["assert", "undocumented-public-function", "undocumented-public-module", "undocumented-public-package", "private-member-access", "useless-expression"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
