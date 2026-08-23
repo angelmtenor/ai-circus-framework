@@ -79,6 +79,18 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: LLM_GATEWAY_URL
+    description: "Base URL of llm-gateway's OpenAI-compatible API (only needed if EMBEDDING_PROVIDER=local)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LLM_GATEWAY_API_KEY
+    description: "API key presented to llm-gateway (its LITELLM_MASTER_KEY); needed if EMBEDDING_PROVIDER=local"
+    type: string
+    mandatory: true
+    secret: true
+
   - name: GOOGLE_API_KEY
     description: "Google API key (only needed if EMBEDDING_PROVIDER=gemini)"
     type: string
@@ -113,15 +125,17 @@ environments:
   local:
     SCENARIOS_DIR: "../../scenarios"
     MINIO_ENDPOINT: "http://minio.localhost"
-    # Loopback-bound host port (not Traefik — see root docker-compose.yml's qdrant
-    # comment for why it must never be on the public entrypoint).
+    # Loopback-bound host ports (not Traefik — see root docker-compose.yml's qdrant/
+    # llm-gateway comments for why neither belongs on the public entrypoint).
     QDRANT_URL: "http://localhost:6333"
+    LLM_GATEWAY_URL: "http://localhost:4000"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
     MINIO_ENDPOINT: "http://minio:9000"
     QDRANT_URL: "http://qdrant:6333"
+    LLM_GATEWAY_URL: "http://llm-gateway:4000"
 
   staging: {}
     # Staging environment profile — overrides go here

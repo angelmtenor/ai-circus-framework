@@ -9,10 +9,12 @@ WORKDIR /app
 # as it does in local dev.
 COPY libs/shared /app/libs/shared
 COPY services/form-agent/pyproject.toml services/form-agent/uv.lock services/form-agent/
-RUN uv sync --project services/form-agent --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/form-agent --frozen --no-dev --no-install-project
 
 COPY services/form-agent services/form-agent
-RUN uv sync --project services/form-agent --frozen --no-cache --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
+    uv sync --project services/form-agent --frozen --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime

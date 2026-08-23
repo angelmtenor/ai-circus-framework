@@ -2,57 +2,16 @@
 
 from __future__ import annotations
 
-import sys
-import types
-
 import httpx
 import pytest
 
 from ai_circus_shared import embeddings
 from ai_circus_shared.embeddings import (
+    GatewayEmbeddingProvider,
     GeminiEmbeddingProvider,
-    LocalEmbeddingProvider,
     VoyageEmbeddingProvider,
     build_embedding_provider,
 )
-
-
-class _FakeSentenceTransformer:
-    """Deterministic stand-in for sentence_transformers.SentenceTransformer."""
-
-    def __init__(self, model_name: str) -> None:
-        """Record the model name it was constructed with."""
-        self.model_name = model_name
-
-    def get_sentence_embedding_dimension(self) -> int:
-        """Report a small fixed vector size."""
-        return 4
-
-    def encode(self, texts: str | list[str], normalize_embeddings: bool = True) -> list:
-        """Return one fixed vector per input (or a single vector for a single string)."""
-        if isinstance(texts, str):
-            return [0.1, 0.2, 0.3, 0.4]
-        return [[0.1, 0.2, 0.3, 0.4] for _ in texts]
-
-
-@pytest.fixture
-def fake_sentence_transformers_module(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Inject a fake sentence_transformers module so LocalEmbeddingProvider's lazy
-    import resolves to a deterministic fake regardless of whether the real (heavy,
-    torch-backed) package is installed in this environment.
-    """
-    fake_module = types.ModuleType("sentence_transformers")
-    fake_module.SentenceTransformer = _FakeSentenceTransformer  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
-
-
-def test_local_embedding_provider_reports_dimension_and_encodes(fake_sentence_transformers_module: None) -> None:
-    """LocalEmbeddingProvider reads the model's dimension and normalizes encode() output to plain floats."""
-    provider = LocalEmbeddingProvider("fake-model")
-
-    assert provider.dimension == 4
-    assert provider.encode_documents(["a", "b"]) == [[0.1, 0.2, 0.3, 0.4], [0.1, 0.2, 0.3, 0.4]]
-    assert provider.encode_query("q") == [0.1, 0.2, 0.3, 0.4]
 
 
 def _mock_httpx_client(monkeypatch: pytest.MonkeyPatch, handler: object) -> None:
@@ -117,14 +76,49 @@ def test_voyage_embedding_provider_encodes_documents_and_query(monkeypatch: pyte
     assert seen_bodies[0]["input_type"] == "query"  # the constructor's own probe call
 
 
-def test_build_embedding_provider_defaults_to_local(
-    monkeypatch: pytest.MonkeyPatch, fake_sentence_transformers_module: None
-) -> None:
-    """provider='local' builds a LocalEmbeddingProvider using DEFAULT_LOCAL_MODEL when no override is given."""
-    provider = build_embedding_provider("local", None, None, None)
+def test_gateway_embedding_provider_hits_llm_gateway_embeddings_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """encode_documents/encode_query both POST /embeddings with the configured model_name and Bearer auth."""
+    calls: list[httpx.Request] = []
+    seen_bodies: list[dict[str, object]] = []
 
-    assert isinstance(provider, LocalEmbeddingProvider)
-    assert provider._model.model_name == embeddings.DEFAULT_LOCAL_MODEL  # type: ignore[attr-defined]
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        calls.append(request)
+        body = json.loads(request.content)
+        seen_bodies.append(body)
+        vectors = [[float(i), float(i) + 1] for i in range(len(body["input"]))]
+        return httpx.Response(200, json={"data": [{"embedding": v} for v in vectors]})
+
+    _mock_httpx_client(monkeypatch, handler)
+
+    provider = GatewayEmbeddingProvider("http://llm-gateway:4000", "fake-key", "local-embed")
+
+    assert provider.dimension == 2  # from the constructor's probe call
+    assert provider.encode_documents(["doc a", "doc b"]) == [[0.0, 1.0], [1.0, 2.0]]
+    assert provider.encode_query("a query") == [0.0, 1.0]
+    assert all(r.headers["authorization"] == "Bearer fake-key" for r in calls)
+    assert all(body["model"] == "local-embed" for body in seen_bodies)
+
+
+def test_build_embedding_provider_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
+    """provider='local' builds a GatewayEmbeddingProvider using DEFAULT_LOCAL_MODEL when no override is given."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [{"embedding": [0.1, 0.2]}]})
+
+    _mock_httpx_client(monkeypatch, handler)
+
+    provider = build_embedding_provider("local", None, None, None, "http://llm-gateway:4000", "fake-key")
+
+    assert isinstance(provider, GatewayEmbeddingProvider)
+    assert provider._model_name == embeddings.DEFAULT_LOCAL_MODEL  # type: ignore[attr-defined]
+
+
+def test_build_embedding_provider_local_requires_gateway_config() -> None:
+    """Selecting local without LLM_GATEWAY_URL/LLM_GATEWAY_API_KEY fails fast, not with a confusing connection error."""
+    with pytest.raises(RuntimeError, match="LLM_GATEWAY_URL"):
+        build_embedding_provider("local", None, None, None, None, None)
 
 
 def test_build_embedding_provider_gemini_requires_api_key() -> None:

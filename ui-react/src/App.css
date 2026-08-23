@@ -1317,6 +1317,12 @@ select:focus {
   max-width: 28rem;
 }
 
+.settings-model-select--inline {
+  margin: 0.35rem 0;
+  font-size: 0.82rem;
+  max-width: none;
+}
+
 .settings-badge {
   font-size: 0.68rem;
   padding: 0.15rem 0.5rem;

@@ -70,6 +70,8 @@ def main() -> None:
         model_name=config.EMBEDDING_MODEL,
         google_api_key=config.GOOGLE_API_KEY.get_secret_value() if config.GOOGLE_API_KEY else None,
         voyage_api_key=config.VOYAGE_API_KEY.get_secret_value() if config.VOYAGE_API_KEY else None,
+        llm_gateway_url=config.LLM_GATEWAY_URL,
+        llm_gateway_api_key=config.LLM_GATEWAY_API_KEY.get_secret_value(),
     )
 
     for slug, definition in definitions.items():

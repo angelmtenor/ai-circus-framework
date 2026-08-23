@@ -78,19 +78,28 @@ def require_org_match(org_id: str, authorization: str | None = Header(default=No
         raise HTTPException(status_code=403, detail=f"Not authorized to read org {org_id!r}'s entitlements.")
 
 
-class LlmProviderOut(BaseModel):
-    """One provider's live routing status, per llm_settings.list_providers."""
+class LlmProviderModelOut(BaseModel):
+    """One of a provider's models' live routing status, per llm_settings.list_providers."""
 
-    provider: str
-    label: str
     model_name: str
+    label: str
     route_exists: bool
     model: str | None
     api_base: str | None
+
+
+class LlmProviderOut(BaseModel):
+    """One provider's (one API key's) live routing status — its models, per
+    llm_settings.list_providers.
+    """
+
+    provider: str
+    label: str
     needs_key: bool
     needs_base: bool
     env_vars: list[str]
     hint: str
+    models: list[LlmProviderModelOut]
 
 
 class LlmProviderTestOut(BaseModel):
@@ -198,25 +207,35 @@ def list_llm_providers() -> list[dict[str, object]]:
 
 
 @router.post(
-    "/llm-settings/providers/{provider}/test",
+    "/llm-settings/providers/{provider}/models/{model_name}/test",
     response_model=LlmProviderTestOut,
     dependencies=[Depends(require_admin)],
 )
-def test_llm_provider(provider: str) -> dict[str, object]:
-    """Round-trip a minimal real completion through this provider's configured model."""
+def test_llm_provider(provider: str, model_name: str) -> dict[str, object]:
+    """Round-trip a minimal real completion through one of this provider's models —
+    `model_name` picks among `ProviderSpec.models` (most providers have exactly one;
+    see llm_settings.PROVIDERS["groq"] for one with more).
+    """
     config = get_env_config()
     if provider not in llm_settings.PROVIDERS:
         raise HTTPException(status_code=404, detail=f"Unknown provider {provider!r}.")
-    return llm_settings.test_provider(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value(), provider)
+    try:
+        return llm_settings.test_provider(
+            config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value(), provider, model_name
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(
     "/llm-settings/providers/test-all",
-    response_model=dict[str, LlmProviderTestOut],
+    response_model=dict[str, dict[str, LlmProviderTestOut]],
     dependencies=[Depends(require_admin)],
 )
-def test_all_llm_providers() -> dict[str, dict[str, object]]:
-    """Round-trip every provider concurrently — the Settings page's "Test All" button."""
+def test_all_llm_providers() -> dict[str, dict[str, dict[str, object]]]:
+    """Round-trip every model of every provider concurrently — the Settings page's
+    "Test All" button. Returns `{provider: {model_name: result}}`.
+    """
     config = get_env_config()
     return llm_settings.test_all_providers(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value())
 
@@ -247,10 +266,10 @@ def set_active_llm_model(body: ActiveLlmModelIn, session: Session = Depends(get_
     """Switch which model assistant/rag-agent use — the Settings page's model picker.
 
     Only accepts a `model_name` already routed in litellm_config.yaml (i.e. one of
-    llm_settings.PROVIDERS' model_names) — this can't add a new route, only choose
-    among the ones an operator already configured there.
+    llm_settings.PROVIDERS' models' model_names) — this can't add a new route, only
+    choose among the ones an operator already configured there.
     """
-    valid_model_names = {spec.model_name for spec in llm_settings.PROVIDERS.values()}
+    valid_model_names = {model.model_name for spec in llm_settings.PROVIDERS.values() for model in spec.models}
     if body.model_name not in valid_model_names:
         raise HTTPException(
             status_code=400,

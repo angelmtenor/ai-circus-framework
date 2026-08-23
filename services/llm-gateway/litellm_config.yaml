@@ -33,10 +33,24 @@ model_list:
 
   # GroqCloud — free tier, LPU-hosted, very low latency. Groq retired every Llama 3.x
   # model from its catalog (this used to be llama-3.3-70b-versatile) — gpt-oss-120b is
-  # the current closest-capability general-chat replacement on their free tier.
+  # the current closest-capability general-chat replacement on their free tier. Same
+  # GROQ_API_KEY as the smaller model below — see platform_registry/core/llm_settings.py's
+  # PROVIDERS["groq"], which groups both under one "GroqCloud" card in ui-react's Settings
+  # page, letting an operator pick per-request accuracy vs. free-tier headroom.
   - model_name: groq-llama
     litellm_params:
       model: groq/openai/gpt-oss-120b
+      api_key: os.environ/GROQ_API_KEY
+
+  # Smaller sibling of gpt-oss-120b above, same free key — Groq scales its free-tier
+  # tokens-per-minute quota down with model size, so this one has far more headroom
+  # than gpt-oss-120b's (which 429s on a single request once tool results/history push
+  # the prompt past ~8k tokens), at some quality cost. (Not llama-3.1-8b-instant — Groq
+  # has since delisted that one too; check `GET /openai/v1/models` on your own key via
+  # https://console.groq.com/docs/models if this one also 404s later.)
+  - model_name: groq-oss-20b
+    litellm_params:
+      model: groq/openai/gpt-oss-20b
       api_key: os.environ/GROQ_API_KEY
 
   # OpenRouter — one key routes to many vendors' models. Individual ":free"-suffixed
@@ -87,6 +101,20 @@ model_list:
     litellm_params:
       model: ollama/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
+
+  # Local, no-API-key embedding backend for EMBEDDING_PROVIDER=local (etl-vectorize/
+  # rag-agent/form-agent — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
+  # Routed to the `local-embed` custom provider registered below, which runs a
+  # sentence-transformers model in-process (custom_handler.py) instead of each of
+  # those three services carrying their own torch + sentence-transformers install.
+  - model_name: local-embed
+    litellm_params:
+      model: local-embed/voyageai/voyage-4-nano
+
+litellm_settings:
+  custom_provider_map:
+    - provider: "local-embed"
+      custom_handler: llm_gateway.custom_handler.local_embedding_llm
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

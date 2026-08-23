@@ -1,7 +1,7 @@
 FROM node:22-slim AS build
 WORKDIR /app
 COPY ui-react/package.json ui-react/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY ui-react/ ./
 
 # Vite inlines import.meta.env.VITE_* at build time, so these must be build args

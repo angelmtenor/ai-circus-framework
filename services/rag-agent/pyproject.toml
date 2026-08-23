@@ -37,8 +37,6 @@ dependencies = [
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
     "qdrant-client>=1.19.0",
-    "sentence-transformers>=5.6.1",
-    "torch>=2.0",
     "uvicorn[standard]>=0.52.1",
 ]
 
@@ -182,24 +180,8 @@ skip_empty = true
 branch = true
 source = ["src"]
 
-# ──────────────────────────────────────────────────────────────────────────────
-#  Deptry
-# ──────────────────────────────────────────────────────────────────────────────
-[tool.deptry.per_rule_ignores]
-# torch is never imported directly — declared explicitly only so [tool.uv.sources]
-# can pin it to the CPU-only wheel index (sentence-transformers uses it internally).
-DEP002 = ["torch"]
-
 [tool.uv.sources]
 ai-circus-shared = { path = "../../libs/shared" }
-# CPU-only torch build (sentence-transformers' dependency) — Green Code: avoids
-# pulling ~2GB of unused CUDA/nvidia-* wheels into a demo image with no GPU.
-torch = [{ index = "pytorch-cpu" }]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Scripts

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { ScenarioSummary } from "./apiClient";
+import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { DataView } from "./DataView";
@@ -58,7 +58,7 @@ function TabularViewContent({
   const [tab, setTab] = useState<Tab>("data");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
-  const [chatModel, setChatModel] = useState<string | null>(null);
+  const [chatModel, setChatModel] = useState<ChatModel | null>(null);
 
   return (
     <div className="workspace">
@@ -87,7 +87,12 @@ function TabularViewContent({
             <div className="chat-dock-header">
               <span>
                 <Icon name="chat" /> Ask about {scenario.title}
-                {chatModel && <span className="chat-model-badge">{chatModel}</span>}
+                {chatModel && (
+                  <span className="chat-model-badge">
+                    {chatModel.model}
+                    {chatModel.provider && ` (${chatModel.provider})`}
+                  </span>
+                )}
               </span>
               <div className="chat-dock-header-actions">
                 <button
