@@ -44,9 +44,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     with Session(engine) as session:
         seed_scenarios(session, Path(config.SCENARIOS_DIR))
-        # "llama3" (the bundled, no-API-key Ollama model) — matches assistant/rag-agent's
-        # own static LLM_MODEL default, so a fresh install behaves the same either way.
-        seed_default_llm_setting(session, default_model_name="llama3")
+        # "groq-llama" (GroqCloud's free tier, no local Ollama container needed) —
+        # matches assistant/rag-agent's own static LLM_MODEL default, so a fresh
+        # install behaves the same either way.
+        seed_default_llm_setting(session, default_model_name="groq-llama")
 
     yield
 

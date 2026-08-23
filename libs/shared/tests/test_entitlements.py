@@ -16,6 +16,7 @@ def _clear_caches() -> None:
     """
     entitlements_module._entitlement_cache.clear()
     entitlements_module._active_model_cache.clear()
+    entitlements_module._providers_cache.clear()
 
 
 class _FakeResponse:
@@ -127,4 +128,74 @@ def test_get_active_llm_model_caches_across_calls(monkeypatch: pytest.MonkeyPatc
     second = client.get_active_llm_model(admin_api_key="secret-key")
 
     assert first == second == "gemini-flash"
+    assert call_count == 1
+
+
+def test_get_llm_provider_display_matches_by_model_name_and_strips_the_configured_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Returns (label, real model id) for the alias, not the bare litellm alias itself.
+
+    A provider's models are nested (see platform_registry.core.llm_settings.PROVIDERS,
+    where GroqCloud alone routes two models sharing one API key) — the match happens
+    against each provider's `models` list, not the provider entry itself.
+    """
+    providers = [
+        {"provider": "openai", "label": "OpenAI", "models": [{"model_name": "gpt-4o-mini", "model": "gpt-4o-mini"}]},
+        {
+            "provider": "groq",
+            "label": "GroqCloud",
+            "models": [
+                {"model_name": "groq-llama", "model": "openai/gpt-oss-120b"},
+                {"model_name": "groq-oss-20b", "model": "gpt-oss-20b"},
+            ],
+        },
+    ]
+    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=providers))
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama") == (
+        "GroqCloud",
+        "openai/gpt-oss-120b",
+    )
+    assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-oss-20b") == (
+        "GroqCloud",
+        "gpt-oss-20b",
+    )
+
+
+def test_get_llm_provider_display_returns_none_when_the_alias_is_not_routed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An alias no longer in litellm_config.yaml (e.g. removed) has no match — callers
+    fall back to showing the bare alias with no provider label.
+    """
+    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=[]))
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama") is None
+
+
+def test_get_llm_provider_display_caches_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A second call for the same base_url doesn't re-hit platform-registry within the
+    TTL window — this is called on every /model/{scenario_slug} request.
+    """
+    call_count = 0
+    providers = [
+        {
+            "provider": "groq",
+            "label": "GroqCloud",
+            "models": [{"model_name": "groq-llama", "model": "openai/gpt-oss-120b"}],
+        }
+    ]
+
+    def fake_get(*_a: object, **_kw: object) -> _FakeResponse:
+        nonlocal call_count
+        call_count += 1
+        return _FakeResponse(payload=providers)
+
+    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama")
+    client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama")
+
     assert call_count == 1

@@ -28,12 +28,31 @@ import httpx
 
 
 @dataclass(frozen=True)
+class ProviderModel:
+    """One selectable model within a provider — providers with only one model (the
+    common case) still get a one-element `models` tuple, so callers never special-case
+    "does this provider have alternatives".
+    """
+
+    model_name: str
+    """The litellm_config.yaml alias (`model_list[].model_name`), e.g. "groq-llama"."""
+
+    label: str
+    """Short, human-readable name for this model within its provider's card, e.g.
+    "gpt-oss-120b (accurate)" — distinct from `ProviderSpec.label`, which names the
+    provider/API key itself, e.g. "GroqCloud"."""
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
-    """One provider's routing shape on the gateway, per litellm_config.yaml."""
+    """One provider's (i.e. one API key's) routing shape on the gateway, per
+    litellm_config.yaml. `models` holds every alias sharing that key — see
+    PROVIDERS["groq"] for a provider with more than one.
+    """
 
     key: str
     label: str
-    model_name: str
+    models: tuple[ProviderModel, ...]
     needs_key: bool
     needs_base: bool
     env_vars: tuple[str, ...]
@@ -44,7 +63,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "openai": ProviderSpec(
         key="openai",
         label="OpenAI",
-        model_name="gpt-4o-mini",
+        models=(ProviderModel(model_name="gpt-4o-mini", label="gpt-4o-mini"),),
         needs_key=True,
         needs_base=False,
         env_vars=("OPENAI_API_KEY",),
@@ -53,7 +72,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "gemini": ProviderSpec(
         key="gemini",
         label="Google Gemini",
-        model_name="gemini-flash",
+        models=(ProviderModel(model_name="gemini-flash", label="gemini-3.1-flash-lite"),),
         needs_key=True,
         needs_base=False,
         env_vars=("GOOGLE_API_KEY",),
@@ -62,7 +81,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "deepseek": ProviderSpec(
         key="deepseek",
         label="DeepSeek",
-        model_name="deepseek-chat",
+        models=(ProviderModel(model_name="deepseek-chat", label="deepseek-chat"),),
         needs_key=True,
         needs_base=False,
         env_vars=("DEEPSEEK_API_KEY",),
@@ -71,7 +90,15 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "groq": ProviderSpec(
         key="groq",
         label="GroqCloud",
-        model_name="groq-llama",
+        # Same GROQ_API_KEY backs both — see litellm_config.yaml's groq-llama/
+        # groq-oss-20b entries. gpt-oss-120b is more capable but its free-tier
+        # tokens-per-minute quota (~8k) 429s once a tool result/history grows the
+        # prompt; its smaller sibling gpt-oss-20b trades accuracy for a much higher
+        # quota.
+        models=(
+            ProviderModel(model_name="groq-llama", label="gpt-oss-120b (accurate, low free-tier quota)"),
+            ProviderModel(model_name="groq-oss-20b", label="gpt-oss-20b (faster, higher free-tier quota)"),
+        ),
         needs_key=True,
         needs_base=False,
         env_vars=("GROQ_API_KEY",),
@@ -80,7 +107,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "openrouter": ProviderSpec(
         key="openrouter",
         label="OpenRouter",
-        model_name="openrouter",
+        models=(ProviderModel(model_name="openrouter", label="openrouter/free"),),
         needs_key=True,
         needs_base=False,
         env_vars=("OPENROUTER_API_KEY",),
@@ -89,7 +116,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         key="anthropic",
         label="Anthropic Claude",
-        model_name="claude-haiku",
+        models=(ProviderModel(model_name="claude-haiku", label="claude-haiku-4-5"),),
         needs_key=True,
         needs_base=False,
         env_vars=("ANTHROPIC_API_KEY",),
@@ -98,7 +125,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "azure_openai": ProviderSpec(
         key="azure_openai",
         label="Azure OpenAI",
-        model_name="azure-gpt4o",
+        models=(ProviderModel(model_name="azure-gpt4o", label="azure-gpt4o"),),
         needs_key=True,
         needs_base=True,
         env_vars=("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_API_BASE"),
@@ -112,7 +139,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "ollama": ProviderSpec(
         key="ollama",
         label="Ollama (local)",
-        model_name="llama3",
+        models=(ProviderModel(model_name="llama3", label="llama3.2:3b"),),
         needs_key=False,
         needs_base=True,
         env_vars=("OLLAMA_API_BASE",),
@@ -127,6 +154,18 @@ PROVIDERS: dict[str, ProviderSpec] = {
 }
 
 
+def find_model(model_name: str) -> tuple[ProviderSpec, ProviderModel] | None:
+    """Look up which provider (and which of its models) a litellm alias belongs to —
+    the active-model picker only stores the bare `model_name`, so this is how a caller
+    (e.g. `get_llm_provider_display`) recovers the provider label and model label.
+    """
+    for spec in PROVIDERS.values():
+        for model in spec.models:
+            if model.model_name == model_name:
+                return spec, model
+    return None
+
+
 class LlmGatewayError(RuntimeError):
     """Raised when llm-gateway's admin API call fails outright (network/5xx)."""
 
@@ -136,11 +175,12 @@ def _client(base_url: str, master_key: str) -> httpx.Client:
 
 
 def list_providers(base_url: str, master_key: str) -> list[dict[str, object]]:
-    """Real, live status per provider: the underlying model/deployment and api_base
-    litellm is actually routing to (visible), and whether a route exists at all.
-    litellm redacts `api_key` in this same admin response for env-substituted keys, so
-    key *presence* is never reported here — click "Test" for the real, load-bearing
-    answer to "is this one actually working".
+    """Real, live status per provider, nested one entry per model it routes: the
+    underlying model/deployment and api_base litellm is actually routing to
+    (visible), and whether a route exists at all. litellm redacts `api_key` in this
+    same admin response for env-substituted keys, so key *presence* is never reported
+    here — click "Test" for the real, load-bearing answer to "is this one actually
+    working".
     """
     with _client(base_url, master_key) as client:
         try:
@@ -151,33 +191,43 @@ def list_providers(base_url: str, master_key: str) -> list[dict[str, object]]:
     deployments = response.json().get("data", [])
     by_model_name = {d.get("model_name"): d for d in deployments}
 
-    results = []
+    results: list[dict[str, object]] = []
     for spec in PROVIDERS.values():
-        deployment = by_model_name.get(spec.model_name)
-        litellm_params = (deployment or {}).get("litellm_params", {}) or {}
-        configured_model = litellm_params.get("model")
+        models: list[dict[str, object]] = []
+        for model in spec.models:
+            deployment = by_model_name.get(model.model_name)
+            litellm_params = (deployment or {}).get("litellm_params", {}) or {}
+            configured_model = litellm_params.get("model")
+            models.append({
+                "model_name": model.model_name,
+                "label": model.label,
+                "route_exists": deployment is not None,
+                "model": configured_model.split("/", 1)[-1] if configured_model else None,
+                "api_base": litellm_params.get("api_base"),
+            })
         results.append({
             "provider": spec.key,
             "label": spec.label,
-            "model_name": spec.model_name,
-            "route_exists": deployment is not None,
-            "model": configured_model.split("/", 1)[-1] if configured_model else None,
-            "api_base": litellm_params.get("api_base"),
             "needs_key": spec.needs_key,
             "needs_base": spec.needs_base,
             "env_vars": list(spec.env_vars),
             "hint": spec.hint,
+            "models": models,
         })
     return results
 
 
-def test_provider(base_url: str, master_key: str, provider: str) -> dict[str, object]:
-    """Round-trip a minimal real chat completion through the given provider's model —
-    the actual, live answer to "is this provider working right now".
+def test_provider(base_url: str, master_key: str, provider: str, model_name: str) -> dict[str, object]:
+    """Round-trip a minimal real chat completion through one of the given provider's
+    models — the actual, live answer to "is this model working right now". `model_name`
+    must be one of `provider`'s `ProviderSpec.models` (a provider's other models share
+    its API key but can behave differently — e.g. hit a different free-tier quota).
     """
     spec = PROVIDERS.get(provider)
     if spec is None:
         raise ValueError(f"Unknown provider {provider!r}")
+    if not any(model.model_name == model_name for model in spec.models):
+        raise ValueError(f"Model {model_name!r} does not belong to provider {provider!r}")
 
     started = time.monotonic()
     with _client(base_url, master_key) as client:
@@ -185,7 +235,7 @@ def test_provider(base_url: str, master_key: str, provider: str) -> dict[str, ob
             response = client.post(
                 "/chat/completions",
                 json={
-                    "model": spec.model_name,
+                    "model": model_name,
                     "messages": [{"role": "user", "content": "Reply with exactly one word: ok"}],
                     "max_tokens": 5,
                 },
@@ -210,12 +260,20 @@ def test_provider(base_url: str, master_key: str, provider: str) -> dict[str, ob
     return {"ok": True, "error": None, "latency_ms": latency_ms, "reply": reply[:200]}
 
 
-def test_all_providers(base_url: str, master_key: str) -> dict[str, dict[str, object]]:
-    """Round-trip every provider concurrently (one thread per provider, each opening
-    its own httpx.Client) — the Settings page's "Test All" button. Providers without
-    a configured key fail individually (surfaced per-provider below) rather than
-    blocking the rest; this always returns one result per entry in PROVIDERS.
+def test_all_providers(base_url: str, master_key: str) -> dict[str, dict[str, dict[str, object]]]:
+    """Round-trip every model of every provider concurrently (one thread per model,
+    each opening its own httpx.Client) — the Settings page's "Test All" button.
+    Returns `{provider: {model_name: result}}`, one entry per `ProviderSpec.models`
+    entry across all of `PROVIDERS`; models without a configured key fail
+    individually (surfaced per-model) rather than blocking the rest.
     """
-    with ThreadPoolExecutor(max_workers=len(PROVIDERS)) as pool:
-        futures = {key: pool.submit(test_provider, base_url, master_key, key) for key in PROVIDERS}
-        return {key: future.result() for key, future in futures.items()}
+    jobs = [(spec.key, model.model_name) for spec in PROVIDERS.values() for model in spec.models]
+    with ThreadPoolExecutor(max_workers=len(jobs) or 1) as pool:
+        futures = {
+            (provider, model_name): pool.submit(test_provider, base_url, master_key, provider, model_name)
+            for provider, model_name in jobs
+        }
+        results: dict[str, dict[str, dict[str, object]]] = {}
+        for (provider, model_name), future in futures.items():
+            results.setdefault(provider, {})[model_name] = future.result()
+        return results

@@ -380,7 +380,7 @@ services:
       # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
       # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
       # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
@@ -487,7 +487,7 @@ services:
       # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
       # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
       # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
@@ -542,7 +542,7 @@ services:
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # See rag-agent's own comment above for why this default only answers once
       # you've run `make ollama-up`, and what to set it to instead.
-      LLM_MODEL: ${LLM_MODEL:-llama3}
+      LLM_MODEL: ${LLM_MODEL:-groq-llama}
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}

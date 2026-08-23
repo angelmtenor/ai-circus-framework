@@ -8,7 +8,7 @@ import { zodToJsonSchema as zodToJsonSchemaImpl } from "zod-to-json-schema";
 function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): Record<string, unknown> {
   return zodToJsonSchemaImpl(schema as never, options as never) as Record<string, unknown>;
 }
-import { chatModel } from "./apiClient";
+import { chatModel, type ChatModel } from "./apiClient";
 import { renderMarkdown } from "./markdown";
 
 /**
@@ -153,7 +153,7 @@ export function ChatPanel({
   accessToken: string | null;
   variant?: "dock" | "full";
   title?: string;
-  onModel?: (model: string) => void;
+  onModel?: (model: ChatModel) => void;
   // Fires once per frontend tool call the agent makes (e.g. assisted_form's
   // update_form_fields) — the only way a scenario's own dashboard state can be
   // written from the conversation; see answerUnansweredFrontendToolCalls above.

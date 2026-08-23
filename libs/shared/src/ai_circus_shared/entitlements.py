@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict
 _CACHE_TTL_SECONDS = 30.0
 _entitlement_cache: dict[tuple[str, str, str], tuple[bool, float]] = {}
 _active_model_cache: dict[str, tuple[str, float]] = {}
+_providers_cache: dict[str, tuple[list[dict[str, Any]], float]] = {}
 
 
 class EntitlementDeniedError(Exception):
@@ -132,3 +133,37 @@ class PlatformRegistryClient:
         model_name = response.json()["model_name"]
         _active_model_cache[self.base_url] = (model_name, now + _CACHE_TTL_SECONDS)
         return model_name
+
+    def get_llm_provider_display(self, *, admin_api_key: str, model_name: str) -> tuple[str, str] | None:
+        """(provider label, real model id) for a litellm_config.yaml alias — e.g.
+        `("GroqCloud", "openai/gpt-oss-120b")` for `"groq-llama"` — so callers can show
+        "model (provider)" instead of the bare, often cryptic alias. `None` if
+        `model_name` no longer matches any routed provider.
+
+        Each provider (one API key) may route more than one model (see
+        platform_registry.core.llm_settings.PROVIDERS["groq"]) — `model_name` is
+        matched against each provider's nested `models` list, not the provider itself.
+
+        Reuses the same `/llm-settings/providers` list ui-react's admin Settings page
+        renders. Cached in-process for `_CACHE_TTL_SECONDS`.
+        """
+        now = time.monotonic()
+        cached = _providers_cache.get(self.base_url)
+        if cached is not None and cached[1] > now:
+            providers = cached[0]
+        else:
+            response = httpx.get(
+                f"{self.base_url}/llm-settings/providers",
+                headers={"Authorization": f"Bearer {admin_api_key}"},
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            providers = response.json()
+            _providers_cache[self.base_url] = (providers, now + _CACHE_TTL_SECONDS)
+
+        for provider in providers:
+            for model_entry in provider.get("models", []):
+                if model_entry.get("model_name") == model_name:
+                    model = model_entry.get("model")
+                    return (provider["label"], model if isinstance(model, str) else model_name)
+        return None

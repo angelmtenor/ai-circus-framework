@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { ScenarioSummary } from "./apiClient";
+import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
@@ -13,7 +13,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
  * here — the chat itself (with cited sources per reply) is the exploration surface.
  */
 export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
-  const [chatModel, setChatModel] = useState<string | null>(null);
+  const [chatModel, setChatModel] = useState<ChatModel | null>(null);
   const agent = useScenarioAgent(config.ragAgentUrl, scenario.slug, accessToken);
   // A fresh object literal here would make <CopilotKit> see a "changed" selfManagedAgents
   // prop on every re-render of RagView (e.g. every chatModel update) and reset its
@@ -39,8 +39,8 @@ function RagViewContent({
   scenario: ScenarioSummary;
   accessToken: string | null;
   agent: ReturnType<typeof useScenarioAgent>;
-  chatModel: string | null;
-  onModel: (model: string) => void;
+  chatModel: ChatModel | null;
+  onModel: (model: ChatModel) => void;
 }) {
   useChatGenerativeUiActions();
 
@@ -51,7 +51,12 @@ function RagViewContent({
         <div>
           <h2>
             {scenario.title}
-            {chatModel && <span className="chat-model-badge">{chatModel}</span>}
+            {chatModel && (
+              <span className="chat-model-badge">
+                {chatModel.model}
+                {chatModel.provider && ` (${chatModel.provider})`}
+              </span>
+            )}
           </h2>
           <p>{scenario.description}</p>
         </div>

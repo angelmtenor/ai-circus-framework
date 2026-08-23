@@ -118,17 +118,25 @@ export type DatasetExplainability = {
   sample_size: number;
 };
 
-export type LlmProvider = {
-  provider: string;
-  label: string;
+export type LlmProviderModel = {
   model_name: string;
+  label: string;
   route_exists: boolean;
   model: string | null;
   api_base: string | null;
+};
+
+export type LlmProvider = {
+  provider: string;
+  label: string;
   needs_key: boolean;
   needs_base: boolean;
   env_vars: string[];
   hint: string;
+  // A provider is one API key; most route a single model (one-element array), but
+  // e.g. GroqCloud routes more than one model off the same key — see
+  // platform_registry.core.llm_settings.PROVIDERS.
+  models: LlmProviderModel[];
 };
 
 export type LlmProviderTest = {
@@ -245,9 +253,10 @@ export async function listLlmProviders(baseUrl: string, accessToken: string | nu
 export async function testLlmProvider(
   baseUrl: string,
   provider: string,
+  modelName: string,
   accessToken: string | null,
 ): Promise<LlmProviderTest> {
-  const response = await fetch(`${baseUrl}/llm-settings/providers/${provider}/test`, {
+  const response = await fetch(`${baseUrl}/llm-settings/providers/${provider}/models/${modelName}/test`, {
     method: "POST",
     headers: headers(accessToken),
   });
@@ -275,14 +284,15 @@ export async function setActiveLlmModel(
   return body.model_name;
 }
 
+export type ChatModel = { model: string; provider: string | null };
+
 /**
- * The model that would answer this scenario's next chat message — lets the UI show
- * it before the first reply, not just alongside each answer.
+ * The model (and its provider) that would answer this scenario's next chat message —
+ * lets the UI show it before the first reply, not just alongside each answer.
  */
-export async function chatModel(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<string> {
+export async function chatModel(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ChatModel> {
   const response = await fetch(`${baseUrl}/model/${scenarioSlug}`, { headers: headers(accessToken) });
-  const body = await asJson<{ model: string }>(response);
-  return body.model;
+  return asJson<ChatModel>(response);
 }
 
 export type SubmissionError = { errors: Record<string, string> };
