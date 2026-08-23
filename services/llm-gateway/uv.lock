@@ -1194,7 +1194,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.136.3" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "litellm", extras = ["proxy"], specifier = ">=1.95.0" },
+    { name = "litellm", extras = ["proxy"], specifier = ">=1.97.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "psutil", specifier = ">=7.0.0" },
     { name = "py-cpuinfo", specifier = ">=9.0.0" },
