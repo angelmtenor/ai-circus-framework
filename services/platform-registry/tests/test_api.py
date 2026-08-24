@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from platform_registry.api import require_admin, require_org_match
+from platform_registry.api import require_admin, require_authenticated, require_org_match
 from platform_registry.app import app
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Base, Scenario
@@ -46,6 +46,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[require_admin] = lambda: None
     app.dependency_overrides[require_org_match] = lambda: None
+    app.dependency_overrides[require_authenticated] = lambda: None
     try:
         yield TestClient(app)
     finally:
@@ -283,3 +284,23 @@ def test_set_active_voice_settings_updates_in_place(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"stt_provider": "deepgram", "tts_provider": "cartesia"}
+
+
+def test_extract_document_txt(client: TestClient) -> None:
+    """POST /documents/extract passes .txt content straight through."""
+    response = client.post(
+        "/documents/extract",
+        files={"file": ("notes.txt", b"hello from a plain text attachment", "text/plain")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "text"
+    assert body["text"] == "hello from a plain text attachment"
+    assert body["truncated"] is False
+    assert body["used_ocr"] is False
+
+
+def test_extract_document_rejects_unsupported_extension(client: TestClient) -> None:
+    """An unrecognized extension is a 415, not a silent empty extraction."""
+    response = client.post("/documents/extract", files={"file": ("archive.zip", b"PK\x03\x04", "application/zip")})
+    assert response.status_code == 415

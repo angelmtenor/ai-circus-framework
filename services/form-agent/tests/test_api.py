@@ -20,7 +20,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from form_agent import api as api_module
-from form_agent.api import _embedder, _llm, _llm_model_name, _qdrant, _scenario_definition, _store, router
+from form_agent.api import _embedder, _llm, _llm_display, _llm_model_name, _qdrant, _scenario_definition, _store, router
 from form_agent.core.identity import resolve_identity
 from tests.conftest import FakeSecret
 
@@ -108,6 +108,7 @@ def _client_with(
     app.dependency_overrides[_embedder] = lambda: SimpleNamespace(encode_query=lambda _q: [0.1, 0.2])
     app.dependency_overrides[_llm] = lambda: llm
     app.dependency_overrides[_llm_model_name] = lambda: "gemini-flash"
+    app.dependency_overrides[_llm_display] = lambda: ("gemini-flash", "Google Gemini", True)
     app.dependency_overrides[_store] = lambda: store if store is not None else FakeObjectStore()
     return TestClient(app)
 
@@ -125,7 +126,7 @@ def test_model_endpoint_returns_the_active_model_without_sending_a_message() -> 
     response = client.get("/model/service_request")
 
     assert response.status_code == 200
-    assert response.json() == {"model": "gemini-flash"}
+    assert response.json() == {"model": "gemini-flash", "provider": "Google Gemini", "vision": True}
 
 
 def test_agui_unknown_scenario_returns_404() -> None:
@@ -206,6 +207,37 @@ def test_llm_model_name_falls_back_to_static_default_when_platform_registry_is_u
     monkeypatch.setattr(PlatformRegistryClient, "get_active_llm_model", _raise)
 
     assert _llm_model_name() == "llama3"
+
+
+def test_llm_display_resolves_the_provider_label_and_vision_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """/model surfaces "model (provider)" material plus whether the model accepts
+    image input — the real configured model id, its human-readable provider label,
+    and vision-capability, not just the bare litellm alias.
+    """
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(
+        PlatformRegistryClient,
+        "get_llm_provider_display",
+        lambda self, *, admin_api_key, model_name: ("OpenAI", "gpt-4o-mini", True),
+    )
+
+    assert _llm_display(model_name="gpt-4o-mini") == ("gpt-4o-mini", "OpenAI", True)
+
+
+def test_llm_display_falls_back_to_the_bare_alias_when_platform_registry_is_unreachable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A platform-registry hiccup shouldn't break the /model endpoint — just drop the
+    provider label/vision flag and show the bare alias.
+    """
+
+    def _raise(self: PlatformRegistryClient, *, admin_api_key: str, model_name: str) -> tuple[str, str, bool] | None:
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
+    monkeypatch.setattr(PlatformRegistryClient, "get_llm_provider_display", _raise)
+
+    assert _llm_display(model_name="groq-llama") == ("groq-llama", None, False)
 
 
 def test_llm_builds_a_client_for_the_given_model_name(monkeypatch: pytest.MonkeyPatch) -> None:

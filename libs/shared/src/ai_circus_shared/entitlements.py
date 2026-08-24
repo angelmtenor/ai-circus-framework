@@ -168,11 +168,13 @@ class PlatformRegistryClient:
         _active_voice_settings_cache[self.base_url] = (settings, now + _CACHE_TTL_SECONDS)
         return settings
 
-    def get_llm_provider_display(self, *, admin_api_key: str, model_name: str) -> tuple[str, str] | None:
-        """(provider label, real model id) for a litellm_config.yaml alias — e.g.
-        `("GroqCloud", "openai/gpt-oss-120b")` for `"groq-llama"` — so callers can show
-        "model (provider)" instead of the bare, often cryptic alias. `None` if
-        `model_name` no longer matches any routed provider.
+    def get_llm_provider_display(self, *, admin_api_key: str, model_name: str) -> tuple[str, str, bool] | None:
+        """(provider label, real model id, vision-capable) for a litellm_config.yaml
+        alias — e.g. `("GroqCloud", "openai/gpt-oss-120b", False)` for `"groq-llama"` —
+        so callers can show "model (provider)" instead of the bare, often cryptic
+        alias, and know whether an attached image can go straight to this model or
+        needs OCR first (see ChatPanel.tsx's attach flow). `None` if `model_name` no
+        longer matches any routed provider.
 
         Each provider (one API key) may route more than one model (see
         platform_registry.core.llm_settings.PROVIDERS["groq"]) — `model_name` is
@@ -199,5 +201,9 @@ class PlatformRegistryClient:
             for model_entry in provider.get("models", []):
                 if model_entry.get("model_name") == model_name:
                     model = model_entry.get("model")
-                    return (provider["label"], model if isinstance(model, str) else model_name)
+                    return (
+                        provider["label"],
+                        model if isinstance(model, str) else model_name,
+                        bool(model_entry.get("vision", False)),
+                    )
         return None

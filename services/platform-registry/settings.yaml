@@ -7,9 +7,10 @@
 # platform-registry owns the `platform` Postgres schema (tenants/scenarios/entitlements)
 # and seeds it from ../../scenarios/*.yaml at startup. It is NOT exposed through Traefik.
 # Its entitlement-mutation/llm-settings routes are admin-only, called by other backend
-# services or an operator. GET /entitlements/{org_id} IS called directly from ui-react's
-# browser code (over platform-registry's loopback-published port) to render the scenario
-# picker — see api.py's require_org_match for that route's own auth gate.
+# services or an operator. GET /entitlements/{org_id} and POST /documents/extract ARE
+# called directly from ui-react's browser code (over platform-registry's loopback-
+# published port) — see api.py's require_org_match/require_authenticated for those
+# routes' own auth gates.
 
 env_variables:
   - name: LOG_LEVEL

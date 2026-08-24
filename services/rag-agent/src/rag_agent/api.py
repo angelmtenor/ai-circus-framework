@@ -36,6 +36,7 @@ class ModelResponse(BaseModel):
 
     model: str
     provider: str | None = None
+    vision: bool = False
 
 
 def _qdrant(request: Request) -> QdrantClient:
@@ -59,10 +60,11 @@ def _llm_model_name() -> str:
         return config.LLM_MODEL
 
 
-def _llm_display(model_name: str = Depends(_llm_model_name)) -> tuple[str, str | None]:
-    """(model, provider label) for the UI's "model (provider)" badge — e.g.
-    `("openai/gpt-oss-120b", "GroqCloud")`. Falls back to the bare alias with no
-    provider label if platform-registry is unreachable or the alias isn't routed.
+def _llm_display(model_name: str = Depends(_llm_model_name)) -> tuple[str, str | None, bool]:
+    """(model, provider label, vision-capable) for the UI's "model (provider)" badge —
+    e.g. `("openai/gpt-oss-120b", "GroqCloud", False)`. Falls back to the bare alias
+    with no provider label and vision=False if platform-registry is unreachable or
+    the alias isn't routed.
     """
     config = get_env_config()
     registry = PlatformRegistryClient(base_url=config.PLATFORM_REGISTRY_URL)
@@ -73,9 +75,9 @@ def _llm_display(model_name: str = Depends(_llm_model_name)) -> tuple[str, str |
     except httpx.HTTPError:
         display = None
     if display is None:
-        return model_name, None
-    label, model = display
-    return model, label
+        return model_name, None, False
+    label, model, vision = display
+    return model, label, vision
 
 
 def _llm(request: Request, model_name: str = Depends(_llm_model_name)) -> BaseChatModel:
@@ -118,13 +120,15 @@ def healthz() -> dict[str, str]:
 def model_endpoint(
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
-    display: tuple[str, str | None] = Depends(_llm_display),
+    display: tuple[str, str | None, bool] = Depends(_llm_display),
 ) -> ModelResponse:
     """The model (and its provider) that would answer this scenario's next chat
     message, so the UI can show it upfront rather than only after the first reply.
+    `vision` tells ui-react's ChatPanel whether an attached image can go straight to
+    this model or needs OCR text-extraction first.
     """
-    model, provider = display
-    return ModelResponse(model=model, provider=provider)
+    model, provider, vision = display
+    return ModelResponse(model=model, provider=provider, vision=vision)
 
 
 @router.post("/agui/{scenario_slug}")

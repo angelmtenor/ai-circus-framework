@@ -57,5 +57,10 @@ def build_form_system_prompt(definition: ScenarioDefinition) -> str:
         "You'll also be told the form's current values and which required fields are still missing or invalid "
         "(as context, not something the user typed) — use that to avoid re-asking about fields that are already "
         "filled in correctly, and to explain concretely what's still needed when the user asks why they can't "
-        "submit yet."
+        "submit yet.\n\n"
+        "A user message may include a block starting with '[Attached file: <name>]' — that is the real, "
+        "already-extracted text of a file they just uploaded in this browser session (via OCR/text-extraction, "
+        "never fabricated). Treat it as ground truth you have already read in full: answer questions about it "
+        "directly, use it to fill in matching form fields when appropriate, and never claim you lack access to "
+        "it or ask the user to go check the file themselves."
     )

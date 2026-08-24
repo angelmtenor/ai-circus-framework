@@ -1110,6 +1110,88 @@ select:focus {
   box-shadow: none;
 }
 
+.chat-attach {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-attach:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+}
+
+.chat-attach:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chat-attach-input {
+  display: none;
+}
+
+.chat-attachment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chat-attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.6rem;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.chat-attachment-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9rem;
+}
+
+.chat-attachment-chip-note {
+  color: var(--dim);
+  font-size: 0.72rem;
+}
+
+.chat-attachment-chip-clear {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.chat-attachment-chip-clear:hover {
+  color: #e05a5a;
+}
+
+.chat-attachment-preview {
+  max-width: 12rem;
+  max-height: 12rem;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
 .chat-mic-wrap {
   display: flex;
   align-items: center;

@@ -124,6 +124,7 @@ export type LlmProviderModel = {
   route_exists: boolean;
   model: string | null;
   api_base: string | null;
+  vision: boolean;
 };
 
 export type LlmProvider = {
@@ -313,15 +314,52 @@ export async function setActiveVoiceSettings(
   return asJson<ActiveVoiceSettings>(response);
 }
 
-export type ChatModel = { model: string; provider: string | null };
+export type ChatModel = { model: string; provider: string | null; vision: boolean };
 
 /**
  * The model (and its provider) that would answer this scenario's next chat message —
  * lets the UI show it before the first reply, not just alongside each answer.
+ * `vision` tells ChatPanel's attach flow whether an attached image can go straight
+ * to this model or needs OCR text-extraction first (see extractDocument below).
  */
 export async function chatModel(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ChatModel> {
   const response = await fetch(`${baseUrl}/model/${scenarioSlug}`, { headers: headers(accessToken) });
   return asJson<ChatModel>(response);
+}
+
+export type DocumentExtract = {
+  filename: string;
+  kind: "text" | "markdown" | "docx" | "pdf" | "image";
+  text: string;
+  truncated: boolean;
+  page_count: number | null;
+  used_ocr: boolean;
+};
+
+/**
+ * Best-effort text extraction for a session-only chat attachment — platform-registry
+ * never persists the file (see platform_registry.core.document_extraction's module
+ * docstring); the extracted text is folded into the next chat message as plain text
+ * by ChatPanel's `send()` and then discarded along with the `File` object itself.
+ * Called for every non-image attachment (pdf/docx/md/txt), and for an image
+ * attachment when the scenario's active model has no vision support (ChatModel.vision).
+ */
+export async function extractDocument(
+  platformRegistryUrl: string,
+  file: File,
+  accessToken: string | null,
+): Promise<DocumentExtract> {
+  const body = new FormData();
+  body.append("file", file, file.name);
+  const response = await fetch(`${platformRegistryUrl}/documents/extract`, {
+    method: "POST",
+    // No Content-Type header here: the browser sets multipart/form-data with the
+    // right boundary itself — setting it manually (as headers() would, via its
+    // "application/json" default) breaks the multipart parse server-side.
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    body,
+  });
+  return asJson<DocumentExtract>(response);
 }
 
 export type SubmissionError = { errors: Record<string, string> };

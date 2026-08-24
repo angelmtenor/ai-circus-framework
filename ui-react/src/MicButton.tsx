@@ -108,7 +108,7 @@ export function MicButton({
           </span>
         )}
       </button>
-      {providers && (
+      {providers && active && (
         <span className="chat-voice-providers" title="Voice mode's current speech-to-text/text-to-speech engine">
           🎙️ {providerLabel(providers.stt)} · 🔊 {providerLabel(providers.tts)}
         </span>

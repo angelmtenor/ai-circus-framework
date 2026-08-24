@@ -42,6 +42,12 @@ class ProviderModel:
     "gpt-oss-120b (accurate)" — distinct from `ProviderSpec.label`, which names the
     provider/API key itself, e.g. "GroqCloud"."""
 
+    vision: bool = False
+    """Whether this model accepts image input — lets ui-react's chat attach flow
+    decide whether an attached image can go straight to the model (as an AG-UI
+    `ImageInputContent` block) or needs OCR text-extraction first (see
+    platform_registry.core.document_extraction)."""
+
 
 @dataclass(frozen=True)
 class ProviderSpec:
@@ -63,7 +69,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "openai": ProviderSpec(
         key="openai",
         label="OpenAI",
-        models=(ProviderModel(model_name="gpt-4o-mini", label="gpt-4o-mini"),),
+        models=(ProviderModel(model_name="gpt-4o-mini", label="gpt-4o-mini", vision=True),),
         needs_key=True,
         needs_base=False,
         env_vars=("OPENAI_API_KEY",),
@@ -72,7 +78,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "gemini": ProviderSpec(
         key="gemini",
         label="Google Gemini",
-        models=(ProviderModel(model_name="gemini-flash", label="gemini-3.1-flash-lite"),),
+        models=(ProviderModel(model_name="gemini-flash", label="gemini-3.1-flash-lite", vision=True),),
         needs_key=True,
         needs_base=False,
         env_vars=("GOOGLE_API_KEY",),
@@ -116,7 +122,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         key="anthropic",
         label="Anthropic Claude",
-        models=(ProviderModel(model_name="claude-haiku", label="claude-haiku-4-5"),),
+        models=(ProviderModel(model_name="claude-haiku", label="claude-haiku-4-5", vision=True),),
         needs_key=True,
         needs_base=False,
         env_vars=("ANTHROPIC_API_KEY",),
@@ -125,7 +131,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "azure_openai": ProviderSpec(
         key="azure_openai",
         label="Azure OpenAI",
-        models=(ProviderModel(model_name="azure-gpt4o", label="azure-gpt4o"),),
+        models=(ProviderModel(model_name="azure-gpt4o", label="azure-gpt4o", vision=True),),
         needs_key=True,
         needs_base=True,
         env_vars=("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_API_BASE"),
@@ -204,6 +210,7 @@ def list_providers(base_url: str, master_key: str) -> list[dict[str, object]]:
                 "route_exists": deployment is not None,
                 "model": configured_model.split("/", 1)[-1] if configured_model else None,
                 "api_base": litellm_params.get("api_base"),
+                "vision": model.vision,
             })
         results.append({
             "provider": spec.key,

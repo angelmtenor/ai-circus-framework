@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CopilotKit, useCopilotReadable } from "@copilotkit/react-core";
-import type { ScenarioSummary } from "./apiClient";
+import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { submitForm } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
@@ -49,6 +49,7 @@ function AssistedFormContent({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [caseNumber, setCaseNumber] = useState<string | null>(null);
+  const [chatModel, setChatModel] = useState<ChatModel | null>(null);
 
   const errors = form ? validateForm(form, values) : {};
 
@@ -128,7 +129,18 @@ function AssistedFormContent({
           sampleQuestions={scenario.sample_questions}
           accessToken={accessToken}
           variant="full"
-          title={`Ask about ${scenario.title}`}
+          title={
+            <>
+              Ask about {scenario.title}
+              {chatModel && (
+                <span className="chat-model-badge">
+                  {chatModel.model}
+                  {chatModel.provider && ` (${chatModel.provider})`}
+                </span>
+              )}
+            </>
+          }
+          onModel={setChatModel}
           onFrontendToolCall={handleFrontendToolCall}
         />
       </div>

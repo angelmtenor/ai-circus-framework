@@ -35,7 +35,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
     app.dependency_overrides[_prompt_cache] = lambda: SimpleNamespace(get=lambda _org_id, _slug: "system prompt")
     app.dependency_overrides[_llm_model] = lambda: "gpt-4o-mini"
-    app.dependency_overrides[_llm_display] = lambda: ("gpt-4o-mini", "OpenAI")
+    app.dependency_overrides[_llm_display] = lambda: ("gpt-4o-mini", "OpenAI", True)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -50,7 +50,7 @@ def test_model_endpoint_returns_the_active_model_without_sending_a_message(clien
     response = client.get("/model/churn")
 
     assert response.status_code == 200
-    assert response.json() == {"model": "gpt-4o-mini", "provider": "OpenAI"}
+    assert response.json() == {"model": "gpt-4o-mini", "provider": "OpenAI", "vision": True}
 
 
 def test_agui_unknown_scenario_returns_404() -> None:
@@ -109,10 +109,10 @@ def test_llm_display_resolves_the_provider_label_and_real_model_id(monkeypatch: 
     monkeypatch.setattr(
         PlatformRegistryClient,
         "get_llm_provider_display",
-        lambda self, *, admin_api_key, model_name: ("GroqCloud", "openai/gpt-oss-120b"),
+        lambda self, *, admin_api_key, model_name: ("GroqCloud", "openai/gpt-oss-120b", False),
     )
 
-    assert _llm_display(llm_model="groq-llama") == ("openai/gpt-oss-120b", "GroqCloud")
+    assert _llm_display(llm_model="groq-llama") == ("openai/gpt-oss-120b", "GroqCloud", False)
 
 
 def test_llm_display_falls_back_to_the_bare_alias_when_platform_registry_is_unreachable(
@@ -122,13 +122,13 @@ def test_llm_display_falls_back_to_the_bare_alias_when_platform_registry_is_unre
     provider label and show the bare alias.
     """
 
-    def _raise(self: PlatformRegistryClient, *, admin_api_key: str, model_name: str) -> tuple[str, str] | None:
+    def _raise(self: PlatformRegistryClient, *, admin_api_key: str, model_name: str) -> tuple[str, str, bool] | None:
         raise httpx.ConnectError("connection refused")
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakeLlmEnvConfig())
     monkeypatch.setattr(PlatformRegistryClient, "get_llm_provider_display", _raise)
 
-    assert _llm_display(llm_model="groq-llama") == ("groq-llama", None)
+    assert _llm_display(llm_model="groq-llama") == ("groq-llama", None, False)
 
 
 def _fake_http_request(authorization: str | None) -> Request:
@@ -203,7 +203,9 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
     monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
-    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_raising_agent_run))
+    monkeypatch.setattr(
+        api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_raising_agent_run)
+    )
 
     response = await agui_endpoint(
         scenario_slug="motor_speed",

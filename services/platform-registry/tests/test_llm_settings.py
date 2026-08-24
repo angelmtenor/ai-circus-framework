@@ -91,6 +91,8 @@ def test_list_providers_nests_models_per_provider_and_reports_route_exists(monke
     openai = next(p for p in providers if p["provider"] == "openai")
     assert len(openai["models"]) == 1
     assert openai["models"][0]["route_exists"] is True
+    assert openai["models"][0]["vision"] is True  # gpt-4o-mini is vision-capable
+    assert models_by_name["groq-llama"]["vision"] is False
 
 
 def test_list_providers_raises_llm_gateway_error_on_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
