@@ -427,8 +427,11 @@ Traefik Kubernetes CRD). No Helm chart exists yet.
 
 Kubernetes/Helm manifests, a custom in-app admin screen, a task queue for on-demand
 tenant-triggered jobs, distributed tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
-voice/multimodal agents (Pipecat), per-tenant billing/metering, and a shared cache (e.g. Redis)
-for multi-replica deployments. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat,
+voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis)
+for multi-replica deployments, and (optional) extracting embedded images out of uploaded PDFs
+in the chat attachment flow — today `platform_registry.core.document_extraction` only pulls
+text/OCR out of a PDF, so a figure or diagram embedded in an otherwise text-native page never
+reaches a vision-capable model. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat,
 previously listed here, is built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`.)
 
 ---

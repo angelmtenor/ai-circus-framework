@@ -9,9 +9,16 @@ directly from the browser (see this service's settings.yaml header) to render th
 scenario picker, so `require_org_match` below gives them their own auth — the same
 identity resolution every other service uses (see ai_circus_shared.auth) — rather than
 trusting the caller to have validated the org_id in the URL against anything.
+
+POST /documents/extract is also called directly from the browser (ui-react's
+ChatPanel attach flow) — it's gated by `require_authenticated` rather than
+`require_org_match`, since extracting text from an uploaded file never reads or
+writes per-org data (no org_id in its path to match against).
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 from ai_circus_shared.auth import (
     AuthSettingsAdapter,
@@ -20,13 +27,13 @@ from ai_circus_shared.auth import (
     resolve_org_identity,
 )
 from ai_circus_shared.entitlements import ScenarioSummary
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from platform_registry import get_env_config
-from platform_registry.core import llm_settings
+from platform_registry.core import document_extraction, llm_settings
 from platform_registry.core.db import get_session
 from platform_registry.core.models import Entitlement, LlmSetting, Scenario, VoiceSetting
 
@@ -78,6 +85,44 @@ def require_org_match(org_id: str, authorization: str | None = Header(default=No
         raise HTTPException(status_code=403, detail=f"Not authorized to read org {org_id!r}'s entitlements.")
 
 
+def require_authenticated(authorization: str | None = Header(default=None)) -> None:
+    """Gate POST /documents/extract on the caller being *some* real, resolvable
+    identity — unlike `require_org_match`, no org-id path parameter to match against,
+    since extracting text from an uploaded file never touches per-org data (it's a
+    stateless utility, not a scenario/entitlement read). Deliberately uses
+    `resolve_org_identity`, not `resolve_caller_identity`: there's no `scenario_slug`
+    here for the latter's entitlement check to apply to.
+    """
+    config = get_env_config()
+    settings = AuthSettingsAdapter(
+        AUTH_DISABLED=config.AUTH_DISABLED,
+        DEV_ORG_ID=config.DEV_ORG_ID,
+        LOGTO_ISSUER=config.LOGTO_ISSUER,
+        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
+        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
+        ENGINEERING_DEMO_API_KEY=(
+            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
+        ),
+        PLATFORM_REGISTRY_URL="",  # unused by resolve_org_identity
+    )
+    try:
+        resolve_org_identity(authorization=authorization, settings=settings)
+    except TokenValidationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+class DocumentExtractOut(BaseModel):
+    """Response body for POST /documents/extract."""
+
+    filename: str
+    kind: Literal["text", "markdown", "docx", "pdf", "image"]
+    text: str
+    truncated: bool
+    page_count: int | None = None
+    used_ocr: bool = False
+
+
 class LlmProviderModelOut(BaseModel):
     """One of a provider's models' live routing status, per llm_settings.list_providers."""
 
@@ -86,6 +131,7 @@ class LlmProviderModelOut(BaseModel):
     route_exists: bool
     model: str | None
     api_base: str | None
+    vision: bool = False
 
 
 class LlmProviderOut(BaseModel):
@@ -157,6 +203,37 @@ def verify_engineering_demo_key(authorization: str | None = Header(default=None)
     if not demo_key or not is_admin_bearer_token(authorization, demo_key):
         raise HTTPException(status_code=401, detail="Invalid engineering demo key.")
     return {"valid": True}
+
+
+@router.post(
+    "/documents/extract",
+    response_model=DocumentExtractOut,
+    dependencies=[Depends(require_authenticated)],
+)
+async def extract_document(file: UploadFile) -> DocumentExtractOut:
+    """Best-effort text extraction from a session-only chat attachment.
+
+    ui-react's ChatPanel calls this for any non-image attachment (pdf/docx/md/txt),
+    and for an image attachment when the active model has no vision support (see
+    ChatModel.vision) — the extracted text is folded into the next chat message as
+    plain text, never persisted here or anywhere else (see
+    platform_registry.core.document_extraction's module docstring).
+    """
+    if file.filename is None:
+        raise HTTPException(status_code=400, detail="Uploaded file has no filename.")
+    data = await file.read()
+    try:
+        extracted = document_extraction.extract_document(file.filename, data)
+    except document_extraction.UnsupportedDocumentError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    return DocumentExtractOut(
+        filename=file.filename,
+        kind=extracted.kind,
+        text=extracted.text,
+        truncated=extracted.truncated,
+        page_count=extracted.page_count,
+        used_ocr=extracted.used_ocr,
+    )
 
 
 @router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary], dependencies=[Depends(require_org_match)])

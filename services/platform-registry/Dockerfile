@@ -19,6 +19,14 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime
 WORKDIR /app
+
+# tesseract-ocr + poppler-utils back document_extraction.py's OCR fallback for
+# scanned PDF pages / photographed images (pytesseract/pdf2image call out to these
+# binaries) — small apt packages, no ML model weights, unlike a layout-aware OCR
+# stack such as docling.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --create-home --shell /bin/bash app
 
 COPY --from=builder --chown=app:app /app/services/platform-registry/.venv services/platform-registry/.venv

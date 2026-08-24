@@ -191,13 +191,17 @@ def test_get_llm_provider_display_matches_by_model_name_and_strips_the_configure
     against each provider's `models` list, not the provider entry itself.
     """
     providers = [
-        {"provider": "openai", "label": "OpenAI", "models": [{"model_name": "gpt-4o-mini", "model": "gpt-4o-mini"}]},
+        {
+            "provider": "openai",
+            "label": "OpenAI",
+            "models": [{"model_name": "gpt-4o-mini", "model": "gpt-4o-mini", "vision": True}],
+        },
         {
             "provider": "groq",
             "label": "GroqCloud",
             "models": [
-                {"model_name": "groq-llama", "model": "openai/gpt-oss-120b"},
-                {"model_name": "groq-oss-20b", "model": "gpt-oss-20b"},
+                {"model_name": "groq-llama", "model": "openai/gpt-oss-120b", "vision": False},
+                {"model_name": "groq-oss-20b", "model": "gpt-oss-20b", "vision": False},
             ],
         },
     ]
@@ -207,10 +211,17 @@ def test_get_llm_provider_display_matches_by_model_name_and_strips_the_configure
     assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama") == (
         "GroqCloud",
         "openai/gpt-oss-120b",
+        False,
     )
     assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-oss-20b") == (
         "GroqCloud",
         "gpt-oss-20b",
+        False,
+    )
+    assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="gpt-4o-mini") == (
+        "OpenAI",
+        "gpt-4o-mini",
+        True,
     )
 
 
