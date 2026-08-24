@@ -233,6 +233,10 @@ export default function App() {
             theme={theme}
             themes={themes}
             onThemeChange={setThemeId}
+            // Voice-provider availability isn't scenario-specific data — this is just
+            // an anchor scenario_slug for agui-voice's entitlement check (see
+            // api/providers.py); any scenario the admin org is entitled to works.
+            voiceScenarioSlug={scenarios[0]?.slug ?? null}
           />
         ) : (
           <>

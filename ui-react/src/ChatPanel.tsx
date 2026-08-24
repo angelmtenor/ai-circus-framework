@@ -9,7 +9,10 @@ function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): 
   return zodToJsonSchemaImpl(schema as never, options as never) as Record<string, unknown>;
 }
 import { chatModel, type ChatModel } from "./apiClient";
+import { config } from "./config";
+import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
+import { SpeakerButton } from "./SpeakerButton";
 
 /**
  * Chat UI driven directly by an @ag-ui/client HttpAgent (see RagView.tsx/TabularView.tsx,
@@ -238,7 +241,19 @@ export function ChatPanel({
           <div key={turn.id} className={`chat-turn chat-turn--${turn.role}`}>
             <div className="chat-avatar">{turn.role === "user" ? "🧑" : "🤖"}</div>
             <div>
-              {typeof turn.content === "string" && turn.content && <div className="chat-bubble">{renderMarkdown(turn.content)}</div>}
+              {typeof turn.content === "string" && turn.content && (
+                <div className="chat-bubble">
+                  {renderMarkdown(turn.content)}
+                  {turn.role === "assistant" && (
+                    <SpeakerButton
+                      text={turn.content}
+                      voiceUrl={config.voiceUrl}
+                      scenarioSlug={scenarioSlug}
+                      accessToken={accessToken}
+                    />
+                  )}
+                </div>
+              )}
               {turn.role === "assistant" &&
                 turn.toolCalls?.map((call) => {
                   const tool = (copilotkit.tools as CopilotKitCoreTool[]).find((t) => t.name === call.function.name);
@@ -287,6 +302,7 @@ export function ChatPanel({
         </div>
       )}
       <div className="chat-input-row">
+        <MicButton agent={agent} voiceUrl={config.voiceUrl} scenarioSlug={scenarioSlug} accessToken={accessToken} />
         <input
           value={message}
           onChange={(e) => setMessage(e.target.value)}

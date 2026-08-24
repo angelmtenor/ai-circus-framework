@@ -25,6 +25,7 @@ _CACHE_TTL_SECONDS = 30.0
 _entitlement_cache: dict[tuple[str, str, str], tuple[bool, float]] = {}
 _active_model_cache: dict[str, tuple[str, float]] = {}
 _providers_cache: dict[str, tuple[list[dict[str, Any]], float]] = {}
+_active_voice_settings_cache: dict[str, tuple[tuple[str, str], float]] = {}
 
 
 class EntitlementDeniedError(Exception):
@@ -107,9 +108,20 @@ class PlatformRegistryClient:
         if not entitled:
             raise EntitlementDeniedError(f"Org {org_id!r} is not entitled to scenario {scenario_slug!r}.")
 
-    def list_scenarios(self, *, org_id: str) -> list[ScenarioSummary]:
-        """Return the scenarios the given org is entitled to."""
-        response = httpx.get(f"{self.base_url}/entitlements/{org_id}", timeout=self.timeout_seconds)
+    def list_scenarios(self, *, org_id: str, authorization: str | None = None) -> list[ScenarioSummary]:
+        """Return the scenarios the given org is entitled to.
+
+        Unlike `check_entitlement` above, platform-registry gates this route with
+        `require_org_match` (the caller must prove they *are* `org_id`) since it's
+        also called directly by `ui-react` to render the scenario picker — so a
+        server-to-server caller (e.g. agui-voice resolving a scenario's `kind`) must
+        forward the end user's own bearer token here, same as
+        `PredictionServiceClient` forwarding it on to `prediction`. Omit
+        `authorization` only when calling as a trusted admin/dev caller that already
+        cleared its own auth check.
+        """
+        headers = {"Authorization": authorization} if authorization else {}
+        response = httpx.get(f"{self.base_url}/entitlements/{org_id}", headers=headers, timeout=self.timeout_seconds)
         response.raise_for_status()
         return [ScenarioSummary(**item) for item in response.json()]
 
@@ -133,6 +145,28 @@ class PlatformRegistryClient:
         model_name = response.json()["model_name"]
         _active_model_cache[self.base_url] = (model_name, now + _CACHE_TTL_SECONDS)
         return model_name
+
+    def get_active_voice_settings(self, *, admin_api_key: str) -> tuple[str, str]:
+        """Return `(stt_provider, tts_provider)` agui-voice should use for its next WS
+        connection/`/tts` call — the Settings page's live voice-mode picker.
+        Raises on failure (network/404/etc); callers decide whether to fall back to a
+        static default. Cached in-process for `_CACHE_TTL_SECONDS`.
+        """
+        now = time.monotonic()
+        cached = _active_voice_settings_cache.get(self.base_url)
+        if cached is not None and cached[1] > now:
+            return cached[0]
+
+        response = httpx.get(
+            f"{self.base_url}/voice-settings/active",
+            headers={"Authorization": f"Bearer {admin_api_key}"},
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        body = response.json()
+        settings = (body["stt_provider"], body["tts_provider"])
+        _active_voice_settings_cache[self.base_url] = (settings, now + _CACHE_TTL_SECONDS)
+        return settings
 
     def get_llm_provider_display(self, *, admin_api_key: str, model_name: str) -> tuple[str, str] | None:
         """(provider label, real model id) for a litellm_config.yaml alias — e.g.

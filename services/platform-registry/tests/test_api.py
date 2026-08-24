@@ -243,3 +243,43 @@ def test_set_active_llm_model_updates_in_place(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"model_name": "groq-llama"}
+
+
+def test_get_active_voice_settings_404s_before_any_is_set(client: TestClient) -> None:
+    """No voice_settings row yet (fresh DB, no seeding) is a 404, not a made-up default."""
+    response = client.get("/voice-settings/active")
+    assert response.status_code == 404
+
+
+def test_set_then_get_active_voice_settings(client: TestClient) -> None:
+    """Setting the active STT/TTS provider persists it for subsequent reads — no restart involved."""
+    response = client.put("/voice-settings/active", json={"stt_provider": "deepgram", "tts_provider": "elevenlabs"})
+    assert response.status_code == 200
+    assert response.json() == {"stt_provider": "deepgram", "tts_provider": "elevenlabs"}
+
+    assert client.get("/voice-settings/active").json() == {"stt_provider": "deepgram", "tts_provider": "elevenlabs"}
+
+
+def test_set_active_voice_settings_rejects_unknown_stt_provider(client: TestClient) -> None:
+    """An stt_provider outside agui-voice's known set is rejected."""
+    response = client.put(
+        "/voice-settings/active", json={"stt_provider": "not-a-real-provider", "tts_provider": "piper"}
+    )
+    assert response.status_code == 400
+
+
+def test_set_active_voice_settings_rejects_unknown_tts_provider(client: TestClient) -> None:
+    """A tts_provider outside agui-voice's known set is rejected."""
+    response = client.put(
+        "/voice-settings/active", json={"stt_provider": "whisper", "tts_provider": "not-a-real-provider"}
+    )
+    assert response.status_code == 400
+
+
+def test_set_active_voice_settings_updates_in_place(client: TestClient) -> None:
+    """Setting voice settings twice updates the same singleton row rather than erroring."""
+    client.put("/voice-settings/active", json={"stt_provider": "whisper", "tts_provider": "piper"})
+    response = client.put("/voice-settings/active", json={"stt_provider": "deepgram", "tts_provider": "cartesia"})
+
+    assert response.status_code == 200
+    assert response.json() == {"stt_provider": "deepgram", "tts_provider": "cartesia"}

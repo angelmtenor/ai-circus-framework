@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import {
   getActiveLlmModel,
+  getActiveVoiceSettings,
   listLlmProviders,
   setActiveLlmModel,
+  setActiveVoiceSettings,
   testLlmProvider,
+  voiceProviders,
   type LlmProvider,
   type LlmProviderTest,
+  type VoiceProviders,
 } from "./apiClient";
 import { config } from "./config";
 import type { Theme } from "./themes";
@@ -63,12 +67,18 @@ export function Settings({
   theme,
   themes,
   onThemeChange,
+  voiceScenarioSlug,
 }: {
   accessToken: string | null;
   isAdmin: boolean;
   theme: Theme;
   themes: Theme[];
   onThemeChange: (id: string) => void;
+  // Anchor scenario for agui-voice's per-scenario entitlement check (see
+  // api/providers.py) — the data returned isn't scenario-specific, any scenario
+  // the admin org is entitled to works. `null` while the scenario list is still
+  // loading.
+  voiceScenarioSlug: string | null;
 }) {
   const [providers, setProviders] = useState<LlmProvider[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +119,50 @@ export function Settings({
   }
 
   useEffect(load, [accessToken, isAdmin]);
+
+  const [voiceOptions, setVoiceOptions] = useState<VoiceProviders | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [selectedStt, setSelectedStt] = useState("");
+  const [selectedTts, setSelectedTts] = useState("");
+  const [savingVoice, setSavingVoice] = useState(false);
+  const [voiceSaveMessage, setVoiceSaveMessage] = useState<string | null>(null);
+
+  function loadVoice() {
+    if (!isAdmin || !voiceScenarioSlug) return;
+    setVoiceError(null);
+    Promise.all([
+      voiceProviders(config.voiceUrl, voiceScenarioSlug, accessToken),
+      getActiveVoiceSettings(config.platformRegistryUrl, accessToken),
+    ])
+      .then(([options, active]) => {
+        setVoiceOptions(options);
+        // Prefer the persisted choice over the resolved/fallback "active" value
+        // above — a picker should show what's actually *saved*, not what agui-voice
+        // is falling back to because that choice isn't usable on this instance.
+        setSelectedStt(active?.stt_provider ?? options.stt.active);
+        setSelectedTts(active?.tts_provider ?? options.tts.active);
+      })
+      .catch((e) => setVoiceError((e as Error).message));
+  }
+
+  useEffect(loadVoice, [accessToken, isAdmin, voiceScenarioSlug]);
+
+  async function saveVoiceSettings() {
+    setSavingVoice(true);
+    setVoiceSaveMessage(null);
+    try {
+      const saved = await setActiveVoiceSettings(config.platformRegistryUrl, selectedStt, selectedTts, accessToken);
+      setSelectedStt(saved.stt_provider);
+      setSelectedTts(saved.tts_provider);
+      setVoiceSaveMessage(
+        `Now using STT "${saved.stt_provider}" / TTS "${saved.tts_provider}" — applies to the very next voice request, no restart needed.`,
+      );
+    } catch (e) {
+      setVoiceSaveMessage(`Failed to save: ${(e as Error).message}`);
+    } finally {
+      setSavingVoice(false);
+    }
+  }
 
   async function saveActiveModel(modelName: string) {
     setSavingModel(true);
@@ -297,6 +351,61 @@ export function Settings({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          <div className="settings-card-header">
+            <h3>Voice Mode Settings</h3>
+          </div>
+          <p className="panel-hint">
+            Which speech-to-text/text-to-speech engine agui-voice uses for live voice mode (MicButton) and the
+            speaker icon (SpeakerButton) — applies to the very next request, no restart. Defaults to the
+            self-hosted, open-source engines (Whisper/Piper, no API key needed); a cloud option stays disabled
+            here until its API key is set in agui-voice's own <code>.env</code>.
+          </p>
+          {voiceError && <p className="error">{voiceError}</p>}
+          {!voiceScenarioSlug && !voiceError && <div className="app-loading">Loading…</div>}
+          {voiceOptions && (
+            <div className="panel-card settings-card">
+              <h3>Active STT / TTS</h3>
+              <label className="panel-hint" htmlFor="voice-stt-select">
+                Speech-to-text
+              </label>
+              <select
+                id="voice-stt-select"
+                className="settings-model-select"
+                value={selectedStt}
+                disabled={savingVoice}
+                onChange={(e) => setSelectedStt(e.target.value)}
+              >
+                {voiceOptions.stt.options.map((o) => (
+                  <option key={o.id} value={o.id} disabled={!o.available}>
+                    {o.label}
+                    {!o.available ? ` — ${o.reason}` : ""}
+                  </option>
+                ))}
+              </select>
+              <label className="panel-hint" htmlFor="voice-tts-select">
+                Text-to-speech
+              </label>
+              <select
+                id="voice-tts-select"
+                className="settings-model-select"
+                value={selectedTts}
+                disabled={savingVoice}
+                onChange={(e) => setSelectedTts(e.target.value)}
+              >
+                {voiceOptions.tts.options.map((o) => (
+                  <option key={o.id} value={o.id} disabled={!o.available}>
+                    {o.label}
+                    {!o.available ? ` — ${o.reason}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-secondary" onClick={saveVoiceSettings} disabled={savingVoice}>
+                {savingVoice ? "Saving…" : "Save"}
+              </button>
+              {voiceSaveMessage && <p className="panel-hint">{voiceSaveMessage}</p>}
             </div>
           )}
         </>

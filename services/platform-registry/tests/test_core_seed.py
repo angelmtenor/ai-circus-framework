@@ -9,8 +9,8 @@ from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from platform_registry.core.models import Base, Entitlement, LlmSetting, Scenario
-from platform_registry.core.seed import seed_default_llm_setting, seed_scenarios
+from platform_registry.core.models import Base, Entitlement, LlmSetting, Scenario, VoiceSetting
+from platform_registry.core.seed import seed_default_llm_setting, seed_default_voice_setting, seed_scenarios
 
 SCENARIOS_DIR = Path(__file__).resolve().parents[3] / "scenarios"
 
@@ -168,3 +168,23 @@ def test_seed_default_llm_setting_never_overwrites_an_existing_choice(session: S
     seed_default_llm_setting(session, default_model_name="llama3")
 
     assert session.get(LlmSetting, 1).model_name == "gemini-flash"
+
+
+def test_seed_default_voice_setting_inserts_on_first_boot(session: Session) -> None:
+    """A fresh DB gets the default (self-hosted/open) STT/TTS providers seeded."""
+    seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
+
+    setting = session.get(VoiceSetting, 1)
+    assert setting.stt_provider == "whisper"
+    assert setting.tts_provider == "piper"
+
+
+def test_seed_default_voice_setting_never_overwrites_an_existing_choice(session: Session) -> None:
+    """Re-running the seed on restart doesn't clobber an admin's already-saved provider choice."""
+    seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
+    session.get(VoiceSetting, 1).tts_provider = "elevenlabs"
+    session.commit()
+
+    seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
+
+    assert session.get(VoiceSetting, 1).tts_provider == "elevenlabs"

@@ -1,0 +1,197 @@
+# Project metadata and configuration for agui-voice
+# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+
+[project]
+name = "agui-voice"
+version = "0.1.0"
+description = "ai-circus-framework agui-voice service"
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
+keywords = [
+    "python",
+    "packaging",
+    "template",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "ag-ui-protocol>=0.1.20",
+    "ai-circus-shared",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "pipecat-ai[piper,silero,websocket,whisper]==1.7.0",
+    "psutil>=7.0.0",
+    "py-cpuinfo>=9.0.0",
+    "pydantic>=2.11.4",
+    "pydantic-settings>=2.9.1",
+    "PyYAML>=6.0.2",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/ai-circus-framework/agui-voice"
+Repository = "https://github.com/ai-circus-framework/agui-voice"
+BugTracker = "https://github.com/ai-circus-framework/agui-voice/issues"
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.14",
+    "deptry>=0.23.0",
+    "packaging>=24.0",      # used directly by check_full_env.py
+    "pre-commit>=4.2.0",
+    "pyinstrument>=5.0.1",
+    "pyrefly>=0.53.0",       # replaces pyright
+    "python-dotenv>=1.0.1",  # used directly by check_full_env.py
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "rich>=13.7.0",          # optional pretty output for check_full_env.py
+    "ruff>=0.11.8",
+    "twine>=6.1.0",
+    "pytest-asyncio>=1.4.0",
+    "deepgram-sdk>=6.1.1,<8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Ruff
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+preview = true
+target-version = "py314"
+line-length = 120
+fix = true
+extend-exclude = [".venv", "build", "dist"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.ruff.lint]
+select = [
+    "A",   # flake8-builtins
+    "ANN", # flake8-annotations
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "D",   # pydocstyle
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "PGH", # pygrep-hooks
+    "RUF", # ruff-specific rules
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    "T10", # flake8-debugger
+    "T20", # flake8-print
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+    "YTT", # flake8-2020
+]
+ignore = [
+    "ANN401",  # Dynamically typed expressions
+    "B007",    # Unused loop variable
+    "B008",    # Function call in argument defaults
+    "D105",    # Missing docstring in magic method
+    "D203",    # Blank line before class docstring
+    "D205",    # Blank line between summary and description
+    "D212",    # Multi-line docstring summary
+    "D415",    # First line punctuation
+    "FBT001",  # Boolean flag in function
+    "FBT002",  # Default Boolean flag
+    "G004",    # f-string in log
+    "PLR0913", # Too many arguments
+    "S101",    # Use of assert detected
+    "S404",    # Subprocess Usage
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["D104", "F401"]
+"tests/**" = ["S101", "D103", "D100", "D104", "SLF001", "B018"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Pyrefly (replaces pyright)
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pyrefly]
+use-ignore-files = false
+project-includes = ["src"]
+project-excludes = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*venv/**/*",
+    "**/tests",
+]
+search-path = ["src", ".venv/lib/python3.14/site-packages"]
+python-platform = "linux"
+python-version = "3.14"
+python-interpreter-path = ".venv/bin/python3"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Pytest
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "7.0"
+asyncio_mode = "auto"
+markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
+addopts = [
+    "--cov=src",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-report=json",
+    "--cov-report=term-missing",
+    "--cov-fail-under=0",
+    "-ra",
+    "-q",
+]
+testpaths = ["tests"]
+python_files = "test_*.py tests_*.py *_test.py"
+python_classes = "*Test Test* Describe*"
+python_functions = "test_* it_* should_* scenario_*"
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Coverage
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.coverage.report]
+skip_empty = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Deptry
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.deptry]
+
+[tool.uv.sources]
+ai-circus-shared = { path = "../../libs/shared" }
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Scripts
+# ──────────────────────────────────────────────────────────────────────────────
+[project.scripts]
+agui-voice-hello-world = "agui_voice.tools.hello_world:main"
+agui-voice-generate-data-model = "agui_voice.core.config_generator:main"
+agui-voice-config-drift-check = "agui_voice.core.config_generator:check_env_drift"
+agui-voice-app = "agui_voice.app:main"
