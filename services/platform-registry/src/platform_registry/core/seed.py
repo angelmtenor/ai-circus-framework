@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from platform_registry.core.logger import get_logger
-from platform_registry.core.models import Entitlement, LlmSetting, Scenario
+from platform_registry.core.models import Entitlement, LlmSetting, Scenario, VoiceSetting
 
 logger = get_logger(__name__)
 
@@ -107,3 +107,14 @@ def seed_default_llm_setting(session: Session, default_model_name: str) -> None:
         session.add(LlmSetting(id=1, model_name=default_model_name))
         session.commit()
         logger.info("Seeded default active LLM model: {}", default_model_name)
+
+
+def seed_default_voice_setting(session: Session, default_stt_provider: str, default_tts_provider: str) -> None:
+    """Insert the singleton `voice_settings` row on first boot only — defaults to the
+    self-hosted/open providers (never overwrites an admin's already-saved choice on a
+    later restart).
+    """
+    if session.get(VoiceSetting, 1) is None:
+        session.add(VoiceSetting(id=1, stt_provider=default_stt_provider, tts_provider=default_tts_provider))
+        session.commit()
+        logger.info("Seeded default voice settings: stt={} tts={}", default_stt_provider, default_tts_provider)

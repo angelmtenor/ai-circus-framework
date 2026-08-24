@@ -17,6 +17,7 @@ def _clear_caches() -> None:
     entitlements_module._entitlement_cache.clear()
     entitlements_module._active_model_cache.clear()
     entitlements_module._providers_cache.clear()
+    entitlements_module._active_voice_settings_cache.clear()
 
 
 class _FakeResponse:
@@ -131,6 +132,55 @@ def test_get_active_llm_model_caches_across_calls(monkeypatch: pytest.MonkeyPatc
     assert call_count == 1
 
 
+def test_get_active_voice_settings_sends_admin_bearer_and_parses_providers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The call hits platform-registry's voice-settings endpoint with the admin bearer token."""
+    captured: dict[str, object] = {}
+
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeResponse:
+        captured["url"] = url
+        captured["headers"] = headers
+        return _FakeResponse(payload={"stt_provider": "whisper", "tts_provider": "piper"})
+
+    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    result = client.get_active_voice_settings(admin_api_key="secret-key")
+
+    assert result == ("whisper", "piper")
+    assert captured["url"] == "http://platform-registry:8000/voice-settings/active"
+    assert captured["headers"] == {"Authorization": "Bearer secret-key"}
+
+
+def test_get_active_voice_settings_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-2xx response propagates as an HTTPError — callers decide whether to fall back."""
+    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_active_voice_settings(admin_api_key="secret-key")
+
+
+def test_get_active_voice_settings_caches_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A second get_active_voice_settings() for the same base_url doesn't re-hit
+    platform-registry within the TTL window — the hot path on every new WS connection.
+    """
+    call_count = 0
+
+    def fake_get(*_a: object, **_kw: object) -> _FakeResponse:
+        nonlocal call_count
+        call_count += 1
+        return _FakeResponse(payload={"stt_provider": "whisper", "tts_provider": "piper"})
+
+    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    first = client.get_active_voice_settings(admin_api_key="secret-key")
+    second = client.get_active_voice_settings(admin_api_key="secret-key")
+
+    assert first == second == ("whisper", "piper")
+    assert call_count == 1
+
+
 def test_get_llm_provider_display_matches_by_model_name_and_strips_the_configured_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -199,3 +249,54 @@ def test_get_llm_provider_display_caches_across_calls(monkeypatch: pytest.Monkey
     client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama")
 
     assert call_count == 1
+
+
+def test_list_scenarios_forwards_the_caller_authorization_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    """platform-registry gates GET /entitlements/{org_id} with require_org_match, so a
+    server-to-server caller (e.g. agui-voice) must forward the end user's own bearer
+    token — same reasoning as PredictionServiceClient forwarding it on to prediction.
+    """
+    captured: dict[str, object] = {}
+
+    def fake_get(url: str, **kwargs: object) -> _FakeResponse:
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers")
+        return _FakeResponse(payload=[], status_code=200)
+
+    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    client.list_scenarios(org_id="org-1", authorization="Bearer user-token")
+
+    assert captured["url"] == "http://platform-registry:8000/entitlements/org-1"
+    assert captured["headers"] == {"Authorization": "Bearer user-token"}
+
+
+def test_list_scenarios_omits_authorization_header_when_not_given(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No `authorization` (e.g. a trusted admin caller) sends no header at all, not a literal 'None'."""
+    captured: dict[str, object] = {}
+
+    def fake_get(_url: str, **kwargs: object) -> _FakeResponse:
+        captured["headers"] = kwargs.get("headers")
+        return _FakeResponse(payload=[], status_code=200)
+
+    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    client.list_scenarios(org_id="org-1")
+
+    assert captured["headers"] == {}
+
+
+def test_list_scenarios_parses_scenario_summaries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The JSON list body is parsed into ScenarioSummary models."""
+    payload = [
+        {"slug": "churn", "kind": "tabular_ml", "title": "Churn", "description": "d", "icon": "x"},
+    ]
+    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=payload))
+    client = PlatformRegistryClient(base_url="http://platform-registry:8000")
+
+    result = client.list_scenarios(org_id="org-1", authorization="Bearer user-token")
+
+    assert [s.slug for s in result] == ["churn"]
+    assert result[0].kind == "tabular_ml"

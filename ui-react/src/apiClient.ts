@@ -284,6 +284,35 @@ export async function setActiveLlmModel(
   return body.model_name;
 }
 
+export type ActiveVoiceSettings = { stt_provider: string; tts_provider: string };
+
+/**
+ * Which STT/TTS provider agui-voice should use right now — the admin Settings
+ * page's voice-mode picker, mirroring getActiveLlmModel/setActiveLlmModel above.
+ */
+export async function getActiveVoiceSettings(
+  baseUrl: string,
+  accessToken: string | null,
+): Promise<ActiveVoiceSettings | null> {
+  const response = await fetch(`${baseUrl}/voice-settings/active`, { headers: headers(accessToken) });
+  if (response.status === 404) return null; // no default seeded yet — not an error
+  return asJson<ActiveVoiceSettings>(response);
+}
+
+export async function setActiveVoiceSettings(
+  baseUrl: string,
+  sttProvider: string,
+  ttsProvider: string,
+  accessToken: string | null,
+): Promise<ActiveVoiceSettings> {
+  const response = await fetch(`${baseUrl}/voice-settings/active`, {
+    method: "PUT",
+    headers: headers(accessToken),
+    body: JSON.stringify({ stt_provider: sttProvider, tts_provider: ttsProvider }),
+  });
+  return asJson<ActiveVoiceSettings>(response);
+}
+
 export type ChatModel = { model: string; provider: string | null };
 
 /**
@@ -319,4 +348,59 @@ export async function submitForm(
     return body.detail;
   }
   return asJson<{ case_number: string }>(response);
+}
+
+/**
+ * The chat panel's loudspeaker icon: synthesizes `text` as speech via agui-voice's
+ * one-shot `POST /tts/{scenario_slug}` (see SpeakerButton.tsx) — a plain WAV blob,
+ * decoupled from the live voice WebSocket session (useVoiceSession.ts).
+ */
+export async function speakText(
+  voiceUrl: string,
+  scenarioSlug: string,
+  text: string,
+  accessToken: string | null,
+): Promise<Blob> {
+  const response = await fetch(`${voiceUrl}/tts/${scenarioSlug}`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ text }),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${await response.text()}`);
+  }
+  return response.blob();
+}
+
+export type VoiceProviderOption = {
+  id: string;
+  label: string;
+  available: boolean;
+  reason: string | null;
+};
+
+export type VoiceProviderGroup = {
+  active: string;
+  options: VoiceProviderOption[];
+};
+
+export type VoiceProviders = {
+  stt: VoiceProviderGroup;
+  tts: VoiceProviderGroup;
+};
+
+/**
+ * Which STT/TTS provider agui-voice would actually use for this scenario's next
+ * voice turn, plus every provider it knows how to construct (self-hosted always
+ * available; a cloud one only if its API key is configured on this instance) —
+ * powers both the assistant UI's "STT: ... / TTS: ..." label (MicButton.tsx) and
+ * the admin Settings page's voice-mode picker.
+ */
+export async function voiceProviders(
+  voiceUrl: string,
+  scenarioSlug: string,
+  accessToken: string | null,
+): Promise<VoiceProviders> {
+  const response = await fetch(`${voiceUrl}/providers/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson<VoiceProviders>(response);
 }

@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from platform_registry import get_env_config
 from platform_registry.core import llm_settings
 from platform_registry.core.db import get_session
-from platform_registry.core.models import Entitlement, LlmSetting, Scenario
+from platform_registry.core.models import Entitlement, LlmSetting, Scenario, VoiceSetting
 
 router = APIRouter()
 
@@ -121,6 +121,20 @@ class ActiveLlmModelIn(BaseModel):
     """Body for PUT /llm-settings/active-model."""
 
     model_name: str
+
+
+class ActiveVoiceSettingsOut(BaseModel):
+    """Which STT/TTS provider agui-voice should use right now."""
+
+    stt_provider: str
+    tts_provider: str
+
+
+class ActiveVoiceSettingsIn(BaseModel):
+    """Body for PUT /voice-settings/active."""
+
+    stt_provider: str
+    tts_provider: str
 
 
 @router.get("/healthz")
@@ -284,3 +298,60 @@ def set_active_llm_model(body: ActiveLlmModelIn, session: Session = Depends(get_
         setting.model_name = body.model_name
     session.commit()
     return ActiveLlmModelOut(model_name=setting.model_name)
+
+
+# Known agui-voice provider identifiers (see services/agui-voice/core/providers.py's
+# build_stt_service/build_tts_service match statements) — just enough validation to
+# catch a typo. Whether a given provider is actually *usable* (a cloud one needs its
+# own API key configured in agui-voice's `.env`, which platform-registry has no
+# visibility into) is agui-voice's own call, made when it reads this setting.
+_VALID_STT_PROVIDERS = frozenset({"whisper", "deepgram"})
+_VALID_TTS_PROVIDERS = frozenset({"piper", "elevenlabs", "cartesia"})
+
+
+@router.get(
+    "/voice-settings/active",
+    response_model=ActiveVoiceSettingsOut,
+    dependencies=[Depends(require_admin)],
+)
+def get_active_voice_settings(session: Session = Depends(get_session)) -> ActiveVoiceSettingsOut:
+    """Which STT/TTS provider agui-voice should use right now.
+
+    Called by agui-voice on every new WS connection/`/tts` call (see
+    PlatformRegistryClient.get_active_voice_settings) — no restart needed to switch.
+    """
+    setting = session.get(VoiceSetting, 1)
+    if setting is None:
+        raise HTTPException(status_code=404, detail="No active voice settings set yet.")
+    return ActiveVoiceSettingsOut(stt_provider=setting.stt_provider, tts_provider=setting.tts_provider)
+
+
+@router.put(
+    "/voice-settings/active",
+    response_model=ActiveVoiceSettingsOut,
+    dependencies=[Depends(require_admin)],
+)
+def set_active_voice_settings(
+    body: ActiveVoiceSettingsIn, session: Session = Depends(get_session)
+) -> ActiveVoiceSettingsOut:
+    """Switch which STT/TTS provider agui-voice uses — the Settings page's voice picker."""
+    if body.stt_provider not in _VALID_STT_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown stt_provider {body.stt_provider!r}. Valid: {sorted(_VALID_STT_PROVIDERS)}.",
+        )
+    if body.tts_provider not in _VALID_TTS_PROVIDERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown tts_provider {body.tts_provider!r}. Valid: {sorted(_VALID_TTS_PROVIDERS)}.",
+        )
+
+    setting = session.get(VoiceSetting, 1)
+    if setting is None:
+        setting = VoiceSetting(id=1, stt_provider=body.stt_provider, tts_provider=body.tts_provider)
+        session.add(setting)
+    else:
+        setting.stt_provider = body.stt_provider
+        setting.tts_provider = body.tts_provider
+    session.commit()
+    return ActiveVoiceSettingsOut(stt_provider=setting.stt_provider, tts_provider=setting.tts_provider)

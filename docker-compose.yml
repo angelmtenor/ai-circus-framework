@@ -21,6 +21,9 @@ volumes:
   qdrant-storage:
   minio-data:
   ollama-data:
+  # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
+  # across container restarts so agui-voice doesn't re-download them every `make up`.
+  voice-model-cache:
 
 services:
   # ── Ingress ─────────────────────────────────────────────────────────────────
@@ -576,6 +579,63 @@ services:
       - "traefik.http.routers.form-agent.rule=Host(`form-agent.localhost`)"
       - "traefik.http.routers.form-agent.entrypoints=web"
       - "traefik.http.services.form-agent.loadbalancer.server.port=8000"
+
+  # Voice mode: one Pipecat pipeline per live WebSocket call (STT -> AgentBridgeProcessor
+  # -> TTS), plus a one-shot POST /tts endpoint for the chat UI's loudspeaker icon. Its
+  # "LLM stage" calls the existing assistant/rag-agent/form-agent /agui/{scenario_slug}
+  # endpoint for whichever scenario kind is in play — see agui-voice/core/agent_bridge.py
+  # — rather than running an LLM itself, so entitlement enforcement isn't duplicated here.
+  agui-voice:
+    build:
+      context: .
+      dockerfile: services/agui-voice/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+      # Local, self-hosted defaults (faster-whisper/Piper — no API key). Override to
+      # deepgram/elevenlabs/cartesia once the matching pipecat-ai extra + API key are
+      # configured (see services/agui-voice/settings.yaml).
+      STT_PROVIDER: ${VOICE_STT_PROVIDER:-whisper}
+      TTS_PROVIDER: ${VOICE_TTS_PROVIDER:-piper}
+      WHISPER_MODEL: ${VOICE_WHISPER_MODEL:-base}
+      PIPER_VOICE_ID: ${VOICE_PIPER_VOICE_ID:-en_US-lessac-medium}
+      PIPER_VOICE_ID_ES: ${VOICE_PIPER_VOICE_ID_ES:-es_ES-davefx-medium}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
+      CARTESIA_API_KEY: ${CARTESIA_API_KEY:-}
+      CARTESIA_VOICE_ID: ${CARTESIA_VOICE_ID:-}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
+      LOGTO_ISSUER: ${LOGTO_ISSUER}
+      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
+      # See assistant's own block above for why this can't be derived from LOGTO_ISSUER.
+      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+    volumes:
+      # faster-whisper caches under ~/.cache/huggingface, Piper under ~/.cache/pipecat —
+      # this container has no dedicated user, so $HOME is /root.
+      - voice-model-cache:/root/.cache
+    depends_on:
+      platform-registry:
+        condition: service_started
+      assistant:
+        condition: service_started
+      rag-agent:
+        condition: service_started
+      form-agent:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    # Whisper + Piper model weights loaded in-process — bump from the ~512m/1g other
+    # agent services use.
+    mem_limit: 2g
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.agui-voice.rule=Host(`agui-voice.localhost`)"
+      - "traefik.http.routers.agui-voice.entrypoints=web"
+      - "traefik.http.services.agui-voice.loadbalancer.server.port=8000"
 
   ui-react:
     build:

@@ -1110,6 +1110,136 @@ select:focus {
   box-shadow: none;
 }
 
+.chat-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.chat-mic {
+  position: relative;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 999px;
+  width: 2.4rem;
+  height: 2.4rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-voice-providers {
+  font-size: 0.7rem;
+  color: var(--dim);
+  white-space: nowrap;
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-mic-icon {
+  position: relative;
+  z-index: 1;
+  line-height: 1;
+}
+
+.chat-mic-rings {
+  position: absolute;
+  inset: 0;
+}
+
+.chat-mic-rings span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid currentcolor;
+  opacity: 0;
+  animation: chat-mic-pulse 1.8s ease-out infinite;
+}
+
+.chat-mic-rings span:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.chat-mic-rings span:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes chat-mic-pulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+/* Listening: the mic is live, waiting for the caller to speak. */
+.chat-mic--listening {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+  box-shadow: var(--glow-accent-soft);
+}
+
+/* Speaking: the bot is talking — a distinct, warmer color from "listening" so the
+   two states read differently at a glance, not just by icon. Clicking stops the
+   call outright; talking over it interrupts the bot via server-side VAD instead. */
+.chat-mic--speaking {
+  border-color: #f0a63a;
+  color: #f0a63a;
+  box-shadow: 0 0 0 1px rgba(240, 166, 58, 0.25), 0 0 16px rgba(240, 166, 58, 0.35);
+}
+
+.chat-mic--connecting .chat-mic-icon {
+  animation: chat-mic-spin 0.8s linear infinite;
+}
+
+@keyframes chat-mic-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chat-mic--error {
+  border-color: #e05a5a;
+  color: #e05a5a;
+}
+
+.chat-speaker {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 0.85rem;
+  padding: 0.1rem 0.3rem;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
+.chat-speaker:hover {
+  color: var(--accent-2);
+}
+
+.chat-speaker--loading {
+  animation: chat-mic-spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+.chat-speaker--playing {
+  color: var(--accent-2);
+}
+
+.chat-speaker--error {
+  color: #e05a5a;
+}
+
 /* ── Sub-tabs (Individual / Batch, etc.) ───────────────────────────────────── */
 
 .sub-tabs {

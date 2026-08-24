@@ -28,7 +28,7 @@ from platform_registry.api import router
 from platform_registry.core.db import init_engine
 from platform_registry.core.logger import configure_logger, get_logger
 from platform_registry.core.models import Base
-from platform_registry.core.seed import seed_default_llm_setting, seed_scenarios
+from platform_registry.core.seed import seed_default_llm_setting, seed_default_voice_setting, seed_scenarios
 
 logger = get_logger(__name__)
 
@@ -48,6 +48,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # matches assistant/rag-agent's own static LLM_MODEL default, so a fresh
         # install behaves the same either way.
         seed_default_llm_setting(session, default_model_name="groq-llama")
+        # Self-hosted/no-API-key by default (faster-whisper, Piper) — matches
+        # agui-voice's own static STT_PROVIDER/TTS_PROVIDER env defaults.
+        seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
 
     yield
 

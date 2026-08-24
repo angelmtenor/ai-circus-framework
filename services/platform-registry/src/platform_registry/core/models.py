@@ -89,3 +89,21 @@ class LlmSetting(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     model_name: Mapped[str] = mapped_column(String(64))
+
+
+class VoiceSetting(Base):
+    """Singleton row (id=1): which agui-voice STT/TTS provider ("whisper"/"deepgram"/
+    "groq", "piper"/"elevenlabs"/"cartesia") the live voice pipeline and the /tts
+    speaker-icon endpoint should use right now — the admin Settings page's voice-mode
+    picker, mirroring `LlmSetting` above. Read by agui-voice on every new WS
+    connection/`/tts` call (no restart needed to switch), so this is deliberately just
+    one mutable row, not a history. Only stores the *choice*; whether that provider is
+    actually usable (self-hosted always is, a cloud one needs its API key configured
+    in agui-voice's own `.env`) is agui-voice's own call, not tracked here.
+    """
+
+    __tablename__ = "voice_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    stt_provider: Mapped[str] = mapped_column(String(32))
+    tts_provider: Mapped[str] = mapped_column(String(32))

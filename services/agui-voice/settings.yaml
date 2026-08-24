@@ -1,0 +1,201 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# agui-voice is a long-running FastAPI service hosting a Pipecat real-time voice
+# pipeline (WebSocket, one per active call) plus a one-shot POST /tts endpoint. It
+# never runs an LLM itself — its Pipecat "LLM stage" instead calls the existing
+# assistant/rag-agent/form-agent POST /agui/{scenario_slug} SSE endpoint for whichever
+# scenario kind is in play, forwarding the caller's own bearer token so entitlement
+# enforcement happens exactly once, in that service, same as every other client of it.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ASSISTANT_SERVICE_URL
+    description: "Base URL of the assistant service (backs tabular_ml voice scenarios)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: RAG_AGENT_SERVICE_URL
+    description: "Base URL of the rag-agent service (backs conversational_rag voice scenarios)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: FORM_AGENT_SERVICE_URL
+    description: "Base URL of the form-agent service (backs assisted_form voice scenarios)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: STT_PROVIDER
+    description: "Speech-to-text backend: 'whisper' (local, default) or 'deepgram' (cloud)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: TTS_PROVIDER
+    description: "Text-to-speech backend: 'piper' (local, default), 'elevenlabs', or 'cartesia'"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: WHISPER_MODEL
+    description: "faster-whisper model size/name used when STT_PROVIDER=whisper (e.g. base, small, distil-large-v3)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PIPER_VOICE_ID
+    description: "Piper voice id for English, used when TTS_PROVIDER=piper (e.g. en_US-lessac-medium)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: PIPER_VOICE_ID_ES
+    description: "Piper voice id for Spanish, used when TTS_PROVIDER=piper (e.g. es_ES-davefx-medium)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DEEPGRAM_API_KEY
+    description: "API key for Deepgram STT, required only when STT_PROVIDER=deepgram"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: ELEVENLABS_API_KEY
+    description: "API key for ElevenLabs TTS, required only when TTS_PROVIDER=elevenlabs"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: ELEVENLABS_VOICE_ID
+    description: "ElevenLabs voice id, required only when TTS_PROVIDER=elevenlabs"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: CARTESIA_API_KEY
+    description: "API key for Cartesia TTS, required only when TTS_PROVIDER=cartesia"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: CARTESIA_VOICE_ID
+    description: "Cartesia voice id, required only when TTS_PROVIDER=cartesia"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: AUTH_DISABLED
+    description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ADMIN_API_KEY
+    description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: DEV_ORG_ID
+    description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LOGTO_ISSUER
+    description: "Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_JWKS_URL
+    description: "Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LOGTO_API_RESOURCE_INDICATOR
+    description: "Expected token audience — the API resource registered in Logto for this platform's backend"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    DEV_ORG_ID: "demo"
+    # AUTH_DISABLED/ADMIN_API_KEY/CORS_ALLOWED_ORIGINS/STT_PROVIDER/TTS_PROVIDER/
+    # WHISPER_MODEL/PIPER_VOICE_ID/PIPER_VOICE_ID_ES deliberately have NO default
+    # here — see prediction/settings.yaml for why (a profile default would always
+    # beat a real environment variable): docker-compose.yml's
+    # `${VOICE_TTS_PROVIDER:-piper}`-style fallbacks are meant to let an operator
+    # override these via .env, which a profile default here would silently defeat
+    # (as it did until this was caught: setting VOICE_TTS_PROVIDER=elevenlabs in
+    # .env had zero effect while TTS_PROVIDER's base default was still "piper").
+
+  # Running with `uv run` on the host, against the other agent services started via
+  # `make up` (Traefik-fronted, same as assistant/settings.yaml's PREDICTION_SERVICE_URL).
+  local:
+    ASSISTANT_SERVICE_URL: "http://assistant.localhost"
+    RAG_AGENT_SERVICE_URL: "http://rag-agent.localhost"
+    FORM_AGENT_SERVICE_URL: "http://form-agent.localhost"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    ASSISTANT_SERVICE_URL: "http://assistant:8000"
+    RAG_AGENT_SERVICE_URL: "http://rag-agent:8000"
+    FORM_AGENT_SERVICE_URL: "http://form-agent:8000"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here
