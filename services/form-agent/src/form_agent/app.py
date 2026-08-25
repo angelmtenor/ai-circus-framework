@@ -42,7 +42,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Resolve SCENARIOS to their definitions, build the shared embedder, connect Qdrant/MinIO/llm-gateway."""
+    """Resolve SCENARIOS to their definitions, build the shared embedder, connect Qdrant/SeaweedFS/llm-gateway."""
     config = get_env_config()
     definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="assisted_form")
     if not definitions:
@@ -69,9 +69,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
     app.state.store = ObjectStore.connect(
         bucket=SUBMISSIONS_BUCKET,
-        endpoint_url=config.MINIO_ENDPOINT,
-        access_key=config.MINIO_ACCESS_KEY,
-        secret_key=config.MINIO_SECRET_KEY.get_secret_value(),
+        endpoint_url=config.OBJECT_STORE_ENDPOINT,
+        access_key=config.OBJECT_STORE_ACCESS_KEY,
+        secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
     )
     # One ChatOpenAI client per model_name, built lazily by api._llm() as requests pick
     # different models from platform-registry's live Settings picker — not a single

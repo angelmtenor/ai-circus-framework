@@ -1,4 +1,4 @@
-"""Thin S3-compatible object storage client for MinIO.
+"""Thin S3-compatible object storage client for SeaweedFS.
 
 Every dataset, trained model/explainer artifact, and uploaded document lives here,
 namespaced per tenant — never on a service's local disk — so services stay stateless
@@ -24,7 +24,7 @@ _SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 @dataclass(frozen=True)
 class ObjectStore:
-    """A MinIO/S3 client bound to one bucket, with tenant-prefixed keys."""
+    """A SeaweedFS/S3 client bound to one bucket, with tenant-prefixed keys."""
 
     bucket: str
     _client: object

@@ -34,12 +34,14 @@ class EnvConfig(BaseSettings):
         description="Comma-separated tabular_ml scenario slugs this instance serves; empty/unset = every scenario"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
-    MINIO_ENDPOINT: str = Field(
-        description="MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    OBJECT_STORE_ENDPOINT: str = Field(
+        description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     )
-    MINIO_ACCESS_KEY: str = Field(description="MinIO access key (must match MINIO_ROOT_USER in the repo root .env)")
-    MINIO_SECRET_KEY: SecretStr = Field(
-        description="MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    OBJECT_STORE_ACCESS_KEY: str = Field(
+        description="SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr = Field(
+        description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
     LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible API")
     LLM_GATEWAY_API_KEY: SecretStr = Field(description="API key presented to llm-gateway (its LITELLM_MASTER_KEY)")
@@ -81,7 +83,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "1ceafaacdafddbbb8eca33954f8a8a436e9104019d81c4cac1e06c1dbea7d875"
+_SOURCE_YAML_HASH = "c7b38b6aab8dbd20d629ea5eba0206379480d224070ca2dc26a21bfef66b94d4"
 
 
 EnvConfig.model_rebuild()

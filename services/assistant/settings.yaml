@@ -6,7 +6,7 @@
 #
 # assistant is a long-running FastAPI service serving POST /chat/{scenario_slug} for
 # every tabular_ml scenario in SCENARIOS (empty/unset = all): chat-over-data grounded
-# in the scenario's chat.context and the trained model's metadata (from MinIO),
+# in the scenario's chat.context and the trained model's metadata (from SeaweedFS),
 # answered via llm-gateway — never a raw provider SDK and never exec()'d code (see
 # AGENTS.md).
 
@@ -35,20 +35,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: MINIO_ENDPOINT
-    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_ACCESS_KEY
-    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_SECRET_KEY
-    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: true
@@ -150,7 +150,7 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
-    MINIO_ACCESS_KEY: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
     DEV_ORG_ID: "demo"
     # Must match training's ORG_ID default — see SHARED_MODEL_ORG_ID's description
     # above. Same "safe to default here" reasoning as SCENARIOS below.
@@ -166,7 +166,7 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     SCENARIOS_DIR: "../../scenarios"
-    MINIO_ENDPOINT: "http://minio.localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     # Loopback-bound host port (not Traefik — see root docker-compose.yml's
     # llm-gateway comment for why it must never be on the public entrypoint).
     LLM_GATEWAY_URL: "http://localhost:4000"
@@ -176,7 +176,7 @@ environments:
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
-    MINIO_ENDPOINT: "http://minio:9000"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
     PREDICTION_SERVICE_URL: "http://prediction:8000"

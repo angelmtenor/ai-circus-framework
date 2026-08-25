@@ -8,7 +8,7 @@ builds and ships as its own independent image (see root `README.md` → "Shared 
 
 - `auth.py` — validates Logto-issued OIDC access tokens (JWKS-based) and extracts the
   tenant (Logto Organization id) and `scenario:*` roles from the claims.
-- `storage.py` — thin MinIO/S3 client wrapper (`boto3`) for reading/writing datasets,
+- `storage.py` — thin SeaweedFS/S3 client wrapper (`boto3`) for reading/writing datasets,
   model artifacts, and documents under a per-tenant key prefix.
 - `entitlements.py` — HTTP client for `services/platform-registry`'s entitlement-check
   endpoint; every backend service calls this before serving a scenario request.

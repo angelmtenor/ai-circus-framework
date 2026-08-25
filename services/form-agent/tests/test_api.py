@@ -57,7 +57,7 @@ class FakeObjectStore:
         self.puts: list[tuple[str, str, bytes]] = []
 
     def put(self, tenant_org_id: str, path: str, data: bytes) -> str:
-        """Record the put call instead of touching real MinIO."""
+        """Record the put call instead of touching real SeaweedFS."""
         self.puts.append((tenant_org_id, path, data))
         return f"tenant-{tenant_org_id}/{path}"
 

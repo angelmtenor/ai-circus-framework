@@ -2,7 +2,7 @@
 - Title:    Document vectorization pipeline for conversational_rag scenarios
 - Author:   ai-circus-framework contributors
 
-Extract: bootstrap the tenant's documents into MinIO on first run, from either the
+Extract: bootstrap the tenant's documents into SeaweedFS on first run, from either the
 scenario's tracked sample_docs/ folder or a public GitHub repo folder (demo convenience
 — a real deployment would have each tenant upload their own documents instead).
 Transform: chunk + embed. Load: upsert into the tenant's Qdrant collection for
@@ -54,7 +54,7 @@ def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
 
 
 def _bootstrap_from_seed_dir(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
-    """Upload every file in the scenario's tracked local seed folder to MinIO."""
+    """Upload every file in the scenario's tracked local seed folder to SeaweedFS."""
     assert documents.seed_prefix is not None  # only called when set
     seed_dir = scenario_dir / documents.seed_prefix
     for path in sorted(seed_dir.glob("*")):
@@ -63,7 +63,7 @@ def _bootstrap_from_seed_dir(store: ObjectStore, org_id: str, documents: Documen
 
 
 def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
-    """Upload the scenario's bootstrap documents to MinIO if the tenant has none yet —
+    """Upload the scenario's bootstrap documents to SeaweedFS if the tenant has none yet —
     from a public GitHub repo folder (`documents.github_source`) or a tracked local
     `sample_docs/`-style folder (`documents.seed_prefix`); `DocumentsConfig` guarantees
     at least one of the two is set. If both are set, `github_source` is tried first and

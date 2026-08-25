@@ -5,7 +5,7 @@ app.py
 Entry point for assistant: a long-running FastAPI service serving
 POST /agui/{scenario_slug} for every tabular_ml scenario in SCENARIOS (empty/unset =
 all), shared across every tenant (grounding system prompts are loaded and cached per
-(org, scenario) from MinIO on first request — see core/prompt_cache.py; all
+(org, scenario) from SeaweedFS on first request — see core/prompt_cache.py; all
 completions go through llm-gateway, never a raw provider SDK).
 
 Author: ai-circus-framework contributors
@@ -38,7 +38,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Resolve SCENARIOS to their definitions, connect each one's MinIO bucket, and llm-gateway."""
+    """Resolve SCENARIOS to their definitions, connect each one's SeaweedFS bucket, and llm-gateway."""
     config = get_env_config()
     definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="tabular_ml")
     if not definitions:
@@ -51,9 +51,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
         stores[slug] = ObjectStore.connect(
             bucket=definition.dataset.bucket,
-            endpoint_url=config.MINIO_ENDPOINT,
-            access_key=config.MINIO_ACCESS_KEY,
-            secret_key=config.MINIO_SECRET_KEY.get_secret_value(),
+            endpoint_url=config.OBJECT_STORE_ENDPOINT,
+            access_key=config.OBJECT_STORE_ACCESS_KEY,
+            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
 
     app.state.definitions = definitions

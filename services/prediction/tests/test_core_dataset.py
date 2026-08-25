@@ -38,7 +38,7 @@ class FakeObjectStore:
 
 
 def test_load_normalized_loads_the_tenants_own_dataset() -> None:
-    """A tenant with its own normalized dataset in MinIO gets exactly that."""
+    """A tenant with its own normalized dataset in SeaweedFS gets exactly that."""
     store = FakeObjectStore()
     store.put_dataframe("org-1", pd.DataFrame({"a": [1, 2]}))
     store.put_dataframe("fallback-org", pd.DataFrame({"a": [99]}))

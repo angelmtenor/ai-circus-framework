@@ -38,12 +38,14 @@ class EnvConfig(BaseSettings):
     QDRANT_URL: str = Field(
         description="Qdrant endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
     )
-    MINIO_ENDPOINT: str = Field(
-        description="MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    OBJECT_STORE_ENDPOINT: str = Field(
+        description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     )
-    MINIO_ACCESS_KEY: str = Field(description="MinIO access key (must match MINIO_ROOT_USER in the repo root .env)")
-    MINIO_SECRET_KEY: SecretStr = Field(
-        description="MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    OBJECT_STORE_ACCESS_KEY: str = Field(
+        description="SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr = Field(
+        description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
     LLM_GATEWAY_URL: str = Field(description="Base URL of the llm-gateway service's OpenAI-compatible API")
     LLM_GATEWAY_API_KEY: SecretStr = Field(description="API key presented to llm-gateway (its LITELLM_MASTER_KEY)")
@@ -106,7 +108,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "a38b110a548567795fec28b0bfb725d17c7d0bfa649ffc231613db6b8270faae"
+_SOURCE_YAML_HASH = "3597ba2bd6cf8c2c653dc6d30315ce0fe4a2a7bc623e2fb5d8fccb6760cdb066"
 
 
 EnvConfig.model_rebuild()

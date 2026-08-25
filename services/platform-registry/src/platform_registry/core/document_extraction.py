@@ -1,7 +1,7 @@
 """Best-effort text extraction from a session-only chat attachment.
 
 Called by `POST /documents/extract` (see `platform_registry.api`) — the file is never
-written to MinIO/disk beyond FastAPI's own transient `UploadFile` spooling; the caller
+written to SeaweedFS/disk beyond FastAPI's own transient `UploadFile` spooling; the caller
 (ui-react's ChatPanel) discards it once this response comes back. Because of that
 "good enough for one chat turn" scope, PDF OCR uses `pytesseract`/`pdf2image` (small
 apt packages, no ML weights) rather than a heavier layout-aware OCR stack like

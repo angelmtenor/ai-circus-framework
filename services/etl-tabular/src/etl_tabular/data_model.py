@@ -34,16 +34,18 @@ class EnvConfig(BaseSettings):
     )
     ORG_ID: str = Field(description="Tenant (Logto Organization id) whose dataset this run processes")
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
-    MINIO_ENDPOINT: str = Field(
-        description="MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    OBJECT_STORE_ENDPOINT: str = Field(
+        description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     )
-    MINIO_ACCESS_KEY: str = Field(description="MinIO access key (must match MINIO_ROOT_USER in the repo root .env)")
-    MINIO_SECRET_KEY: SecretStr = Field(
-        description="MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    OBJECT_STORE_ACCESS_KEY: str = Field(
+        description="SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr = Field(
+        description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
 
 
-_SOURCE_YAML_HASH = "c72e0cbfd23b3a91689dd3ae1eafd9531ae300ffecec0fadb63600a466176c6f"
+_SOURCE_YAML_HASH = "586210ac516256c708873f2142872065260dcc0b42fbe3b891404be3cadab400"
 
 
 EnvConfig.model_rebuild()

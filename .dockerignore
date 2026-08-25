@@ -23,5 +23,5 @@ scenarios/**/data/
 scenarios/**/model/
 infra/postgres/data/
 infra/qdrant/storage/
-infra/minio/data/
+infra/seaweedfs/data/
 infra/logto/data/

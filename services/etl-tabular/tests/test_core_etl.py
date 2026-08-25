@@ -140,7 +140,7 @@ def test_clean_boolean_feature_column_stays_categorical_through_parquet_round_tr
     issue with categorical(bool) columns), which then breaks training's
     dtype-based numeric/categorical split (SimpleImputer rejects bool outright).
     clean() must cast bool -> str -> category, not bool -> category directly, so the
-    dtype actually survives being written to and read back from MinIO.
+    dtype actually survives being written to and read back from SeaweedFS.
     """
     dataset = DATASET.model_copy(
         update={
@@ -166,7 +166,7 @@ def test_clean_boolean_feature_column_stays_categorical_through_parquet_round_tr
 
 
 def test_save_normalized_writes_parquet_readable_back(scenario_dir: Path) -> None:
-    """save_normalized round-trips a DataFrame through MinIO as parquet."""
+    """save_normalized round-trips a DataFrame through SeaweedFS as parquet."""
     store = FakeObjectStore()
     df = pd.read_csv(io.StringIO(SAMPLE_CSV), index_col="CustomerId")
 

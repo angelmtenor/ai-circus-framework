@@ -1,7 +1,7 @@
 """Tests for the document vectorization pipeline.
 
 Uses a fake ObjectStore/QdrantClient and a fake embedding model so most tests don't
-need real MinIO/Qdrant/sentence-transformers network calls — one integration test at
+need real SeaweedFS/Qdrant/sentence-transformers network calls — one integration test at
 the bottom exercises the real SentenceTransformer model.
 """
 
