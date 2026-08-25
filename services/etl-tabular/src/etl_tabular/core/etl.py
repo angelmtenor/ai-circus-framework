@@ -2,10 +2,10 @@
 - Title:    ETL pipeline for tabular_ml scenarios
 - Author:   ai-circus-framework contributors
 
-Extract: bootstrap the tenant's raw dataset into MinIO from the scenario's tracked
+Extract: bootstrap the tenant's raw dataset into SeaweedFS from the scenario's tracked
 sample_data/ file on first run (demo convenience — a real deployment would have each
 tenant upload their own data instead). Transform: drop protected/identifier columns
-(Responsible AI) and cast dtypes. Load: write the normalized parquet back to MinIO.
+(Responsible AI) and cast dtypes. Load: write the normalized parquet back to SeaweedFS.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 
 
 def ensure_raw_dataset(store: ObjectStore, org_id: str, dataset: TabularDataset, scenario_dir: Path) -> None:
-    """Upload the scenario's tracked sample dataset to MinIO if the tenant has none yet."""
+    """Upload the scenario's tracked sample dataset to SeaweedFS if the tenant has none yet."""
     if store.exists(org_id, dataset.raw_object):
         return
 
@@ -39,7 +39,7 @@ def ensure_raw_dataset(store: ObjectStore, org_id: str, dataset: TabularDataset,
 
 
 def load_raw(store: ObjectStore, org_id: str, dataset: TabularDataset) -> pd.DataFrame:
-    """Load the tenant's raw CSV dataset from MinIO into a DataFrame."""
+    """Load the tenant's raw CSV dataset from SeaweedFS into a DataFrame."""
     raw_bytes = store.get(org_id, dataset.raw_object)
     df = pd.read_csv(io.BytesIO(raw_bytes), index_col=dataset.index_col)
     logger.info("Loaded raw dataset for org={}: {} rows, {} columns", org_id, *df.shape)
@@ -79,7 +79,7 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
 
 
 def save_normalized(store: ObjectStore, org_id: str, df: pd.DataFrame) -> str:
-    """Write the cleaned DataFrame to MinIO as parquet; return the object key."""
+    """Write the cleaned DataFrame to SeaweedFS as parquet; return the object key."""
     buffer = io.BytesIO()
     df.to_parquet(buffer)
     key = store.put(org_id, NORMALIZED_DATASET_KEY, buffer.getvalue())

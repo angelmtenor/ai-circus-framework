@@ -2,7 +2,7 @@
 - Title:    Dataset sampling + held-out evaluation for tabular_ml scenarios
 - Author:   ai-circus-framework contributors
 
-Reads the same normalized parquet training already wrote to MinIO — real rows, not
+Reads the same normalized parquet training already wrote to SeaweedFS — real rows, not
 fabricated ones. The evaluation reproduces training's exact held-out split
 (train_test_split(random_state=0, test_size=0.2), stratified for classification) to
 score the deployed pipeline on data it wasn't fit on; note the deployed pipeline was
@@ -43,7 +43,7 @@ def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd
     """Load the tenant's cleaned (not yet one-hot-encoded) dataset.
 
     Mirrors ModelCache.get()'s fallback: a tenant without its own copy of the dataset
-    in MinIO yet (e.g. the admin/engineering-demo bypass orgs, or a brand-new Logto
+    in SeaweedFS yet (e.g. the admin/engineering-demo bypass orgs, or a brand-new Logto
     organization) gets `fallback_org_id`'s (matching training's ORG_ID) instead of a
     404 — every tenant otherwise 500s on the Data tab until it's retrained its own.
     """

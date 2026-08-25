@@ -7,11 +7,11 @@ cookiecutter-generated project with its **own** `AGENTS.md` — read that one to
 inside a specific service. Adherence is STRICTLY MANDATORY.
 
 ## 🚨 1. Security & System Integrity (Priority Zero)
-- **Credential Protection:** NEVER log, print, or commit secrets, API keys, or Logto/MinIO/LLM
+- **Credential Protection:** NEVER log, print, or commit secrets, API keys, or Logto/SeaweedFS/LLM
   credentials. Every `.env` (root and per-service) is gitignored except `.env.example`.
 - **Multi-tenancy is not optional:** any code path that reads scenario data, model artifacts,
   or vector search results MUST be scoped by `org_id` (the Logto Organization / tenant). Never
-  add a query, MinIO path, or Qdrant collection lookup that isn't tenant-scoped — see
+  add a query, SeaweedFS path, or Qdrant collection lookup that isn't tenant-scoped — see
   `libs/shared/src/ai_circus_shared/storage.py` and `entitlements.py` for the enforced pattern.
 - **Entitlement checks happen at the API, not just the UI:** every backend service must call
   `platform-registry`'s entitlement check before serving a scenario request, regardless of what

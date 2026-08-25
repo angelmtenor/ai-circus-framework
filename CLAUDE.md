@@ -23,8 +23,8 @@ The two rules from `AGENTS.md` most likely to matter mid-task, worth restating h
 ```bash
 make bootstrap              # copy .env.example -> .env (edit it: at least one LLM key, or `make ollama-up`)
 make all                     # one-shot: infra + services + ETL/training pipelines + end-to-end verify
-make reset-all               # nuke containers+volumes (postgres/logto/qdrant/minio data too), then `make all`
-make up-infra                # postgres, logto, qdrant, minio, traefik only
+make reset-all               # nuke containers+volumes (postgres/logto/qdrant/seaweedfs data too), then `make all`
+make up-infra                # postgres, logto, qdrant, seaweedfs, traefik only
 make up                      # every backend service + ui-react
 make pipeline                # (re)run churn's etl-tabular -> training -> prediction
 make verify                  # curl-check the exact requests the login screen makes (diagnoses "Failed to fetch")
@@ -101,7 +101,7 @@ is a bypass of the real check:
 ### Shared code
 
 `libs/shared` (`ai-circus-shared`) holds cross-service code — Logto token validation (`auth.py`),
-entitlement-check client (`entitlements.py`), MinIO object storage client (`storage.py`), the
+entitlement-check client (`entitlements.py`), SeaweedFS object storage client (`storage.py`), the
 `scenario.yaml` Pydantic schema (`scenario_schema.py`), tabular ML helpers, form validation — added to
 each service as a local **non-editable** `uv` path dependency (no monorepo-wide workspace; each service
 under `services/*/` is its own independent `uv` project, generated via cookiecutter from
@@ -117,10 +117,11 @@ already-configured model is *active*, though, is instant from `ui-react`'s Setti
 
 ### Object storage & ingress
 
-All datasets/models/documents live in **MinIO** (S3-compatible), never on a service's local disk, keeping
-services stateless. `infra/{postgres,logto,qdrant,minio,traefik}/` holds per-service config directories —
-today only `infra/postgres/` has real content (a multi-database init script); the rest is inline in
-`docker-compose.yml`.
+All datasets/models/documents live in **SeaweedFS** (S3-compatible), never on a service's local disk, keeping
+services stateless. `infra/{postgres,logto,qdrant,seaweedfs,traefik}/` holds per-service config directories —
+today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs/` (the generated S3
+gateway credentials file, see `scripts/generate_seaweedfs_s3_config.sh`) have real content; the rest is
+inline in `docker-compose.yml`.
 
 ### ui-react specifics
 

@@ -4,7 +4,7 @@
 
 Mirrors prediction's ModelCache: `assistant` is one long-running service shared by
 every tenant of every tabular_ml scenario in SCENARIOS, but each tenant has their own
-trained model/metadata in MinIO per scenario — the grounding system prompt is built
+trained model/metadata in SeaweedFS per scenario — the grounding system prompt is built
 lazily per (org_id, scenario_slug) and cached thereafter. A per-key lock avoids a
 cold-start cache stampede, same as ModelCache.
 """
@@ -45,7 +45,7 @@ class SystemPromptCache:
 
         `fallback_org_id` mirrors prediction's ModelCache: the tenant (matching
         training's ORG_ID) every other tenant's metadata lookup falls back to until it
-        has its own trained model in MinIO.
+        has its own trained model in SeaweedFS.
         """
         self._stores = stores
         self._definitions = definitions

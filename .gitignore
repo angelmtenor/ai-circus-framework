@@ -4,6 +4,7 @@
 !.env.example
 !.env.*.example
 infra/traefik/*.htpasswd
+infra/seaweedfs/s3.json
 
 # Python
 __pycache__/
@@ -26,7 +27,7 @@ node_modules/
 dist/
 .vite/
 
-# Data & model artifacts (live in MinIO, not git)
+# Data & model artifacts (live in SeaweedFS, not git)
 scenarios/**/data/
 scenarios/**/model/
 **/data/*.parquet
@@ -35,7 +36,7 @@ scenarios/**/model/
 # Infra runtime state
 infra/postgres/data/
 infra/qdrant/storage/
-infra/minio/data/
+infra/seaweedfs/data/
 infra/logto/data/
 
 # OS / editor

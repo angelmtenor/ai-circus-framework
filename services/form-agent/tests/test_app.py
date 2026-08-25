@@ -37,9 +37,9 @@ class FakeEnvConfig:
         self.SCENARIOS_DIR = "/scenarios"
         self.LLM_MODEL = "gpt-4o-mini"
         self.QDRANT_URL = "http://qdrant:6333"
-        self.MINIO_ENDPOINT = "http://minio:9000"
-        self.MINIO_ACCESS_KEY = "ai_circus"
-        self.MINIO_SECRET_KEY = FakeSecret("minio-secret")
+        self.OBJECT_STORE_ENDPOINT = "http://seaweedfs:8333"
+        self.OBJECT_STORE_ACCESS_KEY = "ai_circus"
+        self.OBJECT_STORE_SECRET_KEY = FakeSecret("seaweedfs-secret")
         self.LLM_GATEWAY_URL = "http://llm-gateway:4000"
         self.LLM_GATEWAY_API_KEY = FakeSecret("master-key")
         self.CORS_ALLOWED_ORIGINS = "http://react.localhost,http://localhost:5173"
@@ -145,9 +145,9 @@ async def test_lifespan_sets_up_qdrant_embedder_store_and_llm(monkeypatch: pytes
     assert store_calls == [
         {
             "bucket": "form-agent-submissions",
-            "endpoint_url": "http://minio:9000",
+            "endpoint_url": "http://seaweedfs:8333",
             "access_key": "ai_circus",
-            "secret_key": "minio-secret",
+            "secret_key": "seaweedfs-secret",
         }
     ]
 

@@ -18,7 +18,7 @@ from assistant.data_model import get_env_config
 def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
-    monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("OBJECT_STORE_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
     # AUTH_DISABLED, ADMIN_API_KEY, and LLM_MODEL intentionally have no settings.yaml
     # default (see settings.yaml) — they must come from real env vars.
@@ -46,7 +46,7 @@ def test_get_env_config_docker_profile() -> None:
     config = get_env_config(env="docker")
 
     assert config.SCENARIOS_DIR == "/app/scenarios"
-    assert config.MINIO_ENDPOINT == "http://minio:9000"
+    assert config.OBJECT_STORE_ENDPOINT == "http://seaweedfs:8333"
     assert config.LLM_GATEWAY_URL == "http://llm-gateway:4000"
     assert config.PLATFORM_REGISTRY_URL == "http://platform-registry:8000"
 
@@ -98,7 +98,7 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
 
     config = get_env_config(env="local")
 
-    assert config.MINIO_ENDPOINT == "http://minio.localhost"
+    assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
 
 
 def test_admin_api_key_has_no_yaml_default_and_reads_the_real_env_var(monkeypatch: pytest.MonkeyPatch) -> None:

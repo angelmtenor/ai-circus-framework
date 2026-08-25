@@ -34,12 +34,14 @@ class EnvConfig(BaseSettings):
         description="Comma-separated tabular_ml scenario slugs this instance serves; empty/unset = every scenario"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
-    MINIO_ENDPOINT: str = Field(
-        description="MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+    OBJECT_STORE_ENDPOINT: str = Field(
+        description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     )
-    MINIO_ACCESS_KEY: str = Field(description="MinIO access key (must match MINIO_ROOT_USER in the repo root .env)")
-    MINIO_SECRET_KEY: SecretStr = Field(
-        description="MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+    OBJECT_STORE_ACCESS_KEY: str = Field(
+        description="SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr = Field(
+        description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
     PLATFORM_REGISTRY_URL: str = Field(description="Base URL of the platform-registry service's entitlement-check API")
     AUTH_DISABLED: str = Field(
@@ -73,7 +75,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "a9f0a2e731b2ebd2f2630ac0a535ee0b4ad60ae6d4f6bf732905ba28b138ef04"
+_SOURCE_YAML_HASH = "2f6cb1e2d1a472ea501eec38391c59abea3e0e298a2ad12156d32df65ebd4db0"
 
 
 EnvConfig.model_rebuild()

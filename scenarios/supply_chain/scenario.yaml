@@ -37,10 +37,10 @@ chat:
 
 dataset:
   bucket: "scenario-supply-chain"
-  # MinIO key once uploaded; etl-tabular reads it from there.
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
   raw_object: "raw/supply_chain.csv"
   # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
-  # MinIO on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
   seed_file: "sample_data/supply_chain.csv"
   index_col: "OrderID"
   target: "ActualShippingDays"

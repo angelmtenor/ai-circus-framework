@@ -6,8 +6,8 @@
 #
 # etl-tabular is a one-shot job (not a long-running server): for every tabular_ml
 # scenario in SCENARIOS (empty/unset = all), it loads the tenant's raw dataset from
-# MinIO (bootstrapping it from a tracked sample_data/ file on first run), cleans/casts
-# it, and writes the normalized parquet back to MinIO.
+# SeaweedFS (bootstrapping it from a tracked sample_data/ file on first run), cleans/casts
+# it, and writes the normalized parquet back to SeaweedFS.
 
 env_variables:
   - name: LOG_LEVEL
@@ -34,20 +34,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: MINIO_ENDPOINT
-    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_ACCESS_KEY
-    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_SECRET_KEY
-    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: true
@@ -65,7 +65,7 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     ORG_ID: "demo"
-    MINIO_ACCESS_KEY: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
     # Empty = every tabular_ml scenario under SCENARIOS_DIR. Safe to default here:
     # there's only one instance of this service now (see prediction/settings.yaml's
     # "Consolidation mechanism" comment) — though a real env var override of this
@@ -76,13 +76,13 @@ environments:
   local:
     SCENARIOS_DIR: "../../scenarios"
     # Reached through Traefik's *.localhost routing (see docker-compose.yml).
-    MINIO_ENDPOINT: "http://minio.localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
     # Internal service-to-service traffic bypasses Traefik entirely.
-    MINIO_ENDPOINT: "http://minio:9000"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
 
   staging: {}
     # Staging environment profile — overrides go here
