@@ -1,0 +1,47 @@
+# Mirrors docker-compose.yml's llm-gateway service. Internal-only (no IngressRoute) —
+# same reasoning as its loopback-only compose port: only assistant/rag-agent/
+# platform-registry call it, over the cluster network, and its OpenAI-compatible
+# endpoint is gated only by a single shared key with no rate limiting.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: llm-gateway}
+  template:
+    metadata:
+      labels: {app: llm-gateway}
+    spec:
+      containers:
+        - name: llm-gateway
+          image: ai-circus/llm-gateway:local
+          imagePullPolicy: Never
+          ports:
+            - {containerPort: 4000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          # LiteLLM's proxy doesn't expose the same /healthz FastAPI wrapper the other
+          # services do (root Makefile's wait-services/verify don't probe it either,
+          # since it's internal-only) — a TCP check is the only thing safe to assume.
+          readinessProbe:
+            tcpSocket: {port: 4000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 4000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  namespace: ai-circus
+spec:
+  selector: {app: llm-gateway}
+  ports:
+    - {port: 4000, targetPort: 4000}

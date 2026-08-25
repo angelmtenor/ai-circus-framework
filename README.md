@@ -25,7 +25,7 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
 - [LLM providers](#llm-providers)
 - [Adding a new scenario or service](#adding-a-new-scenario-or-service)
 - [Testing & CI](#testing--ci)
-- [Kubernetes path](#kubernetes-path-documented-not-yet-built)
+- [Kubernetes path](#kubernetes-path)
 - [Reserved for later](#reserved-for-later-documented-not-built)
 - [Why this exists](#why-this-exists)
 - [Contributing](#contributing)
@@ -312,8 +312,8 @@ the comment on its Traefik labels in `docker-compose.yml` for why.
   <img src="docs/screenshots/architecture.png" alt="AI Open Framework architecture diagram" width="900">
 </p>
 
-Runs today via `docker compose up`; designed — not yet built — to migrate to
-minikube/Kubernetes later (see [Kubernetes path](#kubernetes-path-documented-not-yet-built)).
+Runs today via `docker compose up`, and also on a local k3s (k3d) cluster (see
+[Kubernetes path](#kubernetes-path)) — the same stateless, env-configured services either way.
 
 A tenant (Logto **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
@@ -416,17 +416,21 @@ own `npm run build` (type-checks via `tsc -b` then builds via Vite).
 `.github/workflows/ci.yml` runs the same checks per service as a matrix job, builds `ui-react`,
 and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
 
-## Kubernetes path (documented, not yet built)
+## Kubernetes path
 
 Every service already reads all config from env vars and is stateless (artifacts live in
-SeaweedFS/Qdrant/Postgres, never only on local disk) — the only piece that needs re-expressing for a
-minikube/Kubernetes move is Traefik's Docker-label routing, which becomes Ingress resources (or a
-Traefik Kubernetes CRD). No Helm chart exists yet.
+SeaweedFS/Qdrant/Postgres, never only on local disk), which is what makes a local single-node
+**k3d** (k3s-in-Docker) deployment a straightforward re-expression of the same compose services —
+see [`k8s/README.md`](k8s/README.md) for the manifests (`k8s/base/`, plain YAML + one Kustomize
+base, no Helm chart) and the `make k3s-*` workflow. It's dev-parity only, not a production/
+multi-node setup: no registry, images are built locally and imported straight into the cluster.
 
 ## Reserved for later (documented, not built)
 
-Kubernetes/Helm manifests, a custom in-app admin screen, a task queue for on-demand
-tenant-triggered jobs, distributed tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
+A Helm chart (plain YAML + Kustomize exists instead — see [Kubernetes path](#kubernetes-path) — for
+local dev-parity; Helm would only matter for a real multi-environment/production rollout), a
+custom in-app admin screen, a task queue for on-demand tenant-triggered jobs, distributed
+tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis)
 for multi-replica deployments, and (optional) extracting embedded images out of uploaded PDFs
 in the chat attachment flow — today `platform_registry.core.document_extraction` only pulls

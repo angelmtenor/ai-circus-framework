@@ -1,0 +1,25 @@
+# One-shot: `kubectl apply -f k8s/jobs/etl-tabular-job.yaml` (see `make k3s-pipeline`).
+# Mirrors docker-compose.yml's etl-tabular service (its `pipeline` profile). Delete and
+# reapply to re-run — Jobs don't restart on their own once Complete.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: etl-tabular
+  namespace: ai-circus
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: etl-tabular
+          image: ai-circus/etl-tabular:local
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}

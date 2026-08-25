@@ -1,0 +1,62 @@
+# Mirrors docker-compose.yml's form-agent service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: form-agent
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: form-agent}
+  template:
+    metadata:
+      labels: {app: form-agent}
+    spec:
+      containers:
+        - name: form-agent
+          image: ai-circus/form-agent:local
+          imagePullPolicy: Never
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          env:
+            # Renamed from .env's LITELLM_MASTER_KEY.
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: form-agent
+  namespace: ai-circus
+spec:
+  selector: {app: form-agent}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: form-agent
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`form-agent.localhost`)
+      kind: Rule
+      services:
+        - {name: form-agent, port: 8000}

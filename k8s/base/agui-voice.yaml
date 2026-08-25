@@ -1,0 +1,83 @@
+# Mirrors docker-compose.yml's agui-voice service. Persistent voice-model-cache PVC
+# (a plain Deployment+PVC, not a StatefulSet — this is a single-instance cache, not
+# per-replica state) keeps faster-whisper/Piper model weights across pod restarts,
+# same purpose as compose's voice-model-cache volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: voice-model-cache
+  namespace: ai-circus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: {requests: {storage: 5Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agui-voice
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: agui-voice}
+  template:
+    metadata:
+      labels: {app: agui-voice}
+    spec:
+      containers:
+        - name: agui-voice
+          image: ai-circus/agui-voice:local
+          imagePullPolicy: Never
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          env:
+            # Renamed from .env's VOICE_* vars — local, self-hosted defaults
+            # (faster-whisper/Piper, no API key). DEEPGRAM_API_KEY/ELEVENLABS_*/
+            # CARTESIA_* keep their .env names, so they flow through envFrom above
+            # unchanged when overriding to a hosted provider.
+            - {name: STT_PROVIDER, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_STT_PROVIDER}}}
+            - {name: TTS_PROVIDER, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_TTS_PROVIDER}}}
+            - {name: WHISPER_MODEL, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_WHISPER_MODEL}}}
+            - {name: PIPER_VOICE_ID, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_PIPER_VOICE_ID}}}
+            - {name: PIPER_VOICE_ID_ES, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_PIPER_VOICE_ID_ES}}}
+          volumeMounts:
+            # faster-whisper caches under ~/.cache/huggingface, Piper under
+            # ~/.cache/pipecat — this container has no dedicated user, so $HOME is /root.
+            - {name: voice-model-cache, mountPath: /root/.cache}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: voice-model-cache
+          persistentVolumeClaim: {claimName: voice-model-cache}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agui-voice
+  namespace: ai-circus
+spec:
+  selector: {app: agui-voice}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: agui-voice
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`agui-voice.localhost`)
+      kind: Rule
+      services:
+        - {name: agui-voice, port: 8000}

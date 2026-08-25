@@ -1,0 +1,53 @@
+# Mirrors docker-compose.yml's platform-registry service. Internal-only (no
+# IngressRoute) — same as its loopback-only compose port; only other pods call its
+# entitlement-check API (see AGENTS.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-registry
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: platform-registry}
+  template:
+    metadata:
+      labels: {app: platform-registry}
+    spec:
+      containers:
+        - name: platform-registry
+          image: ai-circus/platform-registry:local
+          imagePullPolicy: Never
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          env:
+            - {name: LOG_LEVEL, value: "INFO"}
+            # Renamed from .env's LITELLM_MASTER_KEY — backs the admin-only
+            # /llm-settings/* endpoints (see platform_registry/core/llm_settings.py).
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-registry
+  namespace: ai-circus
+spec:
+  selector: {app: platform-registry}
+  ports:
+    - {port: 8000, targetPort: 8000}

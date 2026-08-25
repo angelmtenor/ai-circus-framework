@@ -1,0 +1,85 @@
+# Mirrors docker-compose.yml's logto service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logto
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: logto}
+  template:
+    metadata:
+      labels: {app: logto}
+    spec:
+      containers:
+        - name: logto
+          image: svhd/logto:1.42.0
+          command: ["sh", "-c", "npm run cli db seed -- --swe; npm start"]
+          ports:
+            - {containerPort: 3001}
+            - {containerPort: 3002}
+          env:
+            - {name: TRUST_PROXY_HEADER, value: "1"}
+            - {name: ENDPOINT, value: "http://logto.localhost"}
+            - {name: ADMIN_ENDPOINT, value: "http://admin.logto.localhost"}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_PASSWORD}}}
+            # $(VAR) expansion of the two secret-sourced vars just above — a real k8s
+            # feature (not shell interpolation), same pattern docker-compose.yml uses
+            # via ${POSTGRES_USER}/${POSTGRES_PASSWORD} in its own DB_URL.
+            - {name: DB_URL, value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/logto"}
+            - {name: ENDPOINT_COOKIE_SECRET, valueFrom: {secretKeyRef: {name: app-env, key: LOGTO_ENDPOINT_COOKIE_SECRET}}}
+          readinessProbe:
+            httpGet: {path: /api/status, port: 3001}
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: {path: /api/status, port: 3001}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logto
+  namespace: ai-circus
+spec:
+  selector: {app: logto}
+  ports:
+    - {name: main, port: 3001, targetPort: 3001}
+    - {name: admin, port: 3002, targetPort: 3002}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: logto
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`logto.localhost`)
+      kind: Rule
+      services:
+        - {name: logto, port: 3001}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: logto-admin
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    # Whoever reaches this Admin Console first, before "First-time Logto setup"
+    # (README) is done, becomes the identity-system owner — the admin-basicauth
+    # Middleware (see middleware.yaml) closes that off regardless of how fast setup
+    # happens, on top of Logto's own login. Same reasoning as docker-compose.yml's
+    # logto-admin router.
+    - match: Host(`admin.logto.localhost`)
+      kind: Rule
+      services:
+        - {name: logto, port: 3002}
+      middlewares:
+        - name: admin-basicauth

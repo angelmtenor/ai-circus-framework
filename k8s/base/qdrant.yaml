@@ -1,0 +1,48 @@
+# Mirrors docker-compose.yml's qdrant service. Internal-only (no IngressRoute) — same
+# reasoning as compose's loopback-only port: Qdrant has no built-in auth, so it must
+# never gain a public route (would let anyone bypass rag-agent/form-agent's
+# entitlement checks and per-tenant collection naming).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  namespace: ai-circus
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels: {app: qdrant}
+  template:
+    metadata:
+      labels: {app: qdrant}
+    spec:
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.19.0
+          ports:
+            - {containerPort: 6333}
+          volumeMounts:
+            - {name: qdrant-storage, mountPath: /qdrant/storage}
+          readinessProbe:
+            tcpSocket: {port: 6333}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 6333}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata: {name: qdrant-storage}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 5Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: ai-circus
+spec:
+  selector: {app: qdrant}
+  ports:
+    - {port: 6333, targetPort: 6333}

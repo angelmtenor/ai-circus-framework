@@ -1,0 +1,24 @@
+# One-shot: `kubectl apply -f k8s/jobs/training-job.yaml` (see `make k3s-pipeline`),
+# run after etl-tabular-job completes. Mirrors docker-compose.yml's training service.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: training
+  namespace: ai-circus
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: training
+          image: ai-circus/training:local
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}

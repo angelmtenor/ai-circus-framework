@@ -1,0 +1,28 @@
+# One-shot: `kubectl apply -f k8s/jobs/etl-vectorize-job.yaml` (see `make k3s-pipeline`).
+# Mirrors docker-compose.yml's etl-vectorize service.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: etl-vectorize
+  namespace: ai-circus
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: etl-vectorize
+          image: ai-circus/etl-vectorize:local
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: app-env}
+          env:
+            # Renamed from .env's LITELLM_MASTER_KEY — only reached when
+            # EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model).
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
