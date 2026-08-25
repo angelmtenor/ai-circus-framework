@@ -13,10 +13,11 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify
+	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
+	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down
 
 help: ## Show this help message
-	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS=":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -193,6 +194,74 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 		echo "❌ engineering-demo key was NOT denied access to churn (got $$code, expected 403) — scoping enforcement is broken"; exit 1; \
 	fi; \
 	echo "✓ engineering-demo tenant verified — scoped to exactly mpm/electric_motor/energy_building"
+
+# ── k3s (local single-node, via k3d — see k8s/README.md) ───────────────────────
+# Dev-parity only: same *.localhost hostnames/routing as docker-compose, on a local
+# k3d cluster instead. Not a production/multi-node setup — no registry, no
+# imagePullSecrets; images are built locally and imported straight into k3d's
+# containerd. Run these roughly in order: cluster -> build -> import -> secrets -> up
+# -> wait -> (pipeline) -> verify.
+
+K3S_CLUSTER ?= ai-circus
+K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice
+
+k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes
+	@k3d cluster list "$(K3S_CLUSTER)" >/dev/null 2>&1 || \
+		k3d cluster create "$(K3S_CLUSTER)" -p "80:80@loadbalancer" -v "$$(pwd)/scenarios:/scenarios@all"
+	@echo "✓ k3d cluster '$(K3S_CLUSTER)' ready"
+
+k3s-build: ## Build every service image locally (same Dockerfiles docker-compose uses), tagged ai-circus/<service>:local
+	@for svc in $(K3S_IMAGES); do \
+		echo "── ai-circus/$$svc:local ──"; \
+		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
+	done
+	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local .
+	@echo "✓ all images built"
+
+k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd
+	@for svc in $(K3S_IMAGES) ui-react; do \
+		k3d image import "ai-circus/$$svc:local" -c "$(K3S_CLUSTER)" || exit 1; \
+	done
+	@echo "✓ all images imported into k3d cluster '$(K3S_CLUSTER)'"
+
+k3s-secrets: ## Generate the app-env/traefik-basicauth/seaweedfs-s3-config k8s Secrets from .env/infra — never committed, re-run any time those change
+	@./scripts/k3s_generate_secrets.sh
+
+k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend services, ingress)
+	@kubectl apply -k k8s/base
+	@echo "✓ k8s/base applied — 'make k3s-wait' to wait for it to actually be ready"
+
+k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to report Ready
+	@echo "⏳ waiting for postgres/qdrant/seaweedfs..."
+	@kubectl -n ai-circus rollout status statefulset/postgres --timeout=180s
+	@kubectl -n ai-circus rollout status statefulset/qdrant --timeout=60s
+	@kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=60s
+	@echo "⏳ waiting for logto (first boot seeds its own DB — can take a couple of minutes)..."
+	@kubectl -n ai-circus rollout status deployment/logto --timeout=180s
+	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice ui-react; do \
+		echo "⏳ waiting for $$svc..."; \
+		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
+	done
+	@echo "✓ all pods ready"
+
+k3s-pipeline: ## Run the one-shot churn ETL -> training pipeline as k8s Jobs (mirrors `make pipeline`)
+	@kubectl -n ai-circus delete job etl-tabular training --ignore-not-found
+	@kubectl apply -f k8s/jobs/etl-tabular-job.yaml
+	@kubectl -n ai-circus wait --for=condition=complete job/etl-tabular --timeout=300s
+	@kubectl apply -f k8s/jobs/training-job.yaml
+	@kubectl -n ai-circus wait --for=condition=complete job/training --timeout=600s
+	@kubectl -n ai-circus rollout restart deployment/prediction
+	@echo "✓ churn pipeline complete"
+
+k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl checks unchanged (same *.localhost + localhost:$${PLATFORM_REGISTRY_PORT:-8010} assertions, now against k3d's Traefik)
+	@kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-verify-port-forward.log 2>&1 & \
+	pf_pid=$$!; \
+	trap "kill $$pf_pid 2>/dev/null" EXIT; \
+	sleep 2; \
+	$(MAKE) verify
+
+k3s-down: ## Delete every applied k8s/base manifest (StatefulSet PVCs are retained by default — delete the k3d cluster entirely for a full wipe: `k3d cluster delete $(K3S_CLUSTER)`)
+	@kubectl delete -k k8s/base --ignore-not-found
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 
