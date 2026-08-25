@@ -160,8 +160,13 @@ services:
     mem_limit: 512m
     healthcheck:
       # No MinIO-style /minio/health/live equivalent — a bare TCP connect to the
-      # S3 port is the lightest true readiness signal.
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8333'"]
+      # S3 port is the lightest true readiness signal. This image has no bash (busybox
+      # only, confirmed via `docker exec ... which bash` -> not found), so `nc -z`
+      # rather than qdrant's `/dev/tcp` bashism above. Must be 127.0.0.1, not
+      # "localhost": this image's /etc/hosts resolves "localhost" to ::1 first and the
+      # S3 server only binds the IPv4 loopback, so busybox nc's IPv6 attempt fails
+      # every time (confirmed via `docker exec ... nc -z localhost/127.0.0.1 8333`).
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8333"]
       interval: 5s
       timeout: 5s
       retries: 10
