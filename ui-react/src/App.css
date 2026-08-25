@@ -1222,6 +1222,12 @@ select:focus {
   text-overflow: ellipsis;
 }
 
+/* Reserves its layout space even while hidden, so toggling the mic never
+   shifts the attach/input/send buttons to its right. */
+.chat-voice-providers--hidden {
+  visibility: hidden;
+}
+
 .chat-mic-icon {
   position: relative;
   z-index: 1;
