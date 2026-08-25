@@ -10,7 +10,7 @@
 # form via a frontend tool and, only for scenarios that configure one, classifies the
 # request via RAG over the tenant's vectorized document catalog — same embedder/Qdrant
 # pattern as rag-agent. Submissions are validated (ai_circus_shared.form_validation)
-# and persisted to MinIO.
+# and persisted to SeaweedFS.
 
 env_variables:
   - name: LOG_LEVEL
@@ -43,20 +43,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: MINIO_ENDPOINT
-    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_ACCESS_KEY
-    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_SECRET_KEY
-    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: true
@@ -175,7 +175,7 @@ environments:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
     DEV_ORG_ID: "demo"
-    MINIO_ACCESS_KEY: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
     # Empty = every assisted_form scenario under SCENARIOS_DIR — see rag-agent/
     # settings.yaml for the same default and its residual-limitation caveat.
     SCENARIOS: ""
@@ -187,7 +187,7 @@ environments:
   local:
     SCENARIOS_DIR: "../../scenarios"
     QDRANT_URL: "http://localhost:6333"
-    MINIO_ENDPOINT: "http://minio.localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     LLM_GATEWAY_URL: "http://localhost:4000"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
 
@@ -195,7 +195,7 @@ environments:
   docker:
     SCENARIOS_DIR: "/app/scenarios"
     QDRANT_URL: "http://qdrant:6333"
-    MINIO_ENDPOINT: "http://minio:9000"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
 

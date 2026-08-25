@@ -2,7 +2,7 @@
 - Title:    Submission validation + persistence
 - Author:   ai-circus-framework contributors
 
-Persists as one JSON object per submission via the tenant-scoped MinIO client
+Persists as one JSON object per submission via the tenant-scoped SeaweedFS client
 (`ai_circus_shared.storage`) — the same mechanism etl/training/prediction already use
 for artifacts, avoiding a new Postgres schema/migration for this demo feature.
 """

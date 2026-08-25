@@ -144,7 +144,7 @@ async def agui_endpoint(
     per-request entitlement check).
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
-    # prompt_cache.get() does blocking MinIO I/O on a cache miss; this route is
+    # prompt_cache.get() does blocking SeaweedFS I/O on a cache miss; this route is
     # `async def` (needed for StreamingResponse below), so FastAPI won't threadpool
     # it automatically — off the event loop explicitly, or a cold-start miss for one
     # tenant stalls every other tenant's concurrent request on this instance.

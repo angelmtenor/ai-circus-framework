@@ -6,7 +6,7 @@
 #
 # etl-vectorize is a one-shot job (not a long-running server): for every
 # conversational_rag scenario in SCENARIOS (empty/unset = all), it loads the tenant's
-# documents from MinIO (bootstrapping them from a tracked sample_docs/ folder on
+# documents from SeaweedFS (bootstrapping them from a tracked sample_docs/ folder on
 # first run), chunks + embeds them, and upserts the result into a per-tenant Qdrant
 # collection for rag-agent to query.
 
@@ -39,20 +39,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: MINIO_ENDPOINT
-    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_ACCESS_KEY
-    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_SECRET_KEY
-    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: true
@@ -116,7 +116,7 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     ORG_ID: "admin"
-    MINIO_ACCESS_KEY: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
     # Empty = every conversational_rag scenario under SCENARIOS_DIR — see
     # etl-tabular/settings.yaml for the same default and its residual-limitation caveat.
     SCENARIOS: ""
@@ -124,7 +124,7 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     SCENARIOS_DIR: "../../scenarios"
-    MINIO_ENDPOINT: "http://minio.localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     # Loopback-bound host ports (not Traefik — see root docker-compose.yml's qdrant/
     # llm-gateway comments for why neither belongs on the public entrypoint).
     QDRANT_URL: "http://localhost:6333"
@@ -133,7 +133,7 @@ environments:
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
-    MINIO_ENDPOINT: "http://minio:9000"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     QDRANT_URL: "http://qdrant:6333"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
 

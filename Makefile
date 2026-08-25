@@ -21,18 +21,19 @@ help: ## Show this help message
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-bootstrap: ## Create .env from .env.example, and console.htpasswd from its .example, if missing
+bootstrap: ## Create .env from .env.example, console.htpasswd from its .example (if missing), and infra/seaweedfs/s3.json from .env
 	@if [ ! -f .env ] && [ -f .env.example ]; then echo "📝 Creating .env from .env.example..."; cp .env.example .env; fi
 	@if [ ! -f infra/traefik/console.htpasswd ] && [ -f infra/traefik/console.htpasswd.example ]; then \
 		echo "📝 Creating infra/traefik/console.htpasswd from its .example (demo credential — rotate with 'make generate-console-auth' before a public deployment)..."; \
 		cp infra/traefik/console.htpasswd.example infra/traefik/console.htpasswd; \
 	fi
-	@echo "✓ Edit .env (Logto/LLM/MinIO secrets) before running 'make up'"
+	@./scripts/generate_seaweedfs_s3_config.sh
+	@echo "✓ Edit .env (Logto/LLM/SeaweedFS secrets) before running 'make up'"
 
 # ── Compose lifecycle ─────────────────────────────────────────────────────────
 
-up-infra: ## Start only the platform infra (postgres, logto, qdrant, minio, traefik)
-	@docker compose up -d postgres logto qdrant minio traefik
+up-infra: ## Start only the platform infra (postgres, logto, qdrant, seaweedfs, traefik)
+	@docker compose up -d postgres logto qdrant seaweedfs traefik
 
 up: ## Start the full platform (infra + all backend services + the UI)
 	@docker compose up -d --build
@@ -54,11 +55,11 @@ ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; 
 # ── Public deployment (any public VM, or minikube behind a public Ingress) — no
 # separate compose file or `up` variant: `make up` already serves both
 # local dev and a real deployment, differentiated purely by .env (same as
-# ADMIN_API_KEY/MINIO_ROOT_PASSWORD/etc. always have been). See README "Public
+# ADMIN_API_KEY/OBJECT_STORE_SECRET_KEY/etc. always have been). See README "Public
 # deployment" for the full checklist; the two commands below cover the parts that
 # are easy to forget.
 
-generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.logto/console.minio — usage: make generate-console-auth [CONSOLE_USER=admin]
+generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.logto/console.objectstore — usage: make generate-console-auth [CONSOLE_USER=admin]
 	@./scripts/generate_console_auth.sh "$(CONSOLE_USER)"
 
 check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped demo values before a public deployment (does not start/stop anything)
@@ -79,6 +80,9 @@ check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped dem
 		echo "❌ infra/traefik/console.htpasswd is missing — run 'make generate-console-auth'"; ok=0; \
 	elif [ -f infra/traefik/console.htpasswd.example ] && cmp -s infra/traefik/console.htpasswd infra/traefik/console.htpasswd.example; then \
 		echo "❌ infra/traefik/console.htpasswd still holds the shipped demo credential — run 'make generate-console-auth'"; ok=0; \
+	fi; \
+	if [ -f infra/seaweedfs/s3.json.example ] && cmp -s infra/seaweedfs/s3.json infra/seaweedfs/s3.json.example 2>/dev/null; then \
+		echo "❌ infra/seaweedfs/s3.json still holds the shipped demo credential — set OBJECT_STORE_ACCESS_KEY/SECRET_KEY in .env then run './scripts/generate_seaweedfs_s3_config.sh'"; ok=0; \
 	fi; \
 	if [ "$$ok" = "1" ]; then echo "✓ looks ready for a public deployment — run 'make up' (or 'make all') on the target host"; else exit 1; fi
 
@@ -109,7 +113,7 @@ all: ## One-shot: bootstrap .env, start infra+services, run both pipelines, veri
 	fi
 
 reset-all: ## Nuke containers + volumes + per-service build artifacts, then rebuild fresh via `make all` — the fastest way back to a known-good state, and what to run before sharing this repo so it's proven from a clean slate
-	@echo "🧹 tearing down containers + volumes (postgres/logto/qdrant/minio data all reset)..."
+	@echo "🧹 tearing down containers + volumes (postgres/logto/qdrant/seaweedfs data all reset)..."
 	@docker compose down -v
 	@$(MAKE) all
 

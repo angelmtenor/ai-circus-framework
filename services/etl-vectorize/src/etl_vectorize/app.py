@@ -5,7 +5,7 @@ app.py
 Entry point for etl-vectorize: a one-shot job that, for every conversational_rag
 scenario in SCENARIOS (empty/unset = all) plus every assisted_form scenario that
 configures a document catalog (`form.classification_field` set), extracts the
-tenant's documents from MinIO
+tenant's documents from SeaweedFS
 (bootstrapping them on first run from either a tracked sample_docs/ folder or a public
 GitHub repo folder — see `documents.seed_prefix`/`documents.github_source`), chunks and
 embeds them, and upserts the result into the tenant's Qdrant collection. Runs once
@@ -78,9 +78,9 @@ def main() -> None:
         assert definition.documents is not None and definition.vector_store is not None  # guaranteed by kind filter
         store = ObjectStore.connect(
             bucket=definition.documents.bucket,
-            endpoint_url=config.MINIO_ENDPOINT,
-            access_key=config.MINIO_ACCESS_KEY,
-            secret_key=config.MINIO_SECRET_KEY.get_secret_value(),
+            endpoint_url=config.OBJECT_STORE_ENDPOINT,
+            access_key=config.OBJECT_STORE_ACCESS_KEY,
+            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
         qdrant = QdrantClient(url=config.QDRANT_URL)
 

@@ -3,9 +3,9 @@ app.py
 ------
 
 Entry point for etl-tabular: a one-shot job that, for every tabular_ml scenario in
-SCENARIOS (empty/unset = all), extracts the tenant's raw dataset from MinIO
+SCENARIOS (empty/unset = all), extracts the tenant's raw dataset from SeaweedFS
 (bootstrapping it from a tracked sample file on first run), cleans it, and writes the
-normalized parquet back to MinIO. Runs once and exits — not a long-running server
+normalized parquet back to SeaweedFS. Runs once and exits — not a long-running server
 (see docker-compose.yml's `profiles: ["pipeline"]`).
 
 Author: ai-circus-framework contributors
@@ -51,9 +51,9 @@ def main() -> None:
         assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
         store = ObjectStore.connect(
             bucket=definition.dataset.bucket,
-            endpoint_url=config.MINIO_ENDPOINT,
-            access_key=config.MINIO_ACCESS_KEY,
-            secret_key=config.MINIO_SECRET_KEY.get_secret_value(),
+            endpoint_url=config.OBJECT_STORE_ENDPOINT,
+            access_key=config.OBJECT_STORE_ACCESS_KEY,
+            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
         run_etl(store, config.ORG_ID, definition.dataset, scenarios_dir / slug)
         logger.success("etl-tabular finished for scenario={} org={}", slug, config.ORG_ID)

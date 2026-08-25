@@ -3,9 +3,9 @@ app.py
 ------
 
 Entry point for training: a one-shot job that, for every tabular_ml scenario in
-SCENARIOS (empty/unset = all), loads the tenant's normalized parquet from MinIO
+SCENARIOS (empty/unset = all), loads the tenant's normalized parquet from SeaweedFS
 (written by etl-tabular), trains/selects a model per the scenario's Green Code
-candidate policy, builds a SHAP explainer, and writes both back to MinIO for the
+candidate policy, builds a SHAP explainer, and writes both back to SeaweedFS for the
 `prediction` service to load. Runs once and exits — not a long-running server (see
 docker-compose.yml's `profiles: ["pipeline"]`).
 
@@ -60,14 +60,14 @@ def _dump(obj: object) -> bytes:
 
 
 def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> None:
-    """Train/select a model for one scenario and save it + its explainer to MinIO."""
+    """Train/select a model for one scenario and save it + its explainer to SeaweedFS."""
     assert definition.dataset is not None and definition.model is not None  # guaranteed by kind filter
 
     store = ObjectStore.connect(
         bucket=definition.dataset.bucket,
-        endpoint_url=config.MINIO_ENDPOINT,
-        access_key=config.MINIO_ACCESS_KEY,
-        secret_key=config.MINIO_SECRET_KEY.get_secret_value(),
+        endpoint_url=config.OBJECT_STORE_ENDPOINT,
+        access_key=config.OBJECT_STORE_ACCESS_KEY,
+        secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
     )
 
     df = pd.read_parquet(io.BytesIO(store.get(config.ORG_ID, NORMALIZED_DATASET_KEY)))

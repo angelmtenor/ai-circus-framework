@@ -18,7 +18,7 @@ from etl_vectorize.data_model import get_env_config
 def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
-    monkeypatch.setenv("MINIO_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("OBJECT_STORE_SECRET_KEY", "test-secret")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-gateway-key")
 
 
@@ -31,7 +31,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.LOG_LEVEL == "INFO"
     assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
-    assert config.MINIO_ENDPOINT == "http://minio.localhost"
+    assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
     assert config.QDRANT_URL == "http://localhost:6333"
 
 
@@ -40,7 +40,7 @@ def test_get_env_config_docker_profile() -> None:
     config = get_env_config(env="docker")
 
     assert config.SCENARIOS_DIR == "/app/scenarios"
-    assert config.MINIO_ENDPOINT == "http://minio:9000"
+    assert config.OBJECT_STORE_ENDPOINT == "http://seaweedfs:8333"
     assert config.QDRANT_URL == "http://qdrant:6333"
 
 
@@ -65,7 +65,7 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
 
     config = get_env_config(env="local")
 
-    assert config.MINIO_ENDPOINT == "http://minio.localhost"
+    assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
 
 
 def test_scenarios_yaml_default_beats_a_real_env_var_override(monkeypatch: pytest.MonkeyPatch) -> None:
