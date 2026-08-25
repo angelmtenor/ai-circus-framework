@@ -34,6 +34,8 @@ make down                    # stop everything
 make check-all               # `make check` inside every services/* project, in sequence
 make sync-shared              # after editing libs/shared: `uv sync --reinstall-package ai-circus-shared` everywhere
 make new-service NAME=foo    # scaffold a new backend service from ai-circus-template
+
+make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):
@@ -66,8 +68,9 @@ exactly).
 
 Microservices behind **Traefik** (the only container reachable from outside the host — a few services
 additionally publish a **loopback-only** port for non-Docker local dev, never `traefik.enable=true`).
-Runs via `docker compose up` today; every service is stateless/env-configured by design for an eventual
-Kubernetes move (not yet built).
+Runs via `docker compose up` day-to-day; every service is stateless/env-configured by design, which
+also runs unchanged on a local single-node k3s (k3d) cluster — see [`k8s/README.md`](k8s/README.md)
+and the `make k3s-*` targets (dev-parity only, not a production/multi-node setup).
 
 ### Scenario-driven, not per-feature code
 
