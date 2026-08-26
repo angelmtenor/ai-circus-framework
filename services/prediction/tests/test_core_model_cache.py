@@ -205,7 +205,7 @@ def test_get_raises_model_not_trained_when_neither_tenant_nor_fallback_has_artif
 ) -> None:
     """If `training` never ran (or errored out) for a scenario, neither the tenant's
     own org nor the shared fallback org has model artifacts. This must surface as a
-    clear ModelNotTrainedError — not a raw, unhandled MinIO 404 (which api.py can't
+    clear ModelNotTrainedError — not a raw, unhandled SeaweedFS 404 (which api.py can't
     turn into a clean HTTP response, since it isn't expecting that exception type).
     """
     empty_store = FakeObjectStore()

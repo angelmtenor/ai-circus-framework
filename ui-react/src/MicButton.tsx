@@ -108,8 +108,12 @@ export function MicButton({
           </span>
         )}
       </button>
-      {providers && active && (
-        <span className="chat-voice-providers" title="Voice mode's current speech-to-text/text-to-speech engine">
+      {providers && (
+        <span
+          className={`chat-voice-providers${active ? "" : " chat-voice-providers--hidden"}`}
+          title="Voice mode's current speech-to-text/text-to-speech engine"
+          aria-hidden={!active}
+        >
           🎙️ {providerLabel(providers.stt)} · 🔊 {providerLabel(providers.tts)}
         </span>
       )}

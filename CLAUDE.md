@@ -23,8 +23,8 @@ The two rules from `AGENTS.md` most likely to matter mid-task, worth restating h
 ```bash
 make bootstrap              # copy .env.example -> .env (edit it: at least one LLM key, or `make ollama-up`)
 make all                     # one-shot: infra + services + ETL/training pipelines + end-to-end verify
-make reset-all               # nuke containers+volumes (postgres/logto/qdrant/minio data too), then `make all`
-make up-infra                # postgres, logto, qdrant, minio, traefik only
+make reset-all               # nuke containers+volumes (postgres/logto/qdrant/seaweedfs data too), then `make all`
+make up-infra                # postgres, logto, qdrant, seaweedfs, traefik only
 make up                      # every backend service + ui-react
 make pipeline                # (re)run churn's etl-tabular -> training -> prediction
 make verify                  # curl-check the exact requests the login screen makes (diagnoses "Failed to fetch")
@@ -34,6 +34,8 @@ make down                    # stop everything
 make check-all               # `make check` inside every services/* project, in sequence
 make sync-shared              # after editing libs/shared: `uv sync --reinstall-package ai-circus-shared` everywhere
 make new-service NAME=foo    # scaffold a new backend service from ai-circus-template
+
+make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):
@@ -66,8 +68,9 @@ exactly).
 
 Microservices behind **Traefik** (the only container reachable from outside the host — a few services
 additionally publish a **loopback-only** port for non-Docker local dev, never `traefik.enable=true`).
-Runs via `docker compose up` today; every service is stateless/env-configured by design for an eventual
-Kubernetes move (not yet built).
+Runs via `docker compose up` day-to-day; every service is stateless/env-configured by design, which
+also runs unchanged on a local single-node k3s (k3d) cluster — see [`k8s/README.md`](k8s/README.md)
+and the `make k3s-*` targets (dev-parity only, not a production/multi-node setup).
 
 ### Scenario-driven, not per-feature code
 
@@ -101,7 +104,7 @@ is a bypass of the real check:
 ### Shared code
 
 `libs/shared` (`ai-circus-shared`) holds cross-service code — Logto token validation (`auth.py`),
-entitlement-check client (`entitlements.py`), MinIO object storage client (`storage.py`), the
+entitlement-check client (`entitlements.py`), SeaweedFS object storage client (`storage.py`), the
 `scenario.yaml` Pydantic schema (`scenario_schema.py`), tabular ML helpers, form validation — added to
 each service as a local **non-editable** `uv` path dependency (no monorepo-wide workspace; each service
 under `services/*/` is its own independent `uv` project, generated via cookiecutter from
@@ -117,10 +120,11 @@ already-configured model is *active*, though, is instant from `ui-react`'s Setti
 
 ### Object storage & ingress
 
-All datasets/models/documents live in **MinIO** (S3-compatible), never on a service's local disk, keeping
-services stateless. `infra/{postgres,logto,qdrant,minio,traefik}/` holds per-service config directories —
-today only `infra/postgres/` has real content (a multi-database init script); the rest is inline in
-`docker-compose.yml`.
+All datasets/models/documents live in **SeaweedFS** (S3-compatible), never on a service's local disk, keeping
+services stateless. `infra/{postgres,logto,qdrant,seaweedfs,traefik}/` holds per-service config directories —
+today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs/` (the generated S3
+gateway credentials file, see `scripts/generate_seaweedfs_s3_config.sh`) have real content; the rest is
+inline in `docker-compose.yml`.
 
 ### ui-react specifics
 

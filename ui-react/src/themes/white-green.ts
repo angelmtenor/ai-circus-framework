@@ -52,8 +52,8 @@ export const whiteGreenTheme: Theme = {
     plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: "#122318", family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" },
     colorway: ["#178a4c", "#2f7bc4", "#7c5cff", "#d9455f", "#0fa3a3", "#c98a00", "#c2437b", "#a9d139"],
-    xaxis: { gridcolor: "#e3efe7", zerolinecolor: "#c6c6c6", linecolor: "#cdead9", color: "#587465" },
-    yaxis: { gridcolor: "#e3efe7", zerolinecolor: "#c6c6c6", linecolor: "#cdead9", color: "#587465" },
+    xaxis: { gridcolor: "#e3efe7", zerolinecolor: "#c6c6c6", linecolor: "#cdead9", color: "#587465", automargin: true },
+    yaxis: { gridcolor: "#e3efe7", zerolinecolor: "#c6c6c6", linecolor: "#cdead9", color: "#587465", automargin: true },
     scene: {
       xaxis: { gridcolor: "#e3efe7", backgroundcolor: "rgba(0,0,0,0)", color: "#587465" },
       yaxis: { gridcolor: "#e3efe7", backgroundcolor: "rgba(0,0,0,0)", color: "#587465" },

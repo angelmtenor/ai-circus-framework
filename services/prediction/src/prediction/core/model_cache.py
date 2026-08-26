@@ -3,10 +3,10 @@
 - Author:   ai-circus-framework contributors
 
 One `prediction` instance serves every tabular_ml scenario in SCENARIOS, shared by
-every tenant of each — the trained pipeline/explainer are loaded from MinIO lazily on
+every tenant of each — the trained pipeline/explainer are loaded from SeaweedFS lazily on
 first request per (org_id, scenario_slug) and cached in memory thereafter. A per-key
 lock avoids a cold-start cache stampede (N concurrent first-requests for the same key
-each redundantly hitting MinIO) without needing to convert this service to async.
+each redundantly hitting SeaweedFS) without needing to convert this service to async.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class ModelUnavailableError(RuntimeError):
 
 
 class CorruptArtifactError(ModelUnavailableError):
-    """Raised when a MinIO artifact's bytes don't match its metadata checksum —
+    """Raised when a SeaweedFS artifact's bytes don't match its metadata checksum —
     i.e. it was partially overwritten by an interrupted retrain, or corrupted/tampered
     with in storage. Refuse to deserialize it rather than joblib.load()'ing unknown
     bytes.
@@ -56,7 +56,7 @@ class CorruptArtifactError(ModelUnavailableError):
 class ModelNotTrainedError(ModelUnavailableError):
     """Raised when no trained model artifacts exist for a scenario, for either the
     tenant's own org or the shared fallback org (e.g. `training` never ran, or errored
-    out, for this scenario) — as opposed to `store.get()` bubbling up a raw MinIO 404.
+    out, for this scenario) — as opposed to `store.get()` bubbling up a raw SeaweedFS 404.
     """
 
 
@@ -99,10 +99,10 @@ class ModelCache:
     """
 
     def __init__(self, stores: dict[str, ObjectStore], fallback_org_id: str) -> None:
-        """Bind this cache to one ObjectStore per loaded scenario_slug (own MinIO bucket each).
+        """Bind this cache to one ObjectStore per loaded scenario_slug (own SeaweedFS bucket each).
 
         `fallback_org_id` is the tenant (matching training's ORG_ID) every other
-        tenant's model lookup falls back to until it has its own artifacts in MinIO —
+        tenant's model lookup falls back to until it has its own artifacts in SeaweedFS —
         without this, any tenant besides the one training actually ran for (e.g. the
         admin/engineering-demo bypass tenants, or a brand-new Logto organization) would
         404 on every predict call, contradicting this cache's own "shared by every
@@ -113,7 +113,7 @@ class ModelCache:
         self._cache: OrderedDict[tuple[str, str], ModelArtifacts] = OrderedDict()
         # Guards every read/write of `self._cache` itself (hit-path bump, insert,
         # eviction). Distinct from the per-key locks below, which only serialize the
-        # expensive MinIO load+joblib.load work so concurrent loads of *different*
+        # expensive SeaweedFS load+joblib.load work so concurrent loads of *different*
         # keys don't block each other — without this separate guard, a fast-path hit
         # on one key could run unsynchronized against another key's slow-path
         # eviction (`popitem`), raising a spurious KeyError under concurrent load.
@@ -165,7 +165,7 @@ class ModelCache:
                         f"(org={org_id!r}, fallback org={load_org_id!r} also has none — has `training` run for it?)."
                     )
             logger.info(
-                "Loading model artifacts for org={} scenario={} from MinIO (cache miss)", load_org_id, scenario_slug
+                "Loading model artifacts for org={} scenario={} from SeaweedFS (cache miss)", load_org_id, scenario_slug
             )
             # Read metadata first — it's the manifest training writes last, once
             # every artifact below it has been confirmed uploaded — so an

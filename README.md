@@ -25,7 +25,7 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
 - [LLM providers](#llm-providers)
 - [Adding a new scenario or service](#adding-a-new-scenario-or-service)
 - [Testing & CI](#testing--ci)
-- [Kubernetes path](#kubernetes-path-documented-not-yet-built)
+- [Kubernetes path](#kubernetes-path)
 - [Reserved for later](#reserved-for-later-documented-not-built)
 - [Why this exists](#why-this-exists)
 - [Contributing](#contributing)
@@ -164,7 +164,7 @@ ready (not just started) before moving to the next, and finishes by curling the 
 through the same path the browser's login screen uses — so a broken setup fails loudly here,
 with logs to check, instead of as a "Failed to fetch" in the UI later. Safe to re-run any time.
 If something's clearly broken (stale volumes, half-applied `.env` change), `make reset-all` tears
-everything down — **including data in postgres/logto/qdrant/minio** — and reruns `make all` from a
+everything down — **including data in postgres/logto/qdrant/seaweedfs** — and reruns `make all` from a
 clean slate; that's also the right thing to run before sharing this repo, to prove it boots clean.
 
 The rest of this section is the same sequence broken into individual steps, useful if you want
@@ -183,7 +183,7 @@ it to get a working demo; the two things that matter most are covered next.
 ### 2. Start the platform infrastructure
 
 ```bash
-make up-infra    # postgres, logto (identity), qdrant (vectors), minio (storage), traefik (ingress)
+make up-infra    # postgres, logto (identity), qdrant (vectors), seaweedfs (storage), traefik (ingress)
 ```
 
 ### 3. Choose your LLM and set its API key — **this step is required**
@@ -288,7 +288,7 @@ tell them apart:
    `ENGINEERING_DEMO_API_KEY` away from their shipped demo values, and confirm
    `AUTH_DISABLED=false`.
 2. Regenerate the Basic Auth credential Traefik puts in front of Logto's Admin Console and
-   MinIO's console — both are otherwise purely-administrative UIs, always reachable on the
+   SeaweedFS's console — both are otherwise purely-administrative UIs, always reachable on the
    Traefik entrypoint (Logto's Admin Console in particular lets *whoever reaches it first*
    become the identity-system owner, so it's gated even locally, just with a shipped demo
    credential you must rotate here):
@@ -301,7 +301,7 @@ tell them apart:
 4. `make check-public-ready` sanity-checks all three steps above without starting/stopping
    anything, then deploy with the usual `make up` (or `make all`).
 
-MinIO's S3 API route (as opposed to its console) is deliberately left without Basic Auth — see
+SeaweedFS's S3 API route (as opposed to its console) is deliberately left without Basic Auth — see
 the comment on its Traefik labels in `docker-compose.yml` for why.
 
 ---
@@ -312,8 +312,8 @@ the comment on its Traefik labels in `docker-compose.yml` for why.
   <img src="docs/screenshots/architecture.png" alt="AI Open Framework architecture diagram" width="900">
 </p>
 
-Runs today via `docker compose up`; designed — not yet built — to migrate to
-minikube/Kubernetes later (see [Kubernetes path](#kubernetes-path-documented-not-yet-built)).
+Runs today via `docker compose up`, and also on a local k3s (k3d) cluster (see
+[Kubernetes path](#kubernetes-path)) — the same stateless, env-configured services either way.
 
 A tenant (Logto **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
@@ -325,7 +325,7 @@ These are in place from day one — not deferred — because they're cheap to bu
 expensive to retrofit once single-tenant assumptions are baked in.
 
 - **Tenancy**: Logto **Organizations** model tenants; roles are assigned per-organization.
-- **Object storage**: all datasets/models/documents live in **MinIO** (S3-compatible), never on a
+- **Object storage**: all datasets/models/documents live in **SeaweedFS** (S3-compatible), never on a
   service's local disk — keeps services stateless and horizontally scalable.
 - **Scenario/entitlement registry**: `platform-registry` owns a Postgres schema
   (`tenants`/`scenarios`/`entitlements`); `scenarios/*.yaml` is only the human-editable seed
@@ -335,10 +335,10 @@ expensive to retrofit once single-tenant assumptions are baked in.
   (`platform-registry`, `qdrant`, `llm-gateway`) purely so services running outside Docker (local,
   non-container dev) can still reach them directly; none of those three has auth strong enough to
   be safe on Traefik's public entrypoint, so they must never gain a `traefik.enable=true` label.
-- **`infra/{postgres,logto,qdrant,minio,traefik}/`**: reserved per-service config directories —
-  today only `infra/postgres/` has content (a multi-database init script); the others' config is
-  inline in `docker-compose.yml` (command args/env/labels) until each grows enough to warrant its
-  own files.
+- **`infra/{postgres,logto,qdrant,seaweedfs,traefik}/`**: reserved per-service config directories —
+  today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs/` (the generated
+  S3 gateway credentials file) have content; the others' config is inline in `docker-compose.yml`
+  (command args/env/labels) until each grows enough to warrant its own files.
 - **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of
@@ -353,7 +353,7 @@ Every backend service is generated via real **cookiecutter** generation against
 `scripts/new_service.sh`), so each stays an independent `uv` project with its own
 `pyproject.toml`/`uv.lock`/Dockerfile — no monorepo-wide uv workspace. That template is itself
 built on the conventions from [`ai-circus`](https://github.com/angelmtenor/ai-circus), my
-Python best-practices reference repo. Common code (Logto token validation, MinIO client,
+Python best-practices reference repo. Common code (Logto token validation, SeaweedFS client,
 entitlement-check client, scenario schema) lives in `libs/shared` (`ai-circus-shared`), added to
 each service as a local **non-editable** `uv` path dependency.
 
@@ -416,17 +416,21 @@ own `npm run build` (type-checks via `tsc -b` then builds via Vite).
 `.github/workflows/ci.yml` runs the same checks per service as a matrix job, builds `ui-react`,
 and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
 
-## Kubernetes path (documented, not yet built)
+## Kubernetes path
 
 Every service already reads all config from env vars and is stateless (artifacts live in
-MinIO/Qdrant/Postgres, never only on local disk) — the only piece that needs re-expressing for a
-minikube/Kubernetes move is Traefik's Docker-label routing, which becomes Ingress resources (or a
-Traefik Kubernetes CRD). No Helm chart exists yet.
+SeaweedFS/Qdrant/Postgres, never only on local disk), which is what makes a local single-node
+**k3d** (k3s-in-Docker) deployment a straightforward re-expression of the same compose services —
+see [`k8s/README.md`](k8s/README.md) for the manifests (`k8s/base/`, plain YAML + one Kustomize
+base, no Helm chart) and the `make k3s-*` workflow. It's dev-parity only, not a production/
+multi-node setup: no registry, images are built locally and imported straight into the cluster.
 
 ## Reserved for later (documented, not built)
 
-Kubernetes/Helm manifests, a custom in-app admin screen, a task queue for on-demand
-tenant-triggered jobs, distributed tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
+A Helm chart (plain YAML + Kustomize exists instead — see [Kubernetes path](#kubernetes-path) — for
+local dev-parity; Helm would only matter for a real multi-environment/production rollout), a
+custom in-app admin screen, a task queue for on-demand tenant-triggered jobs, distributed
+tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis)
 for multi-replica deployments, and (optional) extracting embedded images out of uploaded PDFs
 in the chat attachment flow — today `platform_registry.core.document_extraction` only pulls

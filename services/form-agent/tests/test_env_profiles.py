@@ -19,7 +19,7 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
-    monkeypatch.setenv("MINIO_SECRET_KEY", "test-minio-secret")
+    monkeypatch.setenv("OBJECT_STORE_SECRET_KEY", "test-seaweedfs-secret")
     # LLM_MODEL intentionally has no settings.yaml default (see settings.yaml) — it
     # must come from a real env var, same as AUTH_DISABLED/ADMIN_API_KEY below.
     monkeypatch.setenv("LLM_MODEL", "gpt-4o-mini")
@@ -40,7 +40,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.SCENARIOS == ""
     assert config.SCENARIOS_DIR == "../../scenarios"
     assert config.QDRANT_URL == "http://localhost:6333"
-    assert config.MINIO_ENDPOINT == "http://minio.localhost"
+    assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
     assert config.PLATFORM_REGISTRY_URL == "http://localhost:8010"
 
 
@@ -50,7 +50,7 @@ def test_get_env_config_docker_profile() -> None:
 
     assert config.SCENARIOS_DIR == "/app/scenarios"
     assert config.QDRANT_URL == "http://qdrant:6333"
-    assert config.MINIO_ENDPOINT == "http://minio:9000"
+    assert config.OBJECT_STORE_ENDPOINT == "http://seaweedfs:8333"
     assert config.PLATFORM_REGISTRY_URL == "http://platform-registry:8000"
 
 

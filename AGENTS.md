@@ -7,11 +7,11 @@ cookiecutter-generated project with its **own** `AGENTS.md` — read that one to
 inside a specific service. Adherence is STRICTLY MANDATORY.
 
 ## 🚨 1. Security & System Integrity (Priority Zero)
-- **Credential Protection:** NEVER log, print, or commit secrets, API keys, or Logto/MinIO/LLM
+- **Credential Protection:** NEVER log, print, or commit secrets, API keys, or Logto/SeaweedFS/LLM
   credentials. Every `.env` (root and per-service) is gitignored except `.env.example`.
 - **Multi-tenancy is not optional:** any code path that reads scenario data, model artifacts,
   or vector search results MUST be scoped by `org_id` (the Logto Organization / tenant). Never
-  add a query, MinIO path, or Qdrant collection lookup that isn't tenant-scoped — see
+  add a query, SeaweedFS path, or Qdrant collection lookup that isn't tenant-scoped — see
   `libs/shared/src/ai_circus_shared/storage.py` and `entitlements.py` for the enforced pattern.
 - **Entitlement checks happen at the API, not just the UI:** every backend service must call
   `platform-registry`'s entitlement check before serving a scenario request, regardless of what
@@ -40,6 +40,10 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
 - **New service scaffolding:** always go through `./scripts/new_service.sh <name>` (real
   cookiecutter generation from `ai-circus-template`) — never hand-write a service's
   `pyproject.toml`/`Dockerfile`/`settings.yaml` from scratch.
+- **Browser/rendering verification** (charts, CSS/layout, SVG output): the `mcp__playwright__*`
+  tools require a real Chrome binary this sandbox doesn't have and can't install without an
+  interactive `sudo` prompt. See the `playwright-headless-verify` skill for the working
+  Chromium-via-`playwright-core` alternative before giving up on browser-based verification.
 
 ## 🌳 5. Branching Strategy — git-flow
 - **Model:** `main` (production-ready, tagged releases) and `develop` (integration branch) are

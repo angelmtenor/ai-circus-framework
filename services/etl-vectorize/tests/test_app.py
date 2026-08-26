@@ -36,9 +36,9 @@ class FakeEnvConfig:
         self.SCENARIOS_DIR = "/scenarios"
         self.SCENARIOS = ""
         self.ORG_ID = "demo"
-        self.MINIO_ENDPOINT = "http://minio:9000"
-        self.MINIO_ACCESS_KEY = "ai_circus"
-        self.MINIO_SECRET_KEY = FakeSecret("s3cret")
+        self.OBJECT_STORE_ENDPOINT = "http://seaweedfs:8333"
+        self.OBJECT_STORE_ACCESS_KEY = "ai_circus"
+        self.OBJECT_STORE_SECRET_KEY = FakeSecret("s3cret")
         self.QDRANT_URL = "http://qdrant:6333"
         self.EMBEDDING_PROVIDER = "local"
         self.EMBEDDING_MODEL = None
@@ -113,7 +113,7 @@ def test_main_runs_the_vectorize_pipeline_for_every_resolved_scenario(monkeypatc
     assert connect_calls == [
         {
             "bucket": "scenario-docs-rag",
-            "endpoint_url": "http://minio:9000",
+            "endpoint_url": "http://seaweedfs:8333",
             "access_key": "ai_circus",
             "secret_key": "s3cret",
         }

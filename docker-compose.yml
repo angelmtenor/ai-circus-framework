@@ -8,7 +8,7 @@
 # App services (platform-registry, etl-*, training, prediction, llm-gateway,
 # assistant, rag-agent, form-agent, ui-react) are appended here as they're built
 # (see the build order in the project plan) — this file currently wires the infra
-# layer: postgres, logto, qdrant, minio, traefik.
+# layer: postgres, logto, qdrant, seaweedfs, traefik.
 
 name: ai-circus-framework
 
@@ -19,7 +19,7 @@ networks:
 volumes:
   postgres-data:
   qdrant-storage:
-  minio-data:
+  seaweedfs-data:
   ollama-data:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
@@ -45,11 +45,11 @@ services:
       - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Basic Auth credential for the admin-basicauth middleware below (logto/minio
+      # Basic Auth credential for the admin-basicauth middleware below (logto/seaweedfs
       # labels) — gitignored, seeded from console.htpasswd.example by `make
       # bootstrap`, rotated by `make generate-console-auth` before a public
       # deployment. Always mounted (not just for public deploys): the two routers it
-      # gates (admin.logto, console.minio) are purely administrative and otherwise
+      # gates (admin.logto, console.objectstore) are purely administrative and otherwise
       # unauthenticated-until-configured, so the extra layer costs nothing locally.
       - ./infra/traefik/console.htpasswd:/etc/traefik/console.htpasswd:ro
     networks: [ai-circus]
@@ -142,40 +142,53 @@ services:
       retries: 10
 
   # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  # All-in-one SeaweedFS server (master+volume+filer+S3 gateway in one process) —
+  # mirrors MinIO's previous single-container simplicity. S3 credentials are NOT
+  # env vars here (SeaweedFS's S3 gateway has no ROOT_USER/PASSWORD equivalent):
+  # they come from the mounted s3.json identities file, generated from
+  # OBJECT_STORE_ACCESS_KEY/OBJECT_STORE_SECRET_KEY in .env by `make bootstrap`
+  # (see scripts/generate_seaweedfs_s3_config.sh), same gitignored-generated-file
+  # pattern as infra/traefik/console.htpasswd below.
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.97
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
     volumes:
-      - minio-data:/data
+      - seaweedfs-data:/data
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 512m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # No MinIO-style /minio/health/live equivalent — a bare TCP connect to the
+      # S3 port is the lightest true readiness signal. This image has no bash (busybox
+      # only, confirmed via `docker exec ... which bash` -> not found), so `nc -z`
+      # rather than qdrant's `/dev/tcp` bashism above. Must be 127.0.0.1, not
+      # "localhost": this image's /etc/hosts resolves "localhost" to ::1 first and the
+      # S3 server only binds the IPv4 loopback, so busybox nc's IPv6 attempt fails
+      # every time (confirmed via `docker exec ... nc -z localhost/127.0.0.1 8333`).
+      test: ["CMD", "nc", "-z", "127.0.0.1", "8333"]
       interval: 5s
       timeout: 5s
       retries: 10
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.minio-api.rule=Host(`minio.localhost`)"
-      - "traefik.http.routers.minio-api.entrypoints=web"
-      - "traefik.http.routers.minio-api.service=minio-api"
-      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
-      - "traefik.http.routers.minio-console.rule=Host(`console.minio.localhost`)"
-      - "traefik.http.routers.minio-console.entrypoints=web"
-      - "traefik.http.routers.minio-console.service=minio-console"
-      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+      - "traefik.http.routers.seaweedfs-s3.rule=Host(`objectstore.localhost`)"
+      - "traefik.http.routers.seaweedfs-s3.entrypoints=web"
+      - "traefik.http.routers.seaweedfs-s3.service=seaweedfs-s3"
+      - "traefik.http.services.seaweedfs-s3.loadbalancer.server.port=8333"
+      - "traefik.http.routers.seaweedfs-console.rule=Host(`console.objectstore.localhost`)"
+      - "traefik.http.routers.seaweedfs-console.entrypoints=web"
+      - "traefik.http.routers.seaweedfs-console.service=seaweedfs-console"
+      - "traefik.http.services.seaweedfs-console.loadbalancer.server.port=8888"
       # Same admin-basicauth middleware as logto-admin above (defined once there;
       # referenced here via the @docker provider suffix since it's cross-container).
-      # Deliberately NOT applied to minio-api: no service reaches MinIO's S3 API via
-      # Traefik in the "docker" profile (they all use MINIO_ENDPOINT=http://minio:9000
-      # over the internal network) — this route exists only for local, non-Docker dev
-      # to reach it as minio.localhost, and Basic Auth would break that (S3 clients
-      # don't send it). It's still gated by a real MINIO_ROOT_USER/PASSWORD.
-      - "traefik.http.routers.minio-console.middlewares=admin-basicauth@docker"
+      # Deliberately NOT applied to seaweedfs-s3: no service reaches the S3 API via
+      # Traefik in the "docker" profile (they all use OBJECT_STORE_ENDPOINT=
+      # http://seaweedfs:8333 over the internal network) — this route exists only
+      # for local, non-Docker dev to reach it as objectstore.localhost, and Basic
+      # Auth would break that (S3 clients don't send it). It's still gated by the
+      # real OBJECT_STORE_ACCESS_KEY/SECRET_KEY in s3.json.
+      - "traefik.http.routers.seaweedfs-console.middlewares=admin-basicauth@docker"
 
   # ── Backend services (each generated via `scripts/new_service.sh`) ────────────
   platform-registry:
@@ -217,7 +230,7 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
-      # bind mount here (unlike MinIO for datasets/models) keeps edits live without
+      # bind mount here (unlike SeaweedFS for datasets/models) keeps edits live without
       # a rebuild.
       - ./scenarios:/app/scenarios:ro
     ports:
@@ -244,12 +257,12 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     networks: [ai-circus]
     mem_limit: 1g
@@ -263,8 +276,8 @@ services:
     environment:
       APP_ENVIRONMENT: docker
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
       # Logto is configured; see prediction/settings.yaml.
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
@@ -284,7 +297,7 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
       platform-registry:
         condition: service_started
@@ -375,8 +388,8 @@ services:
     environment:
       APP_ENVIRONMENT: docker
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Defaults to "llama3", which only answers once you've run `make ollama-up`
       # (see docker-compose.yml's `ollama` service — off by default). Set at least
@@ -401,7 +414,7 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
       platform-registry:
         condition: service_started
@@ -427,12 +440,12 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     networks: [ai-circus]
     mem_limit: 2g
@@ -446,8 +459,8 @@ services:
     profiles: ["pipeline"]
     environment:
       APP_ENVIRONMENT: docker
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       # MUST match rag-agent's below — see .env.example's Embeddings section.
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
@@ -459,7 +472,7 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
       qdrant:
         condition: service_healthy
@@ -527,7 +540,7 @@ services:
   # assisted_form scenario in SCENARIOS (empty/unset = all). Classifies the request
   # via RAG only for scenarios that configure it (same embedder/Qdrant pattern as
   # rag-agent above); always answered via llm-gateway. Submissions are persisted to
-  # MinIO (see form-agent/core/submissions.py).
+  # SeaweedFS (see form-agent/core/submissions.py).
   form-agent:
     build:
       context: .
@@ -540,8 +553,8 @@ services:
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       APP_ENVIRONMENT: docker
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # See rag-agent's own comment above for why this default only answers once
       # you've run `make ollama-up`, and what to set it to instead.
@@ -565,7 +578,7 @@ services:
     depends_on:
       qdrant:
         condition: service_healthy
-      minio:
+      seaweedfs:
         condition: service_healthy
       platform-registry:
         condition: service_started

@@ -7,7 +7,7 @@
 # prediction is a long-running FastAPI service serving POST /predict/{scenario_slug}
 # for every tabular_ml scenario listed in SCENARIOS (empty/unset = all), across every
 # tenant (the model/explainer are loaded per (org, scenario), cached in memory, from
-# MinIO). Validates the caller's Logto token (or ADMIN_API_KEY) and checks the
+# SeaweedFS). Validates the caller's Logto token (or ADMIN_API_KEY) and checks the
 # entitlement via platform-registry before serving — unless AUTH_DISABLED (dev only).
 
 env_variables:
@@ -35,20 +35,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: MINIO_ENDPOINT
-    description: "MinIO/S3 endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_ACCESS_KEY
-    description: "MinIO access key (must match MINIO_ROOT_USER in the repo root .env)"
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: false
 
-  - name: MINIO_SECRET_KEY
-    description: "MinIO secret key (must match MINIO_ROOT_PASSWORD in the repo root .env)"
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     type: string
     mandatory: true
     secret: true
@@ -126,7 +126,7 @@ environments:
   base:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
-    MINIO_ACCESS_KEY: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
     DEV_ORG_ID: "demo"
     # Must match training's ORG_ID default — see SHARED_MODEL_ORG_ID's description
     # above. Same "safe to default here" reasoning as SCENARIOS below.
@@ -151,13 +151,13 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     SCENARIOS_DIR: "../../scenarios"
-    MINIO_ENDPOINT: "http://minio.localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
-    MINIO_ENDPOINT: "http://minio:9000"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
 
   staging: {}

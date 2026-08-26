@@ -49,8 +49,8 @@ export const tronTheme: Theme = {
     plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: "#dcecf7", family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" },
     colorway: ["#33c7ff", "#aa3bff", "#ffcf4d", "#2de8a0", "#ff5f7a", "#22d3c8", "#ff8fd6", "#b6ff5c"],
-    xaxis: { gridcolor: "#1c3a5e", zerolinecolor: "#2c5a8a", linecolor: "#1c3a5e", color: "#7fa3c9" },
-    yaxis: { gridcolor: "#1c3a5e", zerolinecolor: "#2c5a8a", linecolor: "#1c3a5e", color: "#7fa3c9" },
+    xaxis: { gridcolor: "#1c3a5e", zerolinecolor: "#2c5a8a", linecolor: "#1c3a5e", color: "#7fa3c9", automargin: true },
+    yaxis: { gridcolor: "#1c3a5e", zerolinecolor: "#2c5a8a", linecolor: "#1c3a5e", color: "#7fa3c9", automargin: true },
     scene: {
       xaxis: { gridcolor: "#1c3a5e", backgroundcolor: "rgba(0,0,0,0)", color: "#7fa3c9" },
       yaxis: { gridcolor: "#1c3a5e", backgroundcolor: "rgba(0,0,0,0)", color: "#7fa3c9" },

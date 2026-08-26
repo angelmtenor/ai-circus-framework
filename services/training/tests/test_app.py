@@ -57,9 +57,9 @@ class FakeEnvConfig:
         self.SCENARIOS_DIR = "/scenarios"
         self.SCENARIOS = ""
         self.ORG_ID = "demo"
-        self.MINIO_ENDPOINT = "http://minio:9000"
-        self.MINIO_ACCESS_KEY = "ai_circus"
-        self.MINIO_SECRET_KEY = FakeSecret("s3cret")
+        self.OBJECT_STORE_ENDPOINT = "http://seaweedfs:8333"
+        self.OBJECT_STORE_ACCESS_KEY = "ai_circus"
+        self.OBJECT_STORE_SECRET_KEY = FakeSecret("s3cret")
 
 
 class FakeObjectStore:

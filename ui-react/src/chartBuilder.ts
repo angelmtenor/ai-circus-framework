@@ -122,7 +122,7 @@ function buildHistogram(rows: DatasetRow[], cfg: ChartCardConfig, palette: strin
   }));
   return {
     data,
-    layout: { barmode: "overlay", xaxis: { title: cfg.x }, yaxis: { title: "count" }, showlegend: groups.length > 1 },
+    layout: { barmode: "overlay", xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: "count" } }, showlegend: groups.length > 1 },
   };
 }
 
@@ -130,7 +130,7 @@ function buildBox(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
   if (!cfg.y) return { data: [], layout: {} };
   const filtered = withFiniteNumber(rows, cfg.y);
   if (!cfg.x) {
-    return { data: [{ type: "box", y: filtered.map((r) => toNumber(r[cfg.y])), marker: { color: palette[0] } }], layout: { yaxis: { title: cfg.y } } };
+    return { data: [{ type: "box", y: filtered.map((r) => toNumber(r[cfg.y])), marker: { color: palette[0] } }], layout: { yaxis: { title: { text: cfg.y } } } };
   }
   return {
     data: [
@@ -141,7 +141,7 @@ function buildBox(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
         marker: { color: palette[0] },
       },
     ],
-    layout: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y } },
+    layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } },
   };
 }
 
@@ -159,8 +159,8 @@ function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[
   if (is3d) candidateRows = withFiniteNumber(candidateRows, cfg.z);
 
   const sceneOrAxes: PlotlyLayout = is3d
-    ? { scene: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, zaxis: { title: cfg.z }, dragmode: "orbit" } }
-    : { xaxis: { title: cfg.x }, yaxis: { title: cfg.y } };
+    ? { scene: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } }, zaxis: { title: { text: cfg.z } }, dragmode: "orbit" } }
+    : { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } };
 
   // Continuous gradient: one trace, marker.color driven by a Plotly colorscale
   // (with its own colorbar) rather than one trace per distinct value — a discrete
@@ -216,7 +216,7 @@ function buildLine(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]):
       marker: { color: palette[i % palette.length] },
     };
   });
-  return { data, layout: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y }, showlegend: groups.length > 1 } };
+  return { data, layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } }, showlegend: groups.length > 1 } };
 }
 
 function bucketValues(rows: DatasetRow[], x: string, y: string): Map<string, number[]> {
@@ -248,8 +248,8 @@ function buildBar(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
     data,
     layout: {
       barmode: groups.length > 1 ? "group" : "stack",
-      xaxis: { title: cfg.x },
-      yaxis: { title: cfg.y ? `${cfg.agg}(${cfg.y})` : "count" },
+      xaxis: { title: { text: cfg.x } },
+      yaxis: { title: { text: cfg.y ? `${cfg.agg}(${cfg.y})` : "count" } },
       showlegend: groups.length > 1,
     },
   };
@@ -271,7 +271,7 @@ function buildHeatmap(rows: DatasetRow[], cfg: ChartCardConfig): { data: PlotlyD
     const filtered = withFiniteNumber(withFiniteNumber(rows, cfg.x), cfg.y);
     return {
       data: [{ type: "histogram2d", x: filtered.map((r) => toNumber(r[cfg.x])), y: filtered.map((r) => toNumber(r[cfg.y])), colorscale: "Blues" }],
-      layout: { xaxis: { title: cfg.x }, yaxis: { title: cfg.y } },
+      layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } },
     };
   }
   // No axes chosen: a correlation matrix across every numeric column is a more

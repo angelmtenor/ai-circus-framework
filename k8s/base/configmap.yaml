@@ -1,0 +1,22 @@
+# Non-secret config shared across backend pods via envFrom. Secrets (POSTGRES_*,
+# ADMIN_API_KEY, OBJECT_STORE_*, LOGTO_*, provider keys, LITELLM_MASTER_KEY, ...) come
+# from the `app-env` Secret instead (generated from .env by `make k3s-secrets` — see
+# scripts/k3s_generate_secrets.sh). pydantic-settings only reads env vars its own
+# EnvConfig declares, so it's safe for every pod to receive every key here even when
+# most don't apply to that particular service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-config
+  namespace: ai-circus
+data:
+  APP_ENVIRONMENT: "docker"
+  DEPLOYMENT_TARGET: "local"
+  CORS_ALLOWED_ORIGINS: "http://aiopen.localhost"
+  # Internal k8s Service DNS, not *.localhost — same reasoning as docker-compose.yml's
+  # identical hardcoded value: *.localhost resolves to loopback inside a pod's own
+  # network namespace, not to the logto Service.
+  LOGTO_JWKS_URL: "http://logto:3001/oidc/jwks"
+  EMBEDDING_PROVIDER: "local"
+  LLM_MODEL: "groq-llama"
+  OLLAMA_API_BASE: "http://ollama:11434"

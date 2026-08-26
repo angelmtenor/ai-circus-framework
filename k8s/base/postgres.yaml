@@ -1,0 +1,80 @@
+# Mirrors docker-compose.yml's postgres service. Internal-only (no IngressRoute) —
+# same as its loopback-only compose port, reached only by other pods over Service DNS.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: ai-circus
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_PASSWORD}}}
+            - {name: POSTGRES_DB, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_DB}}}
+          volumeMounts:
+            - {name: postgres-data, mountPath: /var/lib/postgresql/data}
+            - {name: init-scripts, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "$(POSTGRES_USER)"]}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: ["pg_isready", "-U", "$(POSTGRES_USER)"]}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: init-scripts
+          # postgres-image convention requires *.sh init scripts to be executable.
+          configMap: {name: postgres-init-scripts, defaultMode: 0o755}
+  volumeClaimTemplates:
+    - metadata: {name: postgres-data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: ai-circus
+data:
+  # Kustomize's configMapGenerator would be neater, but a plain ConfigMap keeps this
+  # single-file/no-generator-indirection like the rest of k8s/base/. Content mirrors
+  # infra/postgres/init-multiple-databases.sh exactly — keep the two in sync by hand
+  # if that script ever changes.
+  init-multiple-databases.sh: |
+    #!/bin/bash
+    # Runs once, on first container start (postgres image convention: any *.sh under
+    # /docker-entrypoint-initdb.d/ is executed). POSTGRES_DB only creates one database
+    # (the `platform` schema used by services/platform-registry); Logto and llm-gateway
+    # (LiteLLM's own spend-tracking schema) each need their own.
+    set -euo pipefail
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE DATABASE logto;
+        GRANT ALL PRIVILEGES ON DATABASE logto TO "$POSTGRES_USER";
+        CREATE DATABASE litellm;
+        GRANT ALL PRIVILEGES ON DATABASE litellm TO "$POSTGRES_USER";
+    EOSQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ai-circus
+spec:
+  selector: {app: postgres}
+  ports:
+    - {port: 5432, targetPort: 5432}

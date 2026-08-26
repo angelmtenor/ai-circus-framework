@@ -66,5 +66,7 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
         "hypothetical/what-if records. Call one of these before claiming you lack the data to answer, or before "
         "describing numbers in prose that these tools could fetch for real.\n\n"
         "If a render_chart or render_table tool is available and the question calls for showing a plot or tabular "
-        "data, call it (using the real values from the tools above) instead of describing the data in prose."
+        "data, call it (using the real values from the tools above) instead of describing the data in prose. "
+        "Always pass x_label and y_label describing what each axis represents (include units when relevant, "
+        "e.g. 'Balance ($)') — never omit them or leave a chart unlabeled."
     )

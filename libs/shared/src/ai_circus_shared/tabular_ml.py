@@ -1,4 +1,4 @@
-"""Shared MinIO object-key conventions for tabular_ml scenarios.
+"""Shared SeaweedFS object-key conventions for tabular_ml scenarios.
 
 A single source of truth for the keys etl-tabular writes to and training/prediction
 read from, so the three services can't drift out of sync on where artifacts live.

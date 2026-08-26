@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "ai_circus",
+      "credentials": [
+        {
+          "accessKey": "ai_circus",
+          "secretKey": "change-me-8-chars-minimum"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write"]
+    }
+  ]
+}
