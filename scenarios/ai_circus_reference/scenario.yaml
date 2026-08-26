@@ -25,6 +25,8 @@ chat:
     - "What dev environment does ai-circus recommend, and why?"
     - "What's the recommended workflow for ML explainability?"
     - "What GenAI/RAG courses or reference repos does ai-circus recommend studying first?"
+    - "What does SHAP actually tell you about a model's predictions?"
+    - "What software engineering practices should I follow before opening a pull request?"
 
 documents:
   # Source documents fetched at bootstrap straight from the ai-circus repo's own

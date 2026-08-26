@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from ai_circus_shared.scenario_schema import TabularDataset
+from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 
 from etl_tabular.core.etl import clean, ensure_raw_dataset, load_raw, run_etl, save_normalized
 
@@ -20,9 +21,9 @@ DATASET = TabularDataset(
     protected_features_excluded=["Gender"],
     feature_columns=["CreditScore", "Geography", "Age"],
     feature_schema={
-        "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
-        "Geography": {"type": "categorical", "options": ["France", "Spain"], "default": "France"},
-        "Age": {"type": "numeric", "min": 18, "max": 92, "default": 40},
+        "CreditScore": {"type": "numeric", "label": "Credit score", "min": 300, "max": 850, "default": 650},
+        "Geography": {"type": "categorical", "label": "Country", "options": ["France", "Spain"], "default": "France"},
+        "Age": {"type": "numeric", "label": "Age", "min": 18, "max": 92, "default": 40},
     },
 )
 
@@ -119,8 +120,13 @@ def test_clean_casts_boolean_feature_columns_to_category() -> None:
         update={
             "feature_columns": ["CreditScore", "IsHoliday"],
             "feature_schema": {
-                "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
-                "IsHoliday": {"type": "categorical", "options": ["False", "True"], "default": "False"},
+                "CreditScore": {"type": "numeric", "label": "Credit score", "min": 300, "max": 850, "default": 650},
+                "IsHoliday": {
+                    "type": "categorical",
+                    "label": "Holiday",
+                    "options": ["False", "True"],
+                    "default": "False",
+                },
             },
         }
     )
@@ -146,8 +152,13 @@ def test_clean_boolean_feature_column_stays_categorical_through_parquet_round_tr
         update={
             "feature_columns": ["CreditScore", "IsHoliday"],
             "feature_schema": {
-                "CreditScore": {"type": "numeric", "min": 300, "max": 850, "default": 650},
-                "IsHoliday": {"type": "categorical", "options": ["False", "True"], "default": "False"},
+                "CreditScore": {"type": "numeric", "label": "Credit score", "min": 300, "max": 850, "default": 650},
+                "IsHoliday": {
+                    "type": "categorical",
+                    "label": "Holiday",
+                    "options": ["False", "True"],
+                    "default": "False",
+                },
             },
         }
     )
@@ -163,6 +174,19 @@ def test_clean_boolean_feature_column_stays_categorical_through_parquet_round_tr
     restored = pd.read_parquet(buffer)
 
     assert restored["IsHoliday"].dtype.name == "category"
+
+
+def test_clean_downsamples_a_dataset_larger_than_the_row_cap() -> None:
+    """A dataset larger than MAX_DATASET_ROWS is downsampled to exactly that many rows."""
+    n = MAX_DATASET_ROWS + 5000
+    df = pd.DataFrame(
+        {"CreditScore": range(n), "Geography": ["France"] * n, "Age": range(n), "Exited": [0] * n},
+        index=pd.Index(range(n), name="CustomerId"),
+    )
+
+    cleaned = clean(df, DATASET)
+
+    assert len(cleaned) == MAX_DATASET_ROWS
 
 
 def test_save_normalized_writes_parquet_readable_back(scenario_dir: Path) -> None:

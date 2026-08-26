@@ -37,6 +37,8 @@ chat:
     - "Which sensor readings contribute most to a high failure risk?"
     - "Does tool wear alone predict failure, or does it depend on other factors?"
     - "How accurate is the trained model?"
+    - "Is a high-performance (H) machine more or less likely to fail than a low-performance (L) one?"
+    - "What does a healthy machine's sensor readings usually look like?"
 
 dataset:
   bucket: "scenario-mpm"
@@ -63,12 +65,24 @@ dataset:
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
   # ranges taken from the real dataset's min/max (AI4I 2020, 10000 rows).
   feature_schema:
-    Air temperature [K]: {type: numeric, min: 295.0, max: 305.0, default: 300.0, step: 0.1}
-    Process temperature [K]: {type: numeric, min: 305.0, max: 314.0, default: 310.0, step: 0.1}
-    Rotational speed [rpm]: {type: numeric, min: 1150, max: 2900, default: 1500, step: 10}
-    Torque [Nm]: {type: numeric, min: 3.0, max: 77.0, default: 40.0, step: 0.5}
-    Tool wear [min]: {type: numeric, min: 0, max: 260, default: 108, step: 1}
-    Type: {type: categorical, options: ["L", "M", "H"], default: "M"}
+    Air temperature [K]:
+      {type: numeric, label: "Air temperature (K)", min: 295.0, max: 305.0, default: 300.0, step: 0.1,
+       info: "Ambient air temperature around the machine, in kelvin."}
+    Process temperature [K]:
+      {type: numeric, label: "Process temperature (K)", min: 305.0, max: 314.0, default: 310.0, step: 0.1,
+       info: "Temperature of the machine's working process itself, in kelvin — always somewhat above air temperature."}
+    Rotational speed [rpm]:
+      {type: numeric, label: "Rotational speed (rpm)", min: 1150, max: 2900, default: 1500, step: 10,
+       info: "How fast the machine's spindle is turning, in revolutions per minute."}
+    Torque [Nm]:
+      {type: numeric, label: "Torque (Nm)", min: 3.0, max: 77.0, default: 40.0, step: 0.5,
+       info: "Rotational force the machine is applying, in newton-metres."}
+    Tool wear [min]:
+      {type: numeric, label: "Tool wear (minutes)", min: 0, max: 260, default: 108, step: 1,
+       info: "Cumulative minutes the current cutting tool has been in use since it was last replaced."}
+    Type:
+      {type: categorical, label: "Machine type", options: ["L", "M", "H"], default: "M",
+       info: "The machine's performance tier/quality variant: L = low, M = medium, H = high."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
@@ -85,6 +99,9 @@ model:
   candidates: ["lightgbm"]
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
+  target_label: "Machine condition"
+  target_description: "Whether the machine failed during this operating window."
+  target_value_labels: {"0": "Healthy", "1": "Broken"}
 
 # Dedicated compose instances (etl-tabular-mpm/training-mpm/prediction-mpm/
 # assistant-mpm) of the SAME generic images used by the churn scenario — proves the

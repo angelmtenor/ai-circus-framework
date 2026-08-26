@@ -31,9 +31,11 @@ chat:
     (kitchen, living room, laundry room), outdoor weather (temperature, pressure, humidity,
     wind speed, visibility, dew point), and the time of day/week/holiday status.
   sample_questions:
-    - "Which features matter most for predicting appliance energy use?"
+    - "Which factors matter most for predicting appliance energy use?"
     - "How accurate is the trained model?"
     - "Does the time of day matter more than the weather for energy consumption?"
+    - "How does outdoor temperature affect predicted energy use?"
+    - "Is energy use higher on weekends or holidays?"
 
 dataset:
   bucket: "scenario-energy-building"
@@ -74,23 +76,23 @@ dataset:
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
   # ranges taken from the real dataset's min/max (10,000-row sample).
   feature_schema:
-    T1: {type: numeric, min: 16.0, max: 27.0, default: 21.0, step: 0.1}
-    RH_1: {type: numeric, min: 27.0, max: 64.0, default: 40.0, step: 0.5}
-    T2: {type: numeric, min: 16.0, max: 30.0, default: 20.0, step: 0.1}
-    RH_2: {type: numeric, min: 20.0, max: 57.0, default: 40.0, step: 0.5}
-    T3: {type: numeric, min: 17.0, max: 30.0, default: 22.0, step: 0.1}
-    RH_3: {type: numeric, min: 29.0, max: 50.0, default: 40.0, step: 0.5}
-    T_out: {type: numeric, min: -5.0, max: 27.0, default: 10.0, step: 0.5}
-    Press_mm_hg: {type: numeric, min: 729.0, max: 773.0, default: 755.0, step: 1.0}
-    RH_out: {type: numeric, min: 24.0, max: 100.0, default: 80.0, step: 1.0}
-    Windspeed: {type: numeric, min: 0.0, max: 13.0, default: 4.0, step: 0.5}
-    Visibility: {type: numeric, min: 1.0, max: 66.0, default: 40.0, step: 1.0}
-    Tdewpoint: {type: numeric, min: -7.0, max: 16.0, default: 4.0, step: 0.5}
-    month: {type: numeric, min: 1, max: 5, default: 3, step: 1}
-    day: {type: numeric, min: 1, max: 31, default: 15, step: 1}
-    hour: {type: numeric, min: 0, max: 23, default: 12, step: 1}
-    day_of_week: {type: numeric, min: 0, max: 6, default: 3, step: 1}
-    is_holiday: {type: categorical, options: ["False", "True"], default: "False"}
+    T1: {type: numeric, label: "Kitchen temperature", min: 16.0, max: 27.0, default: 21.0, step: 0.1, info: "Indoor temperature in the kitchen, in °C."}
+    RH_1: {type: numeric, label: "Kitchen humidity", min: 27.0, max: 64.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the kitchen, in %."}
+    T2: {type: numeric, label: "Living room temperature", min: 16.0, max: 30.0, default: 20.0, step: 0.1, info: "Indoor temperature in the living room, in °C."}
+    RH_2: {type: numeric, label: "Living room humidity", min: 20.0, max: 57.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the living room, in %."}
+    T3: {type: numeric, label: "Laundry room temperature", min: 17.0, max: 30.0, default: 22.0, step: 0.1, info: "Indoor temperature in the laundry room, in °C."}
+    RH_3: {type: numeric, label: "Laundry room humidity", min: 29.0, max: 50.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the laundry room, in %."}
+    T_out: {type: numeric, label: "Outdoor temperature", min: -5.0, max: 27.0, default: 10.0, step: 0.5, info: "Outdoor air temperature, in °C, from the nearest weather station."}
+    Press_mm_hg: {type: numeric, label: "Atmospheric pressure", min: 729.0, max: 773.0, default: 755.0, step: 1.0, info: "Outdoor atmospheric pressure, in mm of mercury."}
+    RH_out: {type: numeric, label: "Outdoor humidity", min: 24.0, max: 100.0, default: 80.0, step: 1.0, info: "Outdoor relative humidity, in %."}
+    Windspeed: {type: numeric, label: "Wind speed", min: 0.0, max: 13.0, default: 4.0, step: 0.5, info: "Outdoor wind speed, in metres per second."}
+    Visibility: {type: numeric, label: "Visibility", min: 1.0, max: 66.0, default: 40.0, step: 1.0, info: "Outdoor visibility distance, in km."}
+    Tdewpoint: {type: numeric, label: "Dew point", min: -7.0, max: 16.0, default: 4.0, step: 0.5, info: "Outdoor dew point temperature, in °C — the temperature air must cool to for dew to form."}
+    month: {type: numeric, label: "Month", min: 1, max: 5, default: 3, step: 1}
+    day: {type: numeric, label: "Day of month", min: 1, max: 31, default: 15, step: 1}
+    hour: {type: numeric, label: "Hour of day", min: 0, max: 23, default: 12, step: 1, info: "Hour on a 24-hour clock (0 = midnight, 12 = noon)."}
+    day_of_week: {type: numeric, label: "Day of week", min: 0, max: 6, default: 3, step: 1, info: "0 = Monday through 6 = Sunday."}
+    is_holiday: {type: categorical, label: "Holiday", options: ["False", "True"], default: "False", info: "Whether this day is a public holiday."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
@@ -107,6 +109,8 @@ model:
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
   target_units: "Wh"
+  target_label: "Appliance energy use"
+  target_description: "Electricity consumed by household appliances over this 10-minute window, in watt-hours."
 
 services:
   etl: etl-tabular

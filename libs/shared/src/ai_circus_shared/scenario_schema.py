@@ -18,6 +18,12 @@ class NumericFeatureUI(BaseModel):
     """Declarative UI hint for a numeric feature: a bounded slider/number input."""
 
     type: Literal["numeric"] = "numeric"
+    # Human-friendly display name (e.g. "Quadrature-axis current" for column `i_q`) —
+    # both UIs render this instead of the raw column name everywhere a feature is shown.
+    label: str
+    # One–two sentence technical explanation, shown behind an info button rather than
+    # inline, for a user who wants the precise (e.g. engineering/domain) meaning.
+    info: str | None = None
     min: float
     max: float
     default: float
@@ -28,6 +34,8 @@ class CategoricalFeatureUI(BaseModel):
     """Declarative UI hint for a categorical feature: a fixed set of options."""
 
     type: Literal["categorical"] = "categorical"
+    label: str
+    info: str | None = None
     options: list[str]
     default: str
 
@@ -94,6 +102,16 @@ class TabularModel(BaseModel):
     explainability: Literal["shap"] = "shap"
     # Display-only unit for a regression target (e.g. "days") — None for classification.
     target_units: str | None = None
+    # Human-friendly name for the target column (e.g. "Customer churned" for `Exited`)
+    # — both UIs render this instead of the raw target column name.
+    target_label: str
+    # One-sentence plain-language explanation of what the model predicts, shown
+    # alongside target_label (e.g. behind an info button).
+    target_description: str | None = None
+    # Classification only — maps each raw class value (stringified, e.g. "0"/"1") to a
+    # friendly label (e.g. {"0": "Stayed", "1": "Churned"}) so the UI never shows a
+    # bare 0/1 for the target's real-world meaning. None for regression (no classes).
+    target_value_labels: dict[str, str] | None = None
 
 
 class TabularServices(BaseModel):

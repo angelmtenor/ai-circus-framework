@@ -27,6 +27,8 @@ chat:
     - "There's a broken streetlight on Main Street, near the library."
     - "What do I need to register a new address?"
     - "I want to apply for a minor construction permit for a backyard shed."
+    - "My trash wasn't picked up this week on Elm Street."
+    - "How do I request a residency certificate?"
 
 form:
   title: "Service request"

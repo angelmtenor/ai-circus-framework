@@ -34,6 +34,8 @@ chat:
     - "Which sensor readings contribute most to predicting motor speed?"
     - "How accurate is the trained model?"
     - "Does torque alone predict motor speed, or does it depend on the voltage readings too?"
+    - "How does coolant temperature affect predicted motor speed?"
+    - "What happens to the predicted speed if the current readings spike?"
 
 dataset:
   bucket: "scenario-electric-motor"
@@ -63,17 +65,39 @@ dataset:
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
   # ranges taken from the real dataset's min/max (10,000-row sample).
   feature_schema:
-    u_q: {type: numeric, min: -20.0, max: 135.0, default: 60.0, step: 1.0}
-    coolant: {type: numeric, min: 15.0, max: 95.0, default: 35.0, step: 1.0}
-    stator_winding: {type: numeric, min: 19.0, max: 140.0, default: 70.0, step: 1.0}
-    u_d: {type: numeric, min: -135.0, max: 135.0, default: 0.0, step: 1.0}
-    stator_tooth: {type: numeric, min: 18.0, max: 115.0, default: 60.0, step: 1.0}
-    i_d: {type: numeric, min: -270.0, max: 5.0, default: -50.0, step: 1.0}
-    i_q: {type: numeric, min: -290.0, max: 305.0, default: 60.0, step: 1.0}
-    pm: {type: numeric, min: 21.0, max: 115.0, default: 70.0, step: 1.0}
-    stator_yoke: {type: numeric, min: 18.0, max: 105.0, default: 60.0, step: 1.0}
-    ambient: {type: numeric, min: 18.0, max: 30.0, default: 24.0, step: 0.5}
-    torque: {type: numeric, min: -245.0, max: 265.0, default: 40.0, step: 1.0}
+    u_q:
+      {type: numeric, label: "Quadrature-axis voltage", min: -20.0, max: 135.0, default: 60.0, step: 1.0,
+       info: "The voltage component that drives torque production, expressed in the rotor's d-q reference frame (standard motor-control terminology)."}
+    coolant:
+      {type: numeric, label: "Coolant temperature", min: 15.0, max: 95.0, default: 35.0, step: 1.0,
+       info: "Temperature of the motor's coolant fluid, in °C."}
+    stator_winding:
+      {type: numeric, label: "Stator winding temperature", min: 19.0, max: 140.0, default: 70.0, step: 1.0,
+       info: "Temperature of the copper windings inside the motor's stator, in °C — a key overheating indicator."}
+    u_d:
+      {type: numeric, label: "Direct-axis voltage", min: -135.0, max: 135.0, default: 0.0, step: 1.0,
+       info: "The voltage component that controls magnetic flux, expressed in the rotor's d-q reference frame."}
+    stator_tooth:
+      {type: numeric, label: "Stator tooth temperature", min: 18.0, max: 115.0, default: 60.0, step: 1.0,
+       info: "Temperature at the stator's tooth (the part closest to the rotor's magnets), in °C."}
+    i_d:
+      {type: numeric, label: "Direct-axis current", min: -270.0, max: 5.0, default: -50.0, step: 1.0,
+       info: "The current component that controls magnetic flux, expressed in the rotor's d-q reference frame."}
+    i_q:
+      {type: numeric, label: "Quadrature-axis current", min: -290.0, max: 305.0, default: 60.0, step: 1.0,
+       info: "The current component that produces torque, expressed in the rotor's d-q reference frame."}
+    pm:
+      {type: numeric, label: "Permanent magnet temperature", min: 21.0, max: 115.0, default: 70.0, step: 1.0,
+       info: "Temperature of the rotor's permanent magnet, in °C — magnets lose strength if this runs too high."}
+    stator_yoke:
+      {type: numeric, label: "Stator yoke temperature", min: 18.0, max: 105.0, default: 60.0, step: 1.0,
+       info: "Temperature at the stator's yoke (its outer structural ring), in °C."}
+    ambient:
+      {type: numeric, label: "Ambient temperature", min: 18.0, max: 30.0, default: 24.0, step: 0.5,
+       info: "Temperature of the air around the motor, in °C."}
+    torque:
+      {type: numeric, label: "Torque", min: -245.0, max: 265.0, default: 40.0, step: 1.0,
+       info: "Rotational force the motor is producing (negative = braking/regenerating)."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
@@ -90,6 +114,8 @@ model:
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
   target_units: "rpm"
+  target_label: "Motor speed"
+  target_description: "The motor's rotational speed, predicted from its voltage, current, and temperature sensors."
 
 services:
   etl: etl-tabular

@@ -45,6 +45,14 @@ export function defaultChartCardConfig(numericFeatures: string[], categoricalFea
   return { id: newId(), type: "bar", x: categoricalFeatures[0] ?? "", y: "", z: "", colorBy: "", agg: "count" };
 }
 
+// Resolves a raw dataset column name to its human-friendly display label (see
+// predictUtils.tsx's featureLabel) — every axis title/trace name/tick label below
+// goes through this instead of the raw column name, so a chart never shows e.g. "i_q"
+// when the scenario declares a friendlier label for it. Defaults to identity so
+// callers that don't have a scenario in scope (e.g. tests) still work.
+export type LabelFor = (column: string) => string;
+const identityLabel: LabelFor = (column) => column;
+
 function toNumber(v: unknown): number {
   return Number(v);
 }
@@ -110,27 +118,45 @@ function correlation(a: number[], b: number[]): number {
   return denom === 0 ? 0 : cov / denom;
 }
 
-function buildHistogram(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildHistogram(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x) return { data: [], layout: {} };
   const groups = splitByColor(rows, cfg.colorBy);
   const data = groups.map((g, i) => ({
     type: "histogram",
     x: withFiniteNumber(g.rows, cfg.x).map((r) => toNumber(r[cfg.x])),
-    name: g.key || cfg.x,
+    name: g.key || labelFor(cfg.x),
     marker: { color: palette[i % palette.length] },
     opacity: groups.length > 1 ? 0.7 : 1,
   }));
   return {
     data,
-    layout: { barmode: "overlay", xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: "count" } }, showlegend: groups.length > 1 },
+    layout: {
+      barmode: "overlay",
+      xaxis: { title: { text: labelFor(cfg.x) } },
+      yaxis: { title: { text: "count" } },
+      showlegend: groups.length > 1,
+    },
   };
 }
 
-function buildBox(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildBox(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.y) return { data: [], layout: {} };
   const filtered = withFiniteNumber(rows, cfg.y);
   if (!cfg.x) {
-    return { data: [{ type: "box", y: filtered.map((r) => toNumber(r[cfg.y])), marker: { color: palette[0] } }], layout: { yaxis: { title: { text: cfg.y } } } };
+    return {
+      data: [{ type: "box", y: filtered.map((r) => toNumber(r[cfg.y])), marker: { color: palette[0] } }],
+      layout: { yaxis: { title: { text: labelFor(cfg.y) } } },
+    };
   }
   return {
     data: [
@@ -141,7 +167,7 @@ function buildBox(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
         marker: { color: palette[0] },
       },
     ],
-    layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } },
+    layout: { xaxis: { title: { text: labelFor(cfg.x) } }, yaxis: { title: { text: labelFor(cfg.y) } } },
   };
 }
 
@@ -153,14 +179,27 @@ function isNumericColumn(rows: DatasetRow[], col: string): boolean {
   return rows.length > 0 && rows.every((r) => Number.isFinite(toNumber(r[col])));
 }
 
-function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[], is3d: boolean): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildScatter(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  is3d: boolean,
+  labelFor: LabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x || !cfg.y || (is3d && !cfg.z)) return { data: [], layout: {} };
   let candidateRows = withFiniteNumber(withFiniteNumber(rows, cfg.x), cfg.y);
   if (is3d) candidateRows = withFiniteNumber(candidateRows, cfg.z);
 
   const sceneOrAxes: PlotlyLayout = is3d
-    ? { scene: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } }, zaxis: { title: { text: cfg.z } }, dragmode: "orbit" } }
-    : { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } };
+    ? {
+        scene: {
+          xaxis: { title: { text: labelFor(cfg.x) } },
+          yaxis: { title: { text: labelFor(cfg.y) } },
+          zaxis: { title: { text: labelFor(cfg.z) } },
+          dragmode: "orbit",
+        },
+      }
+    : { xaxis: { title: { text: labelFor(cfg.x) } }, yaxis: { title: { text: labelFor(cfg.y) } } };
 
   // Continuous gradient: one trace, marker.color driven by a Plotly colorscale
   // (with its own colorbar) rather than one trace per distinct value — a discrete
@@ -178,7 +217,7 @@ function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[
         color: candidateRows.map((r) => toNumber(r[cfg.colorBy])),
         colorscale: "Viridis",
         showscale: true,
-        colorbar: { title: { text: cfg.colorBy } },
+        colorbar: { title: { text: labelFor(cfg.colorBy) } },
       },
     };
     if (is3d) trace.z = candidateRows.map((r) => toNumber(r[cfg.z]));
@@ -201,7 +240,12 @@ function buildScatter(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[
   return { data, layout: { ...sceneOrAxes, showlegend: groups.length > 1 } };
 }
 
-function buildLine(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildLine(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x || !cfg.y) return { data: [], layout: {} };
   const groups = splitByColor(rows, cfg.colorBy);
   const data = groups.map((g, i) => {
@@ -211,12 +255,15 @@ function buildLine(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]):
       mode: "lines+markers",
       x: filtered.map((r) => toNumber(r[cfg.x])),
       y: filtered.map((r) => toNumber(r[cfg.y])),
-      name: g.key || cfg.y,
+      name: g.key || labelFor(cfg.y),
       line: { color: palette[i % palette.length] },
       marker: { color: palette[i % palette.length] },
     };
   });
-  return { data, layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } }, showlegend: groups.length > 1 } };
+  return {
+    data,
+    layout: { xaxis: { title: { text: labelFor(cfg.x) } }, yaxis: { title: { text: labelFor(cfg.y) } }, showlegend: groups.length > 1 },
+  };
 }
 
 function bucketValues(rows: DatasetRow[], x: string, y: string): Map<string, number[]> {
@@ -235,21 +282,26 @@ function bucketValues(rows: DatasetRow[], x: string, y: string): Map<string, num
   return buckets;
 }
 
-function buildBar(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildBar(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x) return { data: [], layout: {} };
   const groups = splitByColor(rows, cfg.colorBy);
   const data = groups.map((g, i) => {
     const buckets = bucketValues(g.rows, cfg.x, cfg.y);
     const categories = [...buckets.keys()];
     const values = categories.map((c) => (cfg.y ? aggregate(buckets.get(c)!, cfg.agg) : buckets.get(c)!.length));
-    return { type: "bar", x: categories, y: values, name: g.key || cfg.x, marker: { color: palette[i % palette.length] } };
+    return { type: "bar", x: categories, y: values, name: g.key || labelFor(cfg.x), marker: { color: palette[i % palette.length] } };
   });
   return {
     data,
     layout: {
       barmode: groups.length > 1 ? "group" : "stack",
-      xaxis: { title: { text: cfg.x } },
-      yaxis: { title: { text: cfg.y ? `${cfg.agg}(${cfg.y})` : "count" } },
+      xaxis: { title: { text: labelFor(cfg.x) } },
+      yaxis: { title: { text: cfg.y ? `${cfg.agg}(${labelFor(cfg.y)})` : "count" } },
       showlegend: groups.length > 1,
     },
   };
@@ -266,12 +318,12 @@ function buildPie(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): 
   };
 }
 
-function buildHeatmap(rows: DatasetRow[], cfg: ChartCardConfig): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+function buildHeatmap(rows: DatasetRow[], cfg: ChartCardConfig, labelFor: LabelFor): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (cfg.x && cfg.y) {
     const filtered = withFiniteNumber(withFiniteNumber(rows, cfg.x), cfg.y);
     return {
       data: [{ type: "histogram2d", x: filtered.map((r) => toNumber(r[cfg.x])), y: filtered.map((r) => toNumber(r[cfg.y])), colorscale: "Blues" }],
-      layout: { xaxis: { title: { text: cfg.x } }, yaxis: { title: { text: cfg.y } } },
+      layout: { xaxis: { title: { text: labelFor(cfg.x) } }, yaxis: { title: { text: labelFor(cfg.y) } } },
     };
   }
   // No axes chosen: a correlation matrix across every numeric column is a more
@@ -279,30 +331,36 @@ function buildHeatmap(rows: DatasetRow[], cfg: ChartCardConfig): { data: PlotlyD
   const numericColumns = inferNumericColumns(rows);
   const columnValues = numericColumns.map((c) => rows.map((r) => toNumber(r[c])));
   const z = columnValues.map((a) => columnValues.map((b) => correlation(a, b)));
+  const labels = numericColumns.map(labelFor);
   return {
-    data: [{ type: "heatmap", x: numericColumns, y: numericColumns, z, zmin: -1, zmax: 1, colorscale: "RdBu" }],
+    data: [{ type: "heatmap", x: labels, y: labels, z, zmin: -1, zmax: 1, colorscale: "RdBu" }],
     layout: {},
   };
 }
 
-export function buildChart(rows: DatasetRow[], cfg: ChartCardConfig, palette: string[]): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+export function buildChart(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor = identityLabel,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   switch (cfg.type) {
     case "histogram":
-      return buildHistogram(rows, cfg, palette);
+      return buildHistogram(rows, cfg, palette, labelFor);
     case "box":
-      return buildBox(rows, cfg, palette);
+      return buildBox(rows, cfg, palette, labelFor);
     case "scatter":
-      return buildScatter(rows, cfg, palette, false);
+      return buildScatter(rows, cfg, palette, false, labelFor);
     case "scatter3d":
-      return buildScatter(rows, cfg, palette, true);
+      return buildScatter(rows, cfg, palette, true, labelFor);
     case "line":
-      return buildLine(rows, cfg, palette);
+      return buildLine(rows, cfg, palette, labelFor);
     case "bar":
-      return buildBar(rows, cfg, palette);
+      return buildBar(rows, cfg, palette, labelFor);
     case "pie":
       return buildPie(rows, cfg, palette);
     case "heatmap":
-      return buildHeatmap(rows, cfg);
+      return buildHeatmap(rows, cfg, labelFor);
     default:
       return { data: [], layout: {} };
   }

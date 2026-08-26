@@ -16,7 +16,7 @@
 // UI (dataset sample size, batch predict size, evaluation/explainability sample
 // size) — mirrors prediction/src/prediction/api.py's own MAX_ROWS. Previously these
 // were a scatter of small, inconsistent caps (200/300/etc) across different views.
-export const MAX_ROWS = 10000;
+export const MAX_ROWS = 30000;
 
 export const config = {
   devMode: import.meta.env.VITE_DEV_MODE === "true",

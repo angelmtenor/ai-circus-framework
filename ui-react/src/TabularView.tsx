@@ -72,10 +72,11 @@ function TabularViewContent({
         <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
           <Icon name="scan" /> Explore model
         </button>
-        <button className="chat-dock-toggle" onClick={() => setChatOpen((o) => !o)}>
-          <Icon name="chat" /> Assistant
-        </button>
       </div>
+
+      <button className="chat-dock-toggle" onClick={() => setChatOpen((o) => !o)}>
+        <Icon name="chat" /> Assistant
+      </button>
 
       {tab === "data" && <DataView scenario={scenario} accessToken={accessToken} />}
       {tab === "predict" && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}

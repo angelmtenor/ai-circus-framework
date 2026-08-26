@@ -25,6 +25,7 @@ from sklearn.metrics import (
     accuracy_score,
     f1_score,
     mean_absolute_error,
+    mean_absolute_percentage_error,
     precision_score,
     r2_score,
     recall_score,
@@ -172,6 +173,12 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
             "mae": round(float(mean_absolute_error(y_test, predictions)), 4),
             "rmse": round(float(root_mean_squared_error(y_test, predictions)), 4),
             "r2": round(float(r2_score(y_test, predictions)), 4),
+            # The headline regression metric (see ui-react's metricGlossary.ts): a
+            # percentage, so it's comparable across scenarios with wildly different
+            # target units/scales (rpm vs $ vs days). Unreliable when the target
+            # crosses zero (e.g. energy_building's overnight near-zero Wh readings) —
+            # an accepted limitation of the metric itself, not worked around here.
+            "mape": round(float(mean_absolute_percentage_error(y_test, predictions)) * 100, 2),
         }
         if artifacts.pipeline_lower is not None and artifacts.pipeline_upper is not None:
             lower = np.asarray(artifacts.pipeline_lower.predict(x_test), dtype=float)

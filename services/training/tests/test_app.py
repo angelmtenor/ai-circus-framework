@@ -110,14 +110,20 @@ def fake_definition() -> object:
             target="target",
             feature_columns=["numeric_feature", "category_feature"],
             feature_schema={
-                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
-                "category_feature": {"type": "categorical", "options": ["A", "B"], "default": "A"},
+                "numeric_feature": {"type": "numeric", "label": "Numeric feature", "min": -3, "max": 3, "default": 0},
+                "category_feature": {
+                    "type": "categorical",
+                    "label": "Category feature",
+                    "options": ["A", "B"],
+                    "default": "A",
+                },
             },
         )
         model = TabularModel(
             task_type="classification",
             candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
+            target_label="Target",
         )
 
     return FakeDefinition()
@@ -136,8 +142,13 @@ def fake_regression_definition() -> object:
             target="target",
             feature_columns=["numeric_feature", "category_feature"],
             feature_schema={
-                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
-                "category_feature": {"type": "categorical", "options": ["A", "B"], "default": "A"},
+                "numeric_feature": {"type": "numeric", "label": "Numeric feature", "min": -3, "max": 3, "default": 0},
+                "category_feature": {
+                    "type": "categorical",
+                    "label": "Category feature",
+                    "options": ["A", "B"],
+                    "default": "A",
+                },
             },
         )
         model = TabularModel(
@@ -145,6 +156,7 @@ def fake_regression_definition() -> object:
             candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
             target_units="days",
+            target_label="Target",
         )
 
     return FakeDefinition()
@@ -166,14 +178,15 @@ def fake_broken_definition() -> object:
             target="target",
             feature_columns=["numeric_feature", "missing_feature"],
             feature_schema={
-                "numeric_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
-                "missing_feature": {"type": "numeric", "min": -3, "max": 3, "default": 0},
+                "numeric_feature": {"type": "numeric", "label": "Numeric feature", "min": -3, "max": 3, "default": 0},
+                "missing_feature": {"type": "numeric", "label": "Missing feature", "min": -3, "max": 3, "default": 0},
             },
         )
         model = TabularModel(
             task_type="classification",
             candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
+            target_label="Target",
         )
 
     return FakeDefinition()

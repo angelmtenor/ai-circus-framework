@@ -73,9 +73,15 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         if definition.model is not None:
             existing.task_type = definition.model.task_type
             existing.target_units = definition.model.target_units
+            existing.target_label = definition.model.target_label
+            existing.target_description = definition.model.target_description
+            existing.target_value_labels = definition.model.target_value_labels
         else:
             existing.task_type = None
             existing.target_units = None
+            existing.target_label = None
+            existing.target_description = None
+            existing.target_value_labels = None
 
         existing.form = definition.form.model_dump() if definition.form is not None else None
 
