@@ -9,6 +9,11 @@ from __future__ import annotations
 import hashlib
 
 NORMALIZED_DATASET_KEY = "processed/normalized.parquet"
+# Single shared ceiling on how many rows of any one tenant's dataset ever get
+# processed — etl-tabular downsamples to this at the source (see
+# etl_tabular.core.etl.clean()), so training/evaluation/SHAP can never see more than
+# this regardless of how big the raw uploaded/seed CSV is.
+MAX_DATASET_ROWS = 30000
 MODEL_PIPELINE_KEY = "model/pipeline.joblib"
 MODEL_EXPLAINER_KEY = "model/explainer.joblib"
 MODEL_METADATA_KEY = "model/metadata.json"

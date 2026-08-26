@@ -31,9 +31,11 @@ chat:
     their account, from account/usage features like credit score, tenure, balance,
     number of products, and activity status.
   sample_questions:
-    - "Which features matter most for predicting churn?"
+    - "Which factors matter most for predicting churn?"
     - "How accurate is the trained model?"
-    - "Why would a customer with a high balance still be at risk of churning?"
+    - "Why would a customer with a high balance still be at risk of leaving?"
+    - "Does being an active member actually lower churn risk?"
+    - "What separates a customer who stays from one who churns?"
 
 dataset:
   bucket: "scenario-churn"
@@ -62,20 +64,36 @@ dataset:
   # neither UI has any churn-specific form code; this is the only place these
   # ranges/options/defaults are defined.
   feature_schema:
-    CreditScore: {type: numeric, min: 300, max: 850, default: 650, step: 1}
-    Geography: {type: categorical, options: ["France", "Germany", "Spain"], default: "France"}
-    Age: {type: numeric, min: 18, max: 92, default: 40, step: 1}
-    Tenure: {type: numeric, min: 0, max: 10, default: 3, step: 1}
-    Balance: {type: numeric, min: 0, max: 300000, default: 50000, step: 1000}
-    NumOfProducts: {type: numeric, min: 1, max: 4, default: 2, step: 1}
+    CreditScore:
+      {type: numeric, label: "Credit score", min: 300, max: 850, default: 650, step: 1,
+       info: "A standard 300–850 creditworthiness score (higher = lower credit risk), as reported by a credit bureau."}
+    Geography:
+      {type: categorical, label: "Country", options: ["France", "Germany", "Spain"], default: "France",
+       info: "The country of the branch where the customer holds their account."}
+    Age: {type: numeric, label: "Age", min: 18, max: 92, default: 40, step: 1}
+    Tenure:
+      {type: numeric, label: "Years as customer", min: 0, max: 10, default: 3, step: 1,
+       info: "How many years this person has held an account at the bank."}
+    Balance:
+      {type: numeric, label: "Account balance", min: 0, max: 300000, default: 50000, step: 1000,
+       info: "Current balance held in the customer's account, in the bank's local currency."}
+    NumOfProducts:
+      {type: numeric, label: "Number of products", min: 1, max: 4, default: 2, step: 1,
+       info: "How many of the bank's products (accounts, cards, loans, etc.) this customer holds."}
     # Numeric (not categorical) even though they're 0/1 flags: the raw CSV stores
     # them as integer columns, so etl-tabular's clean() leaves them numeric dtype
     # (only non-numeric columns get cast to "category") — training's ColumnTransformer
     # therefore routes them through the numeric (StandardScaler) branch, which would
     # break on a string "0"/"1" from a categorical form widget.
-    HasCrCard: {type: numeric, min: 0, max: 1, default: 1, step: 1}
-    IsActiveMember: {type: numeric, min: 0, max: 1, default: 1, step: 1}
-    EstimatedSalary: {type: numeric, min: 0, max: 250000, default: 75000, step: 1000}
+    HasCrCard:
+      {type: numeric, label: "Has credit card", min: 0, max: 1, default: 1, step: 1,
+       info: "1 if the customer holds a credit card with the bank, 0 otherwise."}
+    IsActiveMember:
+      {type: numeric, label: "Active member", min: 0, max: 1, default: 1, step: 1,
+       info: "1 if the customer has used their account recently, 0 if it's gone dormant."}
+    EstimatedSalary:
+      {type: numeric, label: "Estimated salary", min: 0, max: 250000, default: 75000, step: 1000,
+       info: "The bank's estimate of the customer's annual income."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
@@ -91,6 +109,9 @@ model:
   candidates: ["lightgbm"]
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
+  target_label: "Customer churned"
+  target_description: "Whether the customer closed their account (churned) or stayed."
+  target_value_labels: {"0": "Stayed", "1": "Churned"}
 
 services:
   etl: etl-tabular

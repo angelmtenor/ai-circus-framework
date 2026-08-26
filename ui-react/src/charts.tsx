@@ -9,6 +9,8 @@
  * every chart re-themes for free alongside the rest of the app.
  */
 
+import { InfoButton } from "./InfoButton";
+
 export const CHART_COLORS = {
   bg: "transparent",
   panel: "var(--panel)",
@@ -28,15 +30,26 @@ export function StatTile({
   value,
   sub,
   color,
+  info,
+  highlight,
 }: {
   label: string;
   value: string;
   sub?: string;
   color?: string;
+  // Renders an InfoButton next to the label carrying a longer explanation — used for
+  // metrics whose raw name isn't self-explanatory (see metricGlossary.ts).
+  info?: string;
+  // Adds an accent-glow modifier class — used to call out the one headline metric for
+  // a scenario's task type (see metricGlossary.ts's PRIMARY_METRIC).
+  highlight?: boolean;
 }) {
   return (
-    <div className="kpi-tile">
-      <div className="kpi-label">{label}</div>
+    <div className={`kpi-tile${highlight ? " kpi-tile--highlight" : ""}`}>
+      <div className="kpi-label">
+        {label}
+        {info && <InfoButton text={info} />}
+      </div>
       <div className="kpi-value" style={color ? { color } : undefined}>
         {value}
       </div>

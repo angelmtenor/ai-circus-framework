@@ -8,12 +8,16 @@ export type NumericFeatureSpec = {
   max: number;
   default: number;
   step?: number;
+  label: string;
+  info?: string | null;
 };
 
 export type CategoricalFeatureSpec = {
   type: "categorical";
   options: string[];
   default: string;
+  label: string;
+  info?: string | null;
 };
 
 export type FeatureSpec = NumericFeatureSpec | CategoricalFeatureSpec;
@@ -78,6 +82,13 @@ export type ScenarioSummary = {
   target_units?: string | null;
   // tabular_ml only — the dataset column being predicted (not itself a feature).
   target?: string | null;
+  // tabular_ml only — a friendly name/description for the target, and (classification
+  // only) a mapping from raw class value (e.g. "0"/"1") to a friendly label (e.g.
+  // {"0": "Stayed", "1": "Churned"}) — null/absent for regression scenarios and for
+  // classification scenarios that don't set one.
+  target_label?: string | null;
+  target_description?: string | null;
+  target_value_labels?: Record<string, string> | null;
   // assisted_form only — drives ui-react's generic form renderer (see FormPanel.tsx).
   form?: FormConfig | null;
 };

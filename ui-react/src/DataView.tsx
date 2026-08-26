@@ -7,7 +7,7 @@ import { PlotlyChart } from "./PlotlyChart";
 import { buildChart, specToChartCardConfig, defaultChartCardConfig, type ChartCardConfig } from "./chartBuilder";
 import { useTheme } from "./useTheme";
 import { Icon } from "./Icon";
-import { exportJson } from "./predictUtils";
+import { exportJson, featureLabel } from "./predictUtils";
 
 const DEFAULT_SAMPLE_LIMIT = 5000;
 const SAMPLE_LIMIT_OPTIONS = [500, 1000, 5000, MAX_ROWS];
@@ -57,7 +57,8 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   // it's a numeric target for regression scenarios, a class label for classification.
   const targetName = scenario.target ?? null;
   const targetIsNumeric = scenario.task_type === "regression";
-  const labelFor = (f: string) => (f === targetName ? `${f} (target)` : f);
+  const labelFor = (f: string) =>
+    f === targetName ? `${scenario.target_label ?? targetName} (target)` : featureLabel(scenario, f);
 
   const [sample, setSample] = useState<DatasetSample | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,10 +106,21 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
       if (values.length === 0) return featureSchema;
       const min = Math.min(...values);
       const max = Math.max(...values);
-      return { ...featureSchema, [targetName]: { type: "numeric" as const, min, max, default: min } };
+      return {
+        ...featureSchema,
+        [targetName]: { type: "numeric" as const, min, max, default: min, label: scenario.target_label ?? targetName },
+      };
     }
-    return { ...featureSchema, [targetName]: { type: "categorical" as const, options: targetOptions, default: targetOptions[0] ?? "" } };
-  }, [sample, targetName, targetIsNumeric, targetOptions, featureSchema]);
+    return {
+      ...featureSchema,
+      [targetName]: {
+        type: "categorical" as const,
+        options: targetOptions,
+        default: targetOptions[0] ?? "",
+        label: scenario.target_label ?? targetName,
+      },
+    };
+  }, [sample, targetName, targetIsNumeric, targetOptions, featureSchema, scenario.target_label]);
 
   const numericSummary = useMemo(() => {
     if (!sample) return [];
@@ -147,6 +159,18 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   }
   function addChart() {
     setCharts((cs) => [...cs, defaultChartCardConfig(numericFeaturesWithTarget, categoricalFeaturesWithTarget)]);
+  }
+
+  // Display-only relabeling of the target column's raw value (e.g. "0"/"1" ->
+  // "Stayed"/"Churned") for the sample-rows table below — scoped to just that one
+  // cell. targetOptions/buildChart/aggregation must keep reading raw values (some
+  // scenarios' default_charts compute e.g. `agg: mean` directly over the raw 0/1
+  // target to get a rate), so this never touches the underlying row data.
+  function displayValue(column: string, value: string | number | boolean | null): string {
+    if (column === targetName && scenario.target_value_labels) {
+      return scenario.target_value_labels[String(value)] ?? String(value);
+    }
+    return String(value);
   }
 
   if (error) {
@@ -192,11 +216,13 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
           <StatTile label="Numeric features" value={String(numericFeatures.length)} />
           <StatTile label="Categorical features" value={String(categoricalFeatures.length)} />
         </div>
-        <p style={{ marginTop: "0.4rem", fontSize: "0.8rem", color: "var(--dim)" }}>
-          Min/Mean/Max below, plus the Query and chart panels, are computed from the {sample.rows.length.toLocaleString()}-row
-          sample only — not the full {sample.total_rows.toLocaleString()}-row dataset. Increase the sample size for more
-          representative stats (up to {MAX_ROWS.toLocaleString()}).
-        </p>
+        {sample.total_rows > sample.rows.length && (
+          <p style={{ marginTop: "0.4rem", fontSize: "0.8rem", color: "var(--dim)" }}>
+            Min/Mean/Max below, plus the Query and chart panels, are computed from the {sample.rows.length.toLocaleString()}-row
+            sample only — not the full {sample.total_rows.toLocaleString()}-row dataset. Increase the sample size for more
+            representative stats (up to {MAX_ROWS.toLocaleString()}).
+          </p>
+        )}
         <table className="data-table" style={{ marginTop: "0.75rem" }}>
           <thead>
             <tr>
@@ -273,7 +299,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
               {filtered.slice(0, 30).map((row, i) => (
                 <tr key={i}>
                   {sample.columns.map((c) => (
-                    <td key={c}>{String(row[c])}</td>
+                    <td key={c}>{displayValue(c, row[c])}</td>
                   ))}
                 </tr>
               ))}
@@ -317,7 +343,7 @@ function ChartCard({
   // by discrete category, so numeric columns would be meaningless there.
   const colorByOptions = cfg.type === "scatter" || cfg.type === "scatter3d" ? allOptions : categoricalOptions;
 
-  const { data, layout } = useMemo(() => buildChart(rows, cfg, palette), [rows, cfg, palette]);
+  const { data, layout } = useMemo(() => buildChart(rows, cfg, palette, labelFor), [rows, cfg, palette, labelFor]);
   const [maximized, setMaximized] = useState(false);
 
   const card = (

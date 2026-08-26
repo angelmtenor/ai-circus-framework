@@ -231,14 +231,18 @@ export function Settings({
               </button>
             )}
           </div>
-          <p className="panel-hint">
-            Every provider here is configured through <code>.env</code> (this deployment's llm-gateway doesn't run
-            litellm's database-backed mode, so runtime key updates from the browser can't apply — see the hint on
-            each card for the exact variable names). Use <strong>Test</strong> (or <strong>Test All</strong> to check
-            every provider concurrently) to see, right now, whether a provider is actually reachable and answering.
-            At least one provider needs a valid key — or run <code>make ollama-up</code> for a free local fallback —
-            for assistant/rag-agent chat to work at all.
-          </p>
+          <p className="panel-hint">Choose which AI provider powers the assistant chat below.</p>
+          <details className="settings-card-details">
+            <summary>How this works</summary>
+            <p className="panel-hint">
+              Every provider here is configured through <code>.env</code> (this deployment's llm-gateway doesn't run
+              litellm's database-backed mode, so runtime key updates from the browser can't apply — see the hint on
+              each card for the exact variable names). Use <strong>Test</strong> (or <strong>Test All</strong> to
+              check every provider concurrently) to see, right now, whether a provider is actually reachable and
+              answering. At least one provider needs a valid key — or run <code>make ollama-up</code> for a free
+              local fallback — for assistant/rag-agent chat to work at all.
+            </p>
+          </details>
           {error && <p className="error">{error}</p>}
           {!providers && !error && <div className="app-loading">Loading providers…</div>}
           {providers && (
@@ -357,12 +361,16 @@ export function Settings({
           <div className="settings-card-header">
             <h3>Voice Mode Settings</h3>
           </div>
-          <p className="panel-hint">
-            Which speech-to-text/text-to-speech engine agui-voice uses for live voice mode (MicButton) and the
-            speaker icon (SpeakerButton) — applies to the very next request, no restart. Defaults to the
-            self-hosted, open-source engines (Whisper/Piper, no API key needed); a cloud option stays disabled
-            here until its API key is set in agui-voice's own <code>.env</code>.
-          </p>
+          <p className="panel-hint">Choose which speech-to-text/text-to-speech engine powers voice mode.</p>
+          <details className="settings-card-details">
+            <summary>How this works</summary>
+            <p className="panel-hint">
+              Which speech-to-text/text-to-speech engine agui-voice uses for live voice mode (MicButton) and the
+              speaker icon (SpeakerButton) — applies to the very next request, no restart. Defaults to the
+              self-hosted, open-source engines (Whisper/Piper, no API key needed); a cloud option stays disabled
+              here until its API key is set in agui-voice's own <code>.env</code>.
+            </p>
+          </details>
           {voiceError && <p className="error">{voiceError}</p>}
           {!voiceScenarioSlug && !voiceError && <div className="app-loading">Loading…</div>}
           {voiceOptions && (

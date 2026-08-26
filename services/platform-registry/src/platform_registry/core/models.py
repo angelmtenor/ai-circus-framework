@@ -54,6 +54,13 @@ class Scenario(Base):
     # units" prediction instead of the classification percentage/probability view.
     task_type: Mapped[str | None] = mapped_column(String(32), default=None)
     target_units: Mapped[str | None] = mapped_column(String(32), default=None)
+    # tabular_ml only — human-friendly name/explanation for the target (see
+    # ai_circus_shared.scenario_schema.TabularModel.target_label/target_description).
+    target_label: Mapped[str | None] = mapped_column(String(200), default=None)
+    target_description: Mapped[str | None] = mapped_column(String(500), default=None)
+    # Classification only — maps each raw class value to a friendly label (see
+    # ai_circus_shared.scenario_schema.TabularModel.target_value_labels).
+    target_value_labels: Mapped[dict[str, str] | None] = mapped_column(JSON, default=None)
     # tabular_ml only — the dataset column being predicted (not a feature itself), so
     # UIs can offer it in dataset-exploration views without treating it as a model input.
     target: Mapped[str | None] = mapped_column(String(64), default=None)

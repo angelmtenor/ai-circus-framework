@@ -12,7 +12,9 @@ import {
 } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, ScatterPlot, Histogram, CategoryBars, LineChart, CHART_COLORS } from "./charts";
-import { initialRecord, FeatureInput, type Record_ } from "./predictUtils";
+import { initialRecord, featureLabel, FeatureInput, type Record_ } from "./predictUtils";
+import { InfoButton } from "./InfoButton";
+import { METRIC_INFO, PRIMARY_METRIC } from "./metricGlossary";
 
 // Unlike dataset sample/evaluation (cheap either way), SHAP explanation cost scales
 // ~linearly with row count (~50s at MAX_ROWS on churn) — 500 rows is plenty for a
@@ -43,11 +45,10 @@ function GlobalImportanceSection({ scenario, accessToken }: { scenario: Scenario
 
   return (
     <div className="panel-card">
-      <h3>Global feature importance (SHAP)</h3>
-      <p className="panel-hint">
-        Mean(|SHAP value|) over a real sample of the dataset — how much each feature matters overall, computed the
-        same way as each individual prediction's explanation, not a single estimator's built-in importances.
-      </p>
+      <h3>
+        What matters most <InfoButton text="Mean(|SHAP value|) over a real sample of the dataset — computed the same way as each individual prediction's explanation, not a single estimator's built-in importances." />
+      </h3>
+      <p className="panel-hint">Which inputs move the model's predictions the most, overall.</p>
       {!data && (
         <button className="btn-primary" onClick={load} disabled={loading}>
           {loading ? "Computing…" : "Compute global importance"}
@@ -56,7 +57,11 @@ function GlobalImportanceSection({ scenario, accessToken }: { scenario: Scenario
       {error && <p className="error">{error}</p>}
       {data && (
         <>
-          <BarList items={data.feature_importance.map((f) => ({ label: f.feature, value: f.importance }))} signed={false} valueFormatter={(v) => v.toFixed(4)} />
+          <BarList
+            items={data.feature_importance.map((f) => ({ label: featureLabel(scenario, f.feature), value: f.importance }))}
+            signed={false}
+            valueFormatter={(v) => v.toFixed(4)}
+          />
           <p className="panel-hint">Computed over {data.sample_size} sampled rows.</p>
         </>
       )}
@@ -118,11 +123,10 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
   return (
     <>
       <div className="panel-card">
-        <h3>Partial dependence</h3>
-        <p className="panel-hint">
-          Sweep one feature across its real range (others held at the values below) and see how the live model's
-          prediction responds — computed from real API calls, not synthetic history.
-        </p>
+        <h3>
+          Try different values <InfoButton text="Sweeps one feature across its real range (others held at the values below) and shows how the live model's prediction responds — computed from real API calls, not synthetic history." />
+        </h3>
+        <p className="panel-hint">See how changing one input, on its own, shifts the model's prediction.</p>
         <div className="feature-grid">
           {featureColumns.map((f) => (
             <FeatureInput key={f} feature={f} spec={featureSchema[f]} value={record[f]} onChange={(v) => setRecord((r) => ({ ...r, [f]: v }))} />
@@ -134,7 +138,7 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
             <select value={feature} onChange={(e) => setFeature(e.target.value)}>
               {featureColumns.map((f) => (
                 <option key={f} value={f}>
-                  {f}
+                  {featureLabel(scenario, f)}
                 </option>
               ))}
             </select>
@@ -149,10 +153,16 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
       {sweep && (
         <div className="panel-card">
           <h3>
-            {yLabel} vs {sweep.feature}
+            {yLabel} vs {featureLabel(scenario, sweep.feature)}
           </h3>
           {sweep.numeric ? (
-            <LineChart points={sweep.points} xLabel={sweep.feature} yLabel={yLabel} color={CHART_COLORS.green} bandColor={CHART_COLORS.green} />
+            <LineChart
+              points={sweep.points}
+              xLabel={featureLabel(scenario, sweep.feature)}
+              yLabel={yLabel}
+              color={CHART_COLORS.green}
+              bandColor={CHART_COLORS.green}
+            />
           ) : (
             <CategoryBars items={sweep.points.map((p) => ({ category: p.label, score: p.y }))} color={CHART_COLORS.blue} valueFormatter={(v) => v.toFixed(2)} />
           )}
@@ -215,15 +225,20 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
   return (
     <>
       <div className="panel-card">
-        <h3>Held-out evaluation</h3>
-        <p className="panel-hint">
-          Scored on training's held-out split ({evaluation.n} rows{sample ? ` of ${sample.total_rows}` : ""}) — the deployed
-          pipeline was then refit on the full dataset, so this is a reference evaluation, not a strict score of the exact
-          deployed weights.
-        </p>
+        <h3>
+          Held-out evaluation{" "}
+          <InfoButton text={`Scored on training's held-out split (${evaluation.n} rows${sample ? ` of ${sample.total_rows}` : ""}) — the deployed pipeline was then refit on the full dataset, so this is a reference evaluation, not a strict score of the exact deployed weights.`} />
+        </h3>
+        <p className="panel-hint">How well the model performs on real data it wasn't trained on.</p>
         <div className="kpi-row">
           {Object.entries(evaluation.metrics).map(([k, v]) => (
-            <StatTile key={k} label={k.toUpperCase()} value={v.toFixed(k === "r2" || k.includes("auc") ? 3 : 2)} />
+            <StatTile
+              key={k}
+              label={METRIC_INFO[k]?.label ?? k.toUpperCase()}
+              value={k === "mape" ? `${v.toFixed(2)}%` : v.toFixed(k === "r2" || k.includes("auc") ? 3 : 2)}
+              info={METRIC_INFO[k]?.info}
+              highlight={k === PRIMARY_METRIC[evaluation.task_type]}
+            />
           ))}
         </div>
       </div>
@@ -240,7 +255,7 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
       {evaluation.breakdown_feature && (
         <div className="panel-card">
           <h3>
-            {isRegression ? "MAE" : "Accuracy"} by {evaluation.breakdown_feature}
+            {isRegression ? METRIC_INFO.mae.label : METRIC_INFO.accuracy.label} by {featureLabel(scenario, evaluation.breakdown_feature)}
           </h3>
           <CategoryBars items={evaluation.breakdown} color={CHART_COLORS.amber} />
         </div>
@@ -255,9 +270,9 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
 export function ExploreModelView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   return (
     <div className="tab-panel">
+      <ModelPerformanceSection scenario={scenario} accessToken={accessToken} />
       <GlobalImportanceSection scenario={scenario} accessToken={accessToken} />
       <PartialDependenceSection scenario={scenario} accessToken={accessToken} />
-      <ModelPerformanceSection scenario={scenario} accessToken={accessToken} />
     </div>
   );
 }

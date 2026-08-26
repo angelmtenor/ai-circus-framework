@@ -70,6 +70,11 @@ class ScenarioSummary(BaseModel):
     # regression scenarios instead of the classification percentage/probability view.
     task_type: str | None = None
     target_units: str | None = None
+    # tabular_ml only — human-friendly name/explanation for the target (see
+    # scenario_schema.TabularModel.target_label/target_description).
+    target_label: str | None = None
+    target_description: str | None = None
+    target_value_labels: dict[str, str] | None = None
     # tabular_ml only — the dataset column being predicted (not itself a feature).
     target: str | None = None
     # assisted_form only — drives ui-react's generic form renderer (see

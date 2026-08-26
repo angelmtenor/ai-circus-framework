@@ -1,6 +1,15 @@
-import type { FeatureSpec } from "./apiClient";
+import type { FeatureSpec, ScenarioSummary } from "./apiClient";
+import { InfoButton } from "./InfoButton";
 
 export type Record_ = Record<string, number | string>;
+
+/** The friendly display name for a feature column — falls back to the raw column name
+ * for scenarios/columns without a `label` (e.g. the target, or older scenario data).
+ * Use this everywhere a raw feature name is currently displayed to the user.
+ */
+export function featureLabel(scenario: ScenarioSummary, feature: string): string {
+  return scenario.feature_schema?.[feature]?.label ?? feature;
+}
 
 /** A fresh record seeded with each feature's default value — the starting point for
  * both the single-record prediction form and the "explore model" what-if form.
@@ -26,11 +35,12 @@ export function FeatureInput({
   value: number | string;
   onChange: (value: number | string) => void;
 }) {
+  const label = spec.label || feature;
   if (spec.type === "numeric") {
     return (
       <label className="feature-input">
         <span className="feature-input-label">
-          {feature} <span className="feature-input-range">{spec.min}–{spec.max}</span>
+          {label} {spec.info && <InfoButton text={spec.info} />} <span className="feature-input-range">{spec.min}–{spec.max}</span>
         </span>
         <input type="range" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
         <input
@@ -47,7 +57,9 @@ export function FeatureInput({
   }
   return (
     <label className="feature-input">
-      <span className="feature-input-label">{feature}</span>
+      <span className="feature-input-label">
+        {label} {spec.info && <InfoButton text={spec.info} />}
+      </span>
       <select value={value as string} onChange={(e) => onChange(e.target.value)}>
         {spec.options.map((option) => (
           <option key={option} value={option}>

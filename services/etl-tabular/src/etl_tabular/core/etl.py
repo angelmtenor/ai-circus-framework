@@ -13,10 +13,11 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from ai_circus_shared.scenario_schema import TabularDataset
 from ai_circus_shared.storage import ObjectStore
-from ai_circus_shared.tabular_ml import NORMALIZED_DATASET_KEY
+from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS, NORMALIZED_DATASET_KEY
 
 from etl_tabular.core.logger import get_logger
 
@@ -56,6 +57,14 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     columns = [*dataset.feature_columns, dataset.target]
     selected = df.loc[:, columns]
     df = selected.drop_duplicates().dropna()
+
+    if len(df) > MAX_DATASET_ROWS:
+        # Evenly-spaced, not a head/tail slice or random sample — keeps the row cap
+        # deterministic and representative of the full range (same technique
+        # prediction/core/dataset.py uses for its own row-limited endpoints).
+        idx = np.linspace(0, len(df) - 1, MAX_DATASET_ROWS, dtype=int)
+        df = df.iloc[idx]
+        logger.info("Capped dataset at {} rows (was larger)", MAX_DATASET_ROWS)
 
     for column in dataset.feature_columns:
         is_numeric = pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])

@@ -728,6 +728,11 @@ select:focus {
   padding: 0.75rem 0.9rem;
 }
 
+.kpi-tile--highlight {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+}
+
 .kpi-label {
   font-size: 0.68rem;
   text-transform: uppercase;
@@ -1420,13 +1425,17 @@ select:focus {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  margin-left: auto;
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 40;
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.5rem 0.9rem;
   border-radius: 8px;
   font-size: 0.85rem;
+  box-shadow: var(--shadow-md);
 }
 
 .chat-dock-toggle:hover {
@@ -1625,6 +1634,38 @@ select:focus {
 
 .settings-card-details .settings-card-model:first-of-type {
   margin-top: 0;
+}
+
+/* ── Info disclosure (small inline "ⓘ" toggle) ────────────────────────────── */
+
+.info-disclosure {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.info-disclosure summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  color: var(--dim);
+  transition: color 0.15s;
+}
+
+.info-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.info-disclosure summary:hover,
+.info-disclosure[open] summary {
+  color: var(--accent-2);
+}
+
+.info-disclosure-text {
+  font-size: 0.78rem;
+  color: var(--dim);
+  margin-top: 0.3rem;
+  max-width: 26rem;
 }
 
 .topbar-settings {

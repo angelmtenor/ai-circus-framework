@@ -8,6 +8,7 @@ from __future__ import annotations
 import pandas as pd
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
@@ -20,9 +21,10 @@ from prediction.core.predict import predict as run_predict
 router = APIRouter()
 
 # One standardized ceiling for every row-limited dataset endpoint below (sample,
-# evaluation, explainability) — previously two different, much smaller caps
-# (20000/1000) with inconsistent per-endpoint defaults (100/300/200).
-MAX_ROWS = 10000
+# evaluation, explainability) — matches etl-tabular's own dataset row cap
+# (ai_circus_shared.tabular_ml.MAX_DATASET_ROWS), so a caller can never request more
+# rows than a tenant's dataset could ever actually contain.
+MAX_ROWS = MAX_DATASET_ROWS
 
 
 class PredictRequest(BaseModel):

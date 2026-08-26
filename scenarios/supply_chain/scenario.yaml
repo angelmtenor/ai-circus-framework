@@ -31,9 +31,11 @@ chat:
     arrive, from the carrier, shipping distance, order type, origin city, and
     shipping priority.
   sample_questions:
-    - "Which features matter most for predicting shipping time?"
+    - "Which factors matter most for predicting shipping time?"
     - "How accurate is the trained model?"
     - "Does shipping priority actually reduce delivery time?"
+    - "Which carrier tends to deliver fastest?"
+    - "Does a bulk order take longer to ship than a single-item order?"
 
 dataset:
   bucket: "scenario-supply-chain"
@@ -59,12 +61,24 @@ dataset:
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
   # ranges/options taken from the real dataset's min/max/value set (10000 rows).
   feature_schema:
-    Carrier: {type: categorical, options: ["GlobalFreight", "MicroCarrier", "Shipper", "BigBird"], default: "GlobalFreight"}
-    YShippingDistance: {type: numeric, min: -476, max: 537, default: 0, step: 1}
-    XShippingDistance: {type: numeric, min: -436, max: 458, default: 0, step: 1}
-    InBulkOrder: {type: categorical, options: ["Bulk Order", "Single Order"], default: "Single Order"}
-    ShippingOrigin: {type: categorical, options: ["Atlanta", "Chicago", "Houston", "Las Vegas", "New York City", "Salt Lake City", "San Francisco", "Seattle"], default: "Atlanta"}
-    ShippingPriority: {type: categorical, options: ["Express", "Standard", "Ground", "Air"], default: "Standard"}
+    Carrier:
+      {type: categorical, label: "Carrier", options: ["GlobalFreight", "MicroCarrier", "Shipper", "BigBird"], default: "GlobalFreight",
+       info: "The shipping company handling this order."}
+    YShippingDistance:
+      {type: numeric, label: "North-south distance", min: -476, max: 537, default: 0, step: 1,
+       info: "North-south component of the distance between origin and destination (synthetic grid units; sign indicates direction)."}
+    XShippingDistance:
+      {type: numeric, label: "East-west distance", min: -436, max: 458, default: 0, step: 1,
+       info: "East-west component of the distance between origin and destination (synthetic grid units; sign indicates direction)."}
+    InBulkOrder:
+      {type: categorical, label: "Order size", options: ["Bulk Order", "Single Order"], default: "Single Order",
+       info: "Whether this was a large bulk order or a single-item order."}
+    ShippingOrigin:
+      {type: categorical, label: "Origin city", options: ["Atlanta", "Chicago", "Houston", "Las Vegas", "New York City", "Salt Lake City", "San Francisco", "Seattle"], default: "Atlanta",
+       info: "The city the shipment departed from."}
+    ShippingPriority:
+      {type: categorical, label: "Shipping priority", options: ["Express", "Standard", "Ground", "Air"], default: "Standard",
+       info: "The shipping speed/service level the customer paid for."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
@@ -81,6 +95,8 @@ model:
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
   target_units: "days"
+  target_label: "Actual shipping time"
+  target_description: "How many days the shipment actually took to arrive."
 
 services:
   etl: etl-tabular

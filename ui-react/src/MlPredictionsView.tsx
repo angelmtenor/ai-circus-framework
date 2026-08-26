@@ -4,7 +4,7 @@ import { predict, datasetSample, type ScenarioSummary, type DatasetSample } from
 import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
-import { mapContributions, topContribution, exportJson, initialRecord, FeatureInput, type Record_ } from "./predictUtils";
+import { mapContributions, topContribution, exportJson, initialRecord, featureLabel, FeatureInput, type Record_ } from "./predictUtils";
 
 // A batch /predict call computes a per-row SHAP explanation for every record in one
 // batched call — the same ~linear-in-row-count cost as explainability's "compute
@@ -44,7 +44,9 @@ function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; 
   }
 
   const isRegression = scenario.task_type === "regression";
-  const contributionItems = result ? mapContributions(record, result.contributions) : [];
+  const contributionItems = result
+    ? mapContributions(record, result.contributions).map((item) => ({ ...item, label: featureLabel(scenario, item.label) }))
+    : [];
 
   // Live "what's on screen" context for the chat agent — the *current* prediction,
   // not the scenario's static grounding (see assistant's build_system_prompt). Only
@@ -197,7 +199,7 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
                 <tr>
                   <th>#</th>
                   {featureColumns.map((f) => (
-                    <th key={f}>{f}</th>
+                    <th key={f}>{featureLabel(scenario, f)}</th>
                   ))}
                   <th>Prediction</th>
                   {isRegression && <th>90% interval</th>}
@@ -215,7 +217,7 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
                     {isRegression && (
                       <td>{row.prediction_lower !== null ? `${row.prediction_lower.toFixed(1)} – ${row.prediction_upper?.toFixed(1)}` : "—"}</td>
                     )}
-                    <td>{row.top ? `${row.top.label} (${row.top.value.toFixed(3)})` : "—"}</td>
+                    <td>{row.top ? `${featureLabel(scenario, row.top.label)} (${row.top.value.toFixed(3)})` : "—"}</td>
                   </tr>
                 ))}
               </tbody>

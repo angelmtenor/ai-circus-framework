@@ -20,6 +20,7 @@ const PATHS: Record<string, string> = {
   back: "M19 12H5m6-7-7 7 7 7",
   download: "M12 4v11m0 0-4-4m4 4 4-4M5 19h14",
   plus: "M12 5v14M5 12h14",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v.01M12 11v6",
 };
 
 export function Icon({ name, size = 16, className }: { name: keyof typeof PATHS; size?: number; className?: string }) {
