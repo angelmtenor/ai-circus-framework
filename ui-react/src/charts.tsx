@@ -88,6 +88,19 @@ function niceTicks(lo: number, hi: number, n = 5): number[] {
   return Array.from({ length: n }, (_, i) => lo + i * step);
 }
 
+function formatTick(v: number): string {
+  return v.toFixed(v % 1 === 0 ? 0 : 1);
+}
+
+/** Left padding wide enough for the widest y-tick label plus the rotated axis
+ * title, so long numbers (e.g. six-figure predictions) never overlap or clip
+ * past the left edge — sized off the actual tick text rather than a fixed
+ * guess, since the value range (and so the label width) varies per chart. */
+function leftPadForLabels(labels: string[]): number {
+  const maxLabelChars = Math.max(...labels.map((s) => s.length));
+  return 26 + maxLabelChars * 5.6;
+}
+
 export const CATEGORY_PALETTE = [
   CHART_COLORS.blue,
   CHART_COLORS.purple,
@@ -129,7 +142,9 @@ export function ScatterPlot({
   color?: string;
   legend?: { label: string; color: string }[];
 }) {
-  const pad = 38;
+  const padRight = 20;
+  const padTop = 16;
+  const padBottom = 38;
   const xs = points.map((p) => p.x);
   const ys = points.flatMap((p) => [p.y, p.lower ?? p.y, p.upper ?? p.y]);
   const allValues = [...xs, ...ys];
@@ -139,8 +154,9 @@ export function ScatterPlot({
   const yHi = sharedDomain ? Math.max(...allValues) : Math.max(...ys);
   const xSpan = xHi - xLo || 1;
   const ySpan = yHi - yLo || 1;
-  const sx = (v: number) => pad + ((v - xLo) / xSpan) * (width - pad * 1.4);
-  const sy = (v: number) => height - pad - ((v - yLo) / ySpan) * (height - pad * 1.4);
+  const padLeft = leftPadForLabels(niceTicks(yLo, yHi).map(formatTick));
+  const sx = (v: number) => padLeft + ((v - xLo) / xSpan) * (width - padLeft - padRight);
+  const sy = (v: number) => height - padBottom - ((v - yLo) / ySpan) * (height - padTop - padBottom);
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label={`${yLabel} vs ${xLabel}`}>
@@ -148,16 +164,15 @@ export function ScatterPlot({
         <g key={i}>
           <line x1={sx(xLo)} x2={sx(xHi)} y1={sy(v)} y2={sy(v)} stroke={CHART_COLORS.border} strokeWidth={1} />
           <text x={sx(xLo) - 6} y={sy(v)} fontSize={9} fill={CHART_COLORS.dim} textAnchor="end" dominantBaseline="middle">
-            {v.toFixed(v % 1 === 0 ? 0 : 1)}
+            {formatTick(v)}
           </text>
         </g>
       ))}
-      {!sharedDomain &&
-        niceTicks(xLo, xHi).map((v, i) => (
-          <text key={i} x={sx(v)} y={height - pad + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
-            {v.toFixed(v % 1 === 0 ? 0 : 1)}
-          </text>
-        ))}
+      {niceTicks(xLo, xHi).map((v, i) => (
+        <text key={i} x={sx(v)} y={height - padBottom + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
+          {formatTick(v)}
+        </text>
+      ))}
       {refLine && (
         <line x1={sx(xLo)} y1={sy(xLo)} x2={sx(xHi)} y2={sy(xHi)} stroke={CHART_COLORS.dim} strokeDasharray="4 4" strokeWidth={1} />
       )}
@@ -186,7 +201,7 @@ export function ScatterPlot({
       {legend && (
         <g>
           {legend.map((item, i) => (
-            <g key={item.label} transform={`translate(${width - pad * 3.4}, ${pad * 0.3 + i * 12})`}>
+            <g key={item.label} transform={`translate(${width - 130}, ${padTop + i * 12})`}>
               <circle cx={0} cy={0} r={3} fill={item.color} />
               <text x={6} y={0} fontSize={9} fill={CHART_COLORS.dim} dominantBaseline="middle">
                 {item.label}
@@ -282,7 +297,9 @@ export function LineChart({
   width?: number;
   height?: number;
 }) {
-  const pad = 38;
+  const padRight = 20;
+  const padTop = 16;
+  const padBottom = 46;
   if (points.length === 0) return null;
   const sortedPoints = [...points].sort((a, b) => a.x - b.x);
   const xs = sortedPoints.map((p) => p.x);
@@ -291,8 +308,10 @@ export function LineChart({
   const xHi = Math.max(...xs);
   const yLo = Math.min(...ys);
   const yHi = Math.max(...ys);
-  const sx = (v: number) => pad + ((v - xLo) / (xHi - xLo || 1)) * (width - pad * 1.4);
-  const sy = (v: number) => height - pad - ((v - yLo) / (yHi - yLo || 1)) * (height - pad * 1.4);
+  const yTickLabels = niceTicks(yLo, yHi).map((v) => v.toFixed(2));
+  const padLeft = leftPadForLabels(yTickLabels);
+  const sx = (v: number) => padLeft + ((v - xLo) / (xHi - xLo || 1)) * (width - padLeft - padRight);
+  const sy = (v: number) => height - padBottom - ((v - yLo) / (yHi - yLo || 1)) * (height - padTop - padBottom);
 
   const hasBand = sortedPoints.every((p) => p.lower !== undefined && p.upper !== undefined);
   const bandPath = hasBand
@@ -313,6 +332,11 @@ export function LineChart({
             {v.toFixed(2)}
           </text>
         </g>
+      ))}
+      {niceTicks(xLo, xHi).map((v, i) => (
+        <text key={i} x={sx(v)} y={height - padBottom + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
+          {formatTick(v)}
+        </text>
       ))}
       {bandPath && <path d={bandPath} fill={bandColor} opacity={0.15} stroke="none" />}
       <path d={linePath} fill="none" stroke={color} strokeWidth={2} />

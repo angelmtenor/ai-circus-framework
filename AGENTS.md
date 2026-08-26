@@ -40,6 +40,10 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
 - **New service scaffolding:** always go through `./scripts/new_service.sh <name>` (real
   cookiecutter generation from `ai-circus-template`) — never hand-write a service's
   `pyproject.toml`/`Dockerfile`/`settings.yaml` from scratch.
+- **Browser/rendering verification** (charts, CSS/layout, SVG output): the `mcp__playwright__*`
+  tools require a real Chrome binary this sandbox doesn't have and can't install without an
+  interactive `sudo` prompt. See the `playwright-headless-verify` skill for the working
+  Chromium-via-`playwright-core` alternative before giving up on browser-based verification.
 
 ## 🌳 5. Branching Strategy — git-flow
 - **Model:** `main` (production-ready, tagged releases) and `develop` (integration branch) are

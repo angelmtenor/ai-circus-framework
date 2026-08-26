@@ -32,11 +32,16 @@ function seriesX(s: ChatChartSeries): (number | string)[] {
 }
 
 function buildChatChartTraces(args: ChatChartArgs): { data: PlotlyDatum[]; layout: PlotlyLayout } {
-  const { chart_type, series, x_label, y_label } = args;
+  const { chart_type, series } = args;
+  // Fall back rather than trusting the model to always honor the (required)
+  // x_label/y_label parameters — some models still omit optional-looking
+  // fields, and an unlabeled axis is worse than a generic one.
+  const x_label = args.x_label?.trim() || "x";
+  const y_label = args.y_label?.trim() || "y";
   const axes: PlotlyLayout =
     chart_type === "scatter3d"
-      ? { scene: { xaxis: { title: x_label }, yaxis: { title: y_label }, zaxis: { title: "z" }, dragmode: "orbit" } }
-      : { xaxis: { title: x_label }, yaxis: { title: y_label } };
+      ? { scene: { xaxis: { title: { text: x_label } }, yaxis: { title: { text: y_label } }, zaxis: { title: { text: "z" } }, dragmode: "orbit" } }
+      : { xaxis: { title: { text: x_label } }, yaxis: { title: { text: y_label } } };
 
   if (chart_type === "pie") {
     const s = series[0];
@@ -100,8 +105,8 @@ export function useChatGenerativeUiActions(): void {
     parameters: [
       { name: "chart_type", type: "string", enum: ["bar", "line", "scatter", "scatter3d", "histogram", "pie"], required: true },
       { name: "title", type: "string", required: false },
-      { name: "x_label", type: "string", required: false },
-      { name: "y_label", type: "string", required: false },
+      { name: "x_label", type: "string", required: true, description: "Axis label for x — always provide a descriptive one, never omit." },
+      { name: "y_label", type: "string", required: true, description: "Axis label for y — always provide a descriptive one, never omit." },
       {
         name: "series",
         type: "object[]",
