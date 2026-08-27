@@ -25,7 +25,6 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
 - [LLM providers](#llm-providers)
 - [Adding a new scenario or service](#adding-a-new-scenario-or-service)
 - [Testing & CI](#testing--ci)
-- [Kubernetes path](#kubernetes-path)
 - [Reserved for later](#reserved-for-later-documented-not-built)
 - [Why this exists](#why-this-exists)
 - [Contributing](#contributing)
@@ -146,29 +145,10 @@ and `form-agent` does the same for every `assisted_form` scenario.
 
 ### Prerequisites
 
-- Docker + Docker Compose
-- `make`
-- **At least one LLM provider** — a free API key (Google Gemini's free tier is easiest) *or* the
-  bundled local Ollama fallback (see step 3 below). Chat features simply won't answer without one.
-
-### The fast path
-
-```bash
-git clone <this-repo-url> && cd ai-circus-framework
-make bootstrap   # copies .env.example -> .env — add an LLM key first if you have one (step 3 below)
-make all         # infra + services + both pipelines + an end-to-end admin-tenant check
-```
-
-`make all` runs every step below in the right order, waits for each container to actually be
-ready (not just started) before moving to the next, and finishes by curling the admin tenant
-through the same path the browser's login screen uses — so a broken setup fails loudly here,
-with logs to check, instead of as a "Failed to fetch" in the UI later. Safe to re-run any time.
-If something's clearly broken (stale volumes, half-applied `.env` change), `make reset-all` tears
-everything down — **including data in postgres/logto/qdrant/seaweedfs** — and reruns `make all` from a
-clean slate; that's also the right thing to run before sharing this repo, to prove it boots clean.
-
-The rest of this section is the same sequence broken into individual steps, useful if you want
-finer control (e.g. iterating on one service without rebuilding everything).
+- **Kubernetes (recommended)** — Docker, [`k3d`](https://k3d.io/#installation), `kubectl`, `make`.
+- **Docker Compose (alternative)** — Docker + Docker Compose, `make`.
+- **At least one LLM provider**, either way — a free API key (Google Gemini's free tier is
+  easiest) *or* the bundled local Ollama fallback. Chat features simply won't answer without one.
 
 ### 1. Clone and bootstrap the environment
 
@@ -178,15 +158,10 @@ make bootstrap   # copies .env.example -> .env
 ```
 
 Open the new `.env` — every setting has a comment explaining it. You don't need to touch most of
-it to get a working demo; the two things that matter most are covered next.
+it to get a working demo; the two things that matter most (an LLM key, and which deployment path
+below) are covered next.
 
-### 2. Start the platform infrastructure
-
-```bash
-make up-infra    # postgres, logto (identity), qdrant (vectors), seaweedfs (storage), traefik (ingress)
-```
-
-### 3. Choose your LLM and set its API key — **this step is required**
+### 2. Choose your LLM and set its API key — **this step is required**
 
 `assistant` (tabular chat) and `rag-agent` (document Q&A) won't answer anything until one model
 is actually reachable. Pick **one** of these:
@@ -201,7 +176,48 @@ every provider's live status and lets you switch the *active* model instantly, w
 (see the [Settings screenshot](#settings--llm-providers) above) — new keys still require editing
 `.env` and restarting `llm-gateway`, though.
 
-### 4. Start everything else and load some data
+### 3. Start the platform
+
+Two paths get you to the same app — pick one.
+
+#### Kubernetes (recommended)
+
+A local [k3d](https://k3d.io/) (k3s-in-Docker) cluster running the exact same stateless services,
+via plain Kustomize manifests — see [`k8s/README.md`](k8s/README.md) for the full manifest
+reference and design notes.
+
+```bash
+make k3s-cluster    # create the local k3d cluster (port 80, ./scenarios bind-mounted)
+make k3s-build      # build every service image locally
+make k3s-import     # import them into the cluster's containerd
+make k3s-secrets    # generate k8s Secrets from .env/infra
+make k3s-up         # kubectl apply -k k8s/base
+make k3s-wait       # wait for every pod to actually be Ready
+make k3s-verify     # curl-check the admin tenant end-to-end, same as `make verify` below
+make k3s-pipeline   # optional: (re)runs the ETL -> training pipeline for the tabular_ml scenarios
+```
+
+**Before opening the app in a browser**, start a standing port-forward — `platform-registry`'s
+browser-facing API isn't reachable through Traefik or `k3s-verify`'s own (command-scoped)
+port-forward:
+
+```bash
+kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+```
+
+Skipping this shows up as a client-side `Failed to fetch` right on the login screen even though
+every other check passes — see [`k8s/README.md`](k8s/README.md)'s "Design notes" for why.
+
+This is dev-parity, single-node only today (no registry — images are built locally and imported
+straight into the cluster; no Helm chart, no multi-node/HA) — not yet a drop-in production
+manifest set. It's still the recommended path because it's the same manifests you'd adapt for a
+real cluster (remote k3s, managed cloud Kubernetes, OpenShift): `kubectl apply -k k8s/base`
+already targets whatever `kubeconfig` context is active, local or not.
+
+#### Docker Compose (alternative)
+
+Simplest option for iterating on a single service without rebuilding into a cluster image each
+time.
 
 ```bash
 make up                              # every backend service + both UIs
@@ -210,7 +226,13 @@ docker compose up --build etl-vectorize   # vectorizes every conversational_rag 
                                            # plus any assisted_form scenario's RAG catalog (e.g. service_request)
 ```
 
-### 5. Open the app
+`make all` (infra + services + both pipelines + an end-to-end admin-tenant check) runs this whole
+compose path in the right order for you, waiting for each container to actually be ready before
+moving to the next — safe to re-run any time. If something's clearly broken (stale volumes,
+half-applied `.env` change), `make reset-all` tears everything down — **including data in
+postgres/logto/qdrant/seaweedfs** — and reruns `make all` from a clean slate.
+
+### 4. Open the app
 
 **[http://aiopen.localhost](http://aiopen.localhost)**
 
@@ -231,16 +253,20 @@ set in `services/platform-registry/src/platform_registry/core/seed.py`'s
 `ENGINEERING_DEMO_SCENARIOS`.
 
 > **"Failed to fetch" after logging in?** That's the browser's network-level error, not an
-> application error — it means a request never reached a server at all. Run `make verify`
-> (or just `make all` again) to pinpoint which service isn't answering; the most common causes
-> are: (1) you tested right after `make up`, before every container was actually ready — `make
-> all`/`make verify` wait for that, plain `docker compose up -d` doesn't; (2) `postgres-data` (or
-> another) volume already existed from an earlier partial run, so its one-time init script never
-> reran — `make reset-all` fixes this; (3) something else on the machine is already bound to port
-> 80 (Traefik's entrypoint), 8010 (platform-registry), 6333 (Qdrant), or 4000 (llm-gateway) —
-> the latter three are loopback-only, for local non-Docker dev; (4) the app was opened via an origin other
-> than `http://aiopen.localhost` (e.g. plain `http://localhost`) — every backend's CORS allow-list
-> is keyed to that exact hostname.
+> application error — it means a request never reached a server at all.
+>
+> **On Kubernetes**, this almost always means the standing `platform-registry` port-forward from
+> step 3 above isn't running — see [`k8s/README.md`](k8s/README.md)'s "Design notes".
+>
+> **On Docker Compose**, run `make verify` (or just `make all` again) to pinpoint which service
+> isn't answering; the most common causes are: (1) you tested right after `make up`, before every
+> container was actually ready — `make all`/`make verify` wait for that, plain `docker compose up
+> -d` doesn't; (2) `postgres-data` (or another) volume already existed from an earlier partial
+> run, so its one-time init script never reran — `make reset-all` fixes this; (3) something else
+> on the machine is already bound to port 80 (Traefik's entrypoint), 8010 (platform-registry), 6333
+> (Qdrant), or 4000 (llm-gateway) — the latter three are loopback-only, for local non-Docker dev;
+> (4) the app was opened via an origin other than `http://aiopen.localhost` (e.g. plain
+> `http://localhost`) — every backend's CORS allow-list is keyed to that exact hostname.
 
 Local (non-Docker) development: each generated service under `services/*/` has its own
 `make run` — run it directly with `uv run` from inside that service's directory while the infra
@@ -248,7 +274,7 @@ containers stay up via `make up-infra`.
 
 ### First-time Logto setup
 
-`make up-infra` brings up Logto at `http://logto.localhost` (sign-in) and
+Either deployment path brings up Logto at `http://logto.localhost` (sign-in) and
 `http://admin.logto.localhost` (Admin Console). One-time, via the Admin Console:
 
 1. Sign up as the Console's first user (this is what makes you the tenant owner), enable
@@ -282,7 +308,9 @@ Deploying this as-is to a public VM or behind a public minikube
 Ingress is still just `make up` — there's no separate compose file or `up` variant — but it
 needs a few `.env` values changed first, since `APP_ENVIRONMENT: docker` in
 `docker-compose.yml` is identical for local dev and a real deployment and so can't be used to
-tell them apart:
+tell them apart. (The same `.env` values apply if you adapt `k8s/base/` for a real cluster — but
+see the Kubernetes step above: today's manifests are dev-parity/single-node only, not yet a
+production-ready starting point on their own.)
 
 1. Rotate (or blank, to disable the shortcut outright) `ADMIN_API_KEY`/
    `ENGINEERING_DEMO_API_KEY` away from their shipped demo values, and confirm
@@ -312,8 +340,9 @@ the comment on its Traefik labels in `docker-compose.yml` for why.
   <img src="docs/screenshots/architecture.png" alt="AI Open Framework architecture diagram" width="900">
 </p>
 
-Runs today via `docker compose up`, and also on a local k3s (k3d) cluster (see
-[Kubernetes path](#kubernetes-path)) — the same stateless, env-configured services either way.
+Runs on a local Kubernetes (k3s/k3d) cluster — the recommended path, see
+[Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
+env-configured services either way.
 
 A tenant (Logto **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
@@ -416,19 +445,11 @@ own `npm run build` (type-checks via `tsc -b` then builds via Vite).
 `.github/workflows/ci.yml` runs the same checks per service as a matrix job, builds `ui-react`,
 and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
 
-## Kubernetes path
-
-Every service already reads all config from env vars and is stateless (artifacts live in
-SeaweedFS/Qdrant/Postgres, never only on local disk), which is what makes a local single-node
-**k3d** (k3s-in-Docker) deployment a straightforward re-expression of the same compose services —
-see [`k8s/README.md`](k8s/README.md) for the manifests (`k8s/base/`, plain YAML + one Kustomize
-base, no Helm chart) and the `make k3s-*` workflow. It's dev-parity only, not a production/
-multi-node setup: no registry, images are built locally and imported straight into the cluster.
-
 ## Reserved for later (documented, not built)
 
-A Helm chart (plain YAML + Kustomize exists instead — see [Kubernetes path](#kubernetes-path) — for
-local dev-parity; Helm would only matter for a real multi-environment/production rollout), a
+A Helm chart (plain YAML + Kustomize exists instead — see
+[Getting started > Kubernetes](#getting-started) and [`k8s/README.md`](k8s/README.md) — for local
+dev-parity; Helm would only matter for a real multi-environment/production rollout), a
 custom in-app admin screen, a task queue for on-demand tenant-triggered jobs, distributed
 tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis)
