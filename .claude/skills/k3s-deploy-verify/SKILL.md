@@ -1,0 +1,103 @@
+---
+name: k3s-deploy-verify
+description: Deploy and verify ai-circus-framework on the local k3d/k3s cluster end-to-end (cluster up through a real browser check) — includes sandbox-specific setup and the known k3s-vs-compose gotchas found doing this the first time.
+version: 1.0.0
+---
+
+# k3s Deploy & Verify
+
+## Overview
+
+`k8s/README.md` documents the `make k3s-*` workflow itself. This skill is the operational
+runbook for actually driving that workflow end-to-end in an agent sandbox where `kubectl`/`k3d`
+usually aren't preinstalled, plus three gotchas that look like real bugs but are really
+compose-vs-k3s environment gaps — found and fixed once already; check here before re-diagnosing
+them from scratch.
+
+## When to use
+
+- Asked to deploy/test the platform on k3s/k3d/Kubernetes instead of (or in addition to)
+  docker compose.
+- A `make k3s-*` step fails in a way that looks like an app bug but might be one of the gotchas
+  below.
+- Verifying a change actually works by driving the real UI against a k3s deployment (predictions,
+  chat, login) — pairs with `playwright-headless-verify` for the browser part.
+
+## Setup: kubectl/k3d without sudo
+
+Sandboxes running this repo often have Docker but not `kubectl`/`k3d`. Both install to
+`~/.local/bin` (already on `PATH` in this repo's dev environments) with no root needed:
+
+```bash
+KVER=$(curl -sSL https://dl.k8s.io/release/stable.txt)
+curl -sSL -o ~/.local/bin/kubectl "https://dl.k8s.io/release/${KVER}/bin/linux/amd64/kubectl"
+chmod +x ~/.local/bin/kubectl
+
+curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
+  USE_SUDO=false K3D_INSTALL_DIR=~/.local/bin bash
+```
+
+## Workflow
+
+1. Stop any docker-compose stack first (`make down`) — it and k3d's Traefik both want host port
+   80.
+2. Run the `k8s/README.md` sequence in order: `k3s-cluster` -> `k3s-build` -> `k3s-import` ->
+   `k3s-secrets` -> `k3s-up` -> `k3s-wait` -> `k3s-verify` -> (optional) `k3s-pipeline`.
+   `k3s-build`/`k3s-import` are the slow steps (image builds, then a full `docker save`/import
+   cycle per image) — run them with a long timeout or in the background.
+3. **Before any real browser use** (not just `k3s-verify`), start a standing port-forward — see
+   Gotcha 2 below.
+4. For a visual/interactive check, use the `playwright-headless-verify` skill's Chromium
+   workaround to log in (`User: admin`, `Password:` the `ADMIN_API_KEY` demo value from
+   `.env.example`, e.g. `ai-circus-2026` — this is the bearer-token shortcut form, not real Logto
+   OIDC) and exercise a prediction/chat scenario.
+
+## Gotchas (compose-vs-k3s environment gaps, not app bugs)
+
+1. **Optional env vars with a compose shell-default aren't optional in k8s.** Anything referenced
+   in `docker-compose.yml` as `${VAR:-default}` has no equivalent fallback when a k8s manifest
+   pulls it via `secretKeyRef` — the key must actually exist in `.env`, or the pod fails
+   `CreateContainerConfigError` with `couldn't find key <VAR> in Secret app-env`. Fix: copy the
+   missing default line(s) from `.env.example` into `.env` (never print/inspect `.env` itself —
+   existence-check with `grep -q "^KEY=" .env`, append blind), then re-run `make k3s-secrets` and
+   restart the pod.
+2. **`platform-registry`'s browser-facing port isn't published in k3s the way it is in compose.**
+   `ui-react` calls `http://localhost:8010` directly for one endpoint
+   (`VITE_PLATFORM_REGISTRY_URL`'s default) — compose satisfies this via
+   `127.0.0.1:8010:8000` on the host; k3d has no equivalent, and `make k3s-verify`'s own
+   port-forward only lives for that one command. Real browser use needs its own standing one:
+   ```bash
+   kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+   ```
+   Without it, login fails client-side with a generic `Failed to fetch` even though every
+   Traefik-routed service (and `k3s-verify`'s curl checks) are fine — check the browser devtools
+   Network tab, not just `k3s-verify`, to catch this class of failure. This is also a real
+   portability gap for an actual remote/cloud/OpenShift target (`localhost` there means the
+   viewer's own machine) — flag it rather than silently working around it if the task is about
+   deploying somewhere other than local k3d.
+3. **Tight default health-probe timing can crash-loop a service that isn't actually broken**, if
+   its startup makes a live network call (e.g. an embedding "dimension probe" to `llm-gateway`)
+   that queues behind every other scenario service doing the same thing during a cold `k3s-up` on
+   a single-node cluster. `rag-agent`/`form-agent` already carry a fixed `timeoutSeconds: 5,
+   failureThreshold: 6` for this reason (see their manifests) — if a *new* service shows the same
+   symptom (`kubectl describe pod` showing repeated `Liveness probe failed` / `connection refused`
+   right after a clean `Application startup complete` log line), it's the same class of issue, not
+   a fresh bug.
+
+## Key rules
+
+- Diagnose with `kubectl -n ai-circus describe pod -l app=<service>` (Events section) and
+  `kubectl -n ai-circus logs -l app=<service>` before assuming a crash-looping pod is an app bug —
+  check the three gotchas above first.
+- Never read/print `.env` content (root `AGENTS.md` §1) — use presence-only checks
+  (`grep -q "^KEY=" .env`) when diagnosing or patching missing keys.
+- A real browser check (via `playwright-headless-verify`) catches failures `k3s-verify`'s curl
+  checks structurally cannot — CORS, client-side-only fetch targets, JS console errors.
+
+## References
+
+- `k8s/README.md` — the manifests, `make k3s-*` command reference, and "Design notes" (which also
+  documents gotchas 2 and 3 above in-place).
+- `playwright-headless-verify` skill — the sandbox's real-browser verification workaround.
+- Root `CLAUDE.md` — "Debugging 'Failed to fetch'" (the compose-side version of the same class of
+  issue).
