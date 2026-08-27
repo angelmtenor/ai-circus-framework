@@ -26,14 +26,23 @@ spec:
             - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          # initialDelaySeconds/timeoutSeconds/failureThreshold are looser than a plain FastAPI
+          # healthz would need: startup makes a live httpx call to llm-gateway (embedding
+          # dimension probe), which queues behind every other scenario-service doing the same
+          # thing on a single-node k3d cluster — the default 1s timeoutSeconds flakes under that
+          # concurrent cold-start load.
           readinessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: scenarios
           hostPath: {path: /scenarios, type: Directory}
