@@ -48,12 +48,35 @@ make k3s-verify     # reuse `make verify`'s curl checks against this cluster
 ```
 
 Open `http://aiopen.localhost` once `k3s-verify` passes — same login flow as the docker-compose
-setup. Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
+setup. **Before logging in**, start a standing port-forward so the browser can reach
+`platform-registry`'s loopback-only API (`ui-react`'s bundled default for
+`VITE_PLATFORM_REGISTRY_URL` is `http://localhost:8010`, matching docker-compose.yml's
+`127.0.0.1:8010` host-published port — `k3s-verify`'s own port-forward only lives for that one
+command, so real browser use needs its own):
+
+```bash
+kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+```
+
+Without it, login fails client-side with a generic `Failed to fetch` (the `/llm-settings/
+active-model` call gets `ERR_CONNECTION_REFUSED` — check the browser devtools Network tab, not
+just `make k3s-verify`, which only exercises curl-reachable Traefik routes and won't catch this).
+Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.
 
 Tear down with `make k3s-down` (deletes the applied manifests; StatefulSet PVCs are retained by
 k8s convention) or `k3d cluster delete ai-circus` for a full wipe including all volumes.
+
+## Verified
+
+The full `k3s-cluster` -> `k3s-verify` -> `k3s-pipeline` sequence above, plus a real browser
+session (login, an ML prediction with SHAP, and a RAG chat turn), all pass against this manifest
+set on a local k3d cluster:
+
+| Login | ML prediction (SHAP) | RAG chat |
+| --- | --- | --- |
+| ![Login](../docs/screenshots/k3s-login.png) | ![ML prediction](../docs/screenshots/k3s-ml-predictions.png) | ![RAG chat](../docs/screenshots/k3s-rag-chat.png) |
 
 ## Design notes
 
@@ -81,3 +104,9 @@ k8s convention) or `k3d cluster delete ai-circus` for a full wipe including all 
   (add a Deployment/PVC for it yourself if you need the free local LLM fallback here too), and the
   pipeline services are `k8s/jobs/*` applied only via `make k3s-pipeline`, matching their
   one-shot, non-`k3s-up` nature in docker-compose.yml too (`profiles: ["pipeline"]`).
+- **`rag-agent`/`form-agent` readiness/liveness probes are deliberately loose**
+  (`timeoutSeconds: 5`, `failureThreshold: 6`) — their FastAPI startup makes a live call to
+  `llm-gateway` (embedding dimension probe), which queues behind every other scenario service
+  doing the same thing during a cold `k3s-up` on a single-node cluster. The default 1s probe
+  timeout flakes under that concurrent cold-start load and CrashLoopBackOffs the pod even though
+  the app itself starts fine.
