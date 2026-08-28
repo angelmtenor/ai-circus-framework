@@ -12,15 +12,23 @@ spec:
     metadata:
       labels: {app: prediction}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: prediction
           image: ai-circus/prediction:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: prediction-secrets}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           readinessProbe:

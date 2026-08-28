@@ -12,18 +12,26 @@ spec:
     metadata:
       labels: {app: form-agent}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: form-agent
           image: ai-circus/form-agent:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: form-agent-secrets}
           env:
             # Renamed from .env's LITELLM_MASTER_KEY.
-            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: form-agent-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           # initialDelaySeconds/timeoutSeconds/failureThreshold are looser than a plain FastAPI

@@ -24,25 +24,33 @@ spec:
     metadata:
       labels: {app: agui-voice}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: agui-voice
           image: ai-circus/agui-voice:local
           imagePullPolicy: Never
+          # No runAsNonRoot/dropped capabilities: unlike the other services/*
+          # Dockerfiles, services/agui-voice/Dockerfile has no `USER app` yet, so this
+          # container still runs as root — fix the Dockerfile first, then tighten this.
+          securityContext:
+            allowPrivilegeEscalation: false
           ports:
             - {containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: agui-voice-secrets}
           env:
             # Renamed from .env's VOICE_* vars — local, self-hosted defaults
             # (faster-whisper/Piper, no API key). DEEPGRAM_API_KEY/ELEVENLABS_*/
             # CARTESIA_* keep their .env names, so they flow through envFrom above
             # unchanged when overriding to a hosted provider.
-            - {name: STT_PROVIDER, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_STT_PROVIDER}}}
-            - {name: TTS_PROVIDER, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_TTS_PROVIDER}}}
-            - {name: WHISPER_MODEL, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_WHISPER_MODEL}}}
-            - {name: PIPER_VOICE_ID, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_PIPER_VOICE_ID}}}
-            - {name: PIPER_VOICE_ID_ES, valueFrom: {secretKeyRef: {name: app-env, key: VOICE_PIPER_VOICE_ID_ES}}}
+            - {name: STT_PROVIDER, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_STT_PROVIDER}}}
+            - {name: TTS_PROVIDER, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_TTS_PROVIDER}}}
+            - {name: WHISPER_MODEL, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_WHISPER_MODEL}}}
+            - {name: PIPER_VOICE_ID, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_PIPER_VOICE_ID}}}
+            - {name: PIPER_VOICE_ID_ES, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_PIPER_VOICE_ID_ES}}}
           volumeMounts:
             # faster-whisper caches under ~/.cache/huggingface, Piper under
             # ~/.cache/pipecat — this container has no dedicated user, so $HOME is /root.

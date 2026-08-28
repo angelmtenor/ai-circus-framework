@@ -12,9 +12,16 @@ spec:
     metadata:
       labels: {app: logto}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: logto
           image: svhd/logto:1.42.0
+          # No runAsNonRoot/dropped capabilities: this image's entrypoint isn't
+          # documented as safe running fully non-root/capability-less.
+          securityContext:
+            allowPrivilegeEscalation: false
           command: ["sh", "-c", "npm run cli db seed -- --swe; npm start"]
           ports:
             - {containerPort: 3001}
@@ -23,13 +30,13 @@ spec:
             - {name: TRUST_PROXY_HEADER, value: "1"}
             - {name: ENDPOINT, value: "http://logto.localhost"}
             - {name: ADMIN_ENDPOINT, value: "http://admin.logto.localhost"}
-            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_USER}}}
-            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_PASSWORD}}}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: logto-secrets, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: logto-secrets, key: POSTGRES_PASSWORD}}}
             # $(VAR) expansion of the two secret-sourced vars just above — a real k8s
             # feature (not shell interpolation), same pattern docker-compose.yml uses
             # via ${POSTGRES_USER}/${POSTGRES_PASSWORD} in its own DB_URL.
             - {name: DB_URL, value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/logto"}
-            - {name: ENDPOINT_COOKIE_SECRET, valueFrom: {secretKeyRef: {name: app-env, key: LOGTO_ENDPOINT_COOKIE_SECRET}}}
+            - {name: ENDPOINT_COOKIE_SECRET, valueFrom: {secretKeyRef: {name: logto-secrets, key: LOGTO_ENDPOINT_COOKIE_SECRET}}}
           readinessProbe:
             httpGet: {path: /api/status, port: 3001}
             initialDelaySeconds: 20

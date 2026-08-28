@@ -15,10 +15,17 @@ spec:
     metadata:
       labels: {app: ui-react}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: ui-react
           image: ai-circus/ui-react:local
           imagePullPolicy: Never
+          # No runAsNonRoot/dropped capabilities: stock nginx's master process starts
+          # as root to bind port 80 before dropping worker processes to `nginx`.
+          securityContext:
+            allowPrivilegeEscalation: false
           ports:
             - {containerPort: 80}
           readinessProbe:

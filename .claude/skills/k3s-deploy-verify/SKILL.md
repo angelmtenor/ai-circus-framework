@@ -10,7 +10,7 @@ version: 1.0.0
 
 `k8s/README.md` documents the `make k3s-*` workflow itself. This skill is the operational
 runbook for actually driving that workflow end-to-end in an agent sandbox where `kubectl`/`k3d`
-usually aren't preinstalled, plus three gotchas that look like real bugs but are really
+usually aren't preinstalled, plus four gotchas that look like real bugs but are really
 compose-vs-k3s environment gaps — found and fixed once already; check here before re-diagnosing
 them from scratch.
 
@@ -45,12 +45,26 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    `k3s-secrets` -> `k3s-up` -> `k3s-wait` -> `k3s-verify` -> (optional) `k3s-pipeline`.
    `k3s-build`/`k3s-import` are the slow steps (image builds, then a full `docker save`/import
    cycle per image) — run them with a long timeout or in the background.
-3. **Before any real browser use** (not just `k3s-verify`), start a standing port-forward — see
-   Gotcha 2 below.
-4. For a visual/interactive check, use the `playwright-headless-verify` skill's Chromium
-   workaround to log in (`User: admin`, `Password:` the `ADMIN_API_KEY` demo value from
-   `.env.example`, e.g. `ai-circus-2026` — this is the bearer-token shortcut form, not real Logto
-   OIDC) and exercise a prediction/chat scenario.
+3. Start a standing port-forward before any real browser use — see Gotcha 2 below:
+   ```bash
+   kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+   ```
+4. **Do the real-browser check — `k3s-verify` passing is not sufficient to call this done.**
+   `k3s-verify`'s curl checks structurally cannot see client-side-only failures (a missing
+   port-forward, CORS, JS console errors) — see Gotcha 2. This was actually missed once already:
+   an agent ran only `k3s-verify`, reported success, and the user had to ask "did you check with
+   playwright?" before the (real) `Failed to fetch` from Gotcha 2 surfaced. Don't repeat that —
+   treat step 4 as mandatory, not an optional nice-to-have, any time the task is "verify this
+   works," not just "does the curl smoke test pass."
+   Use the `playwright-headless-verify` skill to drive a real headless browser against
+   `http://aiopen.localhost`. Log in with the bearer-token shortcut (not real Logto OIDC): the
+   `User` dropdown already defaults to `admin`; fill the password field
+   (`input[type="password"]`) with the `ADMIN_API_KEY` value from `.env` (see that skill for how
+   to do this without ever printing `.env`'s content), then click the button matching
+   `button:has-text("Log in")`. A successful login lands on the scenario dashboard with no failed
+   requests; from there, open a scenario card (e.g. `text=Customer Churn Prediction`) and confirm
+   its data/charts actually render — a `Loading dataset…` state that clears within ~10s is normal
+   render time for a 5,000-row sample, not a bug.
 
 ## Gotchas (compose-vs-k3s environment gaps, not app bugs)
 
@@ -75,7 +89,16 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    portability gap for an actual remote/cloud/OpenShift target (`localhost` there means the
    viewer's own machine) — flag it rather than silently working around it if the task is about
    deploying somewhere other than local k3d.
-3. **Tight default health-probe timing can crash-loop a service that isn't actually broken**, if
+3. **A `securityContext.runAsNonRoot: true` container fails with a *different* flavor of
+   `CreateContainerConfigError` than Gotcha 1's.** `kubectl describe pod` shows `Error: container
+   has runAsNonRoot and image has non-numeric user (app), cannot verify user is non-root` — the
+   Dockerfile's `USER app` is a name, not a UID, so the kubelet can't verify it's non-root at all
+   and refuses to start. Fix: add `runAsUser: 1000` next to `runAsNonRoot: true` (1000 is the UID
+   `useradd --create-home` assigns `app` in every `services/*/Dockerfile` — confirmed via
+   `docker run --rm <image> id`; see `k8s/README.md`'s Design notes). This is unrelated to Gotcha
+   1 even though both surface as `CreateContainerConfigError` — check the Events message to tell
+   them apart before assuming it's the missing-secret-key case.
+4. **Tight default health-probe timing can crash-loop a service that isn't actually broken**, if
    its startup makes a live network call (e.g. an embedding "dimension probe" to `llm-gateway`)
    that queues behind every other scenario service doing the same thing during a cold `k3s-up` on
    a single-node cluster. `rag-agent`/`form-agent` already carry a fixed `timeoutSeconds: 5,
@@ -88,11 +111,12 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
 
 - Diagnose with `kubectl -n ai-circus describe pod -l app=<service>` (Events section) and
   `kubectl -n ai-circus logs -l app=<service>` before assuming a crash-looping pod is an app bug —
-  check the three gotchas above first.
+  check the four gotchas above first.
 - Never read/print `.env` content (root `AGENTS.md` §1) — use presence-only checks
   (`grep -q "^KEY=" .env`) when diagnosing or patching missing keys.
 - A real browser check (via `playwright-headless-verify`) catches failures `k3s-verify`'s curl
-  checks structurally cannot — CORS, client-side-only fetch targets, JS console errors.
+  checks structurally cannot — CORS, client-side-only fetch targets, JS console errors. Treat it
+  as a required step of "verify this works," not an optional extra (see Workflow step 4).
 
 ## References
 
