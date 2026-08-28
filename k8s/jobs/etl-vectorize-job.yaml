@@ -10,17 +10,25 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: etl-vectorize
           image: ai-circus/etl-vectorize:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: etl-vectorize-secrets}
           env:
             # Renamed from .env's LITELLM_MASTER_KEY — only reached when
             # EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model).
-            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: etl-vectorize-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
       volumes:

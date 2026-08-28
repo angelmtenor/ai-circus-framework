@@ -22,6 +22,9 @@ trying to `sudo` your way past it.
   content) and the `mcp__playwright__*` tools error out with the message above.
 - Verifying isolated rendering logic (a chart component's SVG/Plotly output, a CSS fix) *without*
   needing to log into the running app.
+- Verifying a full k3s-deployed app end-to-end through a real login and scenario page — see
+  "Logging into the real running app" below. This is the step `k3s-deploy-verify` calls mandatory
+  before calling any deploy "verified."
 
 ## The workaround: drive Chromium directly via `playwright-core`
 
@@ -63,12 +66,72 @@ const { chromium } = require('playwright-core');
 Run with `node /tmp/pw-verify/shot.js`, then read `/tmp/pw-verify/out.png` with the Read tool to
 inspect visually.
 
-## Isolating what you're testing — don't fight app auth
+## If `node`/`npx` aren't on the host either: the Docker fallback
 
-`aiopen.localhost` requires a real Logto login when `DEV_MODE=false` (the normal state) — there
-are no credentials available to automate that, so don't try to script a full login flow. Instead,
-isolate exactly the rendering logic in question in a static HTML page served over plain HTTP (a
-real browser origin is required — `file://` scripts get blocked), e.g.:
+Some sandboxes have Docker but no Node at all (`node`/`npm`/`npx` all `command not found`), which
+breaks the workaround above at the very first step. `docker pull mcr.microsoft.com/playwright:v1.49.1-noble`
+(check `npm view playwright version` or the app's own `package.json` for which tag to match if it
+matters) bundles Node + Chromium + every OS dependency already — no host install, no sudo. Run
+`--network host` so the container's `localhost`/`*.localhost` resolve against this host's own
+loopback (where Traefik/k3d's ingress is actually listening), and bind-mount your scratch dir in
+place of a local Node install:
+
+```bash
+mkdir -p /tmp/pw-verify
+# write check.js into /tmp/pw-verify first (same script shape as above, `require('playwright')`
+# not `playwright-core` — the image already has matching browsers cached for that version)
+
+docker run --rm --network host \
+  -v /tmp/pw-verify:/work -w /work \
+  mcr.microsoft.com/playwright:v1.49.1-noble \
+  bash -c "npm init -y >/dev/null 2>&1 && npm install playwright@1.49.1 --no-save >/dev/null 2>&1 && node check.js"
+```
+
+Install `node_modules` *inside* the same mounted `-w` directory (not `/tmp` with the script under
+a different mount) — Node resolves `require()` by walking up from the script's own path, and a
+bind-mounted `/work` has no relation to the container's `/tmp`, so a mismatch gives
+`Cannot find module 'playwright'` even though the install "succeeded."
+
+## Logging into the real running app (bearer-token shortcut, k3s target only)
+
+`aiopen.localhost` requires a real Logto login when `DEV_MODE=false` (the normal state on
+docker-compose) — there are no credentials available to automate *that* OIDC flow, so don't script
+it. But a k3s deployment (see `k3s-deploy-verify`) exposes a second, non-OIDC login path: a
+`User`/`Password` form where `User` already defaults to `admin` and `Password` accepts the real
+`ADMIN_API_KEY` value as a bearer-token shortcut. Automate that one — it's a real, intended login
+path, not a bypass:
+
+```js
+await page.goto('http://aiopen.localhost', { waitUntil: 'networkidle' });
+await page.fill('input[type="password"]', process.env.ADMIN_API_KEY);
+await page.click('button:has-text("Log in")');
+```
+
+Never read or print `.env`'s content (root `AGENTS.md` §1) to get that value into the script.
+Instead, mount `.env` read-only into the container and source it into an env var the *container's*
+shell sets — `process.env.ADMIN_API_KEY` inside `check.js` then reads it silently, and it never
+appears in any command, log line, or `console.log`:
+
+```bash
+docker run --rm --network host \
+  -v /tmp/pw-verify:/work -w /work \
+  -v <repo>/.env:/work/.env:ro \
+  mcr.microsoft.com/playwright:v1.49.1-noble \
+  bash -c "set -a; source /work/.env; set +a; node check.js"
+```
+
+A successful login lands on the scenario dashboard with zero failed/non-2xx requests (log
+`page.on('requestfailed', ...)` and `page.on('response', ...)` for anything not `.ok()`). Opening a
+scenario card can show `Loading dataset…` for several seconds while it fetches/renders a
+multi-thousand-row sample — that's normal render time, not a hang; wait it out before concluding
+something's broken.
+
+## Isolating rendering-only bugs — don't fight app auth for those
+
+For a bug that's purely about rendering (chart output, CSS layout, SVG/Canvas content) and doesn't
+need the real backend at all, skip login entirely: isolate exactly the rendering logic in question
+in a static HTML page served over plain HTTP (a real browser origin is required — `file://` scripts
+get blocked), e.g.:
 
 ```bash
 cd /tmp/pw-verify && python3 -m http.server 8931 >/dev/null 2>&1 &
@@ -89,6 +152,16 @@ done (`rm -rf /tmp/pw-verify`, `pkill -f 'http.server <port>'`). Never leave `no
 does reset per-command in this harness (backgrounding a command drops the cwd for the *next*
 command), so double-check `pwd`/file paths after any `&`-backgrounded step rather than assuming a
 later `rm -rf` targeted the right directory.
+
+If you used the Docker fallback, `npm install` inside the container ran as root, so the host-side
+`rm -rf /tmp/pw-verify` will fail partway with `Permission denied` on `node_modules`. Remove it the
+same way it was created — from inside a container that has root on that mount:
+```bash
+docker run --rm -v /tmp/pw-verify:/work mcr.microsoft.com/playwright:v1.49.1-noble rm -rf /work/*
+rmdir /tmp/pw-verify
+```
+Also remove the pulled image if you don't expect to need it again this session
+(`docker rmi mcr.microsoft.com/playwright:v1.49.1-noble`) — it's a multi-GB download.
 
 ## References
 

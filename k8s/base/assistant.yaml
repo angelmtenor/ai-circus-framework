@@ -12,18 +12,26 @@ spec:
     metadata:
       labels: {app: assistant}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: assistant
           image: ai-circus/assistant:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: assistant-secrets}
           env:
             # Renamed from .env's LITELLM_MASTER_KEY.
-            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: assistant-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           readinessProbe:

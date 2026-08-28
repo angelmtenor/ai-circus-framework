@@ -1,9 +1,10 @@
-# Non-secret config shared across backend pods via envFrom. Secrets (POSTGRES_*,
-# ADMIN_API_KEY, OBJECT_STORE_*, LOGTO_*, provider keys, LITELLM_MASTER_KEY, ...) come
-# from the `app-env` Secret instead (generated from .env by `make k3s-secrets` — see
-# scripts/k3s_generate_secrets.sh). pydantic-settings only reads env vars its own
-# EnvConfig declares, so it's safe for every pod to receive every key here even when
-# most don't apply to that particular service.
+# Non-secret config shared across every backend pod via envFrom — safe to share broadly
+# since none of it is sensitive. Secrets (POSTGRES_*, ADMIN_API_KEY, OBJECT_STORE_*,
+# LOGTO_*, provider keys, LITELLM_MASTER_KEY, ...) come from per-workload Secrets
+# instead (e.g. `prediction-secrets`, `rag-agent-secrets`), each scoped to only the
+# keys that workload needs — generated from the single `.env` file by `make k3s-secrets`
+# (see scripts/k3s_generate_secrets.sh) so no credential is handed to a pod that has no
+# reason to hold it.
 apiVersion: v1
 kind: ConfigMap
 metadata:

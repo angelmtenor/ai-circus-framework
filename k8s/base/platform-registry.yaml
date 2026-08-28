@@ -14,20 +14,28 @@ spec:
     metadata:
       labels: {app: platform-registry}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: platform-registry
           image: ai-circus/platform-registry:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: platform-registry-secrets}
           env:
             - {name: LOG_LEVEL, value: "INFO"}
             # Renamed from .env's LITELLM_MASTER_KEY — backs the admin-only
             # /llm-settings/* endpoints (see platform_registry/core/llm_settings.py).
-            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: app-env, key: LITELLM_MASTER_KEY}}}
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: platform-registry-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           readinessProbe:

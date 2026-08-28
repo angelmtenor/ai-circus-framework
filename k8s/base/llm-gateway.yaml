@@ -15,15 +15,23 @@ spec:
     metadata:
       labels: {app: llm-gateway}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: llm-gateway
           image: ai-circus/llm-gateway:local
           imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 4000}
           envFrom:
             - configMapRef: {name: shared-config}
-            - secretRef: {name: app-env}
+            - secretRef: {name: llm-gateway-secrets}
           # LiteLLM's proxy doesn't expose the same /healthz FastAPI wrapper the other
           # services do (root Makefile's wait-services/verify don't probe it either,
           # since it's internal-only) — a TCP check is the only thing safe to assume.

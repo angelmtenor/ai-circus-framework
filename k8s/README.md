@@ -40,7 +40,7 @@ as a working setup allows: dev-parity for one local cluster doesn't need per-env
 make k3s-cluster    # create the local k3d cluster (idempotent) — port 80, ./scenarios bind-mounted
 make k3s-build      # docker build every service image, tagged ai-circus/<service>:local
 make k3s-import     # import those images into the k3d cluster's containerd
-make k3s-secrets    # generate the app-env/traefik-basicauth/seaweedfs-s3-config Secrets
+make k3s-secrets    # generate the per-workload/traefik-basicauth/seaweedfs-s3-config Secrets
 make k3s-up         # kubectl apply -k k8s/base
 make k3s-wait       # wait for every pod to actually be Ready (not just Running)
 make k3s-pipeline   # optional: run the churn ETL -> training pipeline as k8s Jobs
@@ -81,11 +81,14 @@ set on a local k3d cluster:
 ## Design notes
 
 - **Secrets are never committed.** `make k3s-secrets` (`scripts/k3s_generate_secrets.sh`) creates
-  them from local, gitignored files — the same rule `.env` itself follows. Every backend pod
-  receives the entire `app-env` Secret via `envFrom` (harmless: pydantic-settings only reads the
-  env vars a service's own `EnvConfig` declares) plus a small number of explicit `env:` overrides
-  for keys docker-compose.yml itself renames (e.g. `LLM_GATEWAY_API_KEY` from `.env`'s
-  `LITELLM_MASTER_KEY`) or that must be a k8s-internal literal (e.g. `LOGTO_JWKS_URL`).
+  them from local, gitignored files — the same rule `.env` itself follows. `.env` stays the single
+  file you edit, but the script fans it out into one small Secret per workload (`postgres-
+  credentials`, `prediction-secrets`, `rag-agent-secrets`, ...), each containing only the keys that
+  workload's docker-compose.yml `environment:` block actually uses — not one `app-env` blob handed
+  to every pod, so compromising one service doesn't leak every credential in the system. Each pod's
+  `envFrom` points at its own Secret, plus a small number of explicit `env:` overrides for keys
+  docker-compose.yml itself renames (e.g. `LLM_GATEWAY_API_KEY` from `.env`'s `LITELLM_MASTER_KEY`)
+  or that must be a k8s-internal literal (e.g. `LOGTO_JWKS_URL`).
 - **`./scenarios` is a `hostPath` volume**, mounted at `/app/scenarios` in every pod that needs
   it — the k8s-native equivalent of docker-compose.yml's read-only bind mount, viable here because
   this is single-node local dev. `make k3s-cluster` bind-mounts the repo's `scenarios/` directory
@@ -94,6 +97,16 @@ set on a local k3d cluster:
   and its CRDs let the `Host(...)` rules and the `admin-basicauth` gate (on `admin.logto.localhost`
   and `console.objectstore.localhost`) carry over almost verbatim from docker-compose.yml's own
   Traefik labels.
+- **`securityContext.runAsNonRoot: true` always needs `runAsUser: 1000` alongside it**, for every
+  `services/*` Deployment/Job. Each of those Dockerfiles sets `USER app` (a name, not a UID), and
+  the kubelet can't verify "non-root" from a name alone — it refuses to start the container with
+  `Error: container has runAsNonRoot and image has non-numeric user (app), cannot verify user is
+  non-root`, surfacing as `CreateContainerConfigError` (a *different* root cause than the missing-
+  secret-key version of that same status — see the `k3s-deploy-verify` skill's gotchas). `1000` is
+  the UID `useradd --create-home` assigns `app` in every one of those Dockerfiles (confirmed via
+  `docker run --rm <image> id`); `postgres`/`logto`/`qdrant`/`seaweedfs`/`ui-react`/`agui-voice`
+  deliberately skip `runAsNonRoot` instead (see their manifests' comments) since they either need
+  root for entrypoint chown/bind logic or (`agui-voice`) have no non-root `USER` yet.
 - **`ui-react` needs no separate build.** Its backend base URLs are baked in at `docker build` time
   via `VITE_*` args, defaulting to the same `*.localhost` hostnames this cluster's Traefik also
   serves — so the same image `make k3s-build` produces works unchanged. A runtime-injected

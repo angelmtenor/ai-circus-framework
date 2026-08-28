@@ -14,15 +14,23 @@ spec:
     metadata:
       labels: {app: postgres}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
       containers:
         - name: postgres
           image: postgres:16-alpine
+          # No runAsNonRoot/dropped capabilities here: the official entrypoint starts
+          # as root to chown the mounted data dir on first run, then drops to the
+          # postgres user itself — forcing non-root at the pod level would break that.
+          securityContext:
+            allowPrivilegeEscalation: false
           ports:
             - containerPort: 5432
           env:
-            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_USER}}}
-            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_PASSWORD}}}
-            - {name: POSTGRES_DB, valueFrom: {secretKeyRef: {name: app-env, key: POSTGRES_DB}}}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: postgres-credentials, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: postgres-credentials, key: POSTGRES_PASSWORD}}}
+            - {name: POSTGRES_DB, valueFrom: {secretKeyRef: {name: postgres-credentials, key: POSTGRES_DB}}}
           volumeMounts:
             - {name: postgres-data, mountPath: /var/lib/postgresql/data}
             - {name: init-scripts, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
@@ -78,3 +86,23 @@ spec:
   selector: {app: postgres}
   ports:
     - {port: 5432, targetPort: 5432}
+---
+# Postgres has real password auth, but nothing else in the namespace stops any other
+# pod from reaching it over Service DNS — only logto and platform-registry actually
+# have a database here (see infra/postgres/init-multiple-databases.sh), so lock
+# ingress down to just those two.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  namespace: ai-circus
+spec:
+  podSelector:
+    matchLabels: {app: postgres}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: logto}}
+        - podSelector: {matchLabels: {app: platform-registry}}
+      ports:
+        - {protocol: TCP, port: 5432}
