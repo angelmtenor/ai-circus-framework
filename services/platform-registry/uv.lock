@@ -11,9 +11,11 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "prometheus-fastapi-instrumentator" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pyyaml" },
+    { name = "sqlalchemy" },
 ]
 
 [package.metadata]
@@ -22,9 +24,11 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "prometheus-fastapi-instrumentator", specifier = ">=7.0.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", specifier = ">=2.11.4" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
 ]
 
 [package.metadata.requires-dev]

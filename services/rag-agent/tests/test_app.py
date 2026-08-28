@@ -112,6 +112,7 @@ async def test_lifespan_sets_up_qdrant_embedder_and_llm(monkeypatch: pytest.Monk
 
     qdrant_calls: list[dict[str, object]] = []
     provider_calls: list[dict[str, object]] = []
+    create_all_calls: list[object] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"docs_rag": FakeDefinition()})
@@ -119,6 +120,8 @@ async def test_lifespan_sets_up_qdrant_embedder_and_llm(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         app, "build_embedding_provider", lambda **kwargs: provider_calls.append(kwargs) or "fake-embedder"
     )
+    monkeypatch.setattr(app, "init_engine", lambda _config: "fake-conversations-engine")
+    monkeypatch.setattr(app.ConversationsBase.metadata, "create_all", lambda engine: create_all_calls.append(engine))
 
     async with app.lifespan(app.app):
         assert app.app.state.qdrant == "fake-qdrant"
@@ -139,6 +142,7 @@ async def test_lifespan_sets_up_qdrant_embedder_and_llm(monkeypatch: pytest.Monk
             "llm_gateway_api_key": "master-key",
         }
     ]
+    assert create_all_calls == ["fake-conversations-engine"]
 
 
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -109,6 +109,7 @@ async def test_lifespan_sets_up_qdrant_embedder_store_and_llm(monkeypatch: pytes
     qdrant_calls: list[dict[str, object]] = []
     provider_calls: list[dict[str, object]] = []
     store_calls: list[dict[str, object]] = []
+    create_all_calls: list[object] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"service_request": FakeDefinition()})
@@ -121,6 +122,8 @@ async def test_lifespan_sets_up_qdrant_embedder_store_and_llm(monkeypatch: pytes
         "connect",
         classmethod(lambda _cls, **kwargs: store_calls.append(kwargs) or "fake-store"),
     )
+    monkeypatch.setattr(app, "init_engine", lambda _config: "fake-conversations-engine")
+    monkeypatch.setattr(app.ConversationsBase.metadata, "create_all", lambda engine: create_all_calls.append(engine))
 
     async with app.lifespan(app.app):
         assert app.app.state.qdrant == "fake-qdrant"
@@ -131,6 +134,7 @@ async def test_lifespan_sets_up_qdrant_embedder_store_and_llm(monkeypatch: pytes
         # lazily, once it knows (from platform-registry) which model is actually active.
         assert app.app.state.llm_clients == {}
 
+    assert create_all_calls == ["fake-conversations-engine"]
     assert qdrant_calls == [{"url": "http://qdrant:6333"}]
     assert provider_calls == [
         {

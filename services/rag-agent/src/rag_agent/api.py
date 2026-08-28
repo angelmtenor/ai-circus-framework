@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import datetime
+from typing import Any
 
 import httpx
-from ag_ui.core import RunAgentInput, RunErrorEvent
+from ag_ui.core import EventType, RunAgentInput, RunErrorEvent
 from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ScenarioDefinition
@@ -37,6 +40,30 @@ class ModelResponse(BaseModel):
     model: str
     provider: str | None = None
     vision: bool = False
+
+
+class ConversationOut(BaseModel):
+    """One conversation as listed/created for the UI's conversation sidebar."""
+
+    id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationCreateIn(BaseModel):
+    """Body for POST /conversations/{scenario_slug} — title defaults to "New conversation"."""
+
+    title: str | None = None
+
+
+class MessageOut(BaseModel):
+    """One persisted chat message, replayed into the frontend transcript on resume."""
+
+    id: str
+    role: str
+    content: Any
+    created_at: datetime
 
 
 def _qdrant(request: Request) -> QdrantClient:
@@ -95,6 +122,10 @@ def _llm(request: Request, model_name: str = Depends(_llm_model_name)) -> BaseCh
     return llm_clients[model_name]
 
 
+def _conversation_store(session: DbSession = Depends(get_session)) -> ConversationStore:
+    return ConversationStore(session)
+
+
 def _scenario_definition(scenario_slug: str, request: Request) -> ScenarioDefinition:
     """Look up `scenario_slug` among the scenarios this instance loaded at startup.
 
@@ -131,6 +162,98 @@ def model_endpoint(
     return ModelResponse(model=model, provider=provider, vision=vision)
 
 
+@router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])
+def list_conversations_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ConversationStore = Depends(_conversation_store),
+) -> list[ConversationOut]:
+    """List this caller's past conversations for this scenario, most-recently-updated first."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    conversations = store.list_conversations(identity.org_id, identity.subject, definition.slug)
+    return [
+        ConversationOut(id=c.id, title=c.title, created_at=c.created_at, updated_at=c.updated_at) for c in conversations
+    ]
+
+
+@router.post("/conversations/{scenario_slug}", response_model=ConversationOut)
+def create_conversation_endpoint(
+    body: ConversationCreateIn,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ConversationStore = Depends(_conversation_store),
+) -> ConversationOut:
+    """Start a new, empty conversation — the UI's "+ New conversation" button."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    conversation = store.create_conversation(
+        identity.org_id, identity.subject, definition.slug, body.title or "New conversation"
+    )
+    return ConversationOut(
+        id=conversation.id,
+        title=conversation.title,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
+
+
+@router.get("/conversations/{scenario_slug}/{conversation_id}/messages", response_model=list[MessageOut])
+def list_conversation_messages_endpoint(
+    conversation_id: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ConversationStore = Depends(_conversation_store),
+) -> list[MessageOut]:
+    """Full transcript for resuming a past conversation — 404 if it's unknown or not this caller's."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    if store.get_conversation(conversation_id, identity.org_id, identity.subject) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    messages = store.list_messages(conversation_id, identity.org_id, identity.subject)
+    return [MessageOut(id=m.id, role=m.role, content=m.content, created_at=m.created_at) for m in messages]
+
+
+@router.delete("/conversations/{scenario_slug}/{conversation_id}")
+def delete_conversation_endpoint(
+    conversation_id: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ConversationStore = Depends(_conversation_store),
+) -> dict[str, bool]:
+    """Delete a conversation and its messages — 404 if it's unknown or not this caller's."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    if not store.delete_conversation(conversation_id, identity.org_id, identity.subject):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"deleted": True}
+
+
+def _persist_turn(
+    store: ConversationStore,
+    input_data: RunAgentInput,
+    identity: Identity,
+    assistant_text_by_message_id: dict[str, list[str]],
+) -> None:
+    """Append this turn's new user message and the model's final text reply (if any)
+    to the conversation's history. Best-effort: a persistence hiccup here must never
+    surface as a chat error — the client has already received (or errored on) the
+    real response by the time this runs.
+    """
+    assert identity.org_id is not None
+    turns: list[tuple[str, Any]] = []
+    last = input_data.messages[-1] if input_data.messages else None
+    if last is not None and last.role == "user":
+        content = last.content if isinstance(last.content, str) else [c.model_dump(mode="json") for c in last.content]
+        turns.append(("user", content))
+    for deltas in assistant_text_by_message_id.values():
+        text = "".join(deltas)
+        if text:
+            turns.append(("assistant", text))
+    if not turns:
+        return
+    try:
+        store.append_messages(input_data.thread_id, identity.org_id, identity.subject, turns)
+    except Exception:
+        logger.error("Failed to persist conversation history for thread_id={!r}", input_data.thread_id)
+
+
 @router.post("/agui/{scenario_slug}")
 async def agui_endpoint(
     scenario_slug: str,
@@ -141,6 +264,7 @@ async def agui_endpoint(
     qdrant: QdrantClient = Depends(_qdrant),
     embedder: EmbeddingProvider = Depends(_embedder),
     llm: BaseChatModel = Depends(_llm),
+    store: ConversationStore = Depends(_conversation_store),
 ) -> StreamingResponse:
     """AG-UI (CopilotKit) streaming endpoint: an SSE stream of AG-UI events, driven by
     a `create_agent` graph built fresh per request (see build_agui_agent). Same
@@ -157,14 +281,25 @@ async def agui_endpoint(
     the phase-3 plan. This route re-implements just enough of it (no `.clone()` needed,
     since the agent is already built fresh per request) to keep every request going
     through the same auth/entitlement chain as every other route.
+
+    `input_data.thread_id` is a real conversation id — created via
+    `POST /conversations/{scenario_slug}` above, never the bare scenario slug — and
+    must already belong to this org/user, so a guessed/stale thread id from another
+    tenant can't be replayed here. Once the stream completes, this turn's new user
+    message and the model's final text reply are appended to that conversation's
+    history (see ai_circus_shared.conversations) — independent of the per-request
+    `InMemorySaver` in build_agui_agent, which stays unrelated to this durable history.
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
     assert definition.vector_store is not None  # guaranteed by kind="conversational_rag" filter
+    if store.get_conversation(input_data.thread_id, identity.org_id, identity.subject) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
     tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
     graph = build_agui_agent(llm, [tool], definition.chat.context)
     agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph)
 
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
+    assistant_text_by_message_id: dict[str, list[str]] = {}
 
     async def event_generator() -> AsyncIterator[str]:
         # Left uncaught, a mid-run exception (e.g. the LLM provider rate-limiting or
@@ -176,9 +311,13 @@ async def agui_endpoint(
         # as a chat bubble once it actually gets one.
         try:
             async for event in agent.run(input_data):
+                if event.type == EventType.TEXT_MESSAGE_CONTENT:
+                    assistant_text_by_message_id.setdefault(event.message_id, []).append(event.delta)
                 yield encoder.encode(event)
         except Exception as exc:
             logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)
             yield encoder.encode(RunErrorEvent(message=str(exc)))
+        finally:
+            _persist_turn(store, input_data, identity, assistant_text_by_message_id)
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())

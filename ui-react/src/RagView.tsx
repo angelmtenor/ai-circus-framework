@@ -3,7 +3,9 @@ import { CopilotKit } from "@copilotkit/react-core";
 import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
+import { ConversationSidebar } from "./ConversationSidebar";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
+import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
 /**
@@ -14,7 +16,8 @@ import { useScenarioAgent } from "./useScenarioAgent";
  */
 export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
-  const agent = useScenarioAgent(config.ragAgentUrl, scenario.slug, accessToken);
+  const conversation = useConversation(config.ragAgentUrl, scenario.slug, accessToken);
+  const agent = useScenarioAgent(config.ragAgentUrl, scenario.slug, conversation.conversationId, accessToken);
   // A fresh object literal here would make <CopilotKit> see a "changed" selfManagedAgents
   // prop on every re-render of RagView (e.g. every chatModel update) and reset its
   // internal registry — wiping out useChatGenerativeUiActions' registrations right
@@ -24,7 +27,14 @@ export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; 
 
   return (
     <CopilotKit selfManagedAgents={selfManagedAgents}>
-      <RagViewContent scenario={scenario} accessToken={accessToken} agent={agent} chatModel={chatModel} onModel={setChatModel} />
+      <RagViewContent
+        scenario={scenario}
+        accessToken={accessToken}
+        agent={agent}
+        chatModel={chatModel}
+        onModel={setChatModel}
+        conversation={conversation}
+      />
     </CopilotKit>
   );
 }
@@ -35,42 +45,60 @@ function RagViewContent({
   agent,
   chatModel,
   onModel,
+  conversation,
 }: {
   scenario: ScenarioSummary;
   accessToken: string | null;
   agent: ReturnType<typeof useScenarioAgent>;
   chatModel: ChatModel | null;
   onModel: (model: ChatModel) => void;
+  conversation: ReturnType<typeof useConversation>;
 }) {
   useChatGenerativeUiActions();
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   return (
     <div className="workspace workspace--rag">
-      <div className="rag-hero">
-        <div className="rag-hero-icon">{scenario.icon}</div>
-        <div>
-          <h2>
-            {scenario.title}
-            {chatModel && (
-              <span className="chat-model-badge">
-                {chatModel.model}
-                {chatModel.provider && ` (${chatModel.provider})`}
-              </span>
-            )}
-          </h2>
-          <p>{scenario.description}</p>
+      <ConversationSidebar
+        baseUrl={config.ragAgentUrl}
+        scenarioSlug={scenario.slug}
+        accessToken={accessToken}
+        activeConversationId={conversation.conversationId}
+        onSelect={conversation.selectConversation}
+        onCreate={conversation.onCreate}
+        onDeleteActive={conversation.onDeleteActive}
+        refreshKey={sidebarRefreshKey}
+      />
+      <div className="rag-main">
+        <div className="rag-hero">
+          <div className="rag-hero-icon">{scenario.icon}</div>
+          <div>
+            <h2>
+              {scenario.title}
+              {chatModel && (
+                <span className="chat-model-badge">
+                  {chatModel.model}
+                  {chatModel.provider && ` (${chatModel.provider})`}
+                </span>
+              )}
+            </h2>
+            <p>{scenario.description}</p>
+          </div>
         </div>
-      </div>
-      <div className="panel-card panel-card--chat panel-card--chat-full">
-        <ChatPanel
-          agent={agent}
-          baseUrl={config.ragAgentUrl}
-          scenarioSlug={scenario.slug}
-          sampleQuestions={scenario.sample_questions}
-          accessToken={accessToken}
-          variant="full"
-          onModel={onModel}
-        />
+        <div className="panel-card panel-card--chat panel-card--chat-full">
+          <ChatPanel
+            agent={agent}
+            baseUrl={config.ragAgentUrl}
+            scenarioSlug={scenario.slug}
+            sampleQuestions={scenario.sample_questions}
+            accessToken={accessToken}
+            variant="full"
+            onModel={onModel}
+            initialMessages={conversation.initialMessages}
+            conversationReady={conversation.ready}
+            onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
+          />
+        </div>
       </div>
     </div>
   );

@@ -390,6 +390,13 @@ services:
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
       OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+      # This instance's own conversation-history database (see
+      # ai_circus_shared.conversations) — a dedicated `assistant` database, not
+      # platform-registry's `platform` schema. Host/port/db name default from
+      # settings.yaml's docker profile; only the shared cluster credentials come
+      # from the root .env, same as platform-registry's own block above.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Defaults to "llama3", which only answers once you've run `make ollama-up`
       # (see docker-compose.yml's `ollama` service — off by default). Set at least
@@ -414,6 +421,8 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
+      postgres:
+        condition: service_healthy
       seaweedfs:
         condition: service_healthy
       platform-registry:
@@ -497,6 +506,13 @@ services:
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       APP_ENVIRONMENT: docker
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+      # This instance's own conversation-history database (see
+      # ai_circus_shared.conversations) — a dedicated `rag_agent` database, not
+      # platform-registry's `platform` schema. Host/port/db name default from
+      # settings.yaml's docker profile; only the shared cluster credentials come
+      # from the root .env, same as platform-registry's own block above.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Defaults to "llama3", which only answers once you've run `make ollama-up`
       # (see docker-compose.yml's `ollama` service — off by default). Set at least
@@ -521,6 +537,8 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
+      postgres:
+        condition: service_healthy
       qdrant:
         condition: service_healthy
       platform-registry:
@@ -555,6 +573,13 @@ services:
       DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
       OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
       OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+      # This instance's own conversation-history database (see
+      # ai_circus_shared.conversations) — a dedicated `form_agent` database, not
+      # platform-registry's `platform` schema. Host/port/db name default from
+      # settings.yaml's docker profile; only the shared cluster credentials come
+      # from the root .env, same as platform-registry's own block above.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # See rag-agent's own comment above for why this default only answers once
       # you've run `make ollama-up`, and what to set it to instead.
@@ -576,6 +601,8 @@ services:
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
+      postgres:
+        condition: service_healthy
       qdrant:
         condition: service_healthy
       seaweedfs:

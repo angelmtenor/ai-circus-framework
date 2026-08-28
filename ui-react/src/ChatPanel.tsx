@@ -252,6 +252,9 @@ export function ChatPanel({
   title,
   onModel,
   onFrontendToolCall,
+  initialMessages,
+  conversationReady = true,
+  onRunFinished,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -269,9 +272,45 @@ export function ChatPanel({
   // update_form_fields) — the only way a scenario's own dashboard state can be
   // written from the conversation; see answerUnansweredFrontendToolCalls above.
   onFrontendToolCall?: (name: string, args: unknown) => void;
+  // This conversation's persisted history (see apiClient.getConversationMessages),
+  // fetched by the parent view once it knows which conversation id is active.
+  // Reseeds the transcript below whenever `agent` itself changes (i.e. the caller
+  // switched conversations via ConversationSidebar.tsx) — undefined/empty for a
+  // brand-new conversation, which has no history to replay.
+  initialMessages?: AguiMessage[];
+  // False while the parent's conversation (see useConversation.ts) is still being
+  // listed/created — `agent`'s threadId is a placeholder in that window, and the
+  // backend 404s any /agui run against it. Disables sending until a real
+  // conversation id is in place, closing that race rather than surfacing its 404
+  // as a chat bubble.
+  conversationReady?: boolean;
+  // Fires after each run completes (success or error) — lets the caller refresh
+  // ConversationSidebar.tsx's list, since the conversation's title may have just
+  // been auto-derived from this turn's first message (see
+  // ai_circus_shared.conversations.ConversationStore.append_messages).
+  onRunFinished?: () => void;
 }) {
   const { copilotkit } = useCopilotKit();
-  const [messages, setMessages] = useState<AguiMessage[]>(agent.messages);
+  const [messages, setMessages] = useState<AguiMessage[]>(initialMessages ?? agent.messages);
+
+  // Switching to a different agent (a different conversation's threadId — see
+  // useScenarioAgent.ts) starts that agent with an empty transcript; reseed it from
+  // that conversation's own persisted history rather than leaving the previous
+  // conversation's messages on screen. Critically, this calls `agent.setMessages`
+  // (not just this component's own `messages` state): `agent.messages` is what
+  // `agent.runAgent()` actually sends as `input_data.messages` on the *next* turn
+  // (see prepareRunAgentInput in @ag-ui/client) — seeding only the local render
+  // state left the model with no memory of the replayed history even though the
+  // transcript displayed it correctly, since the backend only ever received
+  // whatever `agent.messages` held. `setMessages` itself notifies subscribers
+  // (below) with the new list, so the visible `messages` state stays in sync too.
+  // Also re-keyed on `initialMessages` itself: the parent fetches that history
+  // asynchronously (see useConversation.ts), so it almost always arrives in a
+  // *later* render than the one where `agent` first changed.
+  useEffect(() => {
+    agent.setMessages(initialMessages ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent, initialMessages]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [activity, setActivity] = useState<string | null>(null);
@@ -318,7 +357,7 @@ export function ChatPanel({
 
   async function send(text: string) {
     const trimmed = text.trim();
-    if ((!trimmed && pendingFiles.length === 0) || sending) return;
+    if ((!trimmed && pendingFiles.length === 0) || sending || !conversationReady) return;
     const files = pendingFiles;
     setMessage("");
     setPendingFiles([]);
@@ -338,6 +377,7 @@ export function ChatPanel({
     } catch (error) {
       agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
     } finally {
+      onRunFinished?.();
       setSending(false);
       setActivity(null);
     }
@@ -432,7 +472,12 @@ export function ChatPanel({
       {sampleQuestions.length > 0 && visible.length === 0 && (
         <div className="chat-samples">
           {sampleQuestions.map((question) => (
-            <button key={question} className="chat-sample" onClick={() => send(question)} disabled={sending}>
+            <button
+              key={question}
+              className="chat-sample"
+              onClick={() => send(question)}
+              disabled={sending || !conversationReady}
+            >
               {question}
             </button>
           ))}
@@ -471,13 +516,13 @@ export function ChatPanel({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send(message)}
-          placeholder="Ask a question..."
-          disabled={sending}
+          placeholder={conversationReady ? "Ask a question..." : "Starting conversation…"}
+          disabled={sending || !conversationReady}
         />
         <button
           className="chat-send"
           onClick={() => send(message)}
-          disabled={sending || (!message.trim() && pendingFiles.length === 0)}
+          disabled={sending || !conversationReady || (!message.trim() && pendingFiles.length === 0)}
         >
           {sending ? "…" : "Send"}
         </button>
