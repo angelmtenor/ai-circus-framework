@@ -34,6 +34,13 @@ class EnvConfig(BaseSettings):
         description="Comma-separated tabular_ml scenario slugs this instance serves; empty/unset = every scenario"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
+    POSTGRES_HOST: str = Field(
+        description="Postgres hostname (docker service name in-container, localhost for local dev)"
+    )
+    POSTGRES_PORT: str = Field(description="Postgres port")
+    POSTGRES_DB: str = Field(description="Postgres database name for this service's conversation history")
+    POSTGRES_USER: str = Field(description="Postgres user")
+    POSTGRES_PASSWORD: SecretStr = Field(description="Postgres password")
     OBJECT_STORE_ENDPOINT: str = Field(
         description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
     )
@@ -83,7 +90,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "c7b38b6aab8dbd20d629ea5eba0206379480d224070ca2dc26a21bfef66b94d4"
+_SOURCE_YAML_HASH = "e69599fb7cae9eb5e43735e8ad85bbaab20d8d127f2496a985a96de7997259ad"
 
 
 EnvConfig.model_rebuild()

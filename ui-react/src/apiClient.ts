@@ -325,6 +325,68 @@ export async function setActiveVoiceSettings(
   return asJson<ActiveVoiceSettings>(response);
 }
 
+export type ConversationSummary = { id: string; title: string; created_at: string; updated_at: string };
+export type ConversationMessage = { id: string; role: string; content: unknown; created_at: string };
+
+/**
+ * This caller's past conversations for `scenarioSlug`, most-recently-updated
+ * first — powers the chat's conversation sidebar (list + resume + delete).
+ * Backed by each scenario service's own `conversations`/`messages` tables (see
+ * ai_circus_shared.conversations), independent of the AG-UI/LangGraph run itself.
+ */
+export async function listConversations(
+  baseUrl: string,
+  scenarioSlug: string,
+  accessToken: string | null,
+): Promise<ConversationSummary[]> {
+  const response = await fetch(`${baseUrl}/conversations/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson<ConversationSummary[]>(response);
+}
+
+/** The sidebar's "+ New conversation" button. */
+export async function createConversation(
+  baseUrl: string,
+  scenarioSlug: string,
+  title: string | null,
+  accessToken: string | null,
+): Promise<ConversationSummary> {
+  const response = await fetch(`${baseUrl}/conversations/${scenarioSlug}`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ title }),
+  });
+  return asJson<ConversationSummary>(response);
+}
+
+/** Full transcript for resuming a past conversation — seeds ChatPanel's `initialMessages`. */
+export async function getConversationMessages(
+  baseUrl: string,
+  scenarioSlug: string,
+  conversationId: string,
+  accessToken: string | null,
+): Promise<ConversationMessage[]> {
+  const response = await fetch(`${baseUrl}/conversations/${scenarioSlug}/${conversationId}/messages`, {
+    headers: headers(accessToken),
+  });
+  return asJson<ConversationMessage[]>(response);
+}
+
+/** The sidebar's per-conversation delete button. */
+export async function deleteConversation(
+  baseUrl: string,
+  scenarioSlug: string,
+  conversationId: string,
+  accessToken: string | null,
+): Promise<void> {
+  const response = await fetch(`${baseUrl}/conversations/${scenarioSlug}/${conversationId}`, {
+    method: "DELETE",
+    headers: headers(accessToken),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${await response.text()}`);
+  }
+}
+
 export type ChatModel = { model: string; provider: string | null; vision: boolean };
 
 /**

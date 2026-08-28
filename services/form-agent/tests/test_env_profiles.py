@@ -28,6 +28,9 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AUTH_DISABLED", "false")
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
+    # POSTGRES_PASSWORD has no settings.yaml default (a secret) — see POSTGRES_USER's
+    # own base-profile comment on why the rest of the POSTGRES_* fields do have one.
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-postgres-password")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

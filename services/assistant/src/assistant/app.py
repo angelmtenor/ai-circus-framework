@@ -20,6 +20,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.conversations import Base as ConversationsBase
+from ai_circus_shared.conversations import init_engine
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
@@ -55,6 +57,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             access_key=config.OBJECT_STORE_ACCESS_KEY,
             secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
+
+    # This instance's own conversations/messages tables (persisted chat history for
+    # the UI's conversation sidebar) — a dedicated database, not platform-registry's.
+    conversations_engine = init_engine(config)
+    ConversationsBase.metadata.create_all(conversations_engine)
 
     app.state.definitions = definitions
     app.state.prompt_cache = SystemPromptCache(stores, definitions, fallback_org_id=config.SHARED_MODEL_ORG_ID)

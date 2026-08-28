@@ -36,6 +36,39 @@ env_variables:
     mandatory: true
     secret: false
 
+  # Backs this instance's own conversations/messages tables (persisted chat
+  # history for the UI's conversation sidebar — see ai_circus_shared.conversations).
+  # A dedicated database, not the platform-registry's `platform` schema.
+  - name: POSTGRES_HOST
+    description: "Postgres hostname (docker service name in-container, localhost for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PORT
+    description: "Postgres port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_DB
+    description: "Postgres database name for this service's conversation history"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_USER
+    description: "Postgres user"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PASSWORD
+    description: "Postgres password"
+    type: string
+    mandatory: true
+    secret: true
+
   - name: QDRANT_URL
     description: "Qdrant endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
     type: string
@@ -156,6 +189,11 @@ environments:
     LOG_LEVEL: "INFO"
     HTTP_PORT: "8000"
     DEV_ORG_ID: "demo"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "rag_agent"
+    # Must match POSTGRES_USER in the repo root .env; override here (or via env
+    # var) if you change it there.
+    POSTGRES_USER: "ai_circus"
     # Empty = every conversational_rag scenario under SCENARIOS_DIR — see
     # prediction/settings.yaml's "Consolidation mechanism" comment for why a yaml
     # default is safe here but not for AUTH_DISABLED/ADMIN_API_KEY below.
@@ -168,6 +206,7 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     SCENARIOS_DIR: "../../scenarios"
+    POSTGRES_HOST: "localhost"
     # Loopback-bound host ports (not Traefik — see root docker-compose.yml's qdrant/
     # llm-gateway comments for why neither belongs on the public entrypoint).
     QDRANT_URL: "http://localhost:6333"
@@ -177,6 +216,7 @@ environments:
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     SCENARIOS_DIR: "/app/scenarios"
+    POSTGRES_HOST: "postgres"
     QDRANT_URL: "http://qdrant:6333"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"

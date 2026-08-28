@@ -35,6 +35,13 @@ class EnvConfig(BaseSettings):
         description="Comma-separated assisted_form scenario slugs this instance serves; empty = every scenario"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
+    POSTGRES_HOST: str = Field(
+        description="Postgres hostname (docker service name in-container, localhost for local dev)"
+    )
+    POSTGRES_PORT: str = Field(description="Postgres port")
+    POSTGRES_DB: str = Field(description="Postgres database name for this service's conversation history")
+    POSTGRES_USER: str = Field(description="Postgres user")
+    POSTGRES_PASSWORD: SecretStr = Field(description="Postgres password")
     QDRANT_URL: str = Field(
         description="Qdrant endpoint URL (docker service name in-container, *.localhost via Traefik for local dev)"
     )
@@ -108,7 +115,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "3597ba2bd6cf8c2c653dc6d30315ce0fe4a2a7bc623e2fb5d8fccb6760cdb066"
+_SOURCE_YAML_HASH = "4d334c05ebbe467dec6bf99f3258eb5deb4e4e25b351cf127598eef188a7952e"
 
 
 EnvConfig.model_rebuild()

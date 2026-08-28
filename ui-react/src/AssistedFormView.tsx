@@ -4,7 +4,9 @@ import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { submitForm } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
+import { ConversationSidebar } from "./ConversationSidebar";
 import { FormPanel } from "./FormPanel";
+import { useConversation } from "./useConversation";
 import { useFormAssistActions, type UpdateFormFieldsArgs } from "./formAssistUi";
 import { validateForm } from "./formValidation";
 import { useScenarioAgent } from "./useScenarioAgent";
@@ -20,14 +22,15 @@ import { useScenarioAgent } from "./useScenarioAgent";
  * afterthought.
  */
 export function AssistedFormView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
-  const agent = useScenarioAgent(config.formAgentUrl, scenario.slug, accessToken);
+  const conversation = useConversation(config.formAgentUrl, scenario.slug, accessToken);
+  const agent = useScenarioAgent(config.formAgentUrl, scenario.slug, conversation.conversationId, accessToken);
   // See TabularView.tsx's identical note: must be memoized, or every re-render
   // resets CopilotKit's internal action/context registry.
   const selfManagedAgents = useMemo(() => ({ [scenario.slug]: agent }), [scenario.slug, agent]);
 
   return (
     <CopilotKit selfManagedAgents={selfManagedAgents}>
-      <AssistedFormContent scenario={scenario} accessToken={accessToken} agent={agent} />
+      <AssistedFormContent scenario={scenario} accessToken={accessToken} agent={agent} conversation={conversation} />
     </CopilotKit>
   );
 }
@@ -36,10 +39,12 @@ function AssistedFormContent({
   scenario,
   accessToken,
   agent,
+  conversation,
 }: {
   scenario: ScenarioSummary;
   accessToken: string | null;
   agent: ReturnType<typeof useScenarioAgent>;
+  conversation: ReturnType<typeof useConversation>;
 }) {
   useFormAssistActions();
   const form = scenario.form;
@@ -50,6 +55,7 @@ function AssistedFormContent({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [caseNumber, setCaseNumber] = useState<string | null>(null);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   const errors = form ? validateForm(form, values) : {};
 
@@ -122,6 +128,16 @@ function AssistedFormContent({
         caseNumber={caseNumber}
       />
       <div className="assisted-form-chat">
+        <ConversationSidebar
+          baseUrl={config.formAgentUrl}
+          scenarioSlug={scenario.slug}
+          accessToken={accessToken}
+          activeConversationId={conversation.conversationId}
+          onSelect={conversation.selectConversation}
+          onCreate={conversation.onCreate}
+          onDeleteActive={conversation.onDeleteActive}
+          refreshKey={sidebarRefreshKey}
+        />
         <ChatPanel
           agent={agent}
           baseUrl={config.formAgentUrl}
@@ -142,6 +158,9 @@ function AssistedFormContent({
           }
           onModel={setChatModel}
           onFrontendToolCall={handleFrontendToolCall}
+          initialMessages={conversation.initialMessages}
+          conversationReady={conversation.ready}
+          onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
         />
       </div>
     </div>

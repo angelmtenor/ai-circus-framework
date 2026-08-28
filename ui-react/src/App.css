@@ -414,6 +414,129 @@ select:focus {
   font-size: 2.5rem;
 }
 
+/* ── Conversation sidebar (lite ChatGPT/Claude-style conversation manager) ──── */
+
+.conversation-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 15rem;
+  width: 15rem;
+  min-width: 0;
+  gap: 0.6rem;
+  padding-right: 0.85rem;
+  margin-right: 0.85rem;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.conversation-sidebar--compact {
+  flex: 0 0 10rem;
+  width: 10rem;
+}
+
+.conversation-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.conversation-new {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-2);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.conversation-new:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.conversation-new:disabled {
+  opacity: 0.6;
+}
+
+.conversation-collapse-toggle {
+  flex: 0 0 auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.conversation-collapse-toggle:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.conversation-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.conversation-chip:hover {
+  background: var(--panel-2);
+}
+
+.conversation-chip--active {
+  background: var(--panel-2);
+  border-color: var(--accent-border);
+}
+
+.conversation-chip-select {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-align: left;
+  padding: 0.45rem 0.15rem 0.45rem 0.6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-chip--active .conversation-chip-select {
+  color: var(--accent-2);
+}
+
+.conversation-chip-remove {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.3rem 0.5rem;
+  border-radius: 999px;
+}
+
+.conversation-chip-remove:hover {
+  color: var(--red);
+}
+
 /* ── Workspace ─────────────────────────────────────────────────────────────── */
 
 .workspace-tabs {
@@ -470,14 +593,50 @@ select:focus {
 
 .workspace--rag {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: calc(100vh - 8rem);
+}
+
+.workspace--rag .conversation-sidebar {
+  padding-top: 0.2rem;
+}
+
+.rag-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }
 
 .workspace--rag .panel-card--chat-full {
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .workspace--rag {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .workspace--rag .conversation-sidebar {
+    flex: 0 0 auto;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 0.6rem;
+    margin-right: 0;
+    margin-bottom: 0.6rem;
+  }
+
+  .workspace--rag .conversation-sidebar .conversation-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
 }
 
 .tab-panel {
@@ -1087,10 +1246,12 @@ select:focus {
 .chat-input-row {
   display: flex;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .chat-input-row input {
   flex: 1;
+  min-width: 0;
   border-radius: 999px;
   padding: 0.55rem 0.95rem;
 }
@@ -1453,7 +1614,7 @@ select:focus {
 }
 
 .chat-dock-panel {
-  width: min(28rem, 100%);
+  width: min(34rem, 100%);
   height: 100%;
   background: var(--panel);
   border-left: 1px solid var(--border);
@@ -1508,14 +1669,81 @@ select:focus {
   color: var(--accent-2);
 }
 
+.chat-dock-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-dock-body .conversation-sidebar {
+  padding-top: 0.1rem;
+}
+
 .chat-dock-panel .chat-panel {
   flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
 .chat-dock-panel .chat-history {
   flex: 1;
   min-height: 0;
+}
+
+/* The non-maximized dock (min(34rem, 100%)) genuinely doesn't have room for a
+   side-by-side sidebar + a full chat input row (mic/attach/text/send) at once —
+   confirmed empirically: even at the dock's own full 34rem width, side-by-side
+   squeezed the text input down to a few unusable pixels. So the compact dock
+   always stacks the sidebar as a horizontal strip above the chat (TabularView.tsx
+   applies `chat-dock-body--stacked` whenever `!chatMaximized`); only the maximized
+   dock (min(72rem, 96vw) — plenty of width) uses the side-by-side layout. */
+.chat-dock-body--stacked {
+  flex-direction: column;
+}
+
+.chat-dock-body--stacked .conversation-sidebar {
+  flex: 0 0 auto;
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  padding-right: 0;
+  padding-bottom: 0.6rem;
+  margin-right: 0;
+  margin-bottom: 0.6rem;
+}
+
+.chat-dock-body--stacked .conversation-sidebar .conversation-list {
+  flex-direction: row;
+  overflow-x: auto;
+}
+
+/* Fallback for the *maximized* dock on a narrow-enough viewport (e.g. a phone)
+   that even min(72rem, 96vw) doesn't leave enough room side-by-side. */
+@media (max-width: 560px) {
+  .chat-dock-body {
+    flex-direction: column;
+  }
+
+  .chat-dock-body .conversation-sidebar {
+    flex: 0 0 auto;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 0.6rem;
+    margin-right: 0;
+    margin-bottom: 0.6rem;
+  }
+
+  .chat-dock-body .conversation-sidebar .conversation-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
 }
 
 /* ── Settings page ─────────────────────────────────────────────────────────── */
@@ -1769,7 +1997,38 @@ select:focus {
 
 .assisted-form-chat {
   display: flex;
+  flex-direction: row;
   min-height: 22rem;
+}
+
+.assisted-form-chat .chat-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .assisted-form-chat {
+    flex-direction: column;
+  }
+
+  .assisted-form-chat .conversation-sidebar {
+    flex: 0 0 auto;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 0.6rem;
+    margin-right: 0;
+    margin-bottom: 0.6rem;
+  }
+
+  .assisted-form-chat .conversation-sidebar .conversation-list {
+    flex-direction: row;
+    overflow-x: auto;
+  }
 }
 
 .assisted-form-banner {

@@ -20,6 +20,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.conversations import Base as ConversationsBase
+from ai_circus_shared.conversations import init_engine
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.observability import configure_metrics
@@ -45,6 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         raise RuntimeError(
             f"No conversational_rag scenario matched SCENARIOS={config.SCENARIOS!r} under {config.SCENARIOS_DIR!r}."
         )
+
+    # This instance's own conversations/messages tables (persisted chat history for
+    # the UI's conversation sidebar) — a dedicated database, not platform-registry's.
+    conversations_engine = init_engine(config)
+    ConversationsBase.metadata.create_all(conversations_engine)
 
     # One provider shared by every scenario this instance serves — it must be the
     # same provider/model etl-vectorize embedded documents with, or retrieval

@@ -13,6 +13,8 @@ import httpx
 import pytest
 from ag_ui.core import RunAgentInput
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.conversations import Base as ConversationsBase
+from ai_circus_shared.conversations import Conversation, ConversationStore
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.scenario_schema import ChatConfig, VectorStoreConfig
 from fastapi import FastAPI, Request
@@ -20,9 +22,13 @@ from fastapi.testclient import TestClient
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 from rag_agent import api as api_module
 from rag_agent.api import (
+    _conversation_store,
     _embedder,
     _llm,
     _llm_display,
@@ -34,6 +40,40 @@ from rag_agent.api import (
 )
 from rag_agent.core.identity import resolve_identity
 from tests.conftest import FakeSecret
+
+
+def _seeded_conversation_store(
+    conversation_id: str = "t", org_id: str = "org-1", user_id: str = "user-1"
+) -> ConversationStore:
+    """A ConversationStore backed by a fresh in-memory SQLite database, pre-seeded
+    with one conversation — stands in for `Depends(_conversation_store)` so tests
+    never need a real Postgres.
+    """
+    engine = create_engine("sqlite:///:memory:")
+    ConversationsBase.metadata.create_all(engine)
+    session = Session(engine)
+    session.add(
+        Conversation(id=conversation_id, org_id=org_id, user_id=user_id, scenario_slug="docs_rag", title="mine")
+    )
+    session.commit()
+    return ConversationStore(session)
+
+
+def _seeded_conversation_engine(conversation_id: str = "t", org_id: str = "org-1", user_id: str = "user-1") -> Engine:
+    """A persistent in-memory SQLite engine (one connection, kept alive via
+    StaticPool) pre-seeded with one conversation — unlike `_seeded_conversation_store`
+    above, this is meant to back a `_conversation_store` override reused across
+    *several* TestClient requests in the same test, where a plain `sqlite:///:memory:`
+    engine would otherwise hand each request its own throwaway, empty database.
+    """
+    engine = create_engine("sqlite:///:memory:", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    ConversationsBase.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(
+            Conversation(id=conversation_id, org_id=org_id, user_id=user_id, scenario_slug="docs_rag", title="mine")
+        )
+        session.commit()
+    return engine
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -85,6 +125,8 @@ def _client_with(llm: FakeToolCallingModel) -> TestClient:
     app.dependency_overrides[_llm] = lambda: llm
     app.dependency_overrides[_llm_model_name] = lambda: "gemini-flash"
     app.dependency_overrides[_llm_display] = lambda: ("gemini-flash", "Google Gemini", True)
+    conversation_engine = _seeded_conversation_engine()
+    app.dependency_overrides[_conversation_store] = lambda: ConversationStore(Session(conversation_engine))
     return TestClient(app)
 
 
@@ -224,7 +266,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
     way out) instead of surfacing the error (see ChatPanel.tsx's `send()`).
     """
 
-    async def _raising_agent_run(_input: object) -> AsyncIterator[object]:
+    async def _raising_agent_run(_input: object) -> AsyncIterator[object]:  # ruff: ignore[unused-async]
         if False:  # pragma: no cover - makes this an async generator function
             yield
         raise RuntimeError("GroqException - rate_limit_exceeded")
@@ -250,9 +292,150 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
         llm=SimpleNamespace(),
+        store=_seeded_conversation_store(),
     )
 
     body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
 
     assert '"type":"RUN_ERROR"' in body
     assert "rate_limit_exceeded" in body
+
+
+def test_list_conversations_returns_the_fixtures_seeded_conversation() -> None:
+    """`_client_with`'s persistent conversation engine is pre-seeded with one
+    conversation (id="t") — the one every `/agui/...` test below relies on for the
+    ownership check to pass; this just confirms the list endpoint surfaces it.
+    """
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.get("/conversations/docs_rag")
+
+    assert response.status_code == 200
+    assert [c["id"] for c in response.json()] == ["t"]
+
+
+def test_create_then_list_conversation_round_trips() -> None:
+    """The "+ New conversation" button's call, then the sidebar's list call."""
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    created = client.post("/conversations/docs_rag", json={"title": "My first chat"})
+    assert created.status_code == 200
+    assert created.json()["title"] == "My first chat"
+
+    listed = client.get("/conversations/docs_rag")
+    ids = [c["id"] for c in listed.json()]
+    assert created.json()["id"] in ids
+    assert "t" in ids  # the fixture's pre-seeded conversation is still there too
+
+
+def test_create_conversation_defaults_title_when_none_given() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.post("/conversations/docs_rag", json={})
+
+    assert response.json()["title"] == "New conversation"
+
+
+def test_delete_conversation_removes_it() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+    created = client.post("/conversations/docs_rag", json={}).json()
+
+    deleted = client.delete(f"/conversations/docs_rag/{created['id']}")
+    assert deleted.status_code == 200
+
+    listed = client.get("/conversations/docs_rag")
+    assert [c["id"] for c in listed.json()] == ["t"]  # the fixture's pre-seeded conversation remains
+
+
+def test_delete_unknown_conversation_returns_404() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.delete("/conversations/docs_rag/does-not-exist")
+
+    assert response.status_code == 404
+
+
+def test_list_messages_for_unknown_conversation_returns_404() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.get("/conversations/docs_rag/does-not-exist/messages")
+
+    assert response.status_code == 404
+
+
+def test_agui_endpoint_404s_for_a_thread_id_not_owned_by_this_caller() -> None:
+    """A guessed/stale thread id from another tenant/user must not be replayable here —
+    see the agui_endpoint docstring's ownership check.
+    """
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.post(
+        "/agui/docs_rag",
+        json={
+            "threadId": "not-mine",
+            "runId": "r",
+            "messages": [],
+            "tools": [],
+            "context": [],
+            "state": {},
+            "forwardedProps": {},
+        },
+    )
+
+    assert response.status_code == 404
+
+
+async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After a successful run, the new user turn and the model's final text reply are
+    appended to the conversation's history — independent of the per-request
+    InMemorySaver, which stays unrelated to this durable history.
+    """
+    from ag_ui.core import EventType, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent
+
+    async def _fake_agent_run(  # ruff: ignore[missing-return-type-private-function, unused-async]
+        _input: object,
+    ):
+        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, message_id="m1", role="assistant")
+        yield TextMessageContentEvent(type=EventType.TEXT_MESSAGE_CONTENT, message_id="m1", delta="Overdraft ")
+        yield TextMessageContentEvent(type=EventType.TEXT_MESSAGE_CONTENT, message_id="m1", delta="fee is $25.")
+        yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, message_id="m1")
+
+    monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
+    monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
+    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_fake_agent_run))
+
+    store = _seeded_conversation_store()
+    response = await agui_endpoint(
+        scenario_slug="docs_rag",
+        input_data=RunAgentInput(
+            threadId="t",
+            runId="r",
+            messages=[{"id": "u1", "role": "user", "content": "What's the overdraft fee?"}],
+            tools=[],
+            context=[],
+            state={},
+            forwardedProps={},
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        definition=SimpleNamespace(
+            slug="docs_rag",
+            vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+            chat=ChatConfig(context="Bank account policies and fees."),
+        ),
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        llm=SimpleNamespace(),
+        store=store,
+    )
+
+    # Drain the stream — persistence happens in the generator's `finally` block.
+    "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+
+    messages = store.list_messages("t", "org-1", "user-1")
+    assert [(m.role, m.content) for m in messages] == [
+        ("user", "What's the overdraft fee?"),
+        ("assistant", "Overdraft fee is $25."),
+    ]

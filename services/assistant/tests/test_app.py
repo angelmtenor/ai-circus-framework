@@ -45,6 +45,11 @@ class FakeEnvConfig:
         self.AUTH_DISABLED = "false"
         self.ADMIN_API_KEY = FakeSecret("admin-key")
         self.ENGINEERING_DEMO_API_KEY = None
+        self.POSTGRES_HOST = "postgres"
+        self.POSTGRES_PORT = "5432"
+        self.POSTGRES_DB = "assistant"
+        self.POSTGRES_USER = "ai_circus"
+        self.POSTGRES_PASSWORD = FakeSecret("postgres-secret")
 
 
 def build_validation_error() -> ValidationError:
@@ -105,12 +110,15 @@ async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: p
         dataset = FakeDataset()
 
     connect_calls: list[dict[str, object]] = []
+    create_all_calls: list[object] = []
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
     monkeypatch.setattr(
         app.ObjectStore, "connect", staticmethod(lambda **kwargs: connect_calls.append(kwargs) or "fake-store")
     )
+    monkeypatch.setattr(app, "init_engine", lambda _config: "fake-conversations-engine")
+    monkeypatch.setattr(app.ConversationsBase.metadata, "create_all", lambda engine: create_all_calls.append(engine))
 
     async with app.lifespan(app.app):
         assert app.app.state.prompt_cache._stores == {"churn": "fake-store"}
@@ -126,6 +134,7 @@ async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: p
             "secret_key": "s3cret",
         }
     ]
+    assert create_all_calls == ["fake-conversations-engine"]
 
 
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:

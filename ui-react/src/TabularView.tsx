@@ -3,11 +3,13 @@ import { CopilotKit } from "@copilotkit/react-core";
 import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
+import { ConversationSidebar } from "./ConversationSidebar";
 import { DataView } from "./DataView";
 import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
 import { Icon } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
+import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
 type Tab = "data" | "predict" | "explore";
@@ -32,7 +34,8 @@ type Tab = "data" | "predict" | "explore";
  * chat.context grounding (see the assistant service's build_system_prompt).
  */
 export function TabularView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
-  const agent = useScenarioAgent(config.assistantUrl, scenario.slug, accessToken);
+  const conversation = useConversation(config.assistantUrl, scenario.slug, accessToken);
+  const agent = useScenarioAgent(config.assistantUrl, scenario.slug, conversation.conversationId, accessToken);
   // See RagView.tsx's identical note: must be memoized, or every re-render of
   // TabularView (tab switches, prediction results, etc.) resets CopilotKit's
   // internal action/context registry — confirmed empirically before this fix.
@@ -40,7 +43,7 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
 
   return (
     <CopilotKit selfManagedAgents={selfManagedAgents}>
-      <TabularViewContent scenario={scenario} accessToken={accessToken} agent={agent} />
+      <TabularViewContent scenario={scenario} accessToken={accessToken} agent={agent} conversation={conversation} />
     </CopilotKit>
   );
 }
@@ -49,16 +52,19 @@ function TabularViewContent({
   scenario,
   accessToken,
   agent,
+  conversation,
 }: {
   scenario: ScenarioSummary;
   accessToken: string | null;
   agent: ReturnType<typeof useScenarioAgent>;
+  conversation: ReturnType<typeof useConversation>;
 }) {
   useChatGenerativeUiActions();
   const [tab, setTab] = useState<Tab>("data");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   return (
     <div className="workspace">
@@ -108,15 +114,31 @@ function TabularViewContent({
                 </button>
               </div>
             </div>
-            <ChatPanel
-              agent={agent}
-              baseUrl={config.assistantUrl}
-              scenarioSlug={scenario.slug}
-              sampleQuestions={scenario.sample_questions}
-              accessToken={accessToken}
-              variant="dock"
-              onModel={setChatModel}
-            />
+            <div className={`chat-dock-body${chatMaximized ? "" : " chat-dock-body--stacked"}`}>
+              <ConversationSidebar
+                baseUrl={config.assistantUrl}
+                scenarioSlug={scenario.slug}
+                accessToken={accessToken}
+                activeConversationId={conversation.conversationId}
+                onSelect={conversation.selectConversation}
+                onCreate={conversation.onCreate}
+                onDeleteActive={conversation.onDeleteActive}
+                refreshKey={sidebarRefreshKey}
+                compact={!chatMaximized}
+              />
+              <ChatPanel
+                agent={agent}
+                baseUrl={config.assistantUrl}
+                scenarioSlug={scenario.slug}
+                sampleQuestions={scenario.sample_questions}
+                accessToken={accessToken}
+                variant="dock"
+                onModel={setChatModel}
+                initialMessages={conversation.initialMessages}
+                conversationReady={conversation.ready}
+                onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
+              />
+            </div>
           </div>
         </div>
       )}
