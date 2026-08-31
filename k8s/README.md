@@ -47,6 +47,25 @@ make k3s-pipeline   # optional: run the churn ETL -> training pipeline as k8s Jo
 make k3s-verify     # reuse `make verify`'s curl checks against this cluster
 ```
 
+Or run the first six of those in one shot with `make k3s-all` (still run `make k3s-pipeline`/
+`make k3s-verify` yourself afterward — they're not part of it since they're optional/verification
+steps, not "getting the cluster up").
+
+### Pausing vs. tearing down
+
+Not working the demo but staying in WSL? `k3d cluster stop/start` stops the cluster's containers
+(freeing CPU/RAM) without deleting any pod, volume, or Secret state — much cheaper than deleting
+and redoing `k3s-all` later:
+
+```bash
+make k3s-pause     # stop the cluster's containers — state is kept
+make k3s-resume    # start it back up — run `make k3s-wait` after to confirm pods are Ready
+```
+
+This is different from `make k3s-down` (deletes the applied k8s manifests, cluster keeps running)
+and `k3d cluster delete ai-circus` (deletes the cluster itself, full wipe including volumes) —
+see "Tear down" below.
+
 Open `http://aiopen.localhost` once `k3s-verify` passes — same login flow as the docker-compose
 setup. **Before logging in**, start a standing port-forward so the browser can reach
 `platform-registry`'s loopback-only API (`ui-react`'s bundled default for
@@ -65,8 +84,9 @@ Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.
 
-Tear down with `make k3s-down` (deletes the applied manifests; StatefulSet PVCs are retained by
-k8s convention) or `k3d cluster delete ai-circus` for a full wipe including all volumes.
+To actually tear down (not just pause — see above): `make k3s-down` deletes the applied manifests
+(StatefulSet PVCs are retained by k8s convention), or `k3d cluster delete ai-circus` for a full
+wipe including all volumes.
 
 ## Verified
 

@@ -137,6 +137,7 @@ function AssistedFormContent({
           onCreate={conversation.onCreate}
           onDeleteActive={conversation.onDeleteActive}
           refreshKey={sidebarRefreshKey}
+          compact
         />
         <ChatPanel
           agent={agent}

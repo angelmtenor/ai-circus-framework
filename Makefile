@@ -14,7 +14,8 @@ RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
-	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down
+	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
+	k3s-all k3s-pause k3s-resume
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -266,6 +267,17 @@ k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl c
 
 k3s-down: ## Delete every applied k8s/base manifest (StatefulSet PVCs are retained by default — delete the k3d cluster entirely for a full wipe: `k3d cluster delete $(K3S_CLUSTER)`)
 	@kubectl delete -k k8s/base --ignore-not-found
+
+k3s-all: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait ## One-shot: cluster -> build -> import -> secrets -> up -> wait (run `make k3s-pipeline` yourself afterward if you need the churn ETL/training data)
+	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up — http://aiopen.localhost (start 'kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &' before logging in)"
+
+k3s-pause: ## Stop the k3d cluster's containers to free CPU/RAM while keeping all cluster state (pods, volumes) — resume with `make k3s-resume`
+	@k3d cluster stop "$(K3S_CLUSTER)"
+	@echo "✓ k3d cluster '$(K3S_CLUSTER)' stopped — resume with 'make k3s-resume'"
+
+k3s-resume: ## Start a previously paused k3d cluster back up
+	@k3d cluster start "$(K3S_CLUSTER)"
+	@echo "✓ k3d cluster '$(K3S_CLUSTER)' started — 'make k3s-wait' to confirm pods are Ready"
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 
