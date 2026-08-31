@@ -197,6 +197,16 @@ make k3s-verify     # curl-check the admin tenant end-to-end, same as `make veri
 make k3s-pipeline   # optional: (re)runs the ETL -> training pipeline for the tabular_ml scenarios
 ```
 
+Or run the first six of those (cluster through wait) in one shot: `make k3s-all`.
+
+Not working the demo but staying in WSL? Pause the cluster's containers (frees CPU/RAM, keeps all
+state) instead of tearing it down:
+
+```bash
+make k3s-pause      # stop the cluster — resume later with `make k3s-resume`
+make k3s-resume     # start it back up
+```
+
 **Before opening the app in a browser**, start a standing port-forward — `platform-registry`'s
 browser-facing API isn't reachable through Traefik or `k3s-verify`'s own (command-scoped)
 port-forward:
