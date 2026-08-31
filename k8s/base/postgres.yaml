@@ -66,8 +66,12 @@ data:
     #!/bin/bash
     # Runs once, on first container start (postgres image convention: any *.sh under
     # /docker-entrypoint-initdb.d/ is executed). POSTGRES_DB only creates one database
-    # (the `platform` schema used by services/platform-registry); Logto and llm-gateway
-    # (LiteLLM's own spend-tracking schema) each need their own.
+    # (the `platform` schema used by services/platform-registry); Logto, llm-gateway
+    # (LiteLLM's own spend-tracking schema), and each of assistant/rag-agent/form-agent
+    # (their own persisted conversation-history schema, see
+    # ai_circus_shared.conversations) each need their own. Mirrors
+    # infra/postgres/init-multiple-databases.sh exactly — keep the two in sync by hand
+    # if that script ever changes.
     set -euo pipefail
 
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
@@ -75,6 +79,12 @@ data:
         GRANT ALL PRIVILEGES ON DATABASE logto TO "$POSTGRES_USER";
         CREATE DATABASE litellm;
         GRANT ALL PRIVILEGES ON DATABASE litellm TO "$POSTGRES_USER";
+        CREATE DATABASE assistant;
+        GRANT ALL PRIVILEGES ON DATABASE assistant TO "$POSTGRES_USER";
+        CREATE DATABASE rag_agent;
+        GRANT ALL PRIVILEGES ON DATABASE rag_agent TO "$POSTGRES_USER";
+        CREATE DATABASE form_agent;
+        GRANT ALL PRIVILEGES ON DATABASE form_agent TO "$POSTGRES_USER";
     EOSQL
 ---
 apiVersion: v1
@@ -88,9 +98,10 @@ spec:
     - {port: 5432, targetPort: 5432}
 ---
 # Postgres has real password auth, but nothing else in the namespace stops any other
-# pod from reaching it over Service DNS — only logto and platform-registry actually
+# pod from reaching it over Service DNS — only logto, platform-registry, and each of
+# assistant/rag-agent/form-agent (their own conversation-history database) actually
 # have a database here (see infra/postgres/init-multiple-databases.sh), so lock
-# ingress down to just those two.
+# ingress down to just those five.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -104,5 +115,8 @@ spec:
     - from:
         - podSelector: {matchLabels: {app: logto}}
         - podSelector: {matchLabels: {app: platform-registry}}
+        - podSelector: {matchLabels: {app: assistant}}
+        - podSelector: {matchLabels: {app: rag-agent}}
+        - podSelector: {matchLabels: {app: form-agent}}
       ports:
         - {protocol: TCP, port: 5432}
