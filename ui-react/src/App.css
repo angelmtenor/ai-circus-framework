@@ -1995,9 +1995,13 @@ select:focus {
   color: var(--text);
 }
 
+/* Stacked (sidebar strip above chat), same as TabularView's chat-dock-body--stacked
+   and for the same reason: the assisted_form chat column (~0.9fr of the workspace
+   grid) is no wider than the chat dock, so a side-by-side sidebar left just a few
+   pixels for the actual input row. */
 .assisted-form-chat {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   min-height: 22rem;
 }
 
@@ -2007,28 +2011,22 @@ select:focus {
   min-height: 0;
 }
 
-@media (max-width: 900px) {
-  .assisted-form-chat {
-    flex-direction: column;
-  }
+.assisted-form-chat .conversation-sidebar {
+  flex: 0 0 auto;
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  padding-right: 0;
+  padding-bottom: 0.6rem;
+  margin-right: 0;
+  margin-bottom: 0.6rem;
+}
 
-  .assisted-form-chat .conversation-sidebar {
-    flex: 0 0 auto;
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    padding-right: 0;
-    padding-bottom: 0.6rem;
-    margin-right: 0;
-    margin-bottom: 0.6rem;
-  }
-
-  .assisted-form-chat .conversation-sidebar .conversation-list {
-    flex-direction: row;
-    overflow-x: auto;
-  }
+.assisted-form-chat .conversation-sidebar .conversation-list {
+  flex-direction: row;
+  overflow-x: auto;
 }
 
 .assisted-form-banner {
