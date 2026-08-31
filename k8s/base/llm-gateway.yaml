@@ -35,14 +35,22 @@ spec:
           # LiteLLM's proxy doesn't expose the same /healthz FastAPI wrapper the other
           # services do (root Makefile's wait-services/verify don't probe it either,
           # since it's internal-only) — a TCP check is the only thing safe to assume.
+          # LiteLLM's own startup (registering every model in litellm_config.yaml) takes
+          # ~30-40s and queues behind every other scenario service doing the same kind of
+          # cold-start work on a single-node k3d cluster — loosened the same way
+          # rag-agent/form-agent's probes are, see their manifests' comments.
           readinessProbe:
             tcpSocket: {port: 4000}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             tcpSocket: {port: 4000}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service

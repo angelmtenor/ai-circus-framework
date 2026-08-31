@@ -62,6 +62,13 @@ make k3s-pause     # stop the cluster's containers — state is kept
 make k3s-resume    # start it back up — run `make k3s-wait` after to confirm pods are Ready
 ```
 
+Resuming brings pods back with the *exact* images they already had — if you also rebuild
+(`make k3s-build k3s-import`) after resuming, those pods keep running their old container content
+regardless, since `kubectl apply` only restarts a pod when the Deployment spec text itself
+changes (the image tag string `ai-circus/<service>:local` never does). Explicitly
+`kubectl -n ai-circus rollout restart deployment/<service>` for every service you rebuilt, or
+nothing you test afterward reflects the new build (see the `k3s-deploy-verify` skill's Gotcha 5).
+
 This is different from `make k3s-down` (deletes the applied k8s manifests, cluster keeps running)
 and `k3d cluster delete ai-circus` (deletes the cluster itself, full wipe including volumes) —
 see "Tear down" below.

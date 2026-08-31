@@ -1,7 +1,7 @@
 ---
 name: k3s-deploy-verify
 description: Deploy and verify ai-circus-framework on the local k3d/k3s cluster end-to-end (cluster up through a real browser check) — includes sandbox-specific setup and the known k3s-vs-compose gotchas found doing this the first time.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # k3s Deploy & Verify
@@ -10,7 +10,7 @@ version: 1.0.0
 
 `k8s/README.md` documents the `make k3s-*` workflow itself. This skill is the operational
 runbook for actually driving that workflow end-to-end in an agent sandbox where `kubectl`/`k3d`
-usually aren't preinstalled, plus four gotchas that look like real bugs but are really
+usually aren't preinstalled, plus five gotchas that look like real bugs but are really
 compose-vs-k3s environment gaps — found and fixed once already; check here before re-diagnosing
 them from scratch.
 
@@ -44,7 +44,13 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
 2. Run the `k8s/README.md` sequence in order: `k3s-cluster` -> `k3s-build` -> `k3s-import` ->
    `k3s-secrets` -> `k3s-up` -> `k3s-wait` -> `k3s-verify` -> (optional) `k3s-pipeline`.
    `k3s-build`/`k3s-import` are the slow steps (image builds, then a full `docker save`/import
-   cycle per image) — run them with a long timeout or in the background.
+   cycle per image) — run them with a long timeout or in the background. If `k3s-cluster` found an
+   *existing* cluster (paused or already running — check `k3d cluster list`'s `SERVERS` column, and
+   see `k8s/README.md`'s pause/resume section), its pods were NOT freshly created by `k3s-up` and
+   will keep running whatever image content they already had — see Gotcha 5. After
+   `k3s-build`/`k3s-import` in that case, explicitly `kubectl -n ai-circus rollout restart
+   deployment/<service>` for every service you rebuilt before trusting anything you test against
+   the cluster.
 3. Start a standing port-forward before any real browser use — see Gotcha 2 below:
    ```bash
    kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
@@ -106,6 +112,25 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    symptom (`kubectl describe pod` showing repeated `Liveness probe failed` / `connection refused`
    right after a clean `Application startup complete` log line), it's the same class of issue, not
    a fresh bug.
+5. **`make k3s-build k3s-import` alone never updates an already-running pod**, even after a
+   successful import — `kubectl apply` only triggers a rollout when the Deployment's *spec* text
+   changes (it never does, since the image tag string `ai-circus/<service>:local` stays constant
+   across rebuilds), so a pod that was already running keeps its original container/image content
+   indefinitely. This bites hardest exactly on the `k3s-pause`/`k3s-resume` path (see below): the
+   cluster's pods survive a pause/resume with their *original* images, so rebuilding+reimporting
+   after resuming does nothing to them by itself. Confirmed root cause of a real bug once: a stale
+   pre-existing `ui-react` pod (running code from days earlier, before a conversation-history
+   feature existed) talked to a freshly-rebuilt `assistant`/`rag-agent`/`form-agent` backend that
+   now required a real persisted conversation id first — surfaced in the browser as `HTTP 404:
+   {"detail":"Conversation not found."}` on every chat send, which looks exactly like a backend
+   bug but had nothing to do with the backend. Diagnose with `kubectl -n ai-circus get pods -o
+   wide` — a pod whose `AGE` predates your `k3s-build` is running stale content regardless of what
+   `k3s-import` just loaded. Fix: `kubectl -n ai-circus rollout restart deployment/<service>` for
+   every service you rebuilt (or, blunter but reliable when several might be stale: restart all of
+   them) — don't try to compare `docker inspect ai-circus/<service>:local --format '{{.Id}}'`
+   against the pod's `imageID` to check staleness, they're different digest types (Docker image
+   config digest vs. containerd manifest digest) and will never string-match even for identical
+   content; pod age vs. build time is the reliable signal.
 
 ## Key rules
 
