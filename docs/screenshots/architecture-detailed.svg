@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1740" height="1050" viewBox="0 0 1740 1050">
+
+<defs>
+  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur"/>
+    <feMerge>
+      <feMergeNode in="blur"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+  <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+    <path d="M 34 0 L 0 0 0 34" fill="none" stroke="rgba(255,255,255,0.035)" stroke-width="1"/>
+  </pattern>
+  <marker id="arrow-primary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#9fb7cc" opacity="0.85"/>
+  </marker>
+  <marker id="arrow-secondary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M 0 0 L 10 5 L 0 10 z" fill="#7d8fa3" opacity="0.6"/>
+  </marker>
+</defs>
+
+<rect x="0" y="0" width="1740" height="1050" fill="#050b16"/>
+<rect x="0" y="0" width="1740" height="1050" fill="url(#grid)"/>
+<text x="870.0" y="38" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="2" fill="#f3f8fc">AI OPEN FRAMEWORK</text>
+<text x="870.0" y="58" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12.5" letter-spacing="0.5" fill="#5c7288">Realistic view — verified service-to-service calls</text>
+<rect x="368" y="252" width="674" height="160" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/><text x="384" y="270" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.85">IDENTITY &amp; PLATFORM</text>
+<rect x="38" y="422" width="1664" height="168" rx="14" fill="#34d399" fill-opacity="0.035" stroke="#34d399" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/><text x="54" y="440" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#34d399" fill-opacity="0.85">SCENARIO SERVICES — one Deployment per kind, every scenario of that kind</text>
+<rect x="38" y="612" width="1664" height="160" rx="14" fill="#22d3ee" fill-opacity="0.035" stroke="#22d3ee" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/><text x="54" y="630" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#22d3ee" fill-opacity="0.85">DATA</text>
+<rect x="38" y="772" width="1334" height="160" rx="14" fill="#cddc39" fill-opacity="0.035" stroke="#cddc39" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/><text x="54" y="790" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#cddc39" fill-opacity="0.85">BATCH / ETL — k8s Jobs, run once or on demand</text>
+<path d="M 720.0 195.0 C 720.0 247.5 210.0 247.5 210.0 300.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 240.0 C 870.0 270.0 540.0 270.0 540.0 300.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 240.0 C 870.0 355.0 210.0 355.0 210.0 470.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 240.0 C 870.0 355.0 540.0 355.0 540.0 470.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 240.0 C 870.0 355.0 870.0 355.0 870.0 470.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 240.0 C 870.0 355.0 1200.0 355.0 1200.0 470.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1020.0 195.0 C 1020.0 332.5 1530.0 332.5 1530.0 470.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 360.0 345.0 C 360.0 345.0 390.0 345.0 390.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<rect x="349.9" y="336.0" width="74.0" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="386.9" y="348.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#7d8fa3" opacity="0.95">OIDC login</text>
+<path d="M 210.0 390.0 C 210.0 367.5 720.0 367.5 720.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<rect x="510.2" y="352.2" width="173.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="596.8" y="364.7" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#7d8fa3" opacity="0.95">loopback, bypasses Traefik</text>
+<path d="M 1380.0 519.0 C 1380.0 519.0 690.0 519.0 690.0 519.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1380.0 519.0 C 1380.0 543.5 870.0 543.5 870.0 568.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1380.0 519.0 C 1380.0 519.0 1350.0 519.0 1350.0 519.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 780.0 422.0 C 780.0 406.0 540.0 406.0 540.0 390.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<rect x="515.5" y="394.1" width="204.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="617.6" y="406.6" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#7d8fa3" opacity="0.95">JWKS validation (every service)</text>
+<path d="M 940.0 422.0 C 940.0 406.0 870.0 406.0 870.0 390.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<rect x="807.1" y="399.4" width="216.6" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="915.4" y="411.9" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#7d8fa3" opacity="0.95">entitlement check (every service)</text>
+<path d="M 540.0 470.0 C 540.0 407.5 1050.0 407.5 1050.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 470.0 C 870.0 407.5 1050.0 407.5 1050.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1200.0 470.0 C 1200.0 407.5 1050.0 407.5 1050.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1350.0 345.0 C 1350.0 345.0 1380.0 345.0 1380.0 345.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 568.0 C 870.0 614.0 870.0 614.0 870.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1200.0 568.0 C 1200.0 614.0 870.0 614.0 870.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 210.0 568.0 C 210.0 614.0 1530.0 614.0 1530.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 540.0 568.0 C 540.0 614.0 1530.0 614.0 1530.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1350.0 519.0 C 1350.0 589.5 1530.0 589.5 1530.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 390.0 519.0 C 390.0 589.5 210.0 589.5 210.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<path d="M 720.0 519.0 C 720.0 589.5 210.0 589.5 210.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<path d="M 1050.0 519.0 C 1050.0 589.5 210.0 589.5 210.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<path d="M 870.0 390.0 C 870.0 525.0 210.0 525.0 210.0 660.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 540.0 390.0 C 540.0 547.5 60.0 547.5 60.0 705.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 870.0 300.0 C 870.0 254.0 540.0 254.0 540.0 300.0" fill="none" stroke="#7d8fa3" stroke-width="1.1" opacity="0.42" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)"/>
+<rect x="655.6" y="256.5" width="98.8" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="705.0" y="269.0" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#7d8fa3" opacity="0.95">Admin REST API</text>
+<path d="M 360.0 865.0 C 360.0 785.0 1380.0 785.0 1380.0 705.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 690.0 865.0 C 690.0 785.0 1380.0 785.0 1380.0 705.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1200.0 820.0 C 1200.0 785.0 870.0 785.0 870.0 750.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<path d="M 1350.0 865.0 C 1350.0 807.5 1530.0 807.5 1530.0 750.0" fill="none" stroke="#7d8fa3" stroke-width="2.2" opacity="0.8" stroke-dasharray="none" marker-end="url(#arrow-primary)"/>
+<rect x="720" y="150" width="300" height="90" rx="12" fill="#0a1c2a" stroke="#4fc3f7" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="720" y="150" width="300" height="90" rx="12" fill="none" stroke="#4fc3f7" stroke-width="1.1" opacity="0.9"/>
+<text x="870.0" y="180" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">TRAEFIK</text>
+<text x="870.0" y="202" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Ingress — single entrypoint, *.localhost</text>
+<line x1="738" y1="214" x2="1002" y2="214" stroke="#4fc3f7" stroke-opacity="0.25"/>
+<text x="870.0" y="230" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Traefik</text>
+<rect x="60" y="300" width="300" height="90" rx="12" fill="#08211d" stroke="#2dd4bf" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="60" y="300" width="300" height="90" rx="12" fill="none" stroke="#2dd4bf" stroke-width="1.1" opacity="0.9"/>
+<text x="210.0" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">UI-REACT</text>
+<text x="210.0" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Web app — scenario picker, dashboards,</text>
+<text x="210.0" y="367" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">chat</text>
+<line x1="78" y1="379" x2="342" y2="379" stroke="#2dd4bf" stroke-opacity="0.25"/>
+<text x="210.0" y="395" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">React + Vite + CopilotKit</text>
+<rect x="390" y="300" width="300" height="90" rx="12" fill="#160f2b" stroke="#b388ff" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="390" y="300" width="300" height="90" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
+<text x="540.0" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">KEYCLOAK</text>
+<text x="540.0" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Identity — OIDC login, Organizations =</text>
+<text x="540.0" y="367" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">tenants</text>
+<line x1="408" y1="379" x2="672" y2="379" stroke="#b388ff" stroke-opacity="0.25"/>
+<text x="540.0" y="395" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Keycloak (OIDC)</text>
+<rect x="720" y="300" width="300" height="90" rx="12" fill="#160f2b" stroke="#b388ff" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="720" y="300" width="300" height="90" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
+<text x="870.0" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">PLATFORM-REGISTRY</text>
+<text x="870.0" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Tenants, scenario roles, entitlement</text>
+<text x="870.0" y="367" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">checks</text>
+<line x1="738" y1="379" x2="1002" y2="379" stroke="#b388ff" stroke-opacity="0.25"/>
+<text x="870.0" y="395" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + SQLAlchemy</text>
+<rect x="1050" y="300" width="300" height="90" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1050" y="300" width="300" height="90" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
+<text x="1200.0" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">LLM-GATEWAY</text>
+<text x="1200.0" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Routes every LLM call, one place to swap</text>
+<text x="1200.0" y="367" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">providers</text>
+<line x1="1068" y1="379" x2="1332" y2="379" stroke="#ffca28" stroke-opacity="0.25"/>
+<text x="1200.0" y="395" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">LiteLLM proxy</text>
+<rect x="1380" y="300" width="300" height="90" rx="12" fill="#14161c" stroke="#8b93a1" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1380" y="300" width="300" height="90" rx="12" fill="none" stroke="#8b93a1" stroke-width="1.1" opacity="0.9"/>
+<text x="1530.0" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">LLM PROVIDERS</text>
+<text x="1530.0" y="352" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">OpenAI / Anthropic / Groq / … or local</text>
+<line x1="1398" y1="364" x2="1662" y2="364" stroke="#8b93a1" stroke-opacity="0.25"/>
+<text x="1530.0" y="380" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Ollama (optional)</text>
+<rect x="60" y="470" width="300" height="98" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="60" y="470" width="300" height="98" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<text x="210.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">PREDICTION</text>
+<text x="210.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Tabular ML — predictions + SHAP</text>
+<text x="210.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">explainability</text>
+<line x1="78" y1="549" x2="342" y2="549" stroke="#34d399" stroke-opacity="0.25"/>
+<text x="210.0" y="565" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + scikit-learn/LightGBM</text>
+<rect x="390" y="470" width="300" height="98" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="390" y="470" width="300" height="98" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<text x="540.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">ASSISTANT</text>
+<text x="540.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Chat copilot for tabular_ml scenarios</text>
+<line x1="408" y1="542" x2="672" y2="542" stroke="#34d399" stroke-opacity="0.25"/>
+<text x="540.0" y="558" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain</text>
+<rect x="720" y="470" width="300" height="98" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="720" y="470" width="300" height="98" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<text x="870.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">RAG-AGENT</text>
+<text x="870.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Document Q&amp;A over a scenario's knowledge</text>
+<text x="870.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">base</text>
+<line x1="738" y1="549" x2="1002" y2="549" stroke="#34d399" stroke-opacity="0.25"/>
+<text x="870.0" y="565" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain + Qdrant</text>
+<rect x="1050" y="470" width="300" height="98" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1050" y="470" width="300" height="98" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<text x="1200.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">FORM-AGENT</text>
+<text x="1200.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Conversational form-filling,</text>
+<text x="1200.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">RAG-grounded</text>
+<line x1="1068" y1="549" x2="1332" y2="549" stroke="#34d399" stroke-opacity="0.25"/>
+<text x="1200.0" y="565" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain + Qdrant</text>
+<rect x="1380" y="470" width="300" height="98" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1380" y="470" width="300" height="98" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<text x="1530.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">AGUI-VOICE</text>
+<text x="1530.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Voice front-end — bridges into the 3</text>
+<text x="1530.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">agents</text>
+<line x1="1398" y1="549" x2="1662" y2="549" stroke="#34d399" stroke-opacity="0.25"/>
+<text x="1530.0" y="565" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + Pipecat (Whisper/Piper)</text>
+<rect x="60" y="660" width="300" height="90" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="60" y="660" width="300" height="90" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
+<text x="210.0" y="690" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">POSTGRES</text>
+<text x="210.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Keycloak · platform · per-agent</text>
+<text x="210.0" y="727" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">conversation history</text>
+<line x1="78" y1="739" x2="342" y2="739" stroke="#22d3ee" stroke-opacity="0.25"/>
+<text x="210.0" y="755" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">PostgreSQL</text>
+<rect x="720" y="660" width="300" height="90" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="720" y="660" width="300" height="90" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
+<text x="870.0" y="690" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">QDRANT</text>
+<text x="870.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Per-tenant vector collections</text>
+<line x1="738" y1="724" x2="1002" y2="724" stroke="#22d3ee" stroke-opacity="0.25"/>
+<text x="870.0" y="740" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Qdrant</text>
+<rect x="1380" y="660" width="300" height="90" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1380" y="660" width="300" height="90" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
+<text x="1530.0" y="690" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">SEAWEEDFS</text>
+<text x="1530.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Datasets, models, documents</text>
+<text x="1530.0" y="727" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">(S3-compatible)</text>
+<line x1="1398" y1="739" x2="1662" y2="739" stroke="#22d3ee" stroke-opacity="0.25"/>
+<text x="1530.0" y="755" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">SeaweedFS</text>
+<rect x="60" y="820" width="300" height="90" rx="12" fill="#20220a" stroke="#cddc39" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="60" y="820" width="300" height="90" rx="12" fill="none" stroke="#cddc39" stroke-width="1.1" opacity="0.9"/>
+<text x="210.0" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">ETL-TABULAR</text>
+<text x="210.0" y="872" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Prepares each scenario's tabular dataset</text>
+<line x1="78" y1="884" x2="342" y2="884" stroke="#cddc39" stroke-opacity="0.25"/>
+<text x="210.0" y="900" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">k8s Job · pandas/pyarrow</text>
+<rect x="390" y="820" width="300" height="90" rx="12" fill="#20220a" stroke="#cddc39" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="390" y="820" width="300" height="90" rx="12" fill="none" stroke="#cddc39" stroke-width="1.1" opacity="0.9"/>
+<text x="540.0" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">TRAINING</text>
+<text x="540.0" y="872" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Trains + registers each scenario's model</text>
+<line x1="408" y1="884" x2="672" y2="884" stroke="#cddc39" stroke-opacity="0.25"/>
+<text x="540.0" y="900" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">k8s Job · scikit-learn/LightGBM</text>
+<rect x="1050" y="820" width="300" height="90" rx="12" fill="#20220a" stroke="#cddc39" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1050" y="820" width="300" height="90" rx="12" fill="none" stroke="#cddc39" stroke-width="1.1" opacity="0.9"/>
+<text x="1200.0" y="850" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">ETL-VECTORIZE</text>
+<text x="1200.0" y="872" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Chunks + embeds documents into Qdrant</text>
+<line x1="1068" y1="884" x2="1332" y2="884" stroke="#cddc39" stroke-opacity="0.25"/>
+<text x="1200.0" y="900" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">k8s Job · embeddings</text>
+<circle cx="365.0" cy="940" r="6.5" fill="#4fc3f7"/>
+<text x="380.0" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Ingress</text>
+<circle cx="469.8" cy="940" r="6.5" fill="#2dd4bf"/>
+<text x="484.8" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Frontend</text>
+<circle cx="581.0" cy="940" r="6.5" fill="#b388ff"/>
+<text x="596.0" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Identity &amp; platform</text>
+<circle cx="762.6" cy="940" r="6.5" fill="#ffca28"/>
+<text x="777.6" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">LLM routing</text>
+<circle cx="893.0" cy="940" r="6.5" fill="#34d399"/>
+<text x="908.0" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Scenario services</text>
+<circle cx="1061.8" cy="940" r="6.5" fill="#22d3ee"/>
+<text x="1076.8" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data</text>
+<circle cx="1147.3999999999999" cy="940" r="6.5" fill="#cddc39"/>
+<text x="1162.3999999999999" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Batch / ETL</text>
+<circle cx="1277.8" cy="940" r="6.5" fill="#8b93a1"/>
+<text x="1292.8" y="944" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">External</text>
+<text x="870.0" y="1026" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5c7288">Runs identically on Kubernetes (k3s), namespace ai-circus, and via docker compose</text>
+</svg>

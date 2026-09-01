@@ -350,13 +350,25 @@ the comment on its Traefik labels in `docker-compose.yml` for why.
 
 ## Architecture
 
+Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the recommended path, see
+[Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
+env-configured microservices either way, just a different orchestrator.
+
 <p align="center">
-  <img src="docs/screenshots/architecture.png" alt="AI Open Framework architecture diagram" width="900">
+  <img src="docs/screenshots/architecture-simplified.svg" alt="AI Open Framework architecture diagram — simplified view" width="900">
 </p>
 
-Runs on a local Kubernetes (k3s/k3d) cluster — the recommended path, see
-[Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
-env-configured services either way.
+Solid arrows are primary request/data paths; dotted arrows are cross-cutting auth/admin calls or
+traffic leaving the cluster. Every scenario service independently validates the caller's token
+against Keycloak and re-checks the entitlement with `platform-registry` — never just trusting
+what the UI already filtered.
+
+<details>
+<summary>Realistic view — every verified service-to-service call, not grouped</summary>
+<p align="center">
+  <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
+</p>
+</details>
 
 A tenant (Keycloak **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
