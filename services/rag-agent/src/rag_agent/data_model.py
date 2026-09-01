@@ -65,17 +65,14 @@ class EnvConfig(BaseSettings):
         default=None,
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
-    LOGTO_ISSUER: str | None = Field(
-        description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_ISSUER: str | None = Field(
+        description="Keycloak realm issuer (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_JWKS_URL: str | None = Field(
-        description="Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_JWKS_URL: str | None = Field(
+        description="Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_API_RESOURCE_INDICATOR: str | None = Field(
-        description="Expected token audience — the API resource registered in Logto for this platform's backend",
-        default=None,
+    KEYCLOAK_AUDIENCE: str | None = Field(
+        description="Expected token audience, registered via an Audience client-scope mapper in Keycloak", default=None
     )
     EMBEDDING_PROVIDER: str | None = Field(
         description="Embedding backend: 'local', 'gemini', or 'voyage' — MUST match etl-vectorize's setting",
@@ -106,7 +103,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "13d8af95e532a08401325ab30e269d9f93745a5635cc342590f5693ea2f266eb"
+_SOURCE_YAML_HASH = "84d18446a7fd930a98dc7fc3efac6586efff85cff9757c99181bcae72c42b3ed"
 
 
 EnvConfig.model_rebuild()

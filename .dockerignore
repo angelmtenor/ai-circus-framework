@@ -28,4 +28,4 @@ demo/*
 infra/postgres/data/
 infra/qdrant/storage/
 infra/seaweedfs/data/
-infra/logto/data/
+infra/keycloak/data/

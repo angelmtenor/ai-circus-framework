@@ -1,4 +1,4 @@
-import { useLogto } from "@logto/react";
+import { useAuth } from "react-oidc-context";
 import { useEffect, useState } from "react";
 import { verifyAdminKey, verifyEngineeringDemoKey } from "./apiClient";
 import { config } from "./config";
@@ -9,9 +9,9 @@ export type Identity = {
   accessToken: string | null;
   // What the topbar shows — the org id itself for admin/engineering-demo/dev (a
   // human-readable string we chose), but the signed-in user's email for a real
-  // Logto login (Organizations get an opaque auto-generated id, not a friendly
+  // Keycloak login (Organizations get an opaque auto-generated id, not a friendly
   // name, so showing orgId there would just be a confusing string like
-  // "kgq3gjurzesp").
+  // "3f1e2b9a-...").
   label: string;
 };
 
@@ -29,30 +29,30 @@ const ENGINEERING_DEMO_ORG_ID = "engineering-demo";
 
 /**
  * Resolves the caller's identity — DEV_MODE bypass (mirrors the backend services'
- * AUTH_DISABLED) or a real Logto organization token.
+ * AUTH_DISABLED) or a real Keycloak organization token.
  *
- * The Logto path is unverified against a live, browser-configured Logto tenant
- * (this repo was built without interactive browser access). `getAccessToken(resource,
- * organizationId)` is Logto's documented pattern for a per-organization, API-scoped
- * access token.
+ * The Keycloak path is unverified against a live, browser-configured Keycloak realm
+ * (this repo was built without interactive browser access). Unlike Logto, no
+ * per-request token exchange is needed: the access token minted at sign-in already
+ * carries both the `organization` and audience claims via server-side protocol
+ * mappers, so `user.access_token` is used as-is.
  */
 export function useIdentity(): {
   identity: Identity | null;
   loading: boolean;
-  logtoError: string | null;
+  keycloakError: string | null;
   logIn: (orgId: string, roles: string[]) => void;
   logInWithAdminKey: (adminKey: string) => Promise<void>;
   logInWithEngineeringDemoKey: (demoKey: string) => Promise<void>;
   logOut: () => void;
 } {
-  const { isAuthenticated, isLoading, error, signIn, signOut, getIdTokenClaims, getAccessToken } = useLogto();
+  const auth = useAuth();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [loading, setLoading] = useState(true);
-  // Surfaced on the login screen instead of only `console.error`'d by the SDK
-  // (see useLogto's proxy/handleError) — this whole real-Logto path went
-  // unverified against a live tenant until now, so failures here need to be
-  // visible without opening browser devtools.
-  const [logtoError, setLogtoError] = useState<string | null>(null);
+  // Surfaced on the login screen instead of only `console.error`'d by the SDK —
+  // this whole real-Keycloak path went unverified against a live realm until now,
+  // so failures here need to be visible without opening browser devtools.
+  const [keycloakError, setKeycloakError] = useState<string | null>(null);
 
   useEffect(() => {
     if (config.devMode) {
@@ -76,54 +76,50 @@ export function useIdentity(): {
       return;
     }
 
-    if (isLoading) return;
-    if (error) {
-      setLogtoError(error.message);
+    if (auth.isLoading) return;
+    if (auth.error) {
+      setKeycloakError(auth.error.message);
       setLoading(false);
       return;
     }
-    if (!isAuthenticated) {
+    if (!auth.isAuthenticated || !auth.user) {
       setLoading(false);
       return;
     }
 
-    (async () => {
-      try {
-        const claims = await getIdTokenClaims();
-        // The ID token carries every org the user belongs to as an `organizations`
-        // array (there's no singular `organization_id` claim on it — that only
-        // exists on an org-scoped *access* token) — this app assumes one org per
-        // real user, same simplification as ADMIN_ORG_ID/ENGINEERING_DEMO_ORG_ID.
-        const orgId = (claims?.organizations as string[] | undefined)?.[0];
-        if (!orgId) {
-          setLogtoError(
-            `Signed in as ${claims?.username ?? claims?.sub}, but this account isn't a member of any ` +
-              "Organization yet. If you meant a different account, sign out of Logto (or use a private " +
-              "browser window) and sign in again.",
-          );
-          setLoading(false);
-          return;
-        }
-        const accessToken = await getAccessToken(config.logtoApiResource, orgId);
-        if (!accessToken) {
-          setLogtoError(`Signed in to organization ${orgId}, but couldn't obtain an API access token for it.`);
-          setLoading(false);
-          return;
-        }
-        const label = (claims?.email ?? claims?.name ?? claims?.username ?? orgId) as string;
-        setIdentity({ orgId, roles: [], accessToken, label });
-        setLoading(false);
-      } catch (e) {
-        setLogtoError((e as Error).message);
-        setLoading(false);
-      }
-    })();
-  }, [isLoading, isAuthenticated, error, getIdTokenClaims, getAccessToken]);
+    const claims = auth.user.profile;
+    // Keycloak's `organization` claim is `{alias: {id, groups}}` — keyed by org
+    // *alias*, not id, with the id nested inside (unlike Logto's flat
+    // `organizations: string[]`). This app assumes one org per real user (same
+    // simplification as ADMIN_ORG_ID/ENGINEERING_DEMO_ORG_ID), so just take the
+    // first (only) entry's `.id`.
+    const orgClaim = claims.organization as Record<string, { id: string }> | undefined;
+    const orgAlias = orgClaim ? Object.keys(orgClaim)[0] : undefined;
+    const orgId = orgClaim && orgAlias ? orgClaim[orgAlias].id : undefined;
+    if (!orgId) {
+      setKeycloakError(
+        `Signed in as ${claims.preferred_username ?? claims.sub}, but this account isn't a member of any ` +
+          "Organization yet. If you meant a different account, sign out of Keycloak (or use a private " +
+          "browser window) and sign in again.",
+      );
+      setLoading(false);
+      return;
+    }
+    const accessToken = auth.user.access_token;
+    if (!accessToken) {
+      setKeycloakError(`Signed in to organization ${orgId}, but couldn't obtain an access token for it.`);
+      setLoading(false);
+      return;
+    }
+    const label = (claims.email ?? claims.name ?? claims.preferred_username ?? orgId) as string;
+    setIdentity({ orgId, roles: [], accessToken, label });
+    setLoading(false);
+  }, [auth.isLoading, auth.isAuthenticated, auth.error, auth.user]);
 
   return {
     identity,
     loading,
-    logtoError,
+    keycloakError,
     logIn: (orgId: string, roles: string[]) => {
       if (config.devMode) {
         const dev: Identity = { orgId, roles, accessToken: null, label: orgId };
@@ -131,7 +127,7 @@ export function useIdentity(): {
         setIdentity(dev);
         return;
       }
-      signIn(window.location.origin + "/callback");
+      void auth.signinRedirect();
     },
     logInWithAdminKey: async (adminKey: string) => {
       // Verified against a real admin-gated endpoint first — /entitlements itself has
@@ -174,11 +170,11 @@ export function useIdentity(): {
       sessionStorage.removeItem(ADMIN_STORAGE_KEY);
       sessionStorage.removeItem(ENGINEERING_DEMO_STORAGE_KEY);
       if (config.devMode || hadAdminIdentity || hadEngineeringDemoIdentity) {
-        // Neither DEV_MODE nor the admin-key/engineering-demo-key paths involve a real Logto session.
+        // Neither DEV_MODE nor the admin-key/engineering-demo-key paths involve a real Keycloak session.
         setIdentity(null);
         return;
       }
-      signOut(window.location.origin);
+      void auth.signoutRedirect({ post_logout_redirect_uri: window.location.origin });
     },
   };
 }

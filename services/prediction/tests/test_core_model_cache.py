@@ -167,7 +167,7 @@ def test_get_falls_back_to_shared_baseline_org_when_tenant_has_no_artifacts(
     stores: dict[str, FakeObjectStore],
 ) -> None:
     """A tenant with no trained model of its own (e.g. the admin/engineering-demo bypass
-    orgs, or a brand-new Logto organization) gets the fallback org's artifacts instead
+    orgs, or a brand-new Keycloak organization) gets the fallback org's artifacts instead
     of a KeyError — this is what makes the cache actually "shared by every tenant."
     """
     cache = ModelCache(stores, fallback_org_id="org-1")

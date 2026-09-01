@@ -12,12 +12,13 @@
   "dependencies": {
     "@copilotkit/react-core": "^1.67.1",
     "@copilotkit/react-ui": "^1.67.1",
-    "@logto/react": "^4.0.14",
     "@pipecat-ai/client-js": "^1.13.0",
     "@pipecat-ai/websocket-transport": "^1.7.1",
+    "oidc-client-ts": "^3.5.0",
     "plotly.js-dist-min": "^3.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-oidc-context": "^3.3.1",
     "react-plotly.js": "^4.1.0",
     "zod-to-json-schema": "^3.25.2"
   },

@@ -23,7 +23,7 @@ env_variables:
     secret: false
 
   - name: ORG_ID
-    description: "Tenant (Logto Organization id) whose dataset this run processes"
+    description: "Tenant (Keycloak Organization id) whose dataset this run processes"
     type: string
     mandatory: true
     secret: false

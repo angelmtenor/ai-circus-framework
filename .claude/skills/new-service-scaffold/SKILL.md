@@ -62,10 +62,17 @@ improvise a template.
    is pinned to the current `libs/shared` build.
 
 4. If the new service will read scenario data, model artifacts, or vector search results, wire in
-   tenant scoping from the start — every such code path **must** be scoped by `org_id` (the Logto
+   tenant scoping from the start — every such code path **must** be scoped by `org_id` (the Keycloak
    Organization). Follow the enforced pattern in `libs/shared/src/ai_circus_shared/storage.py` and
    `entitlements.py`, and add the entitlement check in the new service itself, not just the UI —
    see root `AGENTS.md` §1.
+
+   **Known gap:** the `ai-circus-template` repo this skill scaffolds from has not been migrated
+   off Logto — the generated `services/<name>/settings.yaml` will still declare `LOGTO_ISSUER`/
+   `LOGTO_JWKS_URL`/`LOGTO_API_RESOURCE_INDICATOR`, not the `KEYCLOAK_*` names this repo now uses.
+   Rename those three fields by hand to match the pattern in an existing service's `settings.yaml`
+   (e.g. `services/prediction/`) and regenerate `data_model.py` before considering auth wiring
+   done — don't assume a freshly scaffolded service gets Keycloak auth for free.
 
 5. Read the newly generated `services/<name>/AGENTS.md` and `SKILLS.md` — they layer
    service-specific conventions on top of these root ones.

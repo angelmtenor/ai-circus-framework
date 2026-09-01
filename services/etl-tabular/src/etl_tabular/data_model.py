@@ -10,12 +10,13 @@ Author: ai-circus-framework contributors
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,7 +33,7 @@ class EnvConfig(BaseSettings):
     SCENARIOS: str = Field(
         description="Comma-separated tabular_ml scenario slugs this run processes; empty/unset = every scenario"
     )
-    ORG_ID: str = Field(description="Tenant (Logto Organization id) whose dataset this run processes")
+    ORG_ID: str = Field(description="Tenant (Keycloak Organization id) whose dataset this run processes")
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
     OBJECT_STORE_ENDPOINT: str = Field(
         description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
@@ -45,7 +46,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "586210ac516256c708873f2142872065260dcc0b42fbe3b891404be3cadab400"
+_SOURCE_YAML_HASH = "688cbb6f6ad33fe336fe48b40eb6ae0aa35fa77c17d3c3fffdf1e8a5d1b452ee"
 
 
 EnvConfig.model_rebuild()
@@ -81,12 +82,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

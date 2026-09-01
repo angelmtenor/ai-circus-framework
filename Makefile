@@ -30,12 +30,12 @@ bootstrap: ## Create .env from .env.example, console.htpasswd from its .example 
 		cp infra/traefik/console.htpasswd.example infra/traefik/console.htpasswd; \
 	fi
 	@./scripts/generate_seaweedfs_s3_config.sh
-	@echo "✓ Edit .env (Logto/LLM/SeaweedFS secrets) before running 'make up'"
+	@echo "✓ Edit .env (Keycloak/LLM/SeaweedFS secrets) before running 'make up'"
 
 # ── Compose lifecycle ─────────────────────────────────────────────────────────
 
-up-infra: ## Start only the platform infra (postgres, logto, qdrant, seaweedfs, traefik)
-	@docker compose up -d postgres logto qdrant seaweedfs traefik
+up-infra: ## Start only the platform infra (postgres, keycloak, qdrant, seaweedfs, traefik)
+	@docker compose up -d postgres keycloak qdrant seaweedfs traefik
 
 up: ## Start the full platform (infra + all backend services + the UI)
 	@mkdir -p demo/themes
@@ -62,7 +62,7 @@ ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; 
 # deployment" for the full checklist; the two commands below cover the parts that
 # are easy to forget.
 
-generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.logto/console.objectstore — usage: make generate-console-auth [CONSOLE_USER=admin]
+generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.keycloak/console.objectstore — usage: make generate-console-auth [CONSOLE_USER=admin]
 	@./scripts/generate_console_auth.sh "$(CONSOLE_USER)"
 
 check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped demo values before a public deployment (does not start/stop anything)
@@ -77,7 +77,7 @@ check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped dem
 		echo "❌ ENGINEERING_DEMO_API_KEY is still the shipped demo default — rotate it or blank it in .env"; ok=0; \
 	fi; \
 	if [ "$${AUTH_DISABLED:-false}" = "true" ]; then \
-		echo "❌ AUTH_DISABLED=true in .env — this bypasses Logto entirely, never set it for a public deployment"; ok=0; \
+		echo "❌ AUTH_DISABLED=true in .env — this bypasses Keycloak entirely, never set it for a public deployment"; ok=0; \
 	fi; \
 	if [ ! -f infra/traefik/console.htpasswd ]; then \
 		echo "❌ infra/traefik/console.htpasswd is missing — run 'make generate-console-auth'"; ok=0; \
@@ -116,19 +116,19 @@ all: ## One-shot: bootstrap .env, start infra+services, run both pipelines, veri
 	fi
 
 reset-all: ## Nuke containers + volumes + per-service build artifacts, then rebuild fresh via `make all` — the fastest way back to a known-good state, and what to run before sharing this repo so it's proven from a clean slate
-	@echo "🧹 tearing down containers + volumes (postgres/logto/qdrant/seaweedfs data all reset)..."
+	@echo "🧹 tearing down containers + volumes (postgres/keycloak/qdrant/seaweedfs data all reset)..."
 	@docker compose down -v
 	@$(MAKE) all
 
-wait-infra: ## Wait for postgres+logto to report healthy (internal step of `make all`; also handy standalone if `make up-infra` seems stuck)
+wait-infra: ## Wait for postgres+keycloak to report healthy (internal step of `make all`; also handy standalone if `make up-infra` seems stuck)
 	@echo "⏳ waiting for postgres..."
 	@i=0; until [ "$$(docker compose ps postgres --format '{{.Health}}' 2>/dev/null)" = "healthy" ]; do \
 		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ postgres never became healthy — check: docker compose logs postgres"; exit 1; }; \
 		sleep 2; \
 	done
-	@echo "⏳ waiting for logto (first boot seeds its own DB — can take a couple of minutes)..."
-	@i=0; until [ "$$(docker compose ps logto --format '{{.Health}}' 2>/dev/null)" = "healthy" ]; do \
-		i=$$((i+1)); [ $$i -ge 90 ] && { echo "❌ logto never became healthy — check: docker compose logs logto"; exit 1; }; \
+	@echo "⏳ waiting for keycloak (first boot imports the realm — can take a couple of minutes)..."
+	@i=0; until [ "$$(docker compose ps keycloak --format '{{.Health}}' 2>/dev/null)" = "healthy" ]; do \
+		i=$$((i+1)); [ $$i -ge 90 ] && { echo "❌ keycloak never became healthy — check: docker compose logs keycloak"; exit 1; }; \
 		sleep 2; \
 	done
 	@echo "✓ infra healthy"
@@ -223,7 +223,13 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 		echo "── ai-circus/$$svc:local ──"; \
 		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
 	done
-	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local .
+	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local \
+		--build-arg VITE_KEYCLOAK_ISSUER="$(VITE_KEYCLOAK_ISSUER)" \
+		--build-arg VITE_KEYCLOAK_CLIENT_ID="$(if $(VITE_KEYCLOAK_CLIENT_ID),$(VITE_KEYCLOAK_CLIENT_ID),ui-react)" \
+		--build-arg VITE_KEYCLOAK_AUDIENCE="$(VITE_KEYCLOAK_AUDIENCE)" \
+		--build-arg VITE_DEV_MODE="$(if $(DEV_MODE),$(DEV_MODE),false)" \
+		--build-arg VITE_DEV_ORG_ID="$(if $(DEV_ORG_ID),$(DEV_ORG_ID),demo)" \
+		.
 	@echo "✓ all images built"
 
 k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd
@@ -244,8 +250,8 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@kubectl -n ai-circus rollout status statefulset/postgres --timeout=180s
 	@kubectl -n ai-circus rollout status statefulset/qdrant --timeout=60s
 	@kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=60s
-	@echo "⏳ waiting for logto (first boot seeds its own DB — can take a couple of minutes)..."
-	@kubectl -n ai-circus rollout status deployment/logto --timeout=180s
+	@echo "⏳ waiting for keycloak (first boot imports the realm — can take a couple of minutes)..."
+	@kubectl -n ai-circus rollout status deployment/keycloak --timeout=180s
 	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice ui-react; do \
 		echo "⏳ waiting for $$svc..."; \
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \

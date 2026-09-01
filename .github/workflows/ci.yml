@@ -167,11 +167,11 @@ jobs:
 
   # Real CI-driven integration smoke test (plan item C.12). NON-BLOCKING
   # (continue-on-error: true) on purpose: this is the newest and heaviest job here —
-  # it boots the *entire* docker-compose stack (postgres/logto/qdrant/seaweedfs/traefik +
+  # it boots the *entire* docker-compose stack (postgres/keycloak/qdrant/seaweedfs/traefik +
   # every backend service + ui-react), using the optional `ollama` profile so no real
   # LLM provider key/secret is needed in CI, then runs the exact curl checks `make
   # verify` uses locally to diagnose "Failed to fetch". Per the hardening plan, land
-  # this and watch it run for a while (logto's first-boot DB seed and the Ollama
+  # this and watch it run for a while (keycloak's first-boot realm import and the Ollama
   # model pull are the likeliest sources of timing flakiness) before dropping
   # continue-on-error and adding it to branch protection's required checks.
   integration-smoke:
@@ -184,7 +184,7 @@ jobs:
         run: make bootstrap
       - name: Start Ollama (free local LLM fallback — no provider key/secret needed)
         run: make ollama-up
-      - name: Start infra (postgres, logto, qdrant, seaweedfs, traefik)
+      - name: Start infra (postgres, keycloak, qdrant, seaweedfs, traefik)
         run: make up-infra
       - name: Wait for infra to be healthy
         run: make wait-infra

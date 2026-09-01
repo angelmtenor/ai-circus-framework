@@ -31,18 +31,18 @@ function AiDisclosureBanner() {
 
 function LoginScreen({
   logo,
-  logtoError,
+  keycloakError,
   onLogin,
   onLoginWithAdminKey,
   onLoginWithEngineeringDemoKey,
-  onLogtoSignOut,
+  onKeycloakSignOut,
 }: {
   logo: string;
-  logtoError: string | null;
+  keycloakError: string | null;
   onLogin: (orgId: string, roles: string[]) => void;
   onLoginWithAdminKey: (adminKey: string) => Promise<void>;
   onLoginWithEngineeringDemoKey: (demoKey: string) => Promise<void>;
-  onLogtoSignOut: () => void;
+  onKeycloakSignOut: () => void;
 }) {
   const [orgId, setOrgId] = useState(config.devOrgId);
   const [roles, setRoles] = useState("scenario:churn,scenario:ai_circus_reference");
@@ -118,23 +118,23 @@ function LoginScreen({
             {loginError && <p className="error">{loginError}</p>}
           </div>
 
-          {!config.devMode && config.logtoAppId && (
+          {!config.devMode && config.keycloakClientId && (
             <div className="login-section">
               <button className="btn-primary" onClick={() => onLogin("", [])}>
-                Log in with Logto
+                Log in with Keycloak
               </button>
-              {logtoError && (
+              {keycloakError && (
                 <>
-                  <p className="error">{logtoError}</p>
-                  <button className="btn-secondary" onClick={onLogtoSignOut}>
-                    Sign out of Logto
+                  <p className="error">{keycloakError}</p>
+                  <button className="btn-secondary" onClick={onKeycloakSignOut}>
+                    Sign out of Keycloak
                   </button>
                 </>
               )}
             </div>
           )}
-          {!config.devMode && !config.logtoAppId && (
-            <p className="dev-warning">Single sign-on via Logto isn't configured yet — use the login above.</p>
+          {!config.devMode && !config.keycloakClientId && (
+            <p className="dev-warning">Single sign-on via Keycloak isn't configured yet — use the login above.</p>
           )}
         </div>
       </div>
@@ -143,7 +143,7 @@ function LoginScreen({
 }
 
 export default function App() {
-  const { identity, loading, logtoError, logIn, logInWithAdminKey, logInWithEngineeringDemoKey, logOut } =
+  const { identity, loading, keycloakError, logIn, logInWithAdminKey, logInWithEngineeringDemoKey, logOut } =
     useIdentity();
   const { theme, themes, setThemeId } = useTheme();
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
@@ -170,11 +170,11 @@ export default function App() {
     return (
       <LoginScreen
         logo={theme.logo}
-        logtoError={logtoError}
+        keycloakError={keycloakError}
         onLogin={logIn}
         onLoginWithAdminKey={logInWithAdminKey}
         onLoginWithEngineeringDemoKey={logInWithEngineeringDemoKey}
-        onLogtoSignOut={logOut}
+        onKeycloakSignOut={logOut}
       />
     );
 

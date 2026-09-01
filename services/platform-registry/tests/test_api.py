@@ -99,11 +99,11 @@ class _FakeAdminConfig:
         self.ENGINEERING_DEMO_API_KEY = FakeSecret(engineering_demo_api_key) if engineering_demo_api_key else None
         self.AUTH_DISABLED = auth_disabled
         self.DEV_ORG_ID = dev_org_id
-        # Logto unconfigured here (no test exercises a real Logto token) — resolve_org_identity
+        # Keycloak unconfigured here (no test exercises a real Keycloak token) — resolve_org_identity
         # raises RuntimeError if this path is ever reached without AUTH_DISABLED/an admin key.
-        self.LOGTO_ISSUER = None
-        self.LOGTO_API_RESOURCE_INDICATOR = None
-        self.LOGTO_JWKS_URL = None
+        self.KEYCLOAK_ISSUER = None
+        self.KEYCLOAK_AUDIENCE = None
+        self.KEYCLOAK_JWKS_URL = None
 
 
 @pytest.fixture

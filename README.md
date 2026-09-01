@@ -36,7 +36,7 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
 
 ### Login
 
-A single branded entry point: **Logto**-managed sign-in for real users/organizations, or the
+A single branded entry point: **Keycloak**-managed sign-in for real users/organizations, or the
 **admin key** shortcut for quick local demos — both resolve through the exact same identity path
 on the backend, so nothing is a security bypass, just a different way in.
 
@@ -240,7 +240,7 @@ docker compose up --build etl-vectorize   # vectorizes every conversational_rag 
 compose path in the right order for you, waiting for each container to actually be ready before
 moving to the next — safe to re-run any time. If something's clearly broken (stale volumes,
 half-applied `.env` change), `make reset-all` tears everything down — **including data in
-postgres/logto/qdrant/seaweedfs** — and reruns `make all` from a clean slate.
+postgres/keycloak/qdrant/seaweedfs** — and reruns `make all` from a clean slate.
 
 ### 4. Open the app
 
@@ -249,7 +249,7 @@ postgres/logto/qdrant/seaweedfs** — and reruns `make all` from a clean slate.
 For a quick look without configuring an identity provider at all, use the login screen's **User**
 dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by
 default) as the password — it comes pre-granted access to every scenario. For real
-multi-user/multi-tenant login, see "First-time Logto setup" further down.
+multi-user/multi-tenant login, see "First-time Keycloak setup" further down.
 
 The dropdown's other option, **demo engineering**, is the same bypass mechanism scoped to a
 narrower demo tenant — entitled to only the three engineering scenarios (Predictive Maintenance,
@@ -282,35 +282,39 @@ Local (non-Docker) development: each generated service under `services/*/` has i
 `make run` — run it directly with `uv run` from inside that service's directory while the infra
 containers stay up via `make up-infra`.
 
-### First-time Logto setup
+### First-time Keycloak setup
 
-Either deployment path brings up Logto at `http://logto.localhost` (sign-in) and
-`http://admin.logto.localhost` (Admin Console). One-time, via the Admin Console:
+Both deployment paths bring up Keycloak already bootstrapped: `infra/keycloak/realm-export.json`
+is loaded declaratively via `start --import-realm` on first boot, so the `ai-circus` realm,
+the `organization`/`platform-backend` client scopes (Organization membership + Audience
+mappers), and the `ui-react` SPA client all exist the moment the container is healthy — no
+manual Admin Console click-through. `http://keycloak.localhost` is the sign-in page,
+`http://admin.keycloak.localhost` the Admin Console (Basic-Auth-gated, same as before).
 
-1. Sign up as the Console's first user (this is what makes you the tenant owner), enable
-   **Organizations**, then create a **Machine-to-Machine** application with Management API
-   access — note its ID/secret for `LOGTO_M2M_APP_ID`/`LOGTO_M2M_APP_SECRET` in `.env`. This step
-   is Console-only (no valid credential exists yet to script it) and must be redone any time
-   Logto's own data is wiped, e.g. by `make reset-all`.
-2. Under **Sign-in Experience**, upload your logo/colors — end users get this branded, hosted
-   page; no custom login screen is built in this repo (managed auth over custom auth, on purpose).
-3. Everything else — registering the `LOGTO_API_RESOURCE_INDICATOR` API resource, creating
-   organization roles named `scenario:<slug>` for every `scenarios/*/scenario.yaml`'s
-   `role_required`, ui-react's SPA application (its "Log in with Logto" OIDC client), and
-   provisioning a real user — is now one command instead of manual Console clicking: set
-   `LOGTO_OWNER_EMAIL`/`LOGTO_OWNER_PASSWORD` in `.env`, then
+Two things the static realm export can't do for you:
+
+1. **One-time, manual, via the Admin Console** (redo after any `make reset-all`, since it wipes
+   Keycloak's own data): the M2M client (`KEYCLOAK_M2M_CLIENT_ID`/`SECRET` in `.env`) has no
+   admin rights of its own — grant its service-account user the
+   `manage-users`/`manage-organizations`/`manage-realm`/`manage-clients` realm-management client
+   roles, signed in as the container's own bootstrap admin
+   (`KEYCLOAK_ADMIN_USERNAME`/`KEYCLOAK_ADMIN_PASSWORD`). Nothing below works until this is done.
+2. Real users, and the `scenario:<slug>` realm roles derived from `scenarios/*/scenario.yaml`,
+   are one command:
    ```bash
    make -C services/platform-registry provision-owner-user
    ```
-   Idempotent — safe to re-run any time (e.g. after redoing step 1 post-reset). It creates (or
-   finds) an `owner` Organization, creates (or finds) that Logto user, adds them to the
-   Organization, assigns every `scenario:*` role, creates the SPA application (prints its id —
-   paste as `UI_REACT_LOGTO_APP_ID` in `.env`, then `docker compose up -d --build ui-react` to bake
-   it in), and syncs the result into local `entitlements` — so signing in through Logto's hosted
+   Set `KEYCLOAK_OWNER_EMAIL`/`KEYCLOAK_OWNER_PASSWORD` in `.env` first. Idempotent — safe to
+   re-run any time. It creates `scenario:<slug>` as plain realm roles for every scenario's
+   `role_required` (Keycloak's Organizations API has no org-scoped role endpoint, so entitlement
+   roles are assigned per-user, not per-organization-membership — a deliberate simplification, see
+   `libs/shared`'s `auth.py` docstring), creates (or finds) an `owner` Organization and that
+   Keycloak user, adds them to the Organization, assigns every `scenario:*` role directly to the
+   user, and syncs the result into local `entitlements` — so signing in through Keycloak's hosted
    page with that email lands on every scenario, the same as the `ADMIN_API_KEY` bypass. For any
-   *other* user/Organization you want scoped differently, do that one by hand: add them to an
-   Organization and assign only the `scenario:*` role(s) you
-   want them entitled to — that assignment *is* what grants access to a scenario.
+   *other* user/Organization you want scoped differently, do that one by hand in the Admin
+   Console: add them to an Organization and assign only the `scenario:*` realm role(s) you want
+   them entitled to — that assignment *is* what grants access to a scenario.
 
 ### Public deployment
 
@@ -325,11 +329,11 @@ production-ready starting point on their own.)
 1. Rotate (or blank, to disable the shortcut outright) `ADMIN_API_KEY`/
    `ENGINEERING_DEMO_API_KEY` away from their shipped demo values, and confirm
    `AUTH_DISABLED=false`.
-2. Regenerate the Basic Auth credential Traefik puts in front of Logto's Admin Console and
+2. Regenerate the Basic Auth credential Traefik puts in front of Keycloak's Admin Console and
    SeaweedFS's console — both are otherwise purely-administrative UIs, always reachable on the
-   Traefik entrypoint (Logto's Admin Console in particular lets *whoever reaches it first*
-   become the identity-system owner, so it's gated even locally, just with a shipped demo
-   credential you must rotate here):
+   Traefik entrypoint (Keycloak's Admin Console in particular lets whoever holds the bootstrap
+   admin credentials fully control the identity system, so it's gated even locally, just with a
+   shipped demo credential you must rotate here):
    ```bash
    make generate-console-auth   # prints a one-time password — save it, it isn't stored anywhere
    ```
@@ -354,7 +358,7 @@ Runs on a local Kubernetes (k3s/k3d) cluster — the recommended path, see
 [Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
 env-configured services either way.
 
-A tenant (Logto **Organization**, or the shared admin credential) only sees the scenarios its
+A tenant (Keycloak **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
 shown) and at each backend service's API (what's allowed).
 
@@ -363,7 +367,8 @@ shown) and at each backend service's API (what's allowed).
 These are in place from day one — not deferred — because they're cheap to build correctly now and
 expensive to retrofit once single-tenant assumptions are baked in.
 
-- **Tenancy**: Logto **Organizations** model tenants; roles are assigned per-organization.
+- **Tenancy**: Keycloak **Organizations** model tenants; `scenario:*` entitlement roles are plain
+  realm roles assigned per-user (Keycloak's Organizations API has no org-scoped role endpoint).
 - **Object storage**: all datasets/models/documents live in **SeaweedFS** (S3-compatible), never on a
   service's local disk — keeps services stateless and horizontally scalable.
 - **Scenario/entitlement registry**: `platform-registry` owns a Postgres schema
@@ -374,16 +379,17 @@ expensive to retrofit once single-tenant assumptions are baked in.
   (`platform-registry`, `qdrant`, `llm-gateway`) purely so services running outside Docker (local,
   non-container dev) can still reach them directly; none of those three has auth strong enough to
   be safe on Traefik's public entrypoint, so they must never gain a `traefik.enable=true` label.
-- **`infra/{postgres,logto,qdrant,seaweedfs,traefik}/`**: reserved per-service config directories —
-  today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs/` (the generated
-  S3 gateway credentials file) have content; the others' config is inline in `docker-compose.yml`
+- **`infra/{postgres,keycloak,qdrant,seaweedfs,traefik}/`**: reserved per-service config directories —
+  `infra/postgres/` (a multi-database init script), `infra/keycloak/` (the declarative
+  `realm-export.json` bootstrap), and `infra/seaweedfs/` (the generated S3 gateway credentials
+  file) have content; the others' config is inline in `docker-compose.yml`
   (command args/env/labels) until each grows enough to warrant its own files.
 - **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of
   the entitlement check. `ENGINEERING_DEMO_API_KEY` is the same mechanism scoped to a narrower
   `engineering-demo` tenant, entitled to only the engineering scenarios — a template for adding
-  more scoped demo tenants without touching Logto.
+  more scoped demo tenants without touching Keycloak.
 
 ### Shared code
 
@@ -392,7 +398,7 @@ Every backend service is generated via real **cookiecutter** generation against
 `scripts/new_service.sh`), so each stays an independent `uv` project with its own
 `pyproject.toml`/`uv.lock`/Dockerfile — no monorepo-wide uv workspace. That template is itself
 built on the conventions from [`ai-circus`](https://github.com/angelmtenor/ai-circus), my
-Python best-practices reference repo. Common code (Logto token validation, SeaweedFS client,
+Python best-practices reference repo. Common code (Keycloak token validation, SeaweedFS client,
 entitlement-check client, scenario schema) lives in `libs/shared` (`ai-circus-shared`), added to
 each service as a local **non-editable** `uv` path dependency.
 
@@ -434,7 +440,7 @@ though, is instant from **Settings**.
 - **New scenario**: add `scenarios/<slug>/scenario.yaml` (see `churn`/`mpm` for `tabular_ml`,
   `ai_circus_reference` for `conversational_rag`, `service_request` for `assisted_form`) with a
   `chat:` block (`context` + `sample_questions`), restart `platform-registry` (it seeds on
-  startup), and create the matching Logto role. **No new container, no UI code** — the existing
+  startup), and create the matching `scenario:<slug>` Keycloak realm role. **No new container, no UI code** — the existing
   `prediction`/`assistant`, `rag-agent`, or `form-agent` instance picks it up automatically, and
   `ui-react` renders its form/chat generically. An `assisted_form` scenario additionally needs a
   `form:` block (field catalog + validation rules) and, if it's RAG-classified like

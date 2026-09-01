@@ -1,0 +1,89 @@
+{
+  "realm": "ai-circus",
+  "enabled": true,
+  "organizationsEnabled": true,
+  "sslRequired": "none",
+  "clientScopes": [
+    {
+      "name": "organization",
+      "description": "Adds the caller's Organization membership to the token — built into Keycloak 26 by default; declared explicitly here so `--import-realm` doesn't depend on that default surviving future versions.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "organization",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-organization-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "organization",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "platform-backend",
+      "description": "Carries the `aud` claim ai_circus_shared.auth validates (KEYCLOAK_AUDIENCE) — Keycloak omits `aud` by default, unlike Logto's API resource indicator.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "platform-backend-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "https://api.ai-circus-framework.local",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "ui-react",
+      "name": "ui-react",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://aiopen.localhost/*",
+        "http://aiopen.localhost/callback",
+        "http://localhost:5173/*",
+        "http://localhost:5173/callback"
+      ],
+      "webOrigins": [
+        "http://aiopen.localhost",
+        "http://localhost:5173"
+      ],
+      "defaultClientScopes": [
+        "organization",
+        "platform-backend",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    }
+  ]
+}

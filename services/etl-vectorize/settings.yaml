@@ -28,7 +28,7 @@ env_variables:
   # `make all` lands on — a mismatch here silently leaves rag-agent/form-agent querying
   # an empty collection for that tenant (see the DocumentsConfig fallback this seeds).
   - name: ORG_ID
-    description: "Tenant (Logto Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
+    description: "Tenant (Keycloak Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
     type: string
     mandatory: true
     secret: false

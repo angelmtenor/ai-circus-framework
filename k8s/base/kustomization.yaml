@@ -5,7 +5,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - postgres.yaml
-  - logto.yaml
+  - keycloak.yaml
   - middleware.yaml
   - qdrant.yaml
   - seaweedfs.yaml

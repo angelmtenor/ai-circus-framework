@@ -68,9 +68,9 @@ def require_org_match(org_id: str, authorization: str | None = Header(default=No
     settings = AuthSettingsAdapter(
         AUTH_DISABLED=config.AUTH_DISABLED,
         DEV_ORG_ID=config.DEV_ORG_ID,
-        LOGTO_ISSUER=config.LOGTO_ISSUER,
-        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
-        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
+        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
+        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
         ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
         ENGINEERING_DEMO_API_KEY=(
             config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
@@ -97,9 +97,9 @@ def require_authenticated(authorization: str | None = Header(default=None)) -> N
     settings = AuthSettingsAdapter(
         AUTH_DISABLED=config.AUTH_DISABLED,
         DEV_ORG_ID=config.DEV_ORG_ID,
-        LOGTO_ISSUER=config.LOGTO_ISSUER,
-        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
-        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
+        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
+        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
         ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
         ENGINEERING_DEMO_API_KEY=(
             config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
@@ -238,7 +238,7 @@ async def extract_document(file: UploadFile) -> DocumentExtractOut:
 
 @router.get("/entitlements/{org_id}", response_model=list[ScenarioSummary], dependencies=[Depends(require_org_match)])
 def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)) -> list[Scenario]:
-    """Return the scenarios the given tenant (Logto Organization) is entitled to."""
+    """Return the scenarios the given tenant (Keycloak Organization) is entitled to."""
     stmt = select(Scenario).join(Entitlement).where(Entitlement.org_id == org_id)
     return list(session.scalars(stmt))
 
@@ -264,7 +264,7 @@ def check_entitlement(org_id: str, scenario_slug: str, session: Session = Depend
 
 @router.put("/entitlements/{org_id}/{scenario_slug}", status_code=204, dependencies=[Depends(require_admin)])
 def grant_entitlement(org_id: str, scenario_slug: str, session: Session = Depends(get_session)) -> None:
-    """Grant a tenant access to a scenario (idempotent). Mirrors a Logto role assignment."""
+    """Grant a tenant access to a scenario (idempotent). Mirrors a Keycloak realm-role assignment."""
     if session.get(Scenario, scenario_slug) is None:
         raise HTTPException(status_code=404, detail=f"Unknown scenario {scenario_slug!r}.")
 

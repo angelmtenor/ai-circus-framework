@@ -37,7 +37,7 @@ scenarios/**/model/
 infra/postgres/data/
 infra/qdrant/storage/
 infra/seaweedfs/data/
-infra/logto/data/
+infra/keycloak/data/
 
 # OS / editor
 .DS_Store

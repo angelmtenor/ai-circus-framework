@@ -148,20 +148,20 @@ env_variables:
     mandatory: true
     secret: false
 
-  - name: LOGTO_ISSUER
-    description: "Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)"
+  - name: KEYCLOAK_ISSUER
+    description: "Keycloak realm issuer (required unless AUTH_DISABLED=true)"
     type: string
     mandatory: false
     secret: false
 
-  - name: LOGTO_JWKS_URL
-    description: "Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)"
+  - name: KEYCLOAK_JWKS_URL
+    description: "Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)"
     type: string
     mandatory: false
     secret: false
 
-  - name: LOGTO_API_RESOURCE_INDICATOR
-    description: "Expected token audience — the API resource registered in Logto for this platform's backend"
+  - name: KEYCLOAK_AUDIENCE
+    description: "Expected token audience, registered via an Audience client-scope mapper in Keycloak"
     type: string
     mandatory: false
     secret: false

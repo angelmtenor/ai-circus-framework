@@ -1,4 +1,4 @@
-# Basic Auth gate shared by logto-admin (see logto.yaml) and the SeaweedFS console
+# Basic Auth gate shared by keycloak-admin (see keycloak.yaml) and the SeaweedFS console
 # (see seaweedfs.yaml) — the k8s equivalent of docker-compose.yml's admin-basicauth
 # Traefik label, reading the same infra/traefik/console.htpasswd content. The
 # `traefik-basicauth` Secret is created by `make k3s-secrets` from that file
