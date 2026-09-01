@@ -1,7 +1,7 @@
 ---
 name: k3s-deploy-verify
 description: Deploy and verify ai-circus-framework on the local k3d/k3s cluster end-to-end (cluster up through a real browser check) — includes sandbox-specific setup and the known k3s-vs-compose gotchas found doing this the first time.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # k3s Deploy & Verify
@@ -51,10 +51,11 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    `k3s-build`/`k3s-import` in that case, explicitly `kubectl -n ai-circus rollout restart
    deployment/<service>` for every service you rebuilt before trusting anything you test against
    the cluster.
-3. Start a standing port-forward before any real browser use — see Gotcha 2 below:
-   ```bash
-   kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
-   ```
+3. `make k3s-wait` now auto-starts a standing port-forward to `platform-registry` (via `make
+   k3s-portforward`, PID-tracked so it doesn't stack duplicates) — see Gotcha 2 below. If a real
+   browser check ever hits `Failed to fetch` anyway, confirm it's actually running
+   (`ss -tlnp | grep 8010`) and re-run `make k3s-portforward` if not, rather than assuming an app
+   bug.
 4. **Do the real-browser check — `k3s-verify` passing is not sufficient to call this done.**
    `k3s-verify`'s curl checks structurally cannot see client-side-only failures (a missing
    port-forward, CORS, JS console errors) — see Gotcha 2. This was actually missed once already:
@@ -85,16 +86,17 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    `ui-react` calls `http://localhost:8010` directly for one endpoint
    (`VITE_PLATFORM_REGISTRY_URL`'s default) — compose satisfies this via
    `127.0.0.1:8010:8000` on the host; k3d has no equivalent, and `make k3s-verify`'s own
-   port-forward only lives for that one command. Real browser use needs its own standing one:
-   ```bash
-   kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
-   ```
-   Without it, login fails client-side with a generic `Failed to fetch` even though every
-   Traefik-routed service (and `k3s-verify`'s curl checks) are fine — check the browser devtools
-   Network tab, not just `k3s-verify`, to catch this class of failure. This is also a real
-   portability gap for an actual remote/cloud/OpenShift target (`localhost` there means the
-   viewer's own machine) — flag it rather than silently working around it if the task is about
-   deploying somewhere other than local k3d.
+   port-forward only lives for that one command. `make k3s-wait` now starts a standing one
+   automatically (`make k3s-portforward`, PID file at `/tmp/k3s-portforward-<cluster>.pid`,
+   stopped again by `k3s-pause`/`k3s-down`) — this used to require a manual `kubectl -n ai-circus
+   port-forward svc/platform-registry 8010:8000 &` before every browser session; if you ever land
+   in an environment/version of this repo without that automation, that manual command is the
+   fallback. Without it, login fails client-side with a generic `Failed to fetch` even though
+   every Traefik-routed service (and `k3s-verify`'s curl checks) are fine — check the browser
+   devtools Network tab and `ss -tlnp | grep 8010`, not just `k3s-verify`, to catch this class of
+   failure. This is also a real portability gap for an actual remote/cloud/OpenShift target
+   (`localhost` there means the viewer's own machine) — flag it rather than silently working
+   around it if the task is about deploying somewhere other than local k3d.
 3. **A `securityContext.runAsNonRoot: true` container fails with a *different* flavor of
    `CreateContainerConfigError` than Gotcha 1's.** `kubectl describe pod` shows `Error: container
    has runAsNonRoot and image has non-numeric user (app), cannot verify user is non-root` — the

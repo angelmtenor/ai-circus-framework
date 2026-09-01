@@ -74,19 +74,21 @@ and `k3d cluster delete ai-circus` (deletes the cluster itself, full wipe includ
 see "Tear down" below.
 
 Open `http://aiopen.localhost` once `k3s-verify` passes — same login flow as the docker-compose
-setup. **Before logging in**, start a standing port-forward so the browser can reach
-`platform-registry`'s loopback-only API (`ui-react`'s bundled default for
-`VITE_PLATFORM_REGISTRY_URL` is `http://localhost:8010`, matching docker-compose.yml's
-`127.0.0.1:8010` host-published port — `k3s-verify`'s own port-forward only lives for that one
-command, so real browser use needs its own):
+setup. `ui-react`'s bundled default for `VITE_PLATFORM_REGISTRY_URL` is `http://localhost:8010`
+(matching docker-compose.yml's `127.0.0.1:8010` host-published port), so the browser needs a
+standing port-forward to `platform-registry`'s loopback-only API — unlike `k3s-verify`'s own
+port-forward, which only lives for that one command. `make k3s-wait` (and therefore `make
+k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`,
+tracking its PID in `/tmp/k3s-portforward-<cluster>.pid` so re-running it doesn't stack duplicate
+forwards on the same port; `make k3s-pause`/`make k3s-down` stop it again. Run `make
+k3s-portforward` yourself only if you need to restart it without a full `k3s-wait` (e.g. after it
+died for some other reason).
 
-```bash
-kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
-```
-
-Without it, login fails client-side with a generic `Failed to fetch` (the `/llm-settings/
-active-model` call gets `ERR_CONNECTION_REFUSED` — check the browser devtools Network tab, not
-just `make k3s-verify`, which only exercises curl-reachable Traefik routes and won't catch this).
+If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
+active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and
+confirm the port-forward is actually running (`ss -tlnp | grep 8010` or check
+`/tmp/k3s-portforward-<cluster>.log`) — `make k3s-verify` only exercises curl-reachable Traefik
+routes and won't catch this class of failure.
 Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.

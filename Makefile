@@ -15,7 +15,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-pause k3s-resume
+	k3s-all k3s-pause k3s-resume k3s-portforward k3s-portforward-stop
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -209,6 +209,7 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 
 K3S_CLUSTER ?= ai-circus
 K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice
+K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
 
 k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes
 	@k3d cluster list "$(K3S_CLUSTER)" >/dev/null 2>&1 || \
@@ -248,6 +249,7 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
 	done
 	@echo "✓ all pods ready"
+	@$(MAKE) k3s-portforward
 
 k3s-pipeline: ## Run the one-shot churn ETL -> training pipeline as k8s Jobs (mirrors `make pipeline`)
 	@kubectl -n ai-circus delete job etl-tabular training --ignore-not-found
@@ -265,19 +267,36 @@ k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl c
 	sleep 2; \
 	$(MAKE) verify
 
-k3s-down: ## Delete every applied k8s/base manifest (StatefulSet PVCs are retained by default — delete the k3d cluster entirely for a full wipe: `k3d cluster delete $(K3S_CLUSTER)`)
+k3s-down: k3s-portforward-stop ## Delete every applied k8s/base manifest (StatefulSet PVCs are retained by default — delete the k3d cluster entirely for a full wipe: `k3d cluster delete $(K3S_CLUSTER)`)
 	@kubectl delete -k k8s/base --ignore-not-found
 
 k3s-all: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait ## One-shot: cluster -> build -> import -> secrets -> up -> wait (run `make k3s-pipeline` yourself afterward if you need the churn ETL/training data)
-	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up — http://aiopen.localhost (start 'kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &' before logging in)"
+	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up — http://aiopen.localhost"
 
-k3s-pause: ## Stop the k3d cluster's containers to free CPU/RAM while keeping all cluster state (pods, volumes) — resume with `make k3s-resume`
+k3s-pause: k3s-portforward-stop ## Stop the k3d cluster's containers to free CPU/RAM while keeping all cluster state (pods, volumes) — resume with `make k3s-resume`
 	@k3d cluster stop "$(K3S_CLUSTER)"
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' stopped — resume with 'make k3s-resume'"
 
 k3s-resume: ## Start a previously paused k3d cluster back up
 	@k3d cluster start "$(K3S_CLUSTER)"
-	@echo "✓ k3d cluster '$(K3S_CLUSTER)' started — 'make k3s-wait' to confirm pods are Ready"
+	@echo "✓ k3d cluster '$(K3S_CLUSTER)' started — 'make k3s-wait' to confirm pods are Ready (also restarts the platform-registry port-forward)"
+
+k3s-portforward: ## Start (or restart) a standing background port-forward to platform-registry so the browser can reach it directly — auto-run by k3s-wait, safe to re-run any time
+	@if [ -f "$(K3S_PORTFORWARD_PID)" ] && kill -0 "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null; then \
+		kill "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null; sleep 1; \
+	fi
+	@rm -f "$(K3S_PORTFORWARD_PID)"
+	@nohup kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-portforward-$(K3S_CLUSTER).log 2>&1 & \
+		echo $$! > "$(K3S_PORTFORWARD_PID)"
+	@sleep 1
+	@echo "✓ platform-registry port-forward running in background (PID $$(cat $(K3S_PORTFORWARD_PID))) — http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}"
+
+k3s-portforward-stop: ## Stop the standing platform-registry port-forward started by k3s-portforward/k3s-wait
+	@if [ -f "$(K3S_PORTFORWARD_PID)" ]; then \
+		kill "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null || true; \
+		rm -f "$(K3S_PORTFORWARD_PID)"; \
+		echo "✓ platform-registry port-forward stopped"; \
+	fi
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 
