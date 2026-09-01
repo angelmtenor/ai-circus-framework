@@ -67,6 +67,9 @@ export type ScenarioSummary = {
   title: string;
   description: string;
   icon: string;
+  // Industry taxonomy slug (see scenario_schema.Industry) — drives ScenarioPicker's
+  // industry filter, orthogonal to `kind`.
+  industry: string;
   // Attribution for a ported public dataset (see scenario_schema.py's
   // DatasetCredits) — null for scenarios whose content is original.
   credits?: { source: string; url: string; note?: string | null } | null;

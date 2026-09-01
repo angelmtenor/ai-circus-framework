@@ -81,7 +81,16 @@ def test_ws_closes_4404_when_scenario_not_servable(client: TestClient, monkeypat
             pass
 
         def list_scenarios(self, *, org_id: str, authorization: str | None = None) -> list[ScenarioSummary]:
-            return [ScenarioSummary(slug="other-scenario", kind="tabular_ml", title="Other", description="", icon="x")]
+            return [
+                ScenarioSummary(
+                    slug="other-scenario",
+                    kind="tabular_ml",
+                    title="Other",
+                    description="",
+                    icon="x",
+                    industry="general",
+                )
+            ]
 
     monkeypatch.setattr(ws_module, "PlatformRegistryClient", FakeRegistryClient)
 

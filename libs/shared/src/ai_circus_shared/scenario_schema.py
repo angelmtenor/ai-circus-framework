@@ -42,6 +42,20 @@ class CategoricalFeatureUI(BaseModel):
 
 FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI, Field(discriminator="type")]
 
+# Industry taxonomy a scenario belongs to — a second, orthogonal axis to `kind`
+# (ML/RAG/form). Powers ui-react's industry filter atop the scenario picker; closed
+# set (not a free string) so a scenario.yaml typo fails fast at seed time rather than
+# silently creating an unfiltered "industry" nobody meant to add.
+Industry = Literal[
+    "banking_finance",
+    "manufacturing_industry",
+    "energy_utilities",
+    "retail",
+    "logistics",
+    "public_sector",
+    "general",
+]
+
 
 class ChartSpec(BaseModel):
     """One chart in a scenario's default "Data" dashboard combination.
@@ -307,6 +321,7 @@ class ScenarioDefinition(BaseModel):
     description: str
     role_required: str
     icon: str
+    industry: Industry
     chat: ChatConfig
     credits: DatasetCredits | None = None
 

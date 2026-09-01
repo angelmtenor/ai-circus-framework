@@ -39,6 +39,9 @@ class Scenario(Base):
     description: Mapped[str] = mapped_column(String(2000))
     icon: Mapped[str] = mapped_column(String(8))
     role_required: Mapped[str] = mapped_column(String(64))
+    # Industry taxonomy slug (see ai_circus_shared.scenario_schema.Industry) — powers
+    # ui-react's industry filter atop the scenario picker, orthogonal to `kind`.
+    industry: Mapped[str] = mapped_column(String(32))
 
     # Attribution for a ported public dataset (see ai_circus_shared.scenario_schema.
     # DatasetCredits) — None for scenarios whose content is original.

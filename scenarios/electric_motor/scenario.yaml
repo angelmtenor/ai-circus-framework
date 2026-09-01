@@ -17,6 +17,7 @@ description: >
   Predicts a permanent-magnet synchronous motor's rotational speed (in rpm) from its
   voltage, current, and temperature sensor readings — industrial motor monitoring.
 role_required: "scenario:electric_motor"
+industry: manufacturing_industry
 icon: "🧲"
 
 credits:

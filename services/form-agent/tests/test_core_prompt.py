@@ -41,6 +41,7 @@ def _definition(form: FormConfig, *, with_documents: bool = False) -> ScenarioDe
         description="d",
         role_required="scenario:service_request",
         icon="🏛️",
+        industry="public_sector",
         chat=ChatConfig(context="A generic local-government service desk."),
         form=form,
         documents=documents,

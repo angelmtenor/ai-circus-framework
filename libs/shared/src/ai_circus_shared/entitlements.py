@@ -56,6 +56,9 @@ class ScenarioSummary(BaseModel):
     title: str
     description: str
     icon: str
+    # Industry taxonomy slug (see scenario_schema.Industry) — powers ui-react's
+    # industry filter atop the scenario picker, orthogonal to `kind`.
+    industry: str
     # Attribution for a ported public dataset (see scenario_schema.DatasetCredits) —
     # None for scenarios whose content is original.
     credits: dict[str, Any] | None = None

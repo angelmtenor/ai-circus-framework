@@ -56,6 +56,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.description = definition.description.strip()
         existing.icon = definition.icon
         existing.role_required = definition.role_required
+        existing.industry = definition.industry
         existing.sample_questions = definition.chat.sample_questions
         existing.credits = definition.credits.model_dump() if definition.credits is not None else None
 

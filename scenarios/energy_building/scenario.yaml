@@ -17,6 +17,7 @@ description: >
   Predicts a home's appliance energy use (in Wh) from indoor climate readings across
   three zones, outdoor weather, and time-of-day/week — building energy forecasting.
 role_required: "scenario:energy_building"
+industry: energy_utilities
 icon: "🏠"
 
 credits:

@@ -30,6 +30,7 @@ def _definition(form: FormConfig) -> ScenarioDefinition:
         description="d",
         role_required="scenario:service_request",
         icon="🏛️",
+        industry="public_sector",
         chat=ChatConfig(context="A generic local-government service desk."),
         form=form,
         services={"etl": "etl-vectorize", "agent": "form-agent"},
