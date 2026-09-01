@@ -4,6 +4,11 @@ COPY ui-react/package.json ui-react/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY ui-react/ ./
 
+# Optional local theme overlay (see vite-plugins/demo-themes.ts) — demo/ is gitignored
+# and usually absent; the bracket glob makes this COPY a no-op instead of a build
+# failure when there's nothing to copy (same trick as an optional package-lock.json).
+COPY demo/theme[s] /demo/themes
+
 # Vite inlines import.meta.env.VITE_* at build time, so these must be build args
 # (not container-start env vars) — see src/config.ts's docstring for the tradeoff.
 ARG VITE_LOGTO_APP_ID=""

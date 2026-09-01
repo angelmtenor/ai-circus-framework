@@ -1,9 +1,22 @@
+import { useMemo, useState } from "react";
 import type { ScenarioSummary } from "./apiClient";
 
 type Category = {
   key: string;
   label: string;
   match: (scenario: ScenarioSummary) => boolean;
+};
+
+// Mirrors scenario_schema.Industry (libs/shared) — order here is the dropdown's
+// display order, not just a lookup table.
+const INDUSTRY_LABELS: Record<string, string> = {
+  banking_finance: "Banking & Finance",
+  manufacturing_industry: "Manufacturing & Industry",
+  energy_utilities: "Energy & Utilities",
+  retail: "Retail",
+  logistics: "Logistics",
+  public_sector: "Public Sector",
+  general: "General",
 };
 
 const CATEGORIES: Category[] = [
@@ -52,6 +65,13 @@ export function ScenarioPicker({
   scenarios: ScenarioSummary[];
   onSelect: (scenario: ScenarioSummary) => void;
 }) {
+  const [industry, setIndustry] = useState<string>("all");
+
+  const availableIndustries = useMemo(
+    () => Object.keys(INDUSTRY_LABELS).filter((key) => scenarios.some((s) => s.industry === key)),
+    [scenarios],
+  );
+
   if (scenarios.length === 0) {
     return (
       <div className="scenario-empty">
@@ -61,13 +81,35 @@ export function ScenarioPicker({
     );
   }
 
+  const filteredScenarios =
+    industry === "all" ? scenarios : scenarios.filter((s) => s.industry === industry);
+
   const groups = CATEGORIES.map((category) => ({
     ...category,
-    scenarios: scenarios.filter(category.match),
+    scenarios: filteredScenarios.filter(category.match),
   })).filter((group) => group.scenarios.length > 0);
 
   return (
     <div className="scenario-groups">
+      {availableIndustries.length > 1 && (
+        <div className="scenario-industry-filter">
+          <label htmlFor="scenario-industry-select">Industry</label>
+          <select id="scenario-industry-select" value={industry} onChange={(e) => setIndustry(e.target.value)}>
+            <option value="all">All industries</option>
+            {availableIndustries.map((key) => (
+              <option key={key} value={key}>
+                {INDUSTRY_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {groups.length === 0 && (
+        <div className="scenario-empty">
+          <span className="scenario-empty-icon">🗂️</span>
+          <p>No scenarios match this industry.</p>
+        </div>
+      )}
       {groups.map((group) => (
         <section key={group.key} className="scenario-group">
           <h2 className="scenario-group-title">{group.label}</h2>

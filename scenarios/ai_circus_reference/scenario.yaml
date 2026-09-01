@@ -9,6 +9,7 @@ description: >
   reference notes: dev environment/tooling, software engineering practices, ML/DS
   workflow, and generative AI / agent / RAG best practices.
 role_required: "scenario:ai_circus_reference"
+industry: general
 icon: "📚"
 
 # Grounds rag-agent's system prompt AND its judgment of whether a question is

@@ -21,6 +21,10 @@
 **/.coverage
 scenarios/**/data/
 scenarios/**/model/
+# demo/ is otherwise unused as build context (screenshots, video, audio, docx) —
+# only demo/themes/ is ever COPYed (see ui-react/Dockerfile).
+demo/*
+!demo/themes
 infra/postgres/data/
 infra/qdrant/storage/
 infra/seaweedfs/data/

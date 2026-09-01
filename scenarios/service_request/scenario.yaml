@@ -12,6 +12,7 @@ description: >
   fill out the form for you as you describe it. Grounded in a small catalog of
   request types (RAG), which also drives which fields are actually required.
 role_required: "scenario:service_request"
+industry: public_sector
 icon: "🏛️"
 
 # Grounds form-agent's system prompt (build_form_system_prompt) — the domain framing
