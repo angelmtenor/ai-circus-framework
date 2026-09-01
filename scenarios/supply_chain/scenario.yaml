@@ -18,6 +18,7 @@ description: >
   Predicts a shipment's actual delivery time (in days) from carrier, distance,
   order type, origin, and priority — logistics ETA estimation.
 role_required: "scenario:supply_chain"
+industry: logistics
 icon: "🚚"
 
 credits:

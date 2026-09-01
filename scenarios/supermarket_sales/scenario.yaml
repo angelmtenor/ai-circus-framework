@@ -17,6 +17,7 @@ description: >
   Predicts a department's weekly sales from store size, local economic indicators
   (CPI, unemployment, fuel price), weather, and time of year — retail demand forecasting.
 role_required: "scenario:supermarket_sales"
+industry: retail
 icon: "🛒"
 
 credits:

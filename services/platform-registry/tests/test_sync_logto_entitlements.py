@@ -54,6 +54,7 @@ def session() -> Session:
                 description="d",
                 icon="📉",
                 role_required="scenario:churn",
+                industry="banking_finance",
             ),
             Scenario(
                 slug="docs_rag",
@@ -62,6 +63,7 @@ def session() -> Session:
                 description="d",
                 icon="💬",
                 role_required="scenario:docs_rag",
+                industry="general",
             ),
         ])
         session.commit()

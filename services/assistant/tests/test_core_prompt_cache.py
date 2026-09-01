@@ -17,6 +17,7 @@ CHURN_DEFINITION = ScenarioDefinition(
     description="Predicts churn.",
     role_required="scenario:churn",
     icon="📉",
+    industry="banking_finance",
     chat=ChatConfig(context="A retail bank's customer churn model."),
     services=TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant"),
 )
@@ -28,6 +29,7 @@ MPM_DEFINITION = ScenarioDefinition(
     description="Predicts machine failure.",
     role_required="scenario:mpm",
     icon="⚙️",
+    industry="manufacturing_industry",
     chat=ChatConfig(context="An industrial predictive-maintenance model."),
     services=TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant"),
 )

@@ -15,6 +15,7 @@ description: >
   Predicts bank customer churn risk from account/usage features, with SHAP-based
   explainability and a chat assistant for asking follow-up questions about the data.
 role_required: "scenario:churn"
+industry: banking_finance
 icon: "📉"
 
 credits:

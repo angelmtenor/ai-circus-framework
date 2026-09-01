@@ -13,6 +13,7 @@ DEFINITION = ScenarioDefinition(
     description="  Predicts churn risk from account/usage features.  \n",
     role_required="scenario:churn",
     icon="📉",
+    industry="banking_finance",
     chat=ChatConfig(context="A retail bank's customer churn model."),
     services=TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant"),
 )

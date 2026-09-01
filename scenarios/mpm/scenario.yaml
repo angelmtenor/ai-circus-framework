@@ -21,6 +21,7 @@ description: >
   rotational speed, torque, tool wear) and machine type, with SHAP-based
   explainability and a chat assistant for asking follow-up questions about the data.
 role_required: "scenario:mpm"
+industry: manufacturing_industry
 icon: "⚙️"
 
 credits:

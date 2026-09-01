@@ -38,6 +38,7 @@ up-infra: ## Start only the platform infra (postgres, logto, qdrant, seaweedfs, 
 	@docker compose up -d postgres logto qdrant seaweedfs traefik
 
 up: ## Start the full platform (infra + all backend services + the UI)
+	@mkdir -p demo/themes
 	@docker compose up -d --build
 
 down: ## Stop and remove all containers
@@ -217,6 +218,7 @@ k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefi
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' ready"
 
 k3s-build: ## Build every service image locally (same Dockerfiles docker-compose uses), tagged ai-circus/<service>:local
+	@mkdir -p demo/themes
 	@for svc in $(K3S_IMAGES); do \
 		echo "── ai-circus/$$svc:local ──"; \
 		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \

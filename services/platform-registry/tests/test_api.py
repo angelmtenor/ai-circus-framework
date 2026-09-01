@@ -35,6 +35,7 @@ def client() -> Generator[TestClient]:
                 description="Predicts churn.",
                 icon="📉",
                 role_required="scenario:churn",
+                industry="banking_finance",
             )
         )
         setup_session.commit()
