@@ -1,6 +1,6 @@
 """Tests for agui-voice's core/identity.py — a thin wrapper around
 ai_circus_shared.auth.resolve_caller_identity. Its own logic (AUTH_DISABLED bypass,
-ADMIN_API_KEY bypass, Logto validation, entitlement enforcement) is tested once,
+ADMIN_API_KEY bypass, Keycloak validation, entitlement enforcement) is tested once,
 directly, in libs/shared/tests/test_auth.py — this file only covers what's specific
 to this wrapper: adapting SecretStr, translating domain exceptions to HTTPException
 for the HTTP route, and letting the WebSocket route see the raw domain exceptions.
@@ -24,9 +24,9 @@ class FakeConfig:
         """Populate fixed configuration values for identity resolution tests."""
         self.AUTH_DISABLED = "false"
         self.DEV_ORG_ID = "demo"
-        self.LOGTO_ISSUER = "http://logto.localhost/oidc"
-        self.LOGTO_API_RESOURCE_INDICATOR = "https://api.ai-circus-framework.local"
-        self.LOGTO_JWKS_URL = "http://logto.localhost/oidc/jwks"
+        self.KEYCLOAK_ISSUER = "http://keycloak.localhost/realms/ai-circus"
+        self.KEYCLOAK_AUDIENCE = "https://api.ai-circus-framework.local"
+        self.KEYCLOAK_JWKS_URL = "http://keycloak.localhost/realms/ai-circus/protocol/openid-connect/certs"
         self.ADMIN_API_KEY = SecretStr("ai-circus-2026")
         self.ENGINEERING_DEMO_API_KEY = SecretStr("ai-circus-engineering-2026")
         self.PLATFORM_REGISTRY_URL = "http://platform-registry:8000"

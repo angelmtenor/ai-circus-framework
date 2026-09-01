@@ -12,7 +12,7 @@ its own conventions layered on top of these root ones.
 
 The two rules from `AGENTS.md` most likely to matter mid-task, worth restating here:
 - Any code path reading scenario data, model artifacts, or vector search results **must** be scoped by
-  `org_id` (the Logto Organization / tenant) — see `libs/shared/src/ai_circus_shared/storage.py` and
+  `org_id` (the Keycloak Organization / tenant) — see `libs/shared/src/ai_circus_shared/storage.py` and
   `entitlements.py` for the enforced pattern. Entitlement checks belong in the backend service, not just
   the UI.
 - Never hand-write a new service's `pyproject.toml`/`Dockerfile`/`settings.yaml` — always scaffold via
@@ -23,8 +23,8 @@ The two rules from `AGENTS.md` most likely to matter mid-task, worth restating h
 ```bash
 make bootstrap              # copy .env.example -> .env (edit it: at least one LLM key, or `make ollama-up`)
 make all                     # one-shot: infra + services + ETL/training pipelines + end-to-end verify
-make reset-all               # nuke containers+volumes (postgres/logto/qdrant/seaweedfs data too), then `make all`
-make up-infra                # postgres, logto, qdrant, seaweedfs, traefik only
+make reset-all               # nuke containers+volumes (postgres/keycloak/qdrant/seaweedfs data too), then `make all`
+make up-infra                # postgres, keycloak, qdrant, seaweedfs, traefik only
 make up                      # every backend service + ui-react
 make pipeline                # (re)run churn's etl-tabular -> training -> prediction
 make verify                  # curl-check the exact requests the login screen makes (diagnoses "Failed to fetch")
@@ -43,7 +43,7 @@ Per-service (`cd services/<name>/`, or `cd ui-react/`):
 make check                   # pre-commit (ruff, pyrefly, gitleaks, checkmake) + settings.yaml/data_model.py drift + pytest
 make run                     # run the service locally with uv (infra containers must already be up: make up-infra)
 uv run pytest path/to/test_file.py::test_name   # a single test
-uv run platform-registry-provision-owner        # (platform-registry only) create/find the real Logto owner user — see README "First-time Logto setup"
+uv run platform-registry-provision-owner        # (platform-registry only) create/find the real Keycloak owner user — see README "First-time Keycloak setup"
 ```
 ```bash
 cd ui-react/
@@ -89,13 +89,13 @@ candidates) as build-time config; it is otherwise never read by services other t
 
 ### Tenancy & entitlements
 
-Logto **Organizations** model tenants; a tenant only sees scenarios its members hold the matching
+Keycloak **Organizations** model tenants; a tenant only sees scenarios its members hold the matching
 `scenario:<slug>` role for. `platform-registry` owns the source of truth in Postgres
 (`tenants`/`scenarios`/`entitlements`) and every other backend service calls its entitlement check before
 serving a request, regardless of what the UI already filtered client-side. Three ways to authenticate,
 all resolving through the *same* entitlement path (`ai_circus_shared.auth.resolve_caller_identity`) — none
 is a bypass of the real check:
-- Real Logto sign-in (OIDC/PKCE from `ui-react`, organization-scoped access token).
+- Real Keycloak sign-in (OIDC/PKCE from `ui-react`, organization-scoped access token).
 - `ADMIN_API_KEY` bearer token → fixed `admin` org id, entitled to every seeded scenario.
 - `ENGINEERING_DEMO_API_KEY` bearer token → fixed `engineering-demo` org id, entitled only to the
   scenarios in `services/platform-registry/src/platform_registry/core/seed.py`'s
@@ -103,7 +103,7 @@ is a bypass of the real check:
 
 ### Shared code
 
-`libs/shared` (`ai-circus-shared`) holds cross-service code — Logto token validation (`auth.py`),
+`libs/shared` (`ai-circus-shared`) holds cross-service code — Keycloak token validation (`auth.py`),
 entitlement-check client (`entitlements.py`), SeaweedFS object storage client (`storage.py`), the
 `scenario.yaml` Pydantic schema (`scenario_schema.py`), tabular ML helpers, form validation — added to
 each service as a local **non-editable** `uv` path dependency (no monorepo-wide workspace; each service
@@ -121,7 +121,7 @@ already-configured model is *active*, though, is instant from `ui-react`'s Setti
 ### Object storage & ingress
 
 All datasets/models/documents live in **SeaweedFS** (S3-compatible), never on a service's local disk, keeping
-services stateless. `infra/{postgres,logto,qdrant,seaweedfs,traefik}/` holds per-service config directories —
+services stateless. `infra/{postgres,keycloak,qdrant,seaweedfs,traefik}/` holds per-service config directories —
 today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs/` (the generated S3
 gateway credentials file, see `scripts/generate_seaweedfs_s3_config.sh`) have real content; the rest is
 inline in `docker-compose.yml`.

@@ -66,7 +66,7 @@ data:
     #!/bin/bash
     # Runs once, on first container start (postgres image convention: any *.sh under
     # /docker-entrypoint-initdb.d/ is executed). POSTGRES_DB only creates one database
-    # (the `platform` schema used by services/platform-registry); Logto, llm-gateway
+    # (the `platform` schema used by services/platform-registry); Keycloak, llm-gateway
     # (LiteLLM's own spend-tracking schema), and each of assistant/rag-agent/form-agent
     # (their own persisted conversation-history schema, see
     # ai_circus_shared.conversations) each need their own. Mirrors
@@ -75,8 +75,8 @@ data:
     set -euo pipefail
 
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-        CREATE DATABASE logto;
-        GRANT ALL PRIVILEGES ON DATABASE logto TO "$POSTGRES_USER";
+        CREATE DATABASE keycloak;
+        GRANT ALL PRIVILEGES ON DATABASE keycloak TO "$POSTGRES_USER";
         CREATE DATABASE litellm;
         GRANT ALL PRIVILEGES ON DATABASE litellm TO "$POSTGRES_USER";
         CREATE DATABASE assistant;
@@ -98,7 +98,7 @@ spec:
     - {port: 5432, targetPort: 5432}
 ---
 # Postgres has real password auth, but nothing else in the namespace stops any other
-# pod from reaching it over Service DNS — only logto, platform-registry, and each of
+# pod from reaching it over Service DNS — only keycloak, platform-registry, and each of
 # assistant/rag-agent/form-agent (their own conversation-history database) actually
 # have a database here (see infra/postgres/init-multiple-databases.sh), so lock
 # ingress down to just those five.
@@ -113,7 +113,7 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector: {matchLabels: {app: logto}}
+        - podSelector: {matchLabels: {app: keycloak}}
         - podSelector: {matchLabels: {app: platform-registry}}
         - podSelector: {matchLabels: {app: assistant}}
         - podSelector: {matchLabels: {app: rag-agent}}

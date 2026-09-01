@@ -1,18 +1,21 @@
-"""Validate Logto-issued OIDC access tokens and extract tenant/role claims.
+"""Validate Keycloak-issued OIDC access tokens and extract tenant/role claims.
 
 Every backend service (prediction, assistant, rag-agent, platform-registry, ...) uses
 this to turn an `Authorization: Bearer <token>` header into an `Identity` before
 checking entitlements via `entitlements.py`.
 
-Logto setup this assumes (configure once in the Logto Admin Console):
-  - An API resource is registered for the framework's backend (its identifier is
-    `audience` below).
-  - Organizations are enabled and used as tenants; users are added as organization
-    members and assigned organization roles named `scenario:<slug>` (see
-    `scenarios/*/scenario.yaml`).
-  - The organization token's custom claims include `organization_id` and `roles`
-    (Logto includes these by default on organization-scoped tokens; if a differently
-    named claim is used, override `ROLES_CLAIM`/`ORG_CLAIM` below).
+Keycloak setup this assumes (see `infra/keycloak/realm-export.json`):
+  - A client scope carrying an Audience protocol mapper is registered for the
+    framework's backend (its identifier is `audience` below).
+  - The Organizations feature is enabled (realm's `organizationsEnabled: true`,
+    Keycloak >= 26) and used as tenants; users are added as organization members.
+    Keycloak has no org-scoped role endpoint, so `scenario:<slug>` entitlement roles
+    (see `scenarios/*/scenario.yaml`) are plain realm roles assigned directly to the
+    user, not organization roles.
+  - The access token's claims include `organization` (from the built-in
+    "Organization Membership" mapper, requires the `organization` scope to be
+    requested explicitly at sign-in — see `_extract_org_id`) and `realm_access.roles`
+    (Keycloak's default realm-roles claim shape).
 """
 
 from __future__ import annotations
@@ -27,8 +30,24 @@ from jwt import PyJWKClient
 
 from ai_circus_shared.entitlements import PlatformRegistryClient
 
-ROLES_CLAIM = "roles"
-ORG_CLAIM = "organization_id"
+REALM_ACCESS_CLAIM = "realm_access"
+ORGANIZATION_CLAIM = "organization"
+
+
+def _extract_org_id(claims: dict) -> str | None:
+    """Read the tenant org id out of Keycloak's `organization` claim.
+
+    The built-in "Organization Membership" protocol mapper emits
+    `{"organization": {"<org-alias>": {"id": "<org-id>", "groups": [...]}}}` — keyed
+    by org alias, not id (see https://github.com/keycloak/keycloak/issues/39402 on
+    the alias-keying and the "must request the `organization` scope explicitly, or
+    the whole claim disappears" gotcha). This platform is one-org-per-user, so take
+    the first (only) entry's id.
+    """
+    organizations = claims.get(ORGANIZATION_CLAIM) or {}
+    if not organizations:
+        return None
+    return next(iter(organizations.values())).get("id")
 
 # The tenant every scenario auto-grants access to at seed time (see
 # platform-registry/core/seed.py) — not a bypass of entitlement checking, just a
@@ -45,7 +64,7 @@ ENGINEERING_DEMO_ORG_ID = "engineering-demo"
 
 @dataclass(frozen=True)
 class Identity:
-    """Resolved caller identity from a validated Logto access token."""
+    """Resolved caller identity from a validated Keycloak access token."""
 
     subject: str
     org_id: str | None
@@ -67,13 +86,13 @@ def _jwks_client(jwks_url: str) -> PyJWKClient:
 
 
 def validate_token(token: str, *, issuer: str, audience: str, jwks_url: str) -> Identity:
-    """Validate a Logto-issued access token and extract the caller's identity.
+    """Validate a Keycloak-issued access token and extract the caller's identity.
 
     Args:
         token: Raw bearer token (without the "Bearer " prefix).
-        issuer: Expected Logto OIDC issuer, e.g. `https://<logto-host>/oidc`.
-        audience: Expected API resource identifier registered in Logto.
-        jwks_url: Logto JWKS endpoint, e.g. `https://<logto-host>/oidc/jwks`.
+        issuer: Expected Keycloak realm issuer, e.g. `https://<host>/realms/<realm>`.
+        audience: Expected audience string registered via the Audience client-scope mapper.
+        jwks_url: Keycloak realm JWKS endpoint, e.g. `https://<host>/realms/<realm>/protocol/openid-connect/certs`.
 
     Returns:
         The resolved `Identity` (subject, tenant org id, role set).
@@ -97,8 +116,8 @@ def validate_token(token: str, *, issuer: str, audience: str, jwks_url: str) -> 
     except jwt.PyJWTError as exc:
         raise TokenValidationError(str(exc)) from exc
 
-    roles = frozenset(claims.get(ROLES_CLAIM, []) or [])
-    return Identity(subject=claims["sub"], org_id=claims.get(ORG_CLAIM), roles=roles)
+    roles = frozenset(claims.get(REALM_ACCESS_CLAIM, {}).get("roles", []) or [])
+    return Identity(subject=claims["sub"], org_id=_extract_org_id(claims), roles=roles)
 
 
 class AuthSettings(Protocol):
@@ -111,9 +130,9 @@ class AuthSettings(Protocol):
 
     AUTH_DISABLED: str
     DEV_ORG_ID: str
-    LOGTO_ISSUER: str | None
-    LOGTO_API_RESOURCE_INDICATOR: str | None
-    LOGTO_JWKS_URL: str | None
+    KEYCLOAK_ISSUER: str | None
+    KEYCLOAK_AUDIENCE: str | None
+    KEYCLOAK_JWKS_URL: str | None
     ADMIN_API_KEY: str | None
     ENGINEERING_DEMO_API_KEY: str | None
     PLATFORM_REGISTRY_URL: str
@@ -135,9 +154,9 @@ class AuthSettingsAdapter:
 
     AUTH_DISABLED: str
     DEV_ORG_ID: str
-    LOGTO_ISSUER: str | None
-    LOGTO_API_RESOURCE_INDICATOR: str | None
-    LOGTO_JWKS_URL: str | None
+    KEYCLOAK_ISSUER: str | None
+    KEYCLOAK_AUDIENCE: str | None
+    KEYCLOAK_JWKS_URL: str | None
     ADMIN_API_KEY: str | None
     ENGINEERING_DEMO_API_KEY: str | None
     PLATFORM_REGISTRY_URL: str
@@ -157,14 +176,14 @@ def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -
     the entitlement check, so routing them through `resolve_caller_identity` would
     have platform-registry call back into its own API via `check_entitlement` — this
     covers the same four resolution paths (dev bypass / admin key / engineering-demo
-    key / real Logto token) without that trailing call. Deliberately NOT a refactor
-    of `resolve_caller_identity` into a shared helper — keeping the two independent
-    avoids any risk of changing that function's already-tested behavior for
-    prediction/assistant/rag-agent.
+    key / real Keycloak token) without that trailing call. Deliberately NOT a
+    refactor of `resolve_caller_identity` into a shared helper — keeping the two
+    independent avoids any risk of changing that function's already-tested behavior
+    for prediction/assistant/rag-agent.
 
     Raises:
         TokenValidationError: No/malformed token, or a token with no org claim.
-        RuntimeError: AUTH_DISABLED is false but Logto isn't configured.
+        RuntimeError: AUTH_DISABLED is false but Keycloak isn't configured.
     """
     if settings.AUTH_DISABLED.lower() == "true":
         identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=frozenset())
@@ -175,17 +194,17 @@ def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -
     else:
         if not authorization or not authorization.startswith("Bearer "):
             raise TokenValidationError("Missing or malformed Authorization header.")
-        if not (settings.LOGTO_ISSUER and settings.LOGTO_API_RESOURCE_INDICATOR and settings.LOGTO_JWKS_URL):
+        if not (settings.KEYCLOAK_ISSUER and settings.KEYCLOAK_AUDIENCE and settings.KEYCLOAK_JWKS_URL):
             raise RuntimeError(
-                "LOGTO_ISSUER/LOGTO_API_RESOURCE_INDICATOR/LOGTO_JWKS_URL must be set "
+                "KEYCLOAK_ISSUER/KEYCLOAK_AUDIENCE/KEYCLOAK_JWKS_URL must be set "
                 "unless AUTH_DISABLED=true or a matching ADMIN_API_KEY was supplied."
             )
         token = authorization.removeprefix("Bearer ")
         identity = validate_token(
             token,
-            issuer=settings.LOGTO_ISSUER,
-            audience=settings.LOGTO_API_RESOURCE_INDICATOR,
-            jwks_url=settings.LOGTO_JWKS_URL,
+            issuer=settings.KEYCLOAK_ISSUER,
+            audience=settings.KEYCLOAK_AUDIENCE,
+            jwks_url=settings.KEYCLOAK_JWKS_URL,
         )
 
     if identity.org_id is None:
@@ -200,7 +219,7 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
     bypass — a fixed identity, no token needed; (2) an exact `ADMIN_API_KEY` bearer
     match — resolves to the `ADMIN_ORG_ID` tenant; (3) an exact
     `ENGINEERING_DEMO_API_KEY` bearer match — resolves to the narrower
-    `ENGINEERING_DEMO_ORG_ID` tenant; (4) a real Logto access token. Every path then
+    `ENGINEERING_DEMO_ORG_ID` tenant; (4) a real Keycloak access token. Every path then
     goes through the *same* `check_entitlement` call — admin/engineering-demo access
     is a real, seeded entitlement row (see `ADMIN_ORG_ID`/`ENGINEERING_DEMO_ORG_ID`),
     not a bypass of it, so the demo key only ever unlocks whatever's actually seeded
@@ -209,7 +228,7 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
     Raises:
         TokenValidationError: No/malformed token, or a token with no org claim.
         EntitlementDeniedError: The resolved tenant isn't entitled to this scenario.
-        RuntimeError: AUTH_DISABLED is false but Logto isn't configured (server
+        RuntimeError: AUTH_DISABLED is false but Keycloak isn't configured (server
             misconfiguration, not a caller-facing auth failure).
     """
     if settings.AUTH_DISABLED.lower() == "true":
@@ -224,17 +243,17 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
     else:
         if not authorization or not authorization.startswith("Bearer "):
             raise TokenValidationError("Missing or malformed Authorization header.")
-        if not (settings.LOGTO_ISSUER and settings.LOGTO_API_RESOURCE_INDICATOR and settings.LOGTO_JWKS_URL):
+        if not (settings.KEYCLOAK_ISSUER and settings.KEYCLOAK_AUDIENCE and settings.KEYCLOAK_JWKS_URL):
             raise RuntimeError(
-                "LOGTO_ISSUER/LOGTO_API_RESOURCE_INDICATOR/LOGTO_JWKS_URL must be set "
+                "KEYCLOAK_ISSUER/KEYCLOAK_AUDIENCE/KEYCLOAK_JWKS_URL must be set "
                 "unless AUTH_DISABLED=true or a matching ADMIN_API_KEY was supplied."
             )
         token = authorization.removeprefix("Bearer ")
         identity = validate_token(
             token,
-            issuer=settings.LOGTO_ISSUER,
-            audience=settings.LOGTO_API_RESOURCE_INDICATOR,
-            jwks_url=settings.LOGTO_JWKS_URL,
+            issuer=settings.KEYCLOAK_ISSUER,
+            audience=settings.KEYCLOAK_AUDIENCE,
+            jwks_url=settings.KEYCLOAK_JWKS_URL,
         )
 
     if identity.org_id is None:

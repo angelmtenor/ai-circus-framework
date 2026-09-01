@@ -94,7 +94,7 @@ bind-mounted `/work` has no relation to the container's `/tmp`, so a mismatch gi
 
 ## Logging into the real running app (bearer-token shortcut, k3s target only)
 
-`aiopen.localhost` requires a real Logto login when `DEV_MODE=false` (the normal state on
+`aiopen.localhost` requires a real Keycloak login when `DEV_MODE=false` (the normal state on
 docker-compose) — there are no credentials available to automate *that* OIDC flow, so don't script
 it. But a k3s deployment (see `k3s-deploy-verify`) exposes a second, non-OIDC login path: a
 `User`/`Password` form where `User` already defaults to `admin` and `Password` accepts the real

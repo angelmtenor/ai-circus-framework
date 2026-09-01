@@ -98,8 +98,8 @@ run: ## Run the main application (app.py)
 hello-world: ## Run hello world demonstration tool
 	@uv run platform-registry-hello-world
 
-sync-entitlements: ## Pull-sync Logto Organization roles into local entitlements
+sync-entitlements: ## Pull-sync Keycloak realm-role assignments into local entitlements
 	@uv run platform-registry-sync-entitlements
 
-provision-owner-user: ## One-time (or after a reset): create/find a real Logto Organization + user for LOGTO_OWNER_EMAIL, entitled to every scenario, and sync entitlements
+provision-owner-user: ## One-time (or after a reset): create/find a real Keycloak Organization + user for KEYCLOAK_OWNER_EMAIL, entitled to every scenario, and sync entitlements
 	@uv run platform-registry-provision-owner

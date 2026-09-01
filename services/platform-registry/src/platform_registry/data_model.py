@@ -40,24 +40,24 @@ class EnvConfig(BaseSettings):
     SCENARIOS_DIR: str = Field(
         description="Path to the scenarios/ directory (one subdirectory per scenario.yaml) to seed from"
     )
-    LOGTO_ENDPOINT: str | None = Field(
-        description="Logto's public endpoint, e.g. http://logto.localhost (used only by the entitlement sync tool)",
+    KEYCLOAK_SERVER_URL: str | None = Field(
+        description="Keycloak server root (distinct from the realm issuer; sync tool only)", default=None
+    )
+    KEYCLOAK_REALM: str = Field(description="Keycloak realm name, e.g. ai-circus")
+    KEYCLOAK_M2M_CLIENT_ID: str | None = Field(
+        description="Service-account client ID for calling Keycloak's Admin REST API (sync/provision tooling only)",
         default=None,
     )
-    LOGTO_M2M_APP_ID: str | None = Field(
-        description="Machine-to-machine application ID for calling Logto's Management API (sync tool only)",
+    KEYCLOAK_M2M_CLIENT_SECRET: SecretStr | None = Field(
+        description="Service-account client secret for calling Keycloak's Admin REST API (sync/provision tooling only)",
         default=None,
     )
-    LOGTO_M2M_APP_SECRET: SecretStr | None = Field(
-        description="Machine-to-machine application secret for calling Logto's Management API (sync tool only)",
+    KEYCLOAK_OWNER_EMAIL: str | None = Field(
+        description="Email for the real Keycloak user the provision-owner tool creates/finds (provision tool only)",
         default=None,
     )
-    LOGTO_OWNER_EMAIL: str | None = Field(
-        description="Email for the real Logto user the provision-owner tool creates/finds (provision tool only)",
-        default=None,
-    )
-    LOGTO_OWNER_PASSWORD: SecretStr | None = Field(
-        description="Password for the real Logto user the provision-owner tool creates (provision tool only)",
+    KEYCLOAK_OWNER_PASSWORD: SecretStr | None = Field(
+        description="Password for the real Keycloak user the provision-owner tool creates (provision tool only)",
         default=None,
     )
     CORS_ALLOWED_ORIGINS: str = Field(
@@ -77,21 +77,18 @@ class EnvConfig(BaseSettings):
         description="DEV ONLY: skip token checks on entitlement reads. Must be false beyond local iteration."
     )
     DEV_ORG_ID: str = Field(description="Org id used for every request when AUTH_DISABLED=true")
-    LOGTO_ISSUER: str | None = Field(
-        description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_ISSUER: str | None = Field(
+        description="Keycloak realm issuer (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_JWKS_URL: str | None = Field(
-        description="Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_JWKS_URL: str | None = Field(
+        description="Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_API_RESOURCE_INDICATOR: str | None = Field(
-        description="Expected token audience — the API resource registered in Logto for this platform's backend",
-        default=None,
+    KEYCLOAK_AUDIENCE: str | None = Field(
+        description="Expected token audience, registered via an Audience client-scope mapper in Keycloak", default=None
     )
 
 
-_SOURCE_YAML_HASH = "507fd58ad28bba611483f4d958bea23a1334339347d8f7f1fb3d2d2854fb08fe"
+_SOURCE_YAML_HASH = "18e1b824f97844dd9dceeee596ffde944862e1d2a68f0493470cf75b475baf0d"
 
 
 EnvConfig.model_rebuild()

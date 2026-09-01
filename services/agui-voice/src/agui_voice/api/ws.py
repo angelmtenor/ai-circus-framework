@@ -63,7 +63,7 @@ async def voice_ws(websocket: WebSocket, scenario_slug: str, token: str | None =
     authorization = f"Bearer {token}" if token else None
 
     try:
-        # Both resolve_identity_from_token (a real Logto token means a synchronous
+        # Both resolve_identity_from_token (a real Keycloak token means a synchronous
         # JWKS-fetch-and-verify round trip, not just the AUTH_DISABLED/ADMIN_API_KEY
         # bypass) and list_scenarios below are plain blocking calls — unlike
         # api/tts.py's `Depends(resolve_identity)` (FastAPI runs sync *dependencies*

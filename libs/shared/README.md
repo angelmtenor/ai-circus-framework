@@ -6,8 +6,8 @@ builds and ships as its own independent image (see root `README.md` → "Shared 
 
 ## Modules
 
-- `auth.py` — validates Logto-issued OIDC access tokens (JWKS-based) and extracts the
-  tenant (Logto Organization id) and `scenario:*` roles from the claims.
+- `auth.py` — validates Keycloak-issued OIDC access tokens (JWKS-based) and extracts the
+  tenant (Keycloak Organization id) and `scenario:*` roles from the claims.
 - `storage.py` — thin SeaweedFS/S3 client wrapper (`boto3`) for reading/writing datasets,
   model artifacts, and documents under a per-tenant key prefix.
 - `entitlements.py` — HTTP client for `services/platform-registry`'s entitlement-check

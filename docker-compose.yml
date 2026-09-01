@@ -8,7 +8,7 @@
 # App services (platform-registry, etl-*, training, prediction, llm-gateway,
 # assistant, rag-agent, form-agent, ui-react) are appended here as they're built
 # (see the build order in the project plan) — this file currently wires the infra
-# layer: postgres, logto, qdrant, seaweedfs, traefik.
+# layer: postgres, keycloak, qdrant, seaweedfs, traefik.
 
 name: ai-circus-framework
 
@@ -45,18 +45,18 @@ services:
       - "127.0.0.1:${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Basic Auth credential for the admin-basicauth middleware below (logto/seaweedfs
+      # Basic Auth credential for the admin-basicauth middleware below (keycloak/seaweedfs
       # labels) — gitignored, seeded from console.htpasswd.example by `make
       # bootstrap`, rotated by `make generate-console-auth` before a public
       # deployment. Always mounted (not just for public deploys): the two routers it
-      # gates (admin.logto, console.objectstore) are purely administrative and otherwise
+      # gates (admin.keycloak, console.objectstore) are purely administrative and otherwise
       # unauthenticated-until-configured, so the extra layer costs nothing locally.
       - ./infra/traefik/console.htpasswd:/etc/traefik/console.htpasswd:ro
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 256m
 
-  # ── Identity (Logto: hosted+branded sign-in, Organizations = tenants, roles) ──
+  # ── Identity (Keycloak: hosted+branded sign-in, Organizations = tenants, roles) ──
   postgres:
     image: postgres:16-alpine
     environment:
@@ -79,15 +79,34 @@ services:
       timeout: 5s
       retries: 10
 
-  logto:
-    image: svhd/logto:1.42.0
-    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe; npm start"]
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start", "--import-realm"]
     environment:
-      TRUST_PROXY_HEADER: ${LOGTO_TRUST_PROXY_HEADER:-1}
-      DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/logto
-      ENDPOINT: http://logto.localhost
-      ADMIN_ENDPOINT: http://admin.logto.localhost
-      ENDPOINT_COOKIE_SECRET: ${LOGTO_ENDPOINT_COOKIE_SECRET}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: keycloak.localhost
+      KC_PROXY_HEADERS: xforwarded
+      # Traefik terminates plain HTTP locally (no TLS) — without this, Keycloak's
+      # default hostname-strict/HTTPS-required posture refuses to serve behind a
+      # non-TLS proxy. Same "local dev, not a public deployment" posture as
+      # ADMIN_API_KEY's demo-credential default below; revisit before any real
+      # deployment.
+      KC_HTTP_ENABLED: "true"
+      # Not on by default in Keycloak 26 — without it nothing listens on the management
+      # port (9000) at all, so the healthcheck below would "connection refused" forever
+      # even on an otherwise-healthy container. Confirmed via a real k3s deploy of the
+      # same image/config.
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    volumes:
+      # `start --import-realm` scans this directory for realm JSON/YAML files on boot —
+      # see infra/keycloak/README.md for what this bootstrap does and its unverified
+      # status (no live Keycloak instance was available to test it against).
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,27 +114,37 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/api/status"]
+      # Keycloak 26 serves health/metrics on a separate management port (9000) by
+      # default, not the main 8080 port Logto used for /api/status. No curl/wget in
+      # this image (it's built on ubi9-micro) — same reasoning as seaweedfs's
+      # busybox-only image below, but this one lacks even `nc`, so a raw /dev/tcp
+      # bash HTTP request (Keycloak's own documented Docker healthcheck) instead.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\r\nhost: http\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
       start_period: 30s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.logto.rule=Host(`logto.localhost`)"
-      - "traefik.http.routers.logto.entrypoints=web"
-      - "traefik.http.routers.logto.service=logto"
-      - "traefik.http.services.logto.loadbalancer.server.port=3001"
-      - "traefik.http.routers.logto-admin.rule=Host(`admin.logto.localhost`)"
-      - "traefik.http.routers.logto-admin.entrypoints=web"
-      - "traefik.http.routers.logto-admin.service=logto-admin"
-      - "traefik.http.services.logto-admin.loadbalancer.server.port=3002"
-      # Whoever reaches this Admin Console first, before "First-time Logto setup"
-      # (README) is done, becomes the identity-system owner — Basic Auth (see
-      # traefik's console.htpasswd mount above) closes that off regardless of how
-      # fast setup happens, on top of Logto's own login.
+      - "traefik.http.routers.keycloak.rule=Host(`keycloak.localhost`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.routers.keycloak.service=keycloak"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      # Unlike Logto (separate 3001/3002 ports), Keycloak serves its Admin Console on
+      # the same port 8080 under a /admin path — no port split needed. Kept as a
+      # separate host router anyway so admin-basicauth continues to gate a distinct
+      # hostname exactly like logto-admin did.
+      - "traefik.http.routers.keycloak-admin.rule=Host(`admin.keycloak.localhost`)"
+      - "traefik.http.routers.keycloak-admin.entrypoints=web"
+      - "traefik.http.routers.keycloak-admin.service=keycloak-admin"
+      - "traefik.http.services.keycloak-admin.loadbalancer.server.port=8080"
+      # Whoever reaches this Admin Console first, before the M2M service account has
+      # been granted its realm-management roles (see naming contract's
+      # KEYCLOAK_ADMIN_USERNAME/PASSWORD), becomes the identity-system owner — Basic
+      # Auth (see traefik's console.htpasswd mount above) closes that off regardless
+      # of how fast setup happens, on top of Keycloak's own login.
       - "traefik.http.middlewares.admin-basicauth.basicauth.usersfile=/etc/traefik/console.htpasswd"
-      - "traefik.http.routers.logto-admin.middlewares=admin-basicauth"
+      - "traefik.http.routers.keycloak-admin.middlewares=admin-basicauth"
 
   # ── Vector store (conversational_rag scenarios; one collection per tenant) ────
   qdrant:
@@ -180,7 +209,7 @@ services:
       - "traefik.http.routers.seaweedfs-console.entrypoints=web"
       - "traefik.http.routers.seaweedfs-console.service=seaweedfs-console"
       - "traefik.http.services.seaweedfs-console.loadbalancer.server.port=8888"
-      # Same admin-basicauth middleware as logto-admin above (defined once there;
+      # Same admin-basicauth middleware as keycloak-admin above (defined once there;
       # referenced here via the @docker provider suffix since it's cross-container).
       # Deliberately NOT applied to seaweedfs-s3: no service reaches the S3 API via
       # Traefik in the "docker" profile (they all use OBJECT_STORE_ENDPOINT=
@@ -215,16 +244,20 @@ services:
       # is called directly from ui-react's browser code (see below), so it needs the
       # same identity resolution every other service uses, not just a "trust the
       # caller" assumption. DEV ONLY passthrough — leave AUTH_DISABLED unset
-      # (defaults to "false") once Logto is configured; see settings.yaml.
+      # (defaults to "false") once Keycloak is configured; see settings.yaml.
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
       # embedded in real tokens (must match for jwt.decode's issuer check), but
       # `*.localhost` resolves to loopback inside every container's own network
       # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Logto over the internal docker network instead.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      # refused. This must reach Keycloak over the internal docker network instead.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+      # Service-account client used by this service's sync tooling (see naming
+      # contract) — no Logto analog.
+      KEYCLOAK_M2M_CLIENT_ID: ${KEYCLOAK_M2M_CLIENT_ID}
+      KEYCLOAK_M2M_CLIENT_SECRET: ${KEYCLOAK_M2M_CLIENT_SECRET}
       # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
@@ -279,18 +312,18 @@ services:
       OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
       OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
-      # Logto is configured; see prediction/settings.yaml.
+      # Keycloak is configured; see prediction/settings.yaml.
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
       # embedded in real tokens (must match for jwt.decode's issuer check), but
       # `*.localhost` resolves to loopback inside every container's own network
       # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Logto over the internal docker network instead.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      # refused. This must reach Keycloak over the internal docker network instead.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
@@ -407,14 +440,14 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
       # embedded in real tokens (must match for jwt.decode's issuer check), but
       # `*.localhost` resolves to loopback inside every container's own network
       # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Logto over the internal docker network instead.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      # refused. This must reach Keycloak over the internal docker network instead.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
@@ -523,14 +556,14 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
       # embedded in real tokens (must match for jwt.decode's issuer check), but
       # `*.localhost` resolves to loopback inside every container's own network
       # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Logto over the internal docker network instead.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      # refused. This must reach Keycloak over the internal docker network instead.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
@@ -587,14 +620,14 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # NOT derived from LOGTO_ISSUER: that's the public `*.localhost` hostname
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
       # embedded in real tokens (must match for jwt.decode's issuer check), but
       # `*.localhost` resolves to loopback inside every container's own network
       # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Logto over the internal docker network instead.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      # refused. This must reach Keycloak over the internal docker network instead.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       # ui-react calls this API directly from the browser — aiopen.localhost is the
       # Traefik-served build, localhost:5173 the Vite dev server.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
@@ -648,10 +681,10 @@ services:
       AUTH_DISABLED: ${AUTH_DISABLED:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      LOGTO_ISSUER: ${LOGTO_ISSUER}
-      LOGTO_API_RESOURCE_INDICATOR: ${LOGTO_API_RESOURCE_INDICATOR}
-      # See assistant's own block above for why this can't be derived from LOGTO_ISSUER.
-      LOGTO_JWKS_URL: http://logto:3001/oidc/jwks
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      # See assistant's own block above for why this can't be derived from KEYCLOAK_ISSUER.
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       # faster-whisper caches under ~/.cache/huggingface, Piper under ~/.cache/pipecat —
@@ -682,7 +715,11 @@ services:
       context: .
       dockerfile: ui-react/Dockerfile
       args:
-        VITE_LOGTO_APP_ID: ${UI_REACT_LOGTO_APP_ID:-}
+        # Defaults set directly in .env.example (not a `:-` fallback here) to avoid
+        # relying on nested ${VAR} interpolation inside a default value.
+        VITE_KEYCLOAK_ISSUER: ${VITE_KEYCLOAK_ISSUER}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-ui-react}
+        VITE_KEYCLOAK_AUDIENCE: ${VITE_KEYCLOAK_AUDIENCE}
         # Bakes the dev-login bypass into the React bundle (see root .env's DEV_MODE).
         # Only takes effect end-to-end if the backend services' AUTH_DISABLED is also
         # true (see useIdentity.ts's docstring).

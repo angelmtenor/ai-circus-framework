@@ -4,7 +4,7 @@
 
 Entitlement enforcement happens here, at the API — not just in whichever UI called
 us — per the platform's core design requirement (see root AGENTS.md). The actual
-logic (AUTH_DISABLED bypass, ADMIN_API_KEY bypass, Logto validation, entitlement
+logic (AUTH_DISABLED bypass, ADMIN_API_KEY bypass, Keycloak validation, entitlement
 check) lives in `ai_circus_shared.auth.resolve_caller_identity`; this wrapper just
 adapts this service's own generated `EnvConfig` into that call and translates its
 plain domain exceptions into `HTTPException`s, mirroring assistant/core/identity.py.
@@ -48,9 +48,9 @@ def resolve_identity_from_token(scenario_slug: str, authorization: str | None) -
     settings = AuthSettingsAdapter(
         AUTH_DISABLED=config.AUTH_DISABLED,
         DEV_ORG_ID=config.DEV_ORG_ID,
-        LOGTO_ISSUER=config.LOGTO_ISSUER,
-        LOGTO_API_RESOURCE_INDICATOR=config.LOGTO_API_RESOURCE_INDICATOR,
-        LOGTO_JWKS_URL=config.LOGTO_JWKS_URL,
+        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
+        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
+        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
         ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
         ENGINEERING_DEMO_API_KEY=(
             config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None

@@ -44,7 +44,7 @@ def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd
     """Load the tenant's cleaned (not yet one-hot-encoded) dataset.
 
     Mirrors ModelCache.get()'s fallback: a tenant without its own copy of the dataset
-    in SeaweedFS yet (e.g. the admin/engineering-demo bypass orgs, or a brand-new Logto
+    in SeaweedFS yet (e.g. the admin/engineering-demo bypass orgs, or a brand-new Keycloak
     organization) gets `fallback_org_id`'s (matching training's ORG_ID) instead of a
     404 — every tenant otherwise 500s on the Data tab until it's retrained its own.
     """

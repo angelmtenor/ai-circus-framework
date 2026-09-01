@@ -2,9 +2,9 @@
 - Title:    ORM models for the `platform` Postgres schema
 - Author:   ai-circus-framework contributors
 
-Deliberately no separate `tenants` table: a Logto Organization *is* the tenant record
-(id, name, branding all live in Logto) — duplicating that locally would just drift out
-of sync. `Entitlement.org_id` references a Logto Organization id directly.
+Deliberately no separate `tenants` table: a Keycloak Organization *is* the tenant record
+(id, name, branding all live in Keycloak) — duplicating that locally would just drift out
+of sync. `Entitlement.org_id` references a Keycloak Organization id directly.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class Scenario(Base):
 
 
 class Entitlement(Base):
-    """Grants one tenant (Logto Organization) access to one scenario."""
+    """Grants one tenant (Keycloak Organization) access to one scenario."""
 
     __tablename__ = "entitlements"
     __table_args__ = (UniqueConstraint("org_id", "scenario_slug", name="uq_entitlement_org_scenario"),)

@@ -25,7 +25,7 @@ tarball round-trip.
 
 ```
 k8s/
-  base/            # namespace, shared config, infra (postgres/logto/qdrant/seaweedfs),
+  base/            # namespace, shared config, infra (postgres/keycloak/qdrant/seaweedfs),
                     # every backend Deployment + Service + IngressRoute, kustomization.yaml
   jobs/             # etl-tabular / training / etl-vectorize — one-shot batch.Job manifests,
                     # applied manually via `make k3s-pipeline`, not part of `make k3s-up`
@@ -117,13 +117,13 @@ set on a local k3d cluster:
   to every pod, so compromising one service doesn't leak every credential in the system. Each pod's
   `envFrom` points at its own Secret, plus a small number of explicit `env:` overrides for keys
   docker-compose.yml itself renames (e.g. `LLM_GATEWAY_API_KEY` from `.env`'s `LITELLM_MASTER_KEY`)
-  or that must be a k8s-internal literal (e.g. `LOGTO_JWKS_URL`).
+  or that must be a k8s-internal literal (e.g. `KEYCLOAK_JWKS_URL`).
 - **`./scenarios` is a `hostPath` volume**, mounted at `/app/scenarios` in every pod that needs
   it — the k8s-native equivalent of docker-compose.yml's read-only bind mount, viable here because
   this is single-node local dev. `make k3s-cluster` bind-mounts the repo's `scenarios/` directory
   into every k3d node at `/scenarios` for this to resolve.
 - **Traefik `IngressRoute`/`Middleware` CRDs**, not plain `Ingress` — k3s ships Traefik already,
-  and its CRDs let the `Host(...)` rules and the `admin-basicauth` gate (on `admin.logto.localhost`
+  and its CRDs let the `Host(...)` rules and the `admin-basicauth` gate (on `admin.keycloak.localhost`
   and `console.objectstore.localhost`) carry over almost verbatim from docker-compose.yml's own
   Traefik labels.
 - **`securityContext.runAsNonRoot: true` always needs `runAsUser: 1000` alongside it**, for every
@@ -133,7 +133,7 @@ set on a local k3d cluster:
   non-root`, surfacing as `CreateContainerConfigError` (a *different* root cause than the missing-
   secret-key version of that same status — see the `k3s-deploy-verify` skill's gotchas). `1000` is
   the UID `useradd --create-home` assigns `app` in every one of those Dockerfiles (confirmed via
-  `docker run --rm <image> id`); `postgres`/`logto`/`qdrant`/`seaweedfs`/`ui-react`/`agui-voice`
+  `docker run --rm <image> id`); `postgres`/`keycloak`/`qdrant`/`seaweedfs`/`ui-react`/`agui-voice`
   deliberately skip `runAsNonRoot` instead (see their manifests' comments) since they either need
   root for entrypoint chown/bind logic or (`agui-voice`) have no non-root `USER` yet.
 - **`ui-react` needs no separate build.** Its backend base URLs are baked in at `docker build` time

@@ -187,7 +187,7 @@ export async function listEntitledScenarios(
  * on every scenario's own chat/predict call. `/entitlements/{org_id}` itself now also
  * enforces (server-side, see platform_registry.api.require_org_match) that the
  * caller's resolved identity actually matches the requested org, but a wrong admin
- * key would otherwise still resolve to *some* org via Logto/fallthrough — this check
+ * key would otherwise still resolve to *some* org via Keycloak/fallthrough — this check
  * confirms the key itself is real. `/llm-settings/active-model` is admin-gated: 401
  * means a bad key; 200 or 404 ("no active model set yet") both mean the bearer token
  * cleared that gate.

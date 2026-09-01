@@ -104,7 +104,7 @@ class ModelCache:
         `fallback_org_id` is the tenant (matching training's ORG_ID) every other
         tenant's model lookup falls back to until it has its own artifacts in SeaweedFS —
         without this, any tenant besides the one training actually ran for (e.g. the
-        admin/engineering-demo bypass tenants, or a brand-new Logto organization) would
+        admin/engineering-demo bypass tenants, or a brand-new Keycloak organization) would
         404 on every predict call, contradicting this cache's own "shared by every
         tenant" premise.
         """

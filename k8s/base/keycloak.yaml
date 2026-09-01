@@ -1,0 +1,259 @@
+# Mirrors docker-compose.yml's keycloak service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: ai-circus
+spec:
+  replicas: 1
+  # Recreate, not the k8s default RollingUpdate: a rolling update briefly ran two
+  # Keycloak JVM pods at once, which formed an Infinispan/JGroups cluster with each
+  # other and then died with exit code 137 (SIGKILL) during a real k3s deploy on a
+  # single-node local cluster already running 10+ other services under real memory
+  # pressure (`free -h` showed ~90Mi genuinely free at the time) — consistent with an
+  # OOM kill, though the host's OOM-killer log wasn't reachable from this sandbox to
+  # confirm directly. Single-replica local dev has no use for the brief old+new
+  # overlap RollingUpdate exists to provide anyway.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: keycloak}
+  template:
+    metadata:
+      labels: {app: keycloak}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.0
+          # No runAsNonRoot/dropped capabilities: same posture as logto.yaml previously
+          # had — this image's entrypoint isn't documented as safe running fully
+          # non-root/capability-less either.
+          securityContext:
+            allowPrivilegeEscalation: false
+          args: ["start", "--import-realm"]
+          ports:
+            - {containerPort: 8080}
+            - {containerPort: 9000}
+          env:
+            - {name: KC_DB, value: "postgres"}
+            - {name: KC_DB_URL, value: "jdbc:postgresql://postgres:5432/keycloak"}
+            - {name: POSTGRES_USER, valueFrom: {secretKeyRef: {name: keycloak-secrets, key: POSTGRES_USER}}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: keycloak-secrets, key: POSTGRES_PASSWORD}}}
+            # $(VAR) expansion of the two secret-sourced vars just above — same real k8s
+            # feature logto.yaml previously used for its own DB_URL. The JDBC driver
+            # needs credentials as separate KC_DB_USERNAME/KC_DB_PASSWORD vars, not
+            # embedded in KC_DB_URL itself.
+            - {name: KC_DB_USERNAME, value: "$(POSTGRES_USER)"}
+            - {name: KC_DB_PASSWORD, value: "$(POSTGRES_PASSWORD)"}
+            - {name: KC_HOSTNAME, value: "keycloak.localhost"}
+            - {name: KC_PROXY_HEADERS, value: "xforwarded"}
+            # Traefik terminates plain HTTP on the `web` entrypoint (see traefik's own
+            # command in docker-compose.yml/k8s — no TLS locally) — without this,
+            # Keycloak's default hostname-strict/HTTPS-required posture refuses to
+            # serve behind a non-TLS proxy. Judgment call: same "local dev, not a public
+            # deployment" posture the rest of this stack already takes (see
+            # ADMIN_API_KEY's demo-credential comment in .env.example); revisit before
+            # any real deployment.
+            - {name: KC_HTTP_ENABLED, value: "true"}
+            # Not on by default in Keycloak 26 — without it nothing listens on the
+            # management port (9000) at all, so both probes below "connection refused"
+            # forever and the container eventually gets liveness-killed despite having
+            # started successfully. Confirmed via a real k3s deploy: logs showed a clean
+            # "started in 10.239s" with zero problems, yet it still died 3 minutes later
+            # to a liveness probe that could never have passed.
+            - {name: KC_HEALTH_ENABLED, value: "true"}
+            - {name: KC_BOOTSTRAP_ADMIN_USERNAME, valueFrom: {secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_ADMIN_USERNAME}}}
+            - {name: KC_BOOTSTRAP_ADMIN_PASSWORD, valueFrom: {secretKeyRef: {name: keycloak-secrets, key: KEYCLOAK_ADMIN_PASSWORD}}}
+            # Without an explicit container memory limit, the JVM sizes its default heap
+            # against the whole k3d node's cgroup allocation, not what's actually free on
+            # a shared, already-loaded host — this is what led to the OOM-consistent
+            # crash the `strategy: Recreate` comment above describes. Bound it explicitly
+            # instead of trusting JVM auto-sizing here.
+            - {name: JAVA_OPTS_APPEND, value: "-Xms256m -Xmx512m"}
+          resources:
+            requests: {memory: "512Mi", cpu: "250m"}
+            limits: {memory: "768Mi"}
+          volumeMounts:
+            # `start --import-realm` scans this directory for realm JSON/YAML files on
+            # boot — mirrors infra/keycloak/realm-export.json exactly (see the
+            # ConfigMap below); keep the two in sync by hand if either changes, same
+            # convention as postgres.yaml's postgres-init-scripts ConfigMap.
+            - {name: realm-import, mountPath: /opt/keycloak/data/import, readOnly: true}
+          # Keycloak 26 serves health/metrics on a separate management port (9000) by
+          # default, not the main 8080 port Logto used for /api/status.
+          # initialDelaySeconds/timeoutSeconds/failureThreshold are looser than a plain
+          # healthz would need, same class of issue as rag-agent/form-agent's own probe
+          # comments: Keycloak's cold start is genuinely slow (Quarkus re-augmentation
+          # alone measured ~56s on a real k3s deploy, before DB schema migration and the
+          # realm import even start) — the original tighter values here liveness-killed
+          # the container mid-startup (exit 143) well before /health/live could ever
+          # respond, which looked like a crash but wasn't one.
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 9000}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /health/live, port: 9000}
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 8
+      volumes:
+        - name: realm-import
+          configMap: {name: keycloak-realm-import}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm-import
+  namespace: ai-circus
+data:
+  # Content mirrors infra/keycloak/realm-export.json exactly — keep the two in sync by
+  # hand if that file ever changes (same "no configMapGenerator indirection" convention
+  # as postgres.yaml's postgres-init-scripts ConfigMap). UNVERIFIED against a live
+  # Keycloak instance — see infra/keycloak/README.md.
+  realm-export.json: |
+    {
+      "realm": "ai-circus",
+      "enabled": true,
+      "organizationsEnabled": true,
+      "sslRequired": "none",
+      "clientScopes": [
+        {
+          "name": "organization",
+          "description": "Adds the caller's Organization membership to the token — built into Keycloak 26 by default; declared explicitly here so `--import-realm` doesn't depend on that default surviving future versions.",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "false"
+          },
+          "protocolMappers": [
+            {
+              "name": "organization",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-organization-membership-mapper",
+              "consentRequired": false,
+              "config": {
+                "claim.name": "organization",
+                "access.token.claim": "true",
+                "id.token.claim": "true",
+                "userinfo.token.claim": "true"
+              }
+            }
+          ]
+        },
+        {
+          "name": "platform-backend",
+          "description": "Carries the `aud` claim ai_circus_shared.auth validates (KEYCLOAK_AUDIENCE) — Keycloak omits `aud` by default, unlike Logto's API resource indicator.",
+          "protocol": "openid-connect",
+          "attributes": {
+            "include.in.token.scope": "true",
+            "display.on.consent.screen": "false"
+          },
+          "protocolMappers": [
+            {
+              "name": "platform-backend-audience",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-audience-mapper",
+              "consentRequired": false,
+              "config": {
+                "included.custom.audience": "https://api.ai-circus-framework.local",
+                "id.token.claim": "false",
+                "access.token.claim": "true"
+              }
+            }
+          ]
+        }
+      ],
+      "clients": [
+        {
+          "clientId": "ui-react",
+          "name": "ui-react",
+          "enabled": true,
+          "publicClient": true,
+          "protocol": "openid-connect",
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": false,
+          "serviceAccountsEnabled": false,
+          "attributes": {
+            "pkce.code.challenge.method": "S256"
+          },
+          "redirectUris": [
+            "http://aiopen.localhost/*",
+            "http://aiopen.localhost/callback",
+            "http://localhost:5173/*",
+            "http://localhost:5173/callback"
+          ],
+          "webOrigins": [
+            "http://aiopen.localhost",
+            "http://localhost:5173"
+          ],
+          "defaultClientScopes": [
+            "organization",
+            "platform-backend",
+            "profile",
+            "email",
+            "roles"
+          ],
+          "optionalClientScopes": [
+            "offline_access"
+          ]
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: ai-circus
+spec:
+  selector: {app: keycloak}
+  ports:
+    - {name: main, port: 8080, targetPort: 8080}
+    - {name: management, port: 9000, targetPort: 9000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`keycloak.localhost`)
+      kind: Rule
+      services:
+        - {name: keycloak, port: 8080}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: keycloak-admin
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    # Unlike Logto (separate 3001/3002 ports), Keycloak serves its Admin Console on
+    # the same port 8080 under a /admin path — no port split needed. Kept as a
+    # separate host + IngressRoute anyway (rather than a PathPrefix(`/admin`) rule on
+    # the main route) so admin-basicauth continues to gate a distinct hostname exactly
+    # like logto-admin did, and realm end-user login (keycloak.localhost) stays
+    # reachable without Basic Auth in front of it.
+    #
+    # Whoever reaches this Admin Console first, before Keycloak's own bootstrap admin
+    # is used to grant the M2M service account its realm-management roles, becomes the
+    # identity-system owner — the admin-basicauth Middleware (see middleware.yaml)
+    # closes that off regardless of how fast setup happens, on top of Keycloak's own
+    # login. Same reasoning as docker-compose.yml's keycloak-admin router.
+    - match: Host(`admin.keycloak.localhost`)
+      kind: Rule
+      services:
+        - {name: keycloak, port: 8080}
+      middlewares:
+        - name: admin-basicauth

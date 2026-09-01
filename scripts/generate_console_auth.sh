@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Generates the htpasswd file Traefik's Basic Auth middleware (always on, see the
-# admin-basicauth labels on the logto/seaweedfs services in docker-compose.yml) reads to
-# gate Logto's Admin Console and SeaweedFS's console. Uses `openssl passwd -apr1` rather
+# admin-basicauth labels on the keycloak/seaweedfs services in docker-compose.yml) reads to
+# gate Keycloak's Admin Console and SeaweedFS's console. Uses `openssl passwd -apr1` rather
 # than requiring `htpasswd`/pulling an image, since openssl is already a dependency
 # of every Docker host this project targets.
 #

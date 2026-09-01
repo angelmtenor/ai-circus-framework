@@ -40,7 +40,7 @@ def enforce_safe_for_public_deployment(
 
     problems = []
     if auth_disabled.strip().lower() == "true":
-        problems.append("AUTH_DISABLED=true bypasses Logto entirely")
+        problems.append("AUTH_DISABLED=true bypasses Keycloak entirely")
     if admin_api_key == DEMO_ADMIN_API_KEY:
         problems.append("ADMIN_API_KEY is still the shipped demo default")
     if engineering_demo_api_key == DEMO_ENGINEERING_DEMO_API_KEY:

@@ -34,7 +34,7 @@ class EnvConfig(BaseSettings):
         description="Comma-separated conversational_rag scenario slugs this run processes; empty/unset = every scenario"
     )
     ORG_ID: str = Field(
-        description="Tenant (Logto Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
+        description="Tenant (Keycloak Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
     OBJECT_STORE_ENDPOINT: str = Field(
@@ -84,7 +84,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "f74a1ebb285fce37b4eec1e0a9270a5ca9effd70d85b1128f1cc123e2eeb231b"
+_SOURCE_YAML_HASH = "8852ff122d37c8ff900ab6b178b2b078dbe56245e1e8c8d9af2eadb8958877d2"
 
 
 EnvConfig.model_rebuild()
@@ -120,12 +120,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # ruff: ignore[print]
+    print("--- Loaded Configuration ---")  # noqa: T201
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # ruff: ignore[print]
+        print(f"{field}: {val}")  # noqa: T201
 
 
 if __name__ == "__main__":

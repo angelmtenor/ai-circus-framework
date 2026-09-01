@@ -76,21 +76,18 @@ class EnvConfig(BaseSettings):
     SHARED_MODEL_ORG_ID: str = Field(
         description="Org id every tenant's model falls back to until it has its own (matches training's ORG_ID)"
     )
-    LOGTO_ISSUER: str | None = Field(
-        description="Logto OIDC issuer, e.g. http://logto.localhost/oidc (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_ISSUER: str | None = Field(
+        description="Keycloak realm issuer (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_JWKS_URL: str | None = Field(
-        description="Logto JWKS endpoint, e.g. http://logto.localhost/oidc/jwks (required unless AUTH_DISABLED=true)",
-        default=None,
+    KEYCLOAK_JWKS_URL: str | None = Field(
+        description="Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)", default=None
     )
-    LOGTO_API_RESOURCE_INDICATOR: str | None = Field(
-        description="Expected token audience — the API resource registered in Logto for this platform's backend",
-        default=None,
+    KEYCLOAK_AUDIENCE: str | None = Field(
+        description="Expected token audience, registered via an Audience client-scope mapper in Keycloak", default=None
     )
 
 
-_SOURCE_YAML_HASH = "e69599fb7cae9eb5e43735e8ad85bbaab20d8d127f2496a985a96de7997259ad"
+_SOURCE_YAML_HASH = "3513765066a53c9a15caa9b8e31853750ea1643971512dbed5fbf251076c8007"
 
 
 EnvConfig.model_rebuild()

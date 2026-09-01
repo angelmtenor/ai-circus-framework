@@ -19,15 +19,52 @@ from ai_circus_shared.auth import (
 from ai_circus_shared.entitlements import EntitlementDeniedError
 
 
+class TestExtractOrgId:
+    """`_extract_org_id` parses Keycloak's alias-keyed `organization` claim shape."""
+
+    def test_reads_id_from_first_org_entry(self) -> None:
+        claims = {"organization": {"acme-corp": {"id": "org-1", "groups": ["/Engineering"]}}}
+        assert auth_module._extract_org_id(claims) == "org-1"
+
+    def test_missing_claim_returns_none(self) -> None:
+        assert auth_module._extract_org_id({}) is None
+
+    def test_empty_claim_returns_none(self) -> None:
+        assert auth_module._extract_org_id({"organization": {}}) is None
+
+
+def test_validate_token_reads_nested_realm_roles_and_org_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keycloak nests roles under realm_access.roles, not a flat `roles` array."""
+    claims = {
+        "sub": "user-1",
+        "realm_access": {"roles": ["scenario:churn", "offline_access"]},
+        "organization": {"acme-corp": {"id": "org-1"}},
+    }
+    monkeypatch.setattr(auth_module.jwt, "decode", lambda *_a, **_kw: claims)
+    monkeypatch.setattr(
+        auth_module,
+        "_jwks_client",
+        lambda _url: type("FakeJwksClient", (), {"get_signing_key_from_jwt": lambda self, _t: type("Key", (), {"key": "k"})()})(),
+    )
+
+    identity = auth_module.validate_token(
+        "irrelevant", issuer="http://keycloak.localhost/realms/ai-circus", audience="aud", jwks_url="http://jwks"
+    )
+
+    assert identity.subject == "user-1"
+    assert identity.org_id == "org-1"
+    assert identity.roles == frozenset({"scenario:churn", "offline_access"})
+
+
 @dataclass
 class FakeSettings:
     """Minimal stand-in for a service's EnvConfig, covering AuthSettings' fields."""
 
     AUTH_DISABLED: str = "false"
     DEV_ORG_ID: str = "demo"
-    LOGTO_ISSUER: str | None = "http://logto.localhost/oidc"
-    LOGTO_API_RESOURCE_INDICATOR: str | None = "https://api.ai-circus-framework.local"
-    LOGTO_JWKS_URL: str | None = "http://logto.localhost/oidc/jwks"
+    KEYCLOAK_ISSUER: str | None = "http://keycloak.localhost/realms/ai-circus"
+    KEYCLOAK_AUDIENCE: str | None = "https://api.ai-circus-framework.local"
+    KEYCLOAK_JWKS_URL: str | None = "http://keycloak.localhost/realms/ai-circus/protocol/openid-connect/certs"
     ADMIN_API_KEY: str | None = "ai-circus-2026"
     ENGINEERING_DEMO_API_KEY: str | None = "ai-circus-engineering-2026"
     PLATFORM_REGISTRY_URL: str = "http://platform-registry:8000"
@@ -57,7 +94,7 @@ def test_auth_disabled_returns_fixed_dev_identity(monkeypatch: pytest.MonkeyPatc
 
 
 def test_admin_api_key_resolves_to_admin_org(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An exact ADMIN_API_KEY bearer match resolves to ADMIN_ORG_ID, not a Logto token."""
+    """An exact ADMIN_API_KEY bearer match resolves to ADMIN_ORG_ID, not a Keycloak token."""
     _allow_entitlement(monkeypatch)
 
     identity = resolve_caller_identity(
@@ -77,7 +114,7 @@ def test_admin_api_key_still_goes_through_entitlement_check(monkeypatch: pytest.
 
 
 def test_engineering_demo_api_key_resolves_to_engineering_demo_org(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An exact ENGINEERING_DEMO_API_KEY bearer match resolves to ENGINEERING_DEMO_ORG_ID, not admin/Logto."""
+    """An exact ENGINEERING_DEMO_API_KEY bearer match resolves to ENGINEERING_DEMO_ORG_ID, not admin/Keycloak."""
     _allow_entitlement(monkeypatch)
 
     identity = resolve_caller_identity(
@@ -99,7 +136,7 @@ def test_engineering_demo_api_key_still_goes_through_entitlement_check(monkeypat
 
 
 def test_no_engineering_demo_api_key_configured_skips_that_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A falsy ENGINEERING_DEMO_API_KEY never matches — falls through to (here, mocked) Logto validation instead."""
+    """A falsy ENGINEERING_DEMO_API_KEY never matches — falls through to (here, mocked) Keycloak validation instead."""
 
     def raise_invalid(*_args: object, **_kwargs: object) -> Identity:
         raise TokenValidationError("bad signature")
@@ -114,8 +151,8 @@ def test_no_engineering_demo_api_key_configured_skips_that_path(monkeypatch: pyt
         )
 
 
-def test_wrong_admin_api_key_falls_through_to_logto_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bearer token that doesn't match ADMIN_API_KEY is treated as a (here, invalid) Logto token."""
+def test_wrong_admin_api_key_falls_through_to_keycloak_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bearer token that doesn't match ADMIN_API_KEY is treated as a (here, invalid) Keycloak token."""
 
     def raise_invalid(*_args: object, **_kwargs: object) -> Identity:
         raise TokenValidationError("bad signature")
@@ -174,7 +211,7 @@ def test_token_with_no_org_claim_raises_token_validation_error(monkeypatch: pyte
 
 
 def test_no_admin_api_key_configured_skips_admin_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A falsy ADMIN_API_KEY never matches — falls through to (here, mocked) Logto validation instead."""
+    """A falsy ADMIN_API_KEY never matches — falls through to (here, mocked) Keycloak validation instead."""
 
     def raise_invalid(*_args: object, **_kwargs: object) -> Identity:
         raise TokenValidationError("bad signature")
@@ -187,13 +224,13 @@ def test_no_admin_api_key_configured_skips_admin_path(monkeypatch: pytest.Monkey
         )
 
 
-def test_logto_not_configured_raises_runtime_error() -> None:
-    """AUTH_DISABLED=false, no matching admin key, and Logto unconfigured is a server misconfiguration."""
+def test_keycloak_not_configured_raises_runtime_error() -> None:
+    """AUTH_DISABLED=false, no matching admin key, and Keycloak unconfigured is a server misconfiguration."""
     with pytest.raises(RuntimeError):
         resolve_caller_identity(
             authorization="Bearer anything",
             scenario_slug="churn",
-            settings=FakeSettings(ADMIN_API_KEY=None, LOGTO_ISSUER=None),
+            settings=FakeSettings(ADMIN_API_KEY=None, KEYCLOAK_ISSUER=None),
         )
 
 
@@ -246,8 +283,8 @@ class TestResolveOrgIdentity:
         with pytest.raises(TokenValidationError):
             resolve_org_identity(authorization="Bearer good-token", settings=FakeSettings())
 
-    def test_logto_not_configured_raises_runtime_error(self) -> None:
+    def test_keycloak_not_configured_raises_runtime_error(self) -> None:
         with pytest.raises(RuntimeError):
             resolve_org_identity(
-                authorization="Bearer anything", settings=FakeSettings(ADMIN_API_KEY=None, LOGTO_ISSUER=None)
+                authorization="Bearer anything", settings=FakeSettings(ADMIN_API_KEY=None, KEYCLOAK_ISSUER=None)
             )

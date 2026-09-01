@@ -64,7 +64,7 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    treat step 4 as mandatory, not an optional nice-to-have, any time the task is "verify this
    works," not just "does the curl smoke test pass."
    Use the `playwright-headless-verify` skill to drive a real headless browser against
-   `http://aiopen.localhost`. Log in with the bearer-token shortcut (not real Logto OIDC): the
+   `http://aiopen.localhost`. Log in with the bearer-token shortcut (not real Keycloak OIDC): the
    `User` dropdown already defaults to `admin`; fill the password field
    (`input[type="password"]`) with the `ADMIN_API_KEY` value from `.env` (see that skill for how
    to do this without ever printing `.env`'s content), then click the button matching
