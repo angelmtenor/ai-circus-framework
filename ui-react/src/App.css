@@ -135,19 +135,6 @@ select:focus {
   filter: drop-shadow(var(--glow-accent-soft));
 }
 
-.login-brand h1 {
-  font-size: 1.4rem;
-  font-weight: 600;
-  margin: 0.6rem 0 0.35rem;
-  color: var(--text-h);
-}
-
-.login-tagline {
-  color: var(--dim);
-  font-size: 0.88rem;
-  line-height: 1.4;
-}
-
 .login-section {
   display: flex;
   flex-direction: column;
