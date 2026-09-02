@@ -355,7 +355,7 @@ Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the reco
 env-configured microservices either way, just a different orchestrator.
 
 <p align="center">
-  <img src="docs/screenshots/architecture-simplified.svg" alt="AI Open Framework architecture diagram — simplified view" width="900">
+  <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
 </p>
 
 Solid arrows are primary request/data paths; dotted arrows are cross-cutting auth/admin calls or
@@ -364,9 +364,9 @@ against Keycloak and re-checks the entitlement with `platform-registry` — neve
 what the UI already filtered.
 
 <details>
-<summary>Realistic view — every verified service-to-service call, not grouped</summary>
+<summary>Simplified view — grouped data flow</summary>
 <p align="center">
-  <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
+  <img src="docs/screenshots/architecture-simplified.svg" alt="AI Open Framework architecture diagram — simplified view" width="900">
 </p>
 </details>
 

@@ -74,8 +74,6 @@ function LoginScreen({
         <div className="login-card">
           <div className="login-brand">
             <img src={logo} alt="AI Open Framework" className="login-brand-icon" />
-            <h1>AI Open Framework</h1>
-            <p className="login-tagline">Explainable ML &amp; document Q&amp;A, one scenario at a time.</p>
           </div>
 
           {config.devMode && (
