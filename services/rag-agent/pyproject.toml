@@ -24,17 +24,17 @@ classifiers = [
 ]
 
 dependencies = [
-    "ag-ui-protocol>=0.1.19",
+    "ag-ui-protocol>=0.1.22",
     "ai-circus-shared",
-    "copilotkit>=0.1.94",
+    "copilotkit>=0.1.96",
     "fastapi>=0.141.1",
-    "langchain>=0.3",
-    "langchain-openai>=0.3",
+    "langchain>=1.3.18",
+    "langchain-openai>=1.6.0",
     "loguru>=0.7.3",
     "psutil>=7.0.0",
     "py-cpuinfo>=9.0.0",
-    "pydantic>=2.11.4",
-    "pydantic-settings>=2.9.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
     "PyYAML>=6.0.2",
     "qdrant-client>=1.19.0",
     "uvicorn[standard]>=0.52.1",
@@ -50,14 +50,14 @@ dev = [
     "debugpy>=1.8.14",
     "deptry>=0.23.0",
     "packaging>=24.0",      # used directly by check_full_env.py
-    "pre-commit>=4.2.0",
+    "pre-commit>=4.6.2",
     "pyinstrument>=5.0.1",
     "pyrefly>=0.53.0",       # replaces pyright
-    "python-dotenv>=1.0.1",  # used directly by check_full_env.py
+    "python-dotenv>=1.2.3",  # used directly by check_full_env.py
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
     "rich>=13.7.0",          # optional pretty output for check_full_env.py
-    "ruff>=0.11.8",
+    "ruff>=0.16.5",
     "twine>=6.1.0",
     "pytest-asyncio>=1.4.0",
 ]
