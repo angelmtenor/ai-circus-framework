@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { datasetSample, type ScenarioSummary, type ChartType, type ChartAgg, type DatasetSample } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
@@ -58,8 +58,14 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   // it's a numeric target for regression scenarios, a class label for classification.
   const targetName = scenario.target ?? null;
   const targetIsNumeric = scenario.task_type === "regression";
-  const labelFor = (f: string) =>
-    f === targetName ? `${scenario.target_label ?? targetName} (target)` : featureLabel(scenario, f);
+  // Stable across unrelated re-renders (e.g. the chat dock's own state) — an inline
+  // arrow function here would get a fresh reference every render, invalidating
+  // ChartCard's buildChart memo below and forcing a Plotly.react() that resets an
+  // in-progress gl3d drag (see PlotlyChart.tsx's PLOT_CONFIG comment for the sibling bug).
+  const labelFor = useCallback(
+    (f: string) => (f === targetName ? `${scenario.target_label ?? targetName} (target)` : featureLabel(scenario, f)),
+    [targetName, scenario],
+  );
 
   const [sample, setSample] = useState<DatasetSample | null>(null);
   const [error, setError] = useState<string | null>(null);
