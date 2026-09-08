@@ -411,8 +411,51 @@ Every backend service is generated via real **cookiecutter** generation against
 `pyproject.toml`/`uv.lock`/Dockerfile — no monorepo-wide uv workspace. That template is itself
 built on the conventions from [`ai-circus`](https://github.com/angelmtenor/ai-circus), my
 Python best-practices reference repo. Common code (Keycloak token validation, SeaweedFS client,
-entitlement-check client, scenario schema) lives in `libs/shared` (`ai-circus-shared`), added to
-each service as a local **non-editable** `uv` path dependency.
+entitlement-check client, scenario schema, cache/document-store/event-streaming helpers) lives in
+`libs/shared` (`ai-circus-shared`), added to each service as a local **non-editable** `uv` path
+dependency.
+
+### Data Platform (optional profile)
+
+<p align="center">
+  <img src="docs/screenshots/architecture-data-platform.svg" alt="Data Platform optional profile — data-platform-manager and Kafka" width="1000">
+</p>
+
+Two more storage kinds — **Valkey** (cache/key-value; Redis itself is no longer OSI-licensed) and
+a **document store** (Postgres JSONB, via `ai_circus_shared.document_store`) — round out the
+tenant-scoped data layer and are **on by default**, same footprint class as Postgres/Qdrant.
+
+A heavier tier sits behind its own **optional profile**, off by default so the base platform stays
+laptop-sized: real-time event streaming (**Apache Kafka**, KRaft mode, no Zookeeper) plus a new
+admin-only service, **`data-platform-manager`**, that exposes it —
+
+```bash
+make data-platform-up      # docker compose --profile data-platform up -d kafka
+make k3s-data-platform-up  # kubectl apply -f k8s/data-platform/kafka.yaml (k3s target)
+```
+
+`data-platform-manager` (gated on `ADMIN_API_KEY`, never a Keycloak end-user token) is reachable
+both as an API and from **Settings → Data Platform** in `ui-react` once logged in as `admin`:
+
+- **Capability roadmap** — which of these pieces are live, partial, or still planned, read from
+  the running service, not a static doc.
+- **Pipeline job status/trigger** for `etl-tabular`/`training`/`etl-vectorize` — via the real
+  Kubernetes Jobs API (RBAC-scoped to `batch/v1` Jobs only), so k3s only; in docker-compose, run
+  `make pipeline` directly.
+- **AI Gateway rate limits** — a read-only report of `litellm_config.yaml`'s per-model `rpm`/`tpm`
+  ceilings.
+- **Recent events** — every pipeline trigger is published to Kafka as well as recorded durably
+  (Postgres); this panel reads the topic directly, proving the stream is real.
+
+**Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
+then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
+the run shows up under **Pipeline jobs** and, moments later, as a real Kafka message under
+**Recent events**.
+
+Change-data-capture (a real Postgres → Kafka change feed, rather than today's batch-only
+extraction), a lakehouse table format, and semantic modeling/query federation remain
+[reserved for later](#reserved-for-later-documented-not-built) — the roadmap panel above is the
+live source of truth for exactly what's built versus planned.
 
 ---
 
@@ -478,14 +521,20 @@ and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
 A Helm chart (plain YAML + Kustomize exists instead — see
 [Getting started > Kubernetes](#getting-started) and [`k8s/README.md`](k8s/README.md) — for local
 dev-parity; Helm would only matter for a real multi-environment/production rollout), a
-custom in-app admin screen, a task queue for on-demand tenant-triggered jobs, distributed
+task queue for on-demand tenant-triggered jobs, distributed
 tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
-voice/multimodal agents (Pipecat), per-tenant billing/metering, a shared cache (e.g. Redis)
-for multi-replica deployments, and (optional) extracting embedded images out of uploaded PDFs
-in the chat attachment flow — today `platform_registry.core.document_extraction` only pulls
-text/OCR out of a PDF, so a figure or diagram embedded in an otherwise text-native page never
-reaches a vision-capable model. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat,
-previously listed here, is built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`.)
+voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate* limits are
+built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
+litellm's DB-backed proxy mode), a real Postgres-to-Kafka change-data-capture feed (psycopg has
+no logical-replication client — its own design pass, not started), a lakehouse table format and
+semantic-modeling/query-federation layer over the object store, and (optional) extracting
+embedded images out of uploaded PDFs in the chat attachment flow — today
+`platform_registry.core.document_extraction` only pulls text/OCR out of a PDF, so a figure or
+diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
+AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, and a shared
+cache for multi-replica deployments, previously listed here, are built — see
+`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile), and
+`ai_circus_shared.cache` respectively.)
 
 ---
 

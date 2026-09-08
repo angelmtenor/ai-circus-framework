@@ -19,6 +19,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.3.4",
     "redis>=5.2.0",
+    "confluent-kafka>=2.15.0",
 ]
 
 [build-system]

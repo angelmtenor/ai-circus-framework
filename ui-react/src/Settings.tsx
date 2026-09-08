@@ -4,6 +4,7 @@ import {
   getActiveVoiceSettings,
   getGatewayRateLimits,
   getPipelineJobs,
+  getRecentPipelineTriggerEvents,
   getRoadmap,
   listLlmProviders,
   setActiveLlmModel,
@@ -15,6 +16,7 @@ import {
   type LlmProvider,
   type LlmProviderTest,
   type PipelineJobsResult,
+  type PipelineTriggerEvent,
   type RateLimit,
   type VoiceProviders,
 } from "./apiClient";
@@ -68,6 +70,8 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   const [roadmap, setRoadmap] = useState<Capability[] | null>(null);
   const [jobs, setJobs] = useState<PipelineJobsResult | null>(null);
   const [rateLimits, setRateLimits] = useState<RateLimit[] | null>(null);
+  const [events, setEvents] = useState<PipelineTriggerEvent[] | null>(null);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
 
@@ -88,13 +92,24 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
 
   useEffect(load, [baseUrl, accessToken]);
 
+  function loadEvents() {
+    setEventsLoading(true);
+    getRecentPipelineTriggerEvents(baseUrl, accessToken)
+      .then(setEvents)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setEventsLoading(false));
+  }
+
+  useEffect(loadEvents, [baseUrl, accessToken]);
+
   async function trigger(jobName: string) {
     setTriggering(jobName);
     try {
       await triggerPipelineJob(baseUrl, jobName, accessToken);
       // Trigger only returns once the Job is (re)created, not once it's actually
-      // running — give the cluster a moment before re-reading status.
+      // running — give the cluster a moment before re-reading status/events.
       setTimeout(load, 1000);
+      setTimeout(loadEvents, 1000);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -153,6 +168,30 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
           )}
         </div>
       )}
+
+      <div className="panel-card settings-card">
+        <div className="settings-card-header">
+          <h3>Recent events (Kafka)</h3>
+          <button className="btn-secondary" onClick={loadEvents} disabled={eventsLoading}>
+            {eventsLoading ? "Loading…" : "↻ Refresh"}
+          </button>
+        </div>
+        <p className="panel-hint">
+          Pipeline-trigger events read directly off the optional Data Platform profile's event stream — empty if that
+          profile isn't running (<code>make data-platform-up</code>), not an error. Re-reads from the start of the
+          topic on every refresh, so it's a snapshot for this admin view, not a live tail.
+        </p>
+        {events && events.length === 0 && <p className="panel-hint">No events yet.</p>}
+        {events && events.length > 0 && (
+          <div className="settings-grid">
+            {events.map((e, i) => (
+              <div key={`${e.job}-${e.triggered_at}-${i}`} className="settings-card-model">
+                <strong>{e.job}</strong> — {e.triggered_at}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {rateLimits && (
         <div className="panel-card settings-card">

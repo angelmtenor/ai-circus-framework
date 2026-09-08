@@ -582,3 +582,18 @@ export async function triggerPipelineJob(
   });
   return asJson(response);
 }
+
+export type PipelineTriggerEvent = { job: string; triggered_at: string };
+
+/**
+ * Recent pipeline-trigger events read directly off the optional Data
+ * Platform profile's Kafka topic — empty if that profile isn't running (see
+ * api.py's docstring), not an error.
+ */
+export async function getRecentPipelineTriggerEvents(
+  baseUrl: string,
+  accessToken: string | null,
+): Promise<PipelineTriggerEvent[]> {
+  const response = await fetch(`${baseUrl}/events/pipeline-triggers`, { headers: headers(accessToken) });
+  return asJson<PipelineTriggerEvent[]>(response);
+}

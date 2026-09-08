@@ -14,8 +14,10 @@ RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
+	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-pause k3s-resume k3s-portforward k3s-portforward-stop
+	k3s-all k3s-pause k3s-resume k3s-portforward k3s-portforward-stop \
+	k3s-data-platform-up k3s-data-platform-down
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -34,8 +36,8 @@ bootstrap: ## Create .env from .env.example, console.htpasswd from its .example 
 
 # ── Compose lifecycle ─────────────────────────────────────────────────────────
 
-up-infra: ## Start only the platform infra (postgres, keycloak, qdrant, seaweedfs, traefik)
-	@docker compose up -d postgres keycloak qdrant seaweedfs traefik
+up-infra: ## Start only the platform infra (postgres, keycloak, qdrant, seaweedfs, valkey, traefik)
+	@docker compose up -d postgres keycloak qdrant seaweedfs valkey traefik
 
 up: ## Start the full platform (infra + all backend services + the UI)
 	@mkdir -p demo/themes
@@ -51,6 +53,13 @@ pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start pre
 	@docker compose up --build etl-tabular
 	@docker compose up --build training
 	@docker compose up -d --build prediction
+
+data-platform-up: ## Start the optional Data Platform profile (currently: Kafka event streaming) — off by default, ~768MB RAM
+	@docker compose --profile data-platform up -d --build kafka
+	@echo "✓ kafka up — data-platform-manager will start publishing/reading real events against it"
+
+data-platform-down: ## Stop the optional Data Platform profile's containers (state is kept — see docker-compose.yml's kafka-data volume)
+	@docker compose --profile data-platform stop kafka
 
 ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; pulls llama3.2:3b, ~2GB, on first run)
 	@docker compose --profile ollama up -d ollama ollama-pull
@@ -209,7 +218,7 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 # -> wait -> (pipeline) -> verify.
 
 K3S_CLUSTER ?= ai-circus
-K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice
+K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice data-platform-manager
 K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
 
 k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes
@@ -252,7 +261,7 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=60s
 	@echo "⏳ waiting for keycloak (first boot imports the realm — can take a couple of minutes)..."
 	@kubectl -n ai-circus rollout status deployment/keycloak --timeout=180s
-	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice ui-react; do \
+	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice data-platform-manager ui-react; do \
 		echo "⏳ waiting for $$svc..."; \
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
 	done
@@ -280,6 +289,14 @@ k3s-down: k3s-portforward-stop ## Delete every applied k8s/base manifest (Statef
 
 k3s-all: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait ## One-shot: cluster -> build -> import -> secrets -> up -> wait (run `make k3s-pipeline` yourself afterward if you need the churn ETL/training data)
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up — http://aiopen.localhost"
+
+k3s-data-platform-up: ## Apply the optional Data Platform profile (k8s/data-platform/ — currently: Kafka), NOT part of `k3s-up`/`k3s-down`
+	@kubectl apply -f k8s/data-platform/kafka.yaml
+	@kubectl -n ai-circus rollout status statefulset/kafka --timeout=120s
+	@echo "✓ kafka up in k3s — data-platform-manager will start publishing/reading real events against it"
+
+k3s-data-platform-down: ## Delete the optional Data Platform profile's k8s resources (its PVC is retained by default, same as postgres/qdrant)
+	@kubectl delete -f k8s/data-platform/kafka.yaml --ignore-not-found
 
 k3s-pause: k3s-portforward-stop ## Stop the k3d cluster's containers to free CPU/RAM while keeping all cluster state (pods, volumes) — resume with `make k3s-resume`
 	@k3d cluster stop "$(K3S_CLUSTER)"

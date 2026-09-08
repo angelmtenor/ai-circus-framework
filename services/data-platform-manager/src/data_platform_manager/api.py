@@ -18,6 +18,7 @@ has no Kubernetes API to call. /roadmap and /gateway/rate-limits work in both.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 
@@ -26,6 +27,8 @@ from ai_circus_shared.auth import ADMIN_ORG_ID, is_admin_bearer_token
 from ai_circus_shared.cache import TenantCache
 from ai_circus_shared.document_store import DbSession, DocumentStore
 from ai_circus_shared.document_store import get_session as get_document_session
+from ai_circus_shared.events import EventConsumer, EventProducer, connect_consumer
+from confluent_kafka import Producer
 from fastapi import APIRouter, Depends, Header, HTTPException
 from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
@@ -33,12 +36,22 @@ from pydantic import BaseModel
 from data_platform_manager import get_env_config
 from data_platform_manager.core import gateway, k8s_jobs
 from data_platform_manager.core.cache_client import get_client
+from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _JOB_STATUS_CACHE_TTL_SECONDS = 5
 _TRIGGER_HISTORY_COLLECTION = "pipeline-triggers"
+_TRIGGER_EVENTS_TOPIC = "pipeline-triggers"
+_EVENT_POLL_TIMEOUT_SECONDS = 1.0
+# Empirically, a brand-new consumer group's first ~3 poll() calls return None
+# while it joins the group — 6 gives comfortable margin over that before
+# concluding the topic is genuinely empty (worst case ~6s, a manual admin
+# "Refresh" click, not a hot path).
+_EVENT_POLL_ATTEMPTS = 6
+_EVENT_POLL_MAX_MESSAGES = 50
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
@@ -53,6 +66,11 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
 def get_cache(client: redis.Redis = Depends(get_client)) -> TenantCache:
     """FastAPI dependency: a TenantCache bound to this process's Valkey connection."""
     return TenantCache(_client=client)
+
+
+def get_event_producer(producer: Producer = Depends(get_producer)) -> EventProducer:
+    """FastAPI dependency: an EventProducer bound to this process's Kafka connection."""
+    return EventProducer(_client=producer)
 
 
 class JobStatusOut(BaseModel):
@@ -142,11 +160,16 @@ def trigger_pipeline_job(
     name: str,
     cache: TenantCache = Depends(get_cache),
     session: DbSession = Depends(get_document_session),
+    events: EventProducer = Depends(get_event_producer),
 ) -> dict[str, str]:
     """Delete-and-recreate one pipeline Job (etl-tabular/training/etl-vectorize).
-    Every trigger is recorded to this service's own document store (an audit trail
-    of who ran what, when — visible to an operator even after the Job itself is
-    long gone) and immediately invalidates that job's cached status.
+    Every trigger is recorded to this service's own document store (the durable
+    audit trail — visible to an operator even after the Job itself is long gone)
+    and immediately invalidates that job's cached status. It's also published to
+    the optional Data Platform profile's Kafka topic, best-effort: if that
+    profile isn't running, the publish silently does nothing (see
+    ai_circus_shared.events' module docstring) — it must never turn a real,
+    successful trigger into a failed HTTP response.
     """
     if not k8s_jobs.in_cluster_config_available():
         raise HTTPException(
@@ -163,17 +186,59 @@ def trigger_pipeline_job(
     cache.delete(ADMIN_ORG_ID, f"job-status:{name}")
     store = DocumentStore(session)
     triggered_at = datetime.now(UTC).isoformat()
-    store.put(
-        ADMIN_ORG_ID,
-        _TRIGGER_HISTORY_COLLECTION,
-        str(uuid.uuid4()),
-        {"job": name, "triggered_at": triggered_at},
-    )
-    return {"job": name, "triggered_at": triggered_at}
+    event = {"job": name, "triggered_at": triggered_at}
+    store.put(ADMIN_ORG_ID, _TRIGGER_HISTORY_COLLECTION, str(uuid.uuid4()), event)
+
+    try:
+        events.publish(ADMIN_ORG_ID, _TRIGGER_EVENTS_TOPIC, event)
+    except Exception:
+        # Best-effort by design (see docstring above) — the trigger itself
+        # already succeeded and is durably recorded in the document store.
+        logger.warning("Failed to publish pipeline-trigger event for job %r", name, exc_info=True)
+
+    return event
 
 
 @router.get("/pipeline/triggers/history", dependencies=[Depends(require_admin)])
 def trigger_history(session: DbSession = Depends(get_document_session)) -> list[dict[str, object]]:
-    """Most-recently-triggered-first audit trail of every job this service has run."""
+    """Most-recently-triggered-first audit trail of every job this service has run —
+    the durable record (Postgres), unlike GET /events/pipeline-triggers below.
+    """
     store = DocumentStore(session)
     return [doc.content for doc in store.list(ADMIN_ORG_ID, _TRIGGER_HISTORY_COLLECTION)]
+
+
+@router.get("/events/pipeline-triggers", dependencies=[Depends(require_admin)])
+def recent_pipeline_trigger_events() -> list[dict[str, object]]:
+    """Recent pipeline-trigger events read directly off the Kafka topic — proof
+    the optional Data Platform profile's event stream is actually working, not
+    the durable source of truth (see /pipeline/triggers/history for that).
+    Returns an empty list, not an error, if that profile isn't running: this
+    uses a fresh, uniquely-named consumer group per call (auto.offset.reset=
+    earliest) specifically so every call re-reads from the beginning of the
+    topic rather than draining it across calls — the right trade-off for a
+    low-volume admin visibility endpoint, not a real streaming consumer.
+
+    Deliberately polls a *fixed* number of times rather than stopping at the
+    first empty one: confirmed live against a real broker that a brand-new
+    consumer group's first few poll() calls return None while it joins the
+    group / gets its partition assignment, even when messages already exist —
+    stopping early would almost always (wrongly) report "no events".
+    """
+    config = get_env_config()
+    consumer = EventConsumer(_client=connect_consumer(config, group_id=f"data-platform-manager-viewer-{uuid.uuid4()}"))
+    consumer.subscribe(ADMIN_ORG_ID, _TRIGGER_EVENTS_TOPIC)
+    events: list[dict[str, object]] = []
+    try:
+        for _ in range(_EVENT_POLL_ATTEMPTS):
+            if len(events) >= _EVENT_POLL_MAX_MESSAGES:
+                break
+            event = consumer.poll(timeout_seconds=_EVENT_POLL_TIMEOUT_SECONDS)
+            if event is not None:
+                events.append(event)
+    except Exception:
+        logger.warning("Failed to read pipeline-trigger events from Kafka", exc_info=True)
+        return []
+    finally:
+        consumer.close()
+    return events

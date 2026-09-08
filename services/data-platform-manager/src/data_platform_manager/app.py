@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from data_platform_manager import get_env_config
 from data_platform_manager.api import router
 from data_platform_manager.core.cache_client import init_client
+from data_platform_manager.core.events_client import init_producer
 from data_platform_manager.core.logger import configure_logger, get_logger
 
 logger = get_logger(__name__)
@@ -35,11 +36,16 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Initialize the document-store database and cache connection on startup."""
+    """Initialize the document-store database, cache connection, and Kafka
+    producer on startup. The producer connects lazily — this succeeds
+    immediately whether or not the optional Data Platform profile is actually
+    running (see ai_circus_shared.events' module docstring).
+    """
     config = get_env_config()
     engine = init_engine(config)
     Base.metadata.create_all(engine)
     init_client(config)
+    init_producer(config)
     yield
 
 
