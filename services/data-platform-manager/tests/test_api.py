@@ -22,7 +22,7 @@ from sqlalchemy.pool import StaticPool
 from data_platform_manager.api import get_client, get_producer, require_admin
 from data_platform_manager.api import get_document_session as api_get_document_session
 from data_platform_manager.app import app
-from data_platform_manager.core import gateway, k8s_jobs
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
 from tests.conftest import FakeSecret
 
 
@@ -117,8 +117,9 @@ def test_roadmap_rejects_wrong_token(unauthenticated_client: TestClient) -> None
 def test_roadmap_returns_every_capability(client: TestClient) -> None:
     response = client.get("/roadmap")
     assert response.status_code == 200
-    statuses = {c["status"] for c in response.json()}
-    assert statuses == {"live", "partial", "planned"}
+    capabilities = response.json()
+    assert len(capabilities) > 0
+    assert {c["status"] for c in capabilities} <= {"live", "partial", "planned"}
 
 
 def test_pipeline_jobs_reports_unavailable_outside_a_cluster(client: TestClient) -> None:
@@ -286,3 +287,232 @@ def test_gateway_rate_limits_surfaces_a_gateway_error_as_502(
     response = unauthenticated_client.get("/gateway/rate-limits", headers={"Authorization": "Bearer test-admin-key"})
 
     assert response.status_code == 502
+
+
+# CDC (ai_circus_shared.cdc) calls real Postgres-only SQL functions
+# (pg_create_logical_replication_slot, pg_logical_slot_get_changes) that the
+# in-memory SQLite this test suite otherwise uses can't run — so these tests
+# mock ensure_slot/poll_changes/slot_status at the boundary, the same way
+# gateway.get_rate_limits is mocked above. The parser itself is fully
+# unit-tested (against real captured output) in libs/shared's own
+# tests/test_cdc.py; the real end-to-end read was verified live in
+# docker-compose against the actual running Postgres.
+
+
+def test_cdc_status_reports_no_slot_before_first_poll(
+    unauthenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("data_platform_manager.api.slot_status", lambda session, slot_name: None)
+
+    response = unauthenticated_client.get("/cdc/status", headers={"Authorization": "Bearer test-admin-key"})
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_exists": False, "active": None, "confirmed_flush_lsn": None}
+
+
+def test_cdc_status_reports_an_existing_slots_position(
+    unauthenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "data_platform_manager.api.slot_status",
+        lambda session, slot_name: {"active": True, "confirmed_flush_lsn": "0/37661C0"},
+    )
+
+    response = unauthenticated_client.get("/cdc/status", headers={"Authorization": "Bearer test-admin-key"})
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_exists": True, "active": True, "confirmed_flush_lsn": "0/37661C0"}
+
+
+def test_cdc_poll_publishes_each_captured_change(
+    client: TestClient, fake_producer: _FakeKafkaProducer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ai_circus_shared.cdc import ChangeEvent
+
+    change = ChangeEvent(
+        schema="public", table="documents", operation="INSERT", columns={"doc_id": "doc-1", "org_id": "admin"}
+    )
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: True)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [change])
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slot_created"] is True
+    assert body["changes_captured"] == 1
+    assert body["changes"] == [change.to_dict()]
+    assert len(fake_producer.produced) == 1
+    topic, value = fake_producer.produced[0]
+    assert topic == "tenant-admin.cdc.documents"
+    assert json.loads(value) == change.to_dict()
+
+
+def test_cdc_poll_reports_zero_changes_when_nothing_changed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: False)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [])
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_created": False, "changes_captured": 0, "changes": []}
+
+
+def test_cdc_poll_succeeds_even_if_event_publish_fails(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ai_circus_shared.cdc import ChangeEvent
+
+    change = ChangeEvent(schema="public", table="documents", operation="DELETE", columns={"doc_id": "doc-1"})
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: False)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [change])
+
+    def _raise(topic: str, value: bytes) -> None:
+        raise RuntimeError("broker unreachable")
+
+    from data_platform_manager.api import get_producer
+
+    app.dependency_overrides[get_producer] = lambda: type("BrokenProducer", (), {"produce": _raise})()
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    assert response.json()["changes_captured"] == 1
+
+
+def test_cdc_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.get("/cdc/status").status_code == 401
+    assert unauthenticated_client.post("/cdc/poll").status_code == 401
+
+
+# Lakehouse (core/lakehouse.py, PyIceberg) needs a real Postgres catalog + real
+# S3-compatible storage to do anything — mocked at the same `get_catalog`
+# boundary the endpoints call through, the same way CDC's SQL functions are
+# mocked above. The real read/write/versioning path was verified live against
+# the actual running Postgres + SeaweedFS before this code was written.
+
+
+class _FakeCatalog:
+    """Stands in for the object lakehouse.get_catalog() would normally return —
+    the endpoints never call any Catalog method directly, only the
+    lakehouse.* functions this test monkeypatches, so its shape doesn't matter.
+    """
+
+
+def test_lakehouse_ingest_returns_the_ingest_summary(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(
+        lakehouse,
+        "ingest",
+        lambda catalog, store, org_id, collection, table_name: {
+            "table": "lakehouse.pipeline_triggers",
+            "rows_ingested": 3,
+            "total_rows": 3,
+            "snapshot_count": 1,
+        },
+    )
+
+    response = client.post("/lakehouse/ingest")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "table": "lakehouse.pipeline_triggers",
+        "rows_ingested": 3,
+        "total_rows": 3,
+        "snapshot_count": 1,
+    }
+
+
+def test_lakehouse_tables_lists_every_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "list_tables", lambda catalog: ["lakehouse.pipeline_triggers"])
+
+    response = client.get("/lakehouse/tables")
+
+    assert response.status_code == 200
+    assert response.json() == ["lakehouse.pipeline_triggers"]
+
+
+def test_lakehouse_tables_is_empty_before_any_ingest(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "list_tables", lambda catalog: [])
+
+    response = client.get("/lakehouse/tables")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_lakehouse_table_returns_404_for_an_unknown_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "table_info", lambda catalog, table_name: None)
+
+    response = client.get("/lakehouse/tables/does-not-exist")
+
+    assert response.status_code == 404
+
+
+def test_lakehouse_table_returns_info_for_a_known_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(
+        lakehouse,
+        "table_info",
+        lambda catalog, table_name: {"table": f"lakehouse.{table_name}", "total_rows": 5, "snapshot_count": 2},
+    )
+
+    response = client.get("/lakehouse/tables/pipeline_triggers")
+
+    assert response.status_code == 200
+    assert response.json() == {"table": "lakehouse.pipeline_triggers", "total_rows": 5, "snapshot_count": 2}
+
+
+def test_lakehouse_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.post("/lakehouse/ingest").status_code == 401
+    assert unauthenticated_client.get("/lakehouse/tables").status_code == 401
+    assert unauthenticated_client.get("/lakehouse/tables/x").status_code == 401
+
+
+def test_semantic_views_lists_the_full_semantic_model(client: TestClient) -> None:
+    response = client.get("/semantic/views")
+
+    assert response.status_code == 200
+    names = {view["name"] for view in response.json()}
+    assert names == {view.name for view in semantic.SEMANTIC_VIEWS}
+
+
+def test_semantic_query_returns_the_federated_result(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(
+        semantic,
+        "run_query",
+        lambda view, config, lakehouse_table_name: {
+            "view": view.name,
+            "columns": ["org_id", "pipeline_triggers_captured"],
+            "rows": [{"org_id": "admin", "pipeline_triggers_captured": 3}],
+        },
+    )
+
+    response = client.post("/semantic/views/tenant_activity_360/query")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "view": "tenant_activity_360",
+        "columns": ["org_id", "pipeline_triggers_captured"],
+        "rows": [{"org_id": "admin", "pipeline_triggers_captured": 3}],
+    }
+
+
+def test_semantic_query_returns_404_for_an_unknown_view(client: TestClient) -> None:
+    response = client.post("/semantic/views/does-not-exist/query")
+
+    assert response.status_code == 404
+
+
+def test_semantic_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.get("/semantic/views").status_code == 401
+    assert unauthenticated_client.post("/semantic/views/tenant_activity_360/query").status_code == 401

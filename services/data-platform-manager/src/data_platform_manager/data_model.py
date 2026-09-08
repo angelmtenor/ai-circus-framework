@@ -51,9 +51,18 @@ class EnvConfig(BaseSettings):
     LLM_GATEWAY_API_KEY: SecretStr = Field(
         description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
     )
+    OBJECT_STORE_ENDPOINT: str = Field(
+        description="SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
+    )
+    OBJECT_STORE_ACCESS_KEY: str = Field(
+        description="SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr = Field(
+        description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    )
 
 
-_SOURCE_YAML_HASH = "81a234cb593c41828bc7b32db2c87d5d016dff2d7e9684f0e3a730670f7c970d"
+_SOURCE_YAML_HASH = "23cbdfce7bff61600677704a7ff4d4080ad6285462d6c07279ba262f9bf2fc26"
 
 
 EnvConfig.model_rebuild()

@@ -2,22 +2,33 @@ import { useEffect, useState } from "react";
 import {
   getActiveLlmModel,
   getActiveVoiceSettings,
+  getCdcStatus,
   getGatewayRateLimits,
+  getLakehouseTables,
   getPipelineJobs,
   getRecentPipelineTriggerEvents,
   getRoadmap,
+  getSemanticViews,
+  ingestLakehouse,
   listLlmProviders,
+  pollCdc,
+  runSemanticQuery,
   setActiveLlmModel,
   setActiveVoiceSettings,
   testLlmProvider,
   triggerPipelineJob,
   voiceProviders,
   type Capability,
+  type CdcPollResult,
+  type CdcStatus,
+  type LakehouseTableInfo,
   type LlmProvider,
   type LlmProviderTest,
   type PipelineJobsResult,
   type PipelineTriggerEvent,
   type RateLimit,
+  type SemanticQueryResult,
+  type SemanticView,
   type VoiceProviders,
 } from "./apiClient";
 import { config } from "./config";
@@ -72,6 +83,15 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   const [rateLimits, setRateLimits] = useState<RateLimit[] | null>(null);
   const [events, setEvents] = useState<PipelineTriggerEvent[] | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [cdcStatus, setCdcStatus] = useState<CdcStatus | null>(null);
+  const [cdcResult, setCdcResult] = useState<CdcPollResult | null>(null);
+  const [cdcPolling, setCdcPolling] = useState(false);
+  const [lakehouseTables, setLakehouseTables] = useState<string[] | null>(null);
+  const [lakehouseResult, setLakehouseResult] = useState<LakehouseTableInfo | null>(null);
+  const [lakehouseIngesting, setLakehouseIngesting] = useState(false);
+  const [semanticViews, setSemanticViews] = useState<SemanticView[] | null>(null);
+  const [semanticResult, setSemanticResult] = useState<SemanticQueryResult | null>(null);
+  const [semanticRunning, setSemanticRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
 
@@ -101,6 +121,68 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   }
 
   useEffect(loadEvents, [baseUrl, accessToken]);
+
+  function loadCdcStatus() {
+    getCdcStatus(baseUrl, accessToken)
+      .then(setCdcStatus)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadCdcStatus, [baseUrl, accessToken]);
+
+  async function runCdcPoll() {
+    setCdcPolling(true);
+    try {
+      const result = await pollCdc(baseUrl, accessToken);
+      setCdcResult(result);
+      loadCdcStatus();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCdcPolling(false);
+    }
+  }
+
+  function loadLakehouseTables() {
+    getLakehouseTables(baseUrl, accessToken)
+      .then(setLakehouseTables)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadLakehouseTables, [baseUrl, accessToken]);
+
+  async function runLakehouseIngest() {
+    setLakehouseIngesting(true);
+    try {
+      const result = await ingestLakehouse(baseUrl, accessToken);
+      setLakehouseResult(result);
+      loadLakehouseTables();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLakehouseIngesting(false);
+    }
+  }
+
+  function loadSemanticViews() {
+    getSemanticViews(baseUrl, accessToken)
+      .then(setSemanticViews)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadSemanticViews, [baseUrl, accessToken]);
+
+  async function runSemanticView(viewName: string) {
+    setSemanticRunning(viewName);
+    try {
+      const result = await runSemanticQuery(baseUrl, viewName, accessToken);
+      setSemanticResult(result);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSemanticRunning(null);
+    }
+  }
 
   async function trigger(jobName: string) {
     setTriggering(jobName);
@@ -189,6 +271,130 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
                 <strong>{e.job}</strong> — {e.triggered_at}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <div className="settings-card-header">
+          <h3>Change-Data-Capture</h3>
+          <button className="btn-secondary" onClick={runCdcPoll} disabled={cdcPolling}>
+            {cdcPolling ? "Polling…" : "▶ Poll now"}
+          </button>
+        </div>
+        <p className="panel-hint">
+          Reads real changes off Postgres's own logical replication slot for the document store and forwards each to
+          Kafka — a genuine WAL read, not the app re-publishing its own writes (unlike the pipeline-trigger events
+          above). On demand, not a background loop — see the roadmap note above.
+        </p>
+        {cdcStatus && (
+          <p className="panel-hint">
+            Slot: {cdcStatus.slot_exists ? `active, at ${cdcStatus.confirmed_flush_lsn}` : "not created yet — poll once to create it"}
+          </p>
+        )}
+        {cdcResult && (
+          <div className="settings-grid">
+            {cdcResult.changes.length === 0 && <p className="panel-hint">No changes since the last poll.</p>}
+            {cdcResult.changes.map((c, i) => (
+              <div key={`${c.table}-${i}`} className="settings-card-model">
+                <strong>
+                  {c.operation} {c.table}
+                </strong>
+                <div className="panel-hint">
+                  {Object.entries(c.columns)
+                    .slice(0, 3)
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(", ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <div className="settings-card-header">
+          <h3>Lakehouse Table Format</h3>
+          <button className="btn-secondary" onClick={runLakehouseIngest} disabled={lakehouseIngesting}>
+            {lakehouseIngesting ? "Ingesting…" : "▶ Ingest now"}
+          </button>
+        </div>
+        <p className="panel-hint">
+          Snapshots the same demo collection into a real, versioned Apache Iceberg table (Parquet files on the
+          object store, cataloged in Postgres) — every ingest appends a new snapshot, so row/snapshot counts grow
+          run over run rather than being overwritten.
+        </p>
+        {lakehouseTables && (
+          <p className="panel-hint">
+            {lakehouseTables.length === 0 ? "No tables yet — ingest once to create one." : `Tables: ${lakehouseTables.join(", ")}`}
+          </p>
+        )}
+        {lakehouseResult && (
+          <div className="settings-grid">
+            <div className="settings-card-model">
+              <strong>{lakehouseResult.table}</strong>
+              <div className="panel-hint">
+                {lakehouseResult.rows_ingested !== undefined && `${lakehouseResult.rows_ingested} rows ingested this run, `}
+                {lakehouseResult.total_rows} total rows, {lakehouseResult.snapshot_count} snapshots
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <h3>Semantic Modeling & Query Federation</h3>
+        <p className="panel-hint">
+          A small named catalog of business-friendly queries, each run through an embedded DuckDB engine that
+          federates two genuinely separate sources in one SQL statement — the lakehouse's Iceberg table and
+          platform-registry's real Postgres tables — with nothing copied into a new store.
+        </p>
+        {semanticViews && (
+          <div className="settings-grid">
+            {semanticViews.map((v) => (
+              <div key={v.name} className="settings-card-model">
+                <strong>{v.name}</strong>
+                <div className="panel-hint">{v.description}</div>
+                <div>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => runSemanticView(v.name)}
+                    disabled={semanticRunning === v.name}
+                  >
+                    {semanticRunning === v.name ? "Running…" : "▶ Run"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {semanticResult && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <strong>{semanticResult.view}</strong>
+            {semanticResult.rows.length === 0 ? (
+              <p className="panel-hint">No rows returned.</p>
+            ) : (
+              <div className="table-scroll">
+                <table className="data-table" style={{ marginTop: "0.5rem" }}>
+                  <thead>
+                    <tr>
+                      {semanticResult.columns.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {semanticResult.rows.map((row, i) => (
+                      <tr key={i}>
+                        {semanticResult.columns.map((c) => (
+                          <td key={c}>{String(row[c])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
