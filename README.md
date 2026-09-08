@@ -458,17 +458,25 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   /lakehouse/ingest` snapshots the document store's demo collection into a table — every call
   appends a new snapshot rather than overwriting, so row/snapshot counts genuinely grow run over
   run (see `core/lakehouse.py`).
+- **Semantic Modeling & Query Federation** — a small named catalog of business-friendly queries
+  (`GET /semantic/views`), each run (`POST /semantic/views/{name}/query`) through an embedded
+  **DuckDB** engine that federates two genuinely separate sources in one SQL statement, without
+  copying either into a new store: the lakehouse's own Iceberg table (handed to DuckDB directly as
+  an Arrow table) and `platform-registry`'s real `entitlements`/`scenarios` tables (a different
+  service's Postgres database, reached over the same shared cluster credentials every service
+  already has). `tenant_activity_360` is the one that actually federates both — per-tenant pipeline
+  activity next to how many scenarios that tenant is entitled to, joined by `org_id` in a single
+  query (see `core/semantic.py`).
 
 **Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
 then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
 the run shows up under **Pipeline jobs**, as a real Kafka message under **Recent events**, and
 (once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**. Click
 **Ingest now** under **Lakehouse Table Format** to snapshot that same data into a real Iceberg
-table — repeat it and watch the snapshot count climb.
+table — repeat it and watch the snapshot count climb. Then run any query under **Semantic Modeling
+& Query Federation** to see it joined live against `platform-registry`'s real tenant data.
 
-Semantic modeling and query federation remain
-[reserved for later](#reserved-for-later-documented-not-built) — the roadmap panel above is the
-live source of truth for exactly what's built versus planned.
+The roadmap panel above is the live source of truth for exactly what's built versus planned.
 
 ---
 
@@ -540,16 +548,16 @@ voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate
 built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
 litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,
 on-demand Postgres-to-Kafka change read — see [Data Platform](#data-platform-optional-profile) —
-continuous polling is the natural next step, not a redesign), a semantic-modeling/query-federation
-layer over the object store, and (optional) extracting embedded images out of uploaded PDFs in the
-chat attachment flow — today `platform_registry.core.document_extraction` only pulls text/OCR out
-of a PDF, so a figure or diagram embedded in an otherwise text-native page never reaches a
-vision-capable model. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app
-admin screen, a shared cache for multi-replica deployments, a real Postgres-to-Kafka
-change-data-capture feed, and a lakehouse table format over the object store, previously listed
-here, are built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`,
-[Data Platform](#data-platform-optional-profile) (three times), and `ai_circus_shared.cache`
-respectively.)
+continuous polling is the natural next step, not a redesign), and (optional) extracting embedded
+images out of uploaded PDFs in the chat attachment flow — today
+`platform_registry.core.document_extraction` only pulls text/OCR out of a PDF, so a figure or
+diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
+AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, a shared cache
+for multi-replica deployments, a real Postgres-to-Kafka change-data-capture feed, a lakehouse table
+format over the object store, and a semantic-modeling/query-federation layer over both the
+lakehouse and platform-registry's own Postgres tables, previously listed here, are built — see
+`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile) (three
+times), and `ai_circus_shared.cache` respectively.)
 
 ---
 

@@ -131,6 +131,18 @@ def list_tables(catalog: Catalog) -> list[str]:
         return []
 
 
+def load_arrow(catalog: Catalog, table_name: str) -> pa.Table:
+    """Full contents of one lakehouse table as an in-memory Arrow table — the
+    hand-off point for query engines like DuckDB (see core/semantic.py). An
+    empty, correctly-typed table if nothing has been ingested yet, not an error.
+    """
+    try:
+        table = catalog.load_table(_table_identifier(table_name))
+    except NoSuchTableError:
+        return _SCHEMA.empty_table()
+    return table.scan().to_arrow()
+
+
 def table_info(catalog: Catalog, table_name: str) -> dict[str, Any] | None:
     """Row/snapshot counts for one table, or None if it doesn't exist yet."""
     try:

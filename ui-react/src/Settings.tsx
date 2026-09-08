@@ -8,9 +8,11 @@ import {
   getPipelineJobs,
   getRecentPipelineTriggerEvents,
   getRoadmap,
+  getSemanticViews,
   ingestLakehouse,
   listLlmProviders,
   pollCdc,
+  runSemanticQuery,
   setActiveLlmModel,
   setActiveVoiceSettings,
   testLlmProvider,
@@ -25,6 +27,8 @@ import {
   type PipelineJobsResult,
   type PipelineTriggerEvent,
   type RateLimit,
+  type SemanticQueryResult,
+  type SemanticView,
   type VoiceProviders,
 } from "./apiClient";
 import { config } from "./config";
@@ -85,6 +89,9 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   const [lakehouseTables, setLakehouseTables] = useState<string[] | null>(null);
   const [lakehouseResult, setLakehouseResult] = useState<LakehouseTableInfo | null>(null);
   const [lakehouseIngesting, setLakehouseIngesting] = useState(false);
+  const [semanticViews, setSemanticViews] = useState<SemanticView[] | null>(null);
+  const [semanticResult, setSemanticResult] = useState<SemanticQueryResult | null>(null);
+  const [semanticRunning, setSemanticRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
 
@@ -154,6 +161,26 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
       setError((e as Error).message);
     } finally {
       setLakehouseIngesting(false);
+    }
+  }
+
+  function loadSemanticViews() {
+    getSemanticViews(baseUrl, accessToken)
+      .then(setSemanticViews)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadSemanticViews, [baseUrl, accessToken]);
+
+  async function runSemanticView(viewName: string) {
+    setSemanticRunning(viewName);
+    try {
+      const result = await runSemanticQuery(baseUrl, viewName, accessToken);
+      setSemanticResult(result);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSemanticRunning(null);
     }
   }
 
@@ -311,6 +338,63 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
                 {lakehouseResult.total_rows} total rows, {lakehouseResult.snapshot_count} snapshots
               </div>
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <h3>Semantic Modeling & Query Federation</h3>
+        <p className="panel-hint">
+          A small named catalog of business-friendly queries, each run through an embedded DuckDB engine that
+          federates two genuinely separate sources in one SQL statement — the lakehouse's Iceberg table and
+          platform-registry's real Postgres tables — with nothing copied into a new store.
+        </p>
+        {semanticViews && (
+          <div className="settings-grid">
+            {semanticViews.map((v) => (
+              <div key={v.name} className="settings-card-model">
+                <strong>{v.name}</strong>
+                <div className="panel-hint">{v.description}</div>
+                <div>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => runSemanticView(v.name)}
+                    disabled={semanticRunning === v.name}
+                  >
+                    {semanticRunning === v.name ? "Running…" : "▶ Run"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {semanticResult && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <strong>{semanticResult.view}</strong>
+            {semanticResult.rows.length === 0 ? (
+              <p className="panel-hint">No rows returned.</p>
+            ) : (
+              <div className="table-scroll">
+                <table className="data-table" style={{ marginTop: "0.5rem" }}>
+                  <thead>
+                    <tr>
+                      {semanticResult.columns.map((c) => (
+                        <th key={c}>{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {semanticResult.rows.map((row, i) => (
+                      <tr key={i}>
+                        {semanticResult.columns.map((c) => (
+                          <td key={c}>{String(row[c])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

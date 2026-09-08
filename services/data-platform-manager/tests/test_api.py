@@ -22,7 +22,7 @@ from sqlalchemy.pool import StaticPool
 from data_platform_manager.api import get_client, get_producer, require_admin
 from data_platform_manager.api import get_document_session as api_get_document_session
 from data_platform_manager.app import app
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
 from tests.conftest import FakeSecret
 
 
@@ -475,3 +475,44 @@ def test_lakehouse_endpoints_require_admin_token(unauthenticated_client: TestCli
     assert unauthenticated_client.post("/lakehouse/ingest").status_code == 401
     assert unauthenticated_client.get("/lakehouse/tables").status_code == 401
     assert unauthenticated_client.get("/lakehouse/tables/x").status_code == 401
+
+
+def test_semantic_views_lists_the_full_semantic_model(client: TestClient) -> None:
+    response = client.get("/semantic/views")
+
+    assert response.status_code == 200
+    names = {view["name"] for view in response.json()}
+    assert names == {view.name for view in semantic.SEMANTIC_VIEWS}
+
+
+def test_semantic_query_returns_the_federated_result(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(
+        semantic,
+        "run_query",
+        lambda view, config, lakehouse_table_name: {
+            "view": view.name,
+            "columns": ["org_id", "pipeline_triggers_captured"],
+            "rows": [{"org_id": "admin", "pipeline_triggers_captured": 3}],
+        },
+    )
+
+    response = client.post("/semantic/views/tenant_activity_360/query")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "view": "tenant_activity_360",
+        "columns": ["org_id", "pipeline_triggers_captured"],
+        "rows": [{"org_id": "admin", "pipeline_triggers_captured": 3}],
+    }
+
+
+def test_semantic_query_returns_404_for_an_unknown_view(client: TestClient) -> None:
+    response = client.post("/semantic/views/does-not-exist/query")
+
+    assert response.status_code == 404
+
+
+def test_semantic_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.get("/semantic/views").status_code == 401
+    assert unauthenticated_client.post("/semantic/views/tenant_activity_360/query").status_code == 401

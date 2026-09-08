@@ -647,3 +647,30 @@ export async function getLakehouseTableInfo(
   const response = await fetch(`${baseUrl}/lakehouse/tables/${tableName}`, { headers: headers(accessToken) });
   return asJson<LakehouseTableInfo>(response);
 }
+
+export type SemanticView = { name: string; description: string; sql: string };
+export type SemanticQueryResult = { view: string; columns: string[]; rows: Record<string, unknown>[] };
+
+/** The semantic model: every named, federated query data-platform-manager can run. */
+export async function getSemanticViews(baseUrl: string, accessToken: string | null): Promise<SemanticView[]> {
+  const response = await fetch(`${baseUrl}/semantic/views`, { headers: headers(accessToken) });
+  return asJson<SemanticView[]>(response);
+}
+
+/**
+ * Run one semantic view — federates the lakehouse's Iceberg table with
+ * platform-registry's real entitlements/scenarios tables through an embedded
+ * DuckDB engine (see api.py's docstring); a genuine cross-source SQL join,
+ * not a mock.
+ */
+export async function runSemanticQuery(
+  baseUrl: string,
+  viewName: string,
+  accessToken: string | null,
+): Promise<SemanticQueryResult> {
+  const response = await fetch(`${baseUrl}/semantic/views/${viewName}/query`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson<SemanticQueryResult>(response);
+}

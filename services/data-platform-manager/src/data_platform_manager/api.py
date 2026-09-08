@@ -35,7 +35,7 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -333,3 +333,32 @@ def lakehouse_table(table_name: str) -> dict[str, object]:
     if info is None:
         raise HTTPException(status_code=404, detail=f"Unknown lakehouse table {table_name!r}.")
     return info
+
+
+class SemanticViewOut(BaseModel):
+    """One entry of the semantic model — the named query itself, not its result."""
+
+    name: str
+    description: str
+    sql: str
+
+
+@router.get("/semantic/views", response_model=list[SemanticViewOut], dependencies=[Depends(require_admin)])
+def semantic_views() -> list[semantic.SemanticView]:
+    """The semantic model: every named, federated query this service can run —
+    see core/semantic.py's module docstring for what "federated" means here.
+    """
+    return semantic.SEMANTIC_VIEWS
+
+
+@router.post("/semantic/views/{name}/query", dependencies=[Depends(require_admin)])
+def semantic_query(name: str) -> dict[str, object]:
+    """Run one semantic view: federates the lakehouse's Iceberg table with
+    platform-registry's real entitlements/scenarios tables through an embedded
+    DuckDB engine (see core/semantic.py) and returns the result rows.
+    """
+    view = semantic.get_view(name)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"Unknown semantic view {name!r}.")
+    config = get_env_config()
+    return semantic.run_query(view, config, _LAKEHOUSE_TABLE_NAME)

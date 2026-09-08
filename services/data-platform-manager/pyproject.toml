@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "ai-circus-shared",
     "confluent-kafka>=2.15.0",
+    "duckdb>=1.5.5",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "kubernetes>=31.0.0",

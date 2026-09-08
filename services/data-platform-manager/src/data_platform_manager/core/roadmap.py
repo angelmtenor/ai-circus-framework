@@ -98,8 +98,10 @@ ROADMAP: list[Capability] = [
     Capability(
         layer="data-platform",
         name="Semantic Modeling & Query Federation",
-        status="planned",
-        note="Phase 3 of the optional profile",
+        status="live",
+        note="Embedded DuckDB engine federating the lakehouse's Iceberg table with "
+        "platform-registry's real Postgres tables in one query — "
+        "GET /semantic/views, POST /semantic/views/{name}/query",
     ),
 ]
 
