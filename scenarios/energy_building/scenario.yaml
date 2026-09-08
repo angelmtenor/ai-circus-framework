@@ -89,8 +89,10 @@ dataset:
     Windspeed: {type: numeric, label: "Wind speed", min: 0.0, max: 13.0, default: 4.0, step: 0.5, info: "Outdoor wind speed, in metres per second."}
     Visibility: {type: numeric, label: "Visibility", min: 1.0, max: 66.0, default: 40.0, step: 1.0, info: "Outdoor visibility distance, in km."}
     Tdewpoint: {type: numeric, label: "Dew point", min: -7.0, max: 16.0, default: 4.0, step: 0.5, info: "Outdoor dew point temperature, in °C — the temperature air must cool to for dew to form."}
-    month: {type: numeric, label: "Month", min: 1, max: 5, default: 3, step: 1}
-    day: {type: numeric, label: "Day of month", min: 1, max: 31, default: 15, step: 1}
+    month: {type: numeric, label: "Month", min: 1, max: 5, default: 3, step: 1,
+       info: "Calendar month (1 = January); this dataset spans January-May, so seasonal heating/lighting load only partially shows up."}
+    day: {type: numeric, label: "Day of month", min: 1, max: 31, default: 15, step: 1,
+       info: "Day of the calendar month (1-31) — mainly useful in combination with month/day_of_week rather than on its own."}
     hour: {type: numeric, label: "Hour of day", min: 0, max: 23, default: 12, step: 1, info: "Hour on a 24-hour clock (0 = midnight, 12 = noon)."}
     day_of_week: {type: numeric, label: "Day of week", min: 0, max: 6, default: 3, step: 1, info: "0 = Monday through 6 = Sunday."}
     is_holiday: {type: categorical, label: "Holiday", options: ["False", "True"], default: "False", info: "Whether this day is a public holiday."}
@@ -98,9 +100,9 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: Appliances}
-    - {type: scatter, x: T_out, y: Appliances}
-    - {type: bar, x: hour, y: Appliances, agg: mean}
+    - {type: histogram, x: Appliances, color_by: is_holiday}
+    - {type: scatter, x: T_out, y: Appliances, color_by: is_holiday}
+    - {type: bar, x: hour, y: Appliances, agg: mean, color_by: is_holiday}
 
 model:
   task_type: regression

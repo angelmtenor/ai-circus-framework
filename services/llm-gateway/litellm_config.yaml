@@ -6,12 +6,24 @@
 # calls a `model_name` from this list, never a provider SDK directly. Provider API
 # keys are read from the real environment via the `os.environ/<NAME>` syntax — see
 # settings.yaml for which vars to set in .env.
+#
+# Rate governance: every entry below carries a static `rpm`/`tpm` ceiling, enforced
+# by the router itself (no database needed — see general_settings' comment for why
+# this repo can't turn on litellm's DB-backed spend tracking/virtual keys). This is
+# a *shared*, per-model limit, not a per-tenant budget — it protects one shared
+# provider key from being exhausted by any single runaway caller, which is what's
+# achievable without adding Postgres+Prisma to this image. Per-tenant budgets are a
+# tracked follow-up (see root README/architecture notes), not implemented here.
+# Tune the numbers to your own provider tier — these defaults are conservative
+# free/low-tier estimates, not measured limits.
 
 model_list:
   - model_name: gpt-4o-mini
     litellm_params:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
+      rpm: 60
+      tpm: 150000
 
   # Default free-tier pick. Google has been retiring 2.x-generation models early for
   # *newly created* API keys/projects (404 "no longer available to new users" well
@@ -24,12 +36,16 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GOOGLE_API_KEY
+      rpm: 15
+      tpm: 1000000
 
   # DeepSeek's own API (not a proxy of another provider) — cheap, OpenAI-compatible.
   - model_name: deepseek-chat
     litellm_params:
       model: deepseek/deepseek-chat
       api_key: os.environ/DEEPSEEK_API_KEY
+      rpm: 60
+      tpm: 150000
 
   # GroqCloud — free tier, LPU-hosted, very low latency. Groq retired every Llama 3.x
   # model from its catalog (this used to be llama-3.3-70b-versatile) — gpt-oss-120b is
@@ -41,6 +57,8 @@ model_list:
     litellm_params:
       model: groq/openai/gpt-oss-120b
       api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+      tpm: 8000
 
   # Smaller sibling of gpt-oss-120b above, same free key — Groq scales its free-tier
   # tokens-per-minute quota down with model size, so this one has far more headroom
@@ -52,6 +70,8 @@ model_list:
     litellm_params:
       model: groq/openai/gpt-oss-20b
       api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+      tpm: 60000
 
   # OpenRouter — one key routes to many vendors' models. Individual ":free"-suffixed
   # model slugs (e.g. meta-llama/llama-3.3-70b-instruct:free) get delisted/relisted
@@ -64,6 +84,8 @@ model_list:
     litellm_params:
       model: openrouter/openrouter/free
       api_key: os.environ/OPENROUTER_API_KEY
+      rpm: 20
+      tpm: 100000
 
   # Anthropic's own API (not a proxy of another provider). Haiku is the
   # fast/cheap tier — matches the cost-conscious default picked for the other
@@ -73,6 +95,8 @@ model_list:
     litellm_params:
       model: anthropic/claude-haiku-4-5
       api_key: os.environ/ANTHROPIC_API_KEY
+      rpm: 50
+      tpm: 100000
 
   # Optional — unreachable (no default model selected) until an operator sets
   # AZURE_OPENAI_API_KEY/_BASE (see docker-compose.yml's llm-gateway env) and edits
@@ -87,6 +111,8 @@ model_list:
       model: azure/gpt-4o-mini # <- replace with your deployment name
       api_key: os.environ/AZURE_OPENAI_API_KEY
       api_base: os.environ/AZURE_OPENAI_API_BASE
+      rpm: 60
+      tpm: 150000
 
   # Fully local/no-API-key option — routes to the `ollama` service in
   # docker-compose.yml. That service is OPTIONAL (profile "ollama", not started by
@@ -101,6 +127,11 @@ model_list:
     litellm_params:
       model: ollama/llama3.2:3b
       api_base: os.environ/OLLAMA_API_BASE
+      # No external quota to protect (self-hosted) — this ceiling exists purely to
+      # stop a burst of concurrent requests from starving the single shared Ollama
+      # container's CPU, on a laptop-class deployment.
+      rpm: 20
+      tpm: 200000
 
   # Local, no-API-key embedding backend for EMBEDDING_PROVIDER=local (etl-vectorize/
   # rag-agent/form-agent — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).

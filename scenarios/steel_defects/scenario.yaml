@@ -1,0 +1,147 @@
+# Seed definition for the "steel_defects" scenario — loaded into the `platform` Postgres
+# schema by services/platform-registry at bootstrap. Editing this file and re-seeding
+# is how a developer adds/changes a scenario; it is never read directly by any other
+# service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+
+slug: steel_defects
+kind: tabular_ml
+title: "Steel Plate Defect Triage"
+description: >
+  Flags steel plates from an automated visual-inspection line whose optical-scan
+  defect doesn't match one of the line's six recognized fault signatures, so it can be
+  routed to a human inspector, with SHAP-based explainability and a chat assistant for
+  asking follow-up questions about the data.
+role_required: "scenario:steel_defects"
+industry: manufacturing_industry
+icon: "🔩"
+
+credits:
+  source: "UCI Machine Learning Repository — Steel Plates Faults"
+  url: "https://archive.ics.uci.edu/dataset/198/steel+plates+faults"
+  note: >
+    ai-circus-framework's own reframing of the original dataset: the source data labels
+    each plate with one of 7 fault types (Pastry, Z_Scratch, K_Scratch, Stains,
+    Dirtiness, Bumps, Other_Faults). This scenario collapses that into a binary target
+    (Other_Faults vs. the six named types) because this platform's SHAP explainability
+    path (services/training and services/prediction) hardcodes a 2-class SHAP array
+    shape shared by every tabular_ml scenario — a real 7-class target would silently
+    produce a meaningless explanation for classes it wasn't written to handle. The 13
+    features used here are also a curated subset of the original dataset's 27 raw
+    columns, chosen for interpretability and demo-form usability.
+
+chat:
+  context: >
+    An automated visual-inspection triage model for steel plates — predicts whether an
+    optical-scan defect is a recognized fault signature (auto-classified) or an
+    unrecognized pattern that needs a human inspector, from the scan's geometry
+    (pixel area, perimeters), luminosity readings, shape indices (edges, squareness,
+    orientation), plate thickness, and steel type.
+  sample_questions:
+    - "Which factors most often trigger a manual-review flag?"
+    - "Does a low luminosity reading alone predict a manual review, or does it depend on shape too?"
+    - "How accurate is the trained model?"
+    - "Is one steel type more likely to need manual review than the other?"
+    - "What does a typical auto-classified (recognized) defect look like versus one needing review?"
+
+dataset:
+  bucket: "scenario-steel-defects"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/steel_defects.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/steel_defects.csv"
+  index_col: "Plate_ID"
+  target: "Needs_Manual_Review"
+  # Nothing to exclude: the raw one-hot fault-type/steel-type columns and the ~14
+  # other raw geometry columns were dropped during this scenario's own data
+  # preparation and were never written into the seed CSV in the first place.
+  protected_features_excluded: []
+  feature_columns:
+    - Steel_Type
+    - Steel_Plate_Thickness
+    - Pixels_Areas
+    - X_Perimeter
+    - Y_Perimeter
+    - Sum_of_Luminosity
+    - Minimum_of_Luminosity
+    - Maximum_of_Luminosity
+    - Edges_Index
+    - Square_Index
+    - Orientation_Index
+    - Luminosity_Index
+    - Length_of_Conveyer
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max/median (UCI Steel Plates Faults, 1941 rows).
+  feature_schema:
+    Steel_Type:
+      {type: categorical, label: "Steel type", options: ["A300", "A400"], default: "A400",
+       info: "Which of the mill's two steel grades this plate was cut from."}
+    Steel_Plate_Thickness:
+      {type: numeric, label: "Plate thickness", min: 40, max: 300, default: 70, step: 1,
+       info: "A relative plate-thickness measurement from the mill's gauge sensor (unit not specified by the source dataset)."}
+    Pixels_Areas:
+      {type: numeric, label: "Defect area (pixels)", min: 2, max: 152655, default: 174, step: 1,
+       info: "Total number of pixels the optical scan flagged as part of the defect."}
+    X_Perimeter:
+      {type: numeric, label: "X-axis perimeter", min: 2, max: 10449, default: 26, step: 1,
+       info: "Length of the defect's outline measured along the plate's X (conveyer travel) axis, in pixels."}
+    Y_Perimeter:
+      {type: numeric, label: "Y-axis perimeter", min: 1, max: 18152, default: 25, step: 1,
+       info: "Length of the defect's outline measured along the plate's Y (cross-conveyer) axis, in pixels."}
+    Sum_of_Luminosity:
+      {type: numeric, label: "Total luminosity", min: 250, max: 11591414, default: 19202, step: 100,
+       info: "Sum of the pixel brightness values across the whole defect area, as read by the optical scan."}
+    Minimum_of_Luminosity:
+      {type: numeric, label: "Minimum luminosity", min: 0, max: 203, default: 90, step: 1,
+       info: "Darkest pixel brightness value found within the defect area."}
+    Maximum_of_Luminosity:
+      {type: numeric, label: "Maximum luminosity", min: 37, max: 253, default: 127, step: 1,
+       info: "Brightest pixel brightness value found within the defect area."}
+    Edges_Index:
+      {type: numeric, label: "Edges index", min: 0.0, max: 1.0, default: 0.23, step: 0.01,
+       info: "A normalized measure of how much the defect's outline concentrates along the plate's edges rather than its interior."}
+    Square_Index:
+      {type: numeric, label: "Square index", min: 0.0, max: 1.0, default: 0.56, step: 0.01,
+       info: "A normalized measure of how square vs. elongated the defect's bounding box is."}
+    Orientation_Index:
+      {type: numeric, label: "Orientation index", min: -1.0, max: 1.0, default: 0.1, step: 0.01,
+       info: "The defect's angular orientation relative to the plate, normalized to roughly -1..1."}
+    Luminosity_Index:
+      {type: numeric, label: "Luminosity index", min: -1.0, max: 1.0, default: -0.13, step: 0.01,
+       info: "A normalized measure of the defect's overall brightness relative to the surrounding plate."}
+    Length_of_Conveyer:
+      {type: numeric, label: "Conveyer length", min: 1227, max: 1794, default: 1364, step: 1,
+       info: "Length of the section of the mill's conveyer line where this plate was scanned."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: bar, x: Steel_Type, y: Needs_Manual_Review, agg: mean, color_by: Steel_Type}
+    - {type: histogram, x: Luminosity_Index, color_by: Needs_Manual_Review}
+    - {type: scatter3d, x: Square_Index, y: Orientation_Index, z: Luminosity_Index, color_by: Needs_Manual_Review}
+
+model:
+  task_type: classification
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_label: "Defect triage outcome"
+  target_description: "Whether this plate's scanned defect needs a human inspector's manual review."
+  target_value_labels: {"0": "Recognized defect signature", "1": "Needs manual review"}
+
+# Plain generic block, same consolidated services as churn/electric_motor — the
+# already-running etl-tabular/training/prediction/assistant instances auto-discover
+# this scenario.yaml, no docker-compose changes needed.
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

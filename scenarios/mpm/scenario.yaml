@@ -89,9 +89,9 @@ dataset:
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   # Column names with brackets/spaces must stay quoted inside these flow mappings.
   default_charts:
-    - {type: histogram, x: "Tool wear [min]"}
+    - {type: histogram, x: "Tool wear [min]", color_by: Target}
     - {type: bar, x: Type, y: Target, agg: mean, color_by: Type}
-    - {type: scatter, x: "Torque [Nm]", y: "Rotational speed [rpm]", color_by: Type}
+    - {type: scatter3d, x: "Torque [Nm]", y: "Rotational speed [rpm]", z: "Tool wear [min]", color_by: Type}
 
 model:
   task_type: classification

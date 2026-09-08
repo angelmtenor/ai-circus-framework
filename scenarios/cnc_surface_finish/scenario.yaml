@@ -1,0 +1,110 @@
+# Seed definition for the "cnc_surface_finish" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# Unlike every other tabular_ml scenario, this one is NOT a ported public dataset —
+# there is no real-world CSV to credit (hence no `credits` block below, same as
+# ai_circus_reference's original content). It's a synthetic generator built from a
+# real physical model: the standard theoretical kinematic surface-roughness formula
+# for single-point turning, Ra ~= feed_rate^2 / (32 * tool_nose_radius) (see e.g.
+# Groover, "Fundamentals of Modern Manufacturing"). That base term is then scaled by
+# documented-but-qualitative process effects this generator itself designed (built-up-edge
+# roughening at low cutting speed, a small depth-of-cut effect, per-material
+# hardness/machinability multipliers, tool-wear growth over time) plus log-normal
+# measurement noise — see scripts/generate_cnc_surface_finish.py for the exact formula.
+# This is disclosed as a designed combination of a real base equation and directionally
+# realistic effects, not a literature-fitted empirical model.
+
+slug: cnc_surface_finish
+kind: tabular_ml
+title: "CNC Turning Surface Finish"
+description: >
+  Predicts the surface roughness (Ra, in micrometres) of a machined part from its CNC
+  turning process parameters — feed rate, cutting speed, depth of cut, tool nose
+  radius, workpiece material, and tool wear time — a produced-part quality outcome
+  rather than a machine-health/predictive-maintenance signal.
+role_required: "scenario:cnc_surface_finish"
+industry: manufacturing_industry
+icon: "🔧"
+
+chat:
+  context: >
+    A CNC turning process-quality model — predicts a machined part's surface
+    roughness (Ra, in micrometres; lower is smoother/better finish) from its cutting
+    parameters (feed rate, cutting speed, depth of cut, tool nose radius), the
+    workpiece material, and how long the current tool has been in use.
+  sample_questions:
+    - "Which process parameter matters most for surface finish?"
+    - "How accurate is the trained model?"
+    - "Why does a smaller tool nose radius make surface finish worse?"
+    - "How does tool wear over time affect the finish quality?"
+    - "Is stainless steel harder to get a smooth finish on than aluminum?"
+
+dataset:
+  bucket: "scenario-cnc-surface-finish"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/cnc_surface_finish.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/cnc_surface_finish.csv"
+  index_col: "part_id"
+  target: "surface_roughness_ra"
+  feature_columns:
+    - material
+    - feed_rate
+    - cutting_speed
+    - depth_of_cut
+    - tool_nose_radius
+    - tool_wear_time
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the generator's own sampling bounds (4,000-row synthetic set).
+  feature_schema:
+    material:
+      {type: categorical, label: "Workpiece material", options: ["Aluminum_6061", "Carbon_Steel_1045", "Stainless_304"], default: "Carbon_Steel_1045",
+       info: "The material being turned — harder/more work-hardening-prone materials (e.g. stainless) tend to finish rougher than aluminum at the same cutting parameters."}
+    feed_rate:
+      {type: numeric, label: "Feed rate", min: 0.05, max: 0.5, default: 0.25, step: 0.01,
+       info: "How far the tool advances per revolution of the workpiece, in mm/rev — the single biggest driver of theoretical surface roughness."}
+    cutting_speed:
+      {type: numeric, label: "Cutting speed", min: 50.0, max: 350.0, default: 200.0, step: 5.0,
+       info: "The workpiece's surface speed past the cutting edge, in m/min. Very low speeds tend to roughen the finish (built-up edge on the tool)."}
+    depth_of_cut:
+      {type: numeric, label: "Depth of cut", min: 0.25, max: 3.0, default: 1.5, step: 0.05,
+       info: "How deep the tool cuts into the workpiece per pass, in mm — a secondary effect on surface finish compared to feed rate."}
+    tool_nose_radius:
+      {type: numeric, label: "Tool nose radius", min: 0.2, max: 1.2, default: 0.4, step: 0.2,
+       info: "The radius of the cutting insert's tip, in mm (standard insert sizes: 0.2/0.4/0.8/1.2). A larger radius theoretically smooths the finish for the same feed rate."}
+    tool_wear_time:
+      {type: numeric, label: "Tool wear time", min: 0.0, max: 60.0, default: 20.0, step: 1.0,
+       info: "Minutes the current cutting tool has been in use since it was last changed — surface finish degrades as the edge wears."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: histogram, x: surface_roughness_ra, color_by: material}
+    - {type: scatter, x: feed_rate, y: surface_roughness_ra, color_by: material}
+    - {type: scatter3d, x: feed_rate, y: cutting_speed, z: surface_roughness_ra, color_by: material}
+
+model:
+  task_type: regression
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "μm (Ra)"
+  target_label: "Surface roughness"
+  target_description: "The machined part's surface roughness (Ra) — lower values mean a smoother, higher-quality finish."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

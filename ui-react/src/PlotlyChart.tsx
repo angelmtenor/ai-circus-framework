@@ -10,6 +10,13 @@ import { useTheme } from "./useTheme";
 const Plot = createPlotlyComponent(Plotly);
 const PlotlyResize = Plotly as unknown as { Plots: { resize: (gd: HTMLDivElement) => void } };
 
+// Hoisted to a stable reference: react-plotly.js's own update check is a strict
+// `prev.config === config` (see its factory.js), so an inline `{ displayModeBar: false }`
+// literal here would count as "the figure changed" on *every* render regardless of the
+// layout/data memoization below, forcing a Plotly.react() that resets an in-progress
+// gl3d drag (see the layout memo's comment for why that resets the camera mid-gesture).
+const PLOT_CONFIG = { displayModeBar: false };
+
 function mergeAxis(themeAxis: unknown, chartAxis: unknown): PlotlyLayout {
   return { ...(themeAxis as PlotlyLayout | undefined), ...(chartAxis as PlotlyLayout | undefined) };
 }
@@ -105,7 +112,7 @@ export function PlotlyChart({
     <Plot
       data={data}
       layout={mergedLayout}
-      config={{ displayModeBar: false }}
+      config={PLOT_CONFIG}
       style={style}
       className="plotly-chart"
       onInitialized={(_figure: unknown, gd: HTMLDivElement) => {

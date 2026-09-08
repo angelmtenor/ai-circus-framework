@@ -27,6 +27,7 @@ export const config = {
   ragAgentUrl: import.meta.env.VITE_RAG_AGENT_URL ?? "http://rag-agent.localhost",
   formAgentUrl: import.meta.env.VITE_FORM_AGENT_URL ?? "http://form-agent.localhost",
   voiceUrl: import.meta.env.VITE_VOICE_URL ?? "http://agui-voice.localhost",
+  dataPlatformManagerUrl: import.meta.env.VITE_DATA_PLATFORM_MANAGER_URL ?? "http://data-platform-manager.localhost",
   keycloakIssuer: import.meta.env.VITE_KEYCLOAK_ISSUER ?? "http://keycloak.localhost/realms/ai-circus",
   keycloakClientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "",
   keycloakAudience: import.meta.env.VITE_KEYCLOAK_AUDIENCE ?? "https://api.ai-circus-framework.local",

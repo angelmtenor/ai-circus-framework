@@ -1794,6 +1794,14 @@ select:focus {
   color: var(--dim);
 }
 
+/* Data platform roadmap statuses (see Settings.tsx's Data Platform section) —
+   "on"/"off" above are binary (routed/not routed); the roadmap has a third,
+   in-between state. */
+.settings-badge--partial {
+  background: rgba(138, 83, 0, 0.14);
+  color: var(--amber);
+}
+
 .settings-card-model {
   font-size: 0.78rem;
   color: var(--dim);
@@ -1892,6 +1900,23 @@ select:focus {
   color: var(--dim);
   margin-top: 0.3rem;
   max-width: 26rem;
+}
+
+/* ── Scenario tab meta pills ───────────────────────────────────────────────── */
+
+.scenario-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scenario-meta-pill {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--dim);
 }
 
 .topbar-settings {

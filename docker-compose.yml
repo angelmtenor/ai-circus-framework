@@ -170,6 +170,29 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Cache / key-value store (session state, rate-limit counters) ──────────────
+  # Valkey, not Redis: Redis Inc. re-licensed the Redis server itself away from an
+  # OSI-approved license in 2024; Valkey is the BSD-3, Linux-Foundation-governed
+  # fork, RESP-protocol-compatible with every Redis client (see
+  # ai_circus_shared/cache.py). No volume: this store is deliberately ephemeral —
+  # losing it on restart is fine for cache/session/rate-limit data, and skipping
+  # persistence keeps both the image and the disk footprint smaller.
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      # Loopback-only (same reasoning as qdrant above) — for services running
+      # outside Docker to still reach it. No auth of its own, so it must never sit
+      # on Traefik's public entrypoint.
+      - "127.0.0.1:${CACHE_PORT:-6379}:6379"
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
   # All-in-one SeaweedFS server (master+volume+filer+S3 gateway in one process) —
   # mirrors MinIO's previous single-container simplicity. S3 credentials are NOT
@@ -709,6 +732,41 @@ services:
       - "traefik.http.routers.agui-voice.rule=Host(`agui-voice.localhost`)"
       - "traefik.http.routers.agui-voice.entrypoints=web"
       - "traefik.http.services.agui-voice.loadbalancer.server.port=8000"
+
+  # Admin-only control surface for the data layer and AI Gateway governance —
+  # pipeline job status/trigger (k3s only), llm-gateway rate-limit report, and the
+  # data-platform capability roadmap. Gated on ADMIN_API_KEY, never a Keycloak
+  # end-user token — see services/data-platform-manager/api.py's module docstring.
+  data-platform-manager:
+    build:
+      context: .
+      dockerfile: services/data-platform-manager/Dockerfile
+    environment:
+      APP_ENVIRONMENT: docker
+      # This instance's own document-store database (see
+      # ai_circus_shared.document_store) — a dedicated `data_platform_manager`
+      # database, same "own schema, shared cluster credentials" pattern as
+      # assistant's conversation history above.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 256m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.data-platform-manager.rule=Host(`data-platform-manager.localhost`)"
+      - "traefik.http.routers.data-platform-manager.entrypoints=web"
+      - "traefik.http.services.data-platform-manager.loadbalancer.server.port=8000"
 
   ui-react:
     build:

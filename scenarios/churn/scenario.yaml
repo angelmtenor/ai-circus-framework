@@ -71,7 +71,8 @@ dataset:
     Geography:
       {type: categorical, label: "Country", options: ["France", "Germany", "Spain"], default: "France",
        info: "The country of the branch where the customer holds their account."}
-    Age: {type: numeric, label: "Age", min: 18, max: 92, default: 40, step: 1}
+    Age: {type: numeric, label: "Age", min: 18, max: 92, default: 40, step: 1,
+       info: "Customer's age in years — older customers tend to churn less often in this dataset."}
     Tenure:
       {type: numeric, label: "Years as customer", min: 0, max: 10, default: 3, step: 1,
        info: "How many years this person has held an account at the bank."}
@@ -99,7 +100,7 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: Age}
+    - {type: histogram, x: Age, color_by: Exited}
     - {type: bar, x: Geography, y: Exited, agg: mean, color_by: Geography}
     - {type: scatter, x: Balance, y: EstimatedSalary, color_by: Geography}
 

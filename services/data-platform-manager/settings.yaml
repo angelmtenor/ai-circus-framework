@@ -1,0 +1,124 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# data-platform-manager is the admin-only control surface for the platform's data
+# layer and AI Gateway governance: pipeline job status/trigger (etl-tabular/training/
+# etl-vectorize), a read-only report of llm-gateway's per-model rate limits, and a
+# static roadmap of which data-platform capabilities are live/partial/planned. It is
+# NOT exposed to normal tenants — every route requires the shared ADMIN_API_KEY
+# bearer token (the same one ui-react's admin-key login already uses), never a
+# Keycloak end-user token, per its "admin tenant only" scope.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_HOST
+    description: "Postgres hostname (docker service name in-container, localhost for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PORT
+    description: "Postgres port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_DB
+    description: "Postgres database name for this service's own document store"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_USER
+    description: "Postgres user"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PASSWORD
+    description: "Postgres password"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: CACHE_URL
+    description: "Redis-protocol connection URL (this repo's own docker-compose/k8s run Valkey)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ADMIN_API_KEY
+    description: "Bearer token required on every route (shared with other services' admin-key bypass)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: LLM_GATEWAY_URL
+    description: "Base URL of the llm-gateway service's OpenAI-compatible + admin API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LLM_GATEWAY_API_KEY
+    description: "API key presented to llm-gateway (its LITELLM_MASTER_KEY) for admin calls"
+    type: string
+    mandatory: true
+    secret: true
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "data_platform_manager"
+    POSTGRES_USER: "ai_circus"
+    # ADMIN_API_KEY/CORS_ALLOWED_ORIGINS deliberately have NO default here — see
+    # platform-registry's settings.yaml for why a profile default must never be able
+    # to silently beat a real deployment's environment variable.
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    POSTGRES_HOST: "localhost"
+    CACHE_URL: "redis://localhost:6379"
+    LLM_GATEWAY_URL: "http://localhost:4000"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    POSTGRES_HOST: "postgres"
+    CACHE_URL: "redis://valkey:6379"
+    LLM_GATEWAY_URL: "http://llm-gateway:4000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

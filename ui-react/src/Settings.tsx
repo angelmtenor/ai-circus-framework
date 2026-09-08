@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 import {
   getActiveLlmModel,
   getActiveVoiceSettings,
+  getGatewayRateLimits,
+  getPipelineJobs,
+  getRoadmap,
   listLlmProviders,
   setActiveLlmModel,
   setActiveVoiceSettings,
   testLlmProvider,
+  triggerPipelineJob,
   voiceProviders,
+  type Capability,
   type LlmProvider,
   type LlmProviderTest,
+  type PipelineJobsResult,
+  type RateLimit,
   type VoiceProviders,
 } from "./apiClient";
 import { config } from "./config";
@@ -41,6 +48,129 @@ function AppearanceSection({
         ))}
       </div>
     </div>
+  );
+}
+
+function statusBadgeClass(status: Capability["status"]): string {
+  if (status === "live") return "settings-badge settings-badge--on";
+  if (status === "partial") return "settings-badge settings-badge--partial";
+  return "settings-badge settings-badge--off";
+}
+
+/**
+ * Admin-only view of data-platform-manager: the capability roadmap (what's live/
+ * partial/planned in the unified data layer + AI Gateway governance — see that
+ * service's core/roadmap.py), pipeline job status/trigger (k3s only — a
+ * docker-compose deployment reports why it can't), and llm-gateway's static
+ * per-model rate limits.
+ */
+function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; accessToken: string | null }) {
+  const [roadmap, setRoadmap] = useState<Capability[] | null>(null);
+  const [jobs, setJobs] = useState<PipelineJobsResult | null>(null);
+  const [rateLimits, setRateLimits] = useState<RateLimit[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [triggering, setTriggering] = useState<string | null>(null);
+
+  function load() {
+    setError(null);
+    Promise.all([
+      getRoadmap(baseUrl, accessToken),
+      getPipelineJobs(baseUrl, accessToken),
+      getGatewayRateLimits(baseUrl, accessToken),
+    ])
+      .then(([r, j, g]) => {
+        setRoadmap(r);
+        setJobs(j);
+        setRateLimits(g);
+      })
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(load, [baseUrl, accessToken]);
+
+  async function trigger(jobName: string) {
+    setTriggering(jobName);
+    try {
+      await triggerPipelineJob(baseUrl, jobName, accessToken);
+      // Trigger only returns once the Job is (re)created, not once it's actually
+      // running — give the cluster a moment before re-reading status.
+      setTimeout(load, 1000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTriggering(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="settings-card-header">
+        <h3>Data Platform</h3>
+      </div>
+      <p className="panel-hint">
+        What's live in AI Liquid Core today, partially built, or still planned — plus pipeline job control and AI
+        Gateway rate limits.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {!roadmap && !error && <div className="app-loading">Loading…</div>}
+
+      {roadmap && (
+        <div className="panel-card settings-card">
+          <h3>Capability roadmap</h3>
+          <div className="settings-grid">
+            {roadmap.map((c) => (
+              <div key={`${c.layer}-${c.name}`} className="settings-card-model">
+                <span className={statusBadgeClass(c.status)}>{c.status}</span> <strong>{c.name}</strong>
+                <div className="panel-hint">{c.note}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {jobs && (
+        <div className="panel-card settings-card">
+          <h3>Pipeline jobs</h3>
+          {!jobs.available ? (
+            <p className="panel-hint">{jobs.reason}</p>
+          ) : (
+            <div className="settings-grid">
+              {jobs.jobs.map((job) => (
+                <div key={job.name} className="settings-card-model">
+                  <strong>{job.name}</strong> — {job.state}
+                  <div>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => trigger(job.name)}
+                      disabled={triggering === job.name}
+                    >
+                      {triggering === job.name ? "Triggering…" : "▶ Trigger"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {rateLimits && (
+        <div className="panel-card settings-card">
+          <h3>AI Gateway rate limits</h3>
+          <p className="panel-hint">
+            Static per-model ceilings from <code>litellm_config.yaml</code> — not per-tenant budgets (see roadmap
+            above for why).
+          </p>
+          <div className="settings-grid">
+            {rateLimits.map((r) => (
+              <div key={r.model_name} className="settings-card-model">
+                <strong>{r.model_name}</strong> — rpm: {r.rpm ?? "—"}, tpm: {r.tpm ?? "—"}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -416,6 +546,8 @@ export function Settings({
               {voiceSaveMessage && <p className="panel-hint">{voiceSaveMessage}</p>}
             </div>
           )}
+
+          <DataPlatformSection baseUrl={config.dataPlatformManagerUrl} accessToken={accessToken} />
         </>
       )}
     </div>

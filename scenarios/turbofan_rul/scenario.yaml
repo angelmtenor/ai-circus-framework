@@ -1,0 +1,173 @@
+# Seed definition for the "turbofan_rul" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# A `regression` scenario built from NASA's C-MAPSS FD001 turbofan degradation
+# simulation dataset — predicts a jet engine's Remaining Useful Life (RUL) from its
+# operating-condition and sensor readings.
+
+slug: turbofan_rul
+kind: tabular_ml
+title: "Turbofan Engine Remaining Useful Life"
+description: >
+  Predicts a jet engine's Remaining Useful Life (in operating cycles) from its
+  operating-condition settings and sensor readings (temperatures, pressures, fan/core
+  speed) — aircraft engine prognostics and health management (PHM).
+role_required: "scenario:turbofan_rul"
+industry: manufacturing_industry
+icon: "✈️"
+
+credits:
+  source: "NASA Prognostics Center of Excellence — C-MAPSS Jet Engine Simulated Data (FD001)"
+  url: "https://huggingface.co/datasets/DeveloperMindset123/CMAPSS_Jet_Engine_Simulated_Data/resolve/main/train_FD001.txt"
+  note: >
+    Public-domain NASA turbofan degradation simulation data (originally listed on
+    data.nasa.gov as "C-MAPSS Jet Engine Simulated Data"), mirrored on Hugging Face
+    under an apache-2.0 mirror license; this scenario uses the FD001 training split
+    (one operating condition, HPC-degradation failure mode). RUL is computed per
+    engine unit as max(time_in_cycles) - time_in_cycles. Of the 3 operating-setting
+    and 21 sensor columns, 7 were dropped as near-constant (std < 1e-6 across all
+    20,631 rows of the full training split) since FD001 simulates a single operating
+    condition: op_setting_3, sensor_1 (T2), sensor_5 (P2), sensor_10 (epr),
+    sensor_16 (farB), sensor_18 (Nf_dmd), sensor_19 (PCNfR_dmd). The sample file is a
+    random 10,000-row sample of the full 20,631-row FD001 training split (not
+    per-engine — mirrors electric_motor's own sampling precedent).
+
+chat:
+  context: >
+    A jet engine prognostics-and-health-management (PHM) model — predicts an
+    engine's Remaining Useful Life (RUL, in operating cycles) from its
+    operating-condition settings and sensor readings (fan/core temperatures and
+    pressures, physical and corrected fan/core speed, bypass ratio, bleed enthalpy
+    and coolant bleed flows), based on NASA's C-MAPSS turbofan degradation
+    simulation (FD001).
+  sample_questions:
+    - "Which sensor readings contribute most to predicting remaining useful life?"
+    - "How does core speed (physical vs. corrected) relate to how much life is left?"
+    - "Does elapsed operating cycle count alone predict RUL, or does it depend on the sensor readings too?"
+    - "How do HPC/LPT outlet temperatures change as an engine approaches end of life?"
+    - "How accurate is the trained model?"
+
+dataset:
+  bucket: "scenario-turbofan-rul"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/turbofan_rul.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/turbofan_rul.csv"
+  # Synthetic "{unit_number}_{time_in_cycles}" per-row identifier — not a per-row
+  # predictive feature, used only as the row index, dropped before training like
+  # electric_motor's profile_id.
+  index_col: "row_id"
+  target: "RUL"
+  # Responsible AI / leakage prevention: unit_number is an arbitrary 1-100 engine
+  # label with no physical relationship to wear — dropped before training regardless
+  # of predictive value, same treatment as mpm's UDI.
+  protected_features_excluded: ["unit_number"]
+  feature_columns:
+    - time_in_cycles
+    - op_setting_1
+    - op_setting_2
+    - sensor_2
+    - sensor_3
+    - sensor_4
+    - sensor_6
+    - sensor_7
+    - sensor_8
+    - sensor_9
+    - sensor_11
+    - sensor_12
+    - sensor_13
+    - sensor_14
+    - sensor_15
+    - sensor_17
+    - sensor_20
+    - sensor_21
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max (10,000-row sample of FD001).
+  feature_schema:
+    time_in_cycles:
+      {type: numeric, label: "Operating cycle count", min: 1.0, max: 359.0, default: 103.0, step: 1.0,
+       info: "Number of operating cycles elapsed since this engine unit started running — correlates with accumulated wear."}
+    op_setting_1:
+      {type: numeric, label: "Operating setting 1", min: -0.0084, max: 0.0077, default: 0.0, step: 0.001,
+       info: "First of three flight-condition settings (altitude/Mach/throttle-resolved regime); FD001 simulates a single operating condition, so this varies only within measurement noise."}
+    op_setting_2:
+      {type: numeric, label: "Operating setting 2", min: -0.0006, max: 0.0006, default: 0.0, step: 0.0001,
+       info: "Second of three flight-condition settings; FD001 simulates a single operating condition, so this varies only within measurement noise."}
+    sensor_2:
+      {type: numeric, label: "T24: LPC outlet temperature", min: 641.21, max: 644.53, default: 642.64, step: 0.1,
+       info: "Total temperature at the low-pressure compressor (LPC) outlet, in °R."}
+    sensor_3:
+      {type: numeric, label: "T30: HPC outlet temperature", min: 1571.06, max: 1616.91, default: 1590.10, step: 0.5,
+       info: "Total temperature at the high-pressure compressor (HPC) outlet, in °R — a key degradation-tracking sensor for FD001's HPC failure mode."}
+    sensor_4:
+      {type: numeric, label: "T50: LPT outlet temperature", min: 1382.25, max: 1437.98, default: 1407.97, step: 0.5,
+       info: "Total temperature at the low-pressure turbine (LPT) outlet, in °R."}
+    sensor_6:
+      {type: numeric, label: "P15: Bypass-duct pressure", min: 21.60, max: 21.61, default: 21.61, step: 0.001,
+       info: "Total pressure in the bypass duct, in psia."}
+    sensor_7:
+      {type: numeric, label: "P30: HPC outlet pressure", min: 549.85, max: 555.70, default: 553.44, step: 0.1,
+       info: "Total pressure at the high-pressure compressor (HPC) outlet, in psia."}
+    sensor_8:
+      {type: numeric, label: "Nf: Physical fan speed", min: 2387.90, max: 2388.52, default: 2388.09, step: 0.01,
+       info: "Physical rotational speed of the fan, in rpm."}
+    sensor_9:
+      {type: numeric, label: "Nc: Physical core speed", min: 9023.85, max: 9228.53, default: 9060.54, step: 1.0,
+       info: "Physical rotational speed of the engine core, in rpm."}
+    sensor_11:
+      {type: numeric, label: "Ps30: HPC outlet static pressure", min: 46.85, max: 48.41, default: 47.51, step: 0.01,
+       info: "Static pressure at the high-pressure compressor (HPC) outlet, in psia."}
+    sensor_12:
+      {type: numeric, label: "phi: Fuel flow / Ps30 ratio", min: 518.95, max: 523.38, default: 521.49, step: 0.1,
+       info: "Ratio of fuel flow to static pressure at the HPC outlet (Ps30), in pps/psi."}
+    sensor_13:
+      {type: numeric, label: "NRf: Corrected fan speed", min: 2387.89, max: 2388.55, default: 2388.09, step: 0.01,
+       info: "Fan speed corrected for temperature/pressure to a standard reference condition, in rpm."}
+    sensor_14:
+      {type: numeric, label: "NRc: Corrected core speed", min: 8099.94, max: 8290.25, default: 8140.52, step: 1.0,
+       info: "Core speed corrected for temperature/pressure to a standard reference condition, in rpm."}
+    sensor_15:
+      {type: numeric, label: "BPR: Bypass ratio", min: 8.3358, max: 8.5836, default: 8.4385, step: 0.001,
+       info: "Ratio of air mass flow through the bypass duct to air mass flow through the engine core."}
+    sensor_17:
+      {type: numeric, label: "htBleed: Bleed enthalpy", min: 388.0, max: 399.0, default: 393.0, step: 1.0,
+       info: "Enthalpy of air bled from the engine core for cabin/anti-icing use."}
+    sensor_20:
+      {type: numeric, label: "W31: HPT coolant bleed", min: 38.20, max: 39.43, default: 38.83, step: 0.01,
+       info: "Coolant air bled from the high-pressure turbine (HPT), in lbm/s."}
+    sensor_21:
+      {type: numeric, label: "W32: LPT coolant bleed", min: 22.8942, max: 23.6184, default: 23.3005, step: 0.001,
+       info: "Coolant air bled from the low-pressure turbine (LPT), in lbm/s."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: histogram, x: RUL}
+    - {type: scatter, x: time_in_cycles, y: RUL, color_by: sensor_3}
+    - {type: heatmap}
+
+model:
+  task_type: regression
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "cycles"
+  target_label: "Remaining useful life"
+  target_description: "How many more operating cycles this jet engine is predicted to run before failure."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

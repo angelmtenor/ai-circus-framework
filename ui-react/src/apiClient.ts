@@ -518,3 +518,67 @@ export async function voiceProviders(
   const response = await fetch(`${voiceUrl}/providers/${scenarioSlug}`, { headers: headers(accessToken) });
   return asJson<VoiceProviders>(response);
 }
+
+// ── Data platform manager (admin-only) ──────────────────────────────────────
+// Mirrors services/data-platform-manager/src/data_platform_manager/api.py and
+// core/roadmap.py. Every call here is gated server-side on ADMIN_API_KEY, same
+// as the LLM/voice settings calls above — this section of the Settings page is
+// only ever rendered when `isAdmin` is true (see Settings.tsx).
+
+export type DataPlatformStatus = "live" | "partial" | "planned";
+
+export type Capability = {
+  layer: string;
+  name: string;
+  status: DataPlatformStatus;
+  note: string;
+};
+
+export async function getRoadmap(baseUrl: string, accessToken: string | null): Promise<Capability[]> {
+  const response = await fetch(`${baseUrl}/roadmap`, { headers: headers(accessToken) });
+  return asJson<Capability[]>(response);
+}
+
+export type RateLimit = {
+  model_name: string | null;
+  rpm: number | null;
+  tpm: number | null;
+};
+
+export async function getGatewayRateLimits(baseUrl: string, accessToken: string | null): Promise<RateLimit[]> {
+  const response = await fetch(`${baseUrl}/gateway/rate-limits`, { headers: headers(accessToken) });
+  return asJson<RateLimit[]>(response);
+}
+
+export type PipelineJobState = "not_run" | "running" | "succeeded" | "failed";
+
+export type PipelineJob = {
+  name: string;
+  state: PipelineJobState;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type PipelineJobsResult = {
+  available: boolean;
+  reason: string | null;
+  jobs: PipelineJob[];
+};
+
+export async function getPipelineJobs(baseUrl: string, accessToken: string | null): Promise<PipelineJobsResult> {
+  const response = await fetch(`${baseUrl}/pipeline/jobs`, { headers: headers(accessToken) });
+  return asJson<PipelineJobsResult>(response);
+}
+
+/** Delete-and-recreate one pipeline Job (k3s only — see api.py's docstring). */
+export async function triggerPipelineJob(
+  baseUrl: string,
+  jobName: string,
+  accessToken: string | null,
+): Promise<{ job: string; triggered_at: string }> {
+  const response = await fetch(`${baseUrl}/pipeline/jobs/${jobName}/trigger`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
