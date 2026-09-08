@@ -4,6 +4,7 @@ import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
+import { ScenarioView } from "./ScenarioView";
 import { DataView } from "./DataView";
 import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
@@ -12,7 +13,7 @@ import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
-type Tab = "data" | "predict" | "explore";
+type Tab = "scenario" | "data" | "predict" | "explore";
 
 /**
  * Generic tabular_ml workspace, driven entirely by the scenario's feature_columns/
@@ -20,12 +21,13 @@ type Tab = "data" | "predict" | "explore";
  * /dataset endpoints — no scenario-specific code, so this same component renders
  * churn, mpm, supply_chain, or any future tabular_ml scenario.
  *
- * Three tabs, each a distinct concern (no overlap): Data (the data, no model),
- * ML Predictions (running the model — one record or a batch/query), Explore model
- * (understanding the model — global SHAP importance, partial dependence, held-out
- * performance). The assistant chat is a single persistent dock here rather than
- * duplicated per tab, since it's the same scenario-grounded conversation regardless
- * of which tab is open.
+ * Four tabs, each a distinct concern (no overlap): Scenario (what/why — description,
+ * data source, feature glossary), Data & BI (the data itself, no model — query
+ * builder plus a chart dashboard), ML Predictions (running the model — one record or
+ * a batch/query), ML Insights (understanding the model — global SHAP importance,
+ * partial dependence, held-out performance). The assistant chat is a single
+ * persistent dock here rather than duplicated per tab, since it's the same
+ * scenario-grounded conversation regardless of which tab is open.
  *
  * The whole workspace (not just the chat dock) is wrapped in one <CopilotKit> so
  * MlPredictionsView/ExploreModelView's useCopilotReadable calls share their current
@@ -60,7 +62,7 @@ function TabularViewContent({
   conversation: ReturnType<typeof useConversation>;
 }) {
   useChatGenerativeUiActions();
-  const [tab, setTab] = useState<Tab>("data");
+  const [tab, setTab] = useState<Tab>("scenario");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
@@ -69,14 +71,17 @@ function TabularViewContent({
   return (
     <div className="workspace">
       <div className="workspace-tabs">
+        <button className={tab === "scenario" ? "active" : ""} onClick={() => setTab("scenario")}>
+          <Icon name="book" /> Scenario
+        </button>
         <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>
-          <Icon name="data" /> Data
+          <Icon name="data" /> Data & BI
         </button>
         <button className={tab === "predict" ? "active" : ""} onClick={() => setTab("predict")}>
           <Icon name="target" /> ML Predictions
         </button>
         <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
-          <Icon name="scan" /> Explore model
+          <Icon name="scan" /> ML Insights
         </button>
       </div>
 
@@ -84,6 +89,7 @@ function TabularViewContent({
         <Icon name="chat" /> Assistant
       </button>
 
+      {tab === "scenario" && <ScenarioView scenario={scenario} />}
       {tab === "data" && <DataView scenario={scenario} accessToken={accessToken} />}
       {tab === "predict" && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
       {tab === "explore" && <ExploreModelView scenario={scenario} accessToken={accessToken} />}

@@ -36,8 +36,9 @@ const AGG_OPTIONS: { value: ChartAgg; label: string }[] = [
  * dataset training reads (see prediction's core/dataset.py), a client-side query/
  * filter builder, and a Power-BI-style multi-chart dashboard (type/X/Y/Z/color-by/
  * aggregate per card, seeded from the scenario's YAML `default_charts` — see
- * chartBuilder.ts). Model behavior/performance lives in the Explore model tab
- * instead, to keep this tab "just the data".
+ * chartBuilder.ts). Model behavior/performance lives in the ML Insights tab
+ * instead, to keep this tab "just the data". Scenario-level description/credits/
+ * feature glossary live in the Scenario tab (see ScenarioView.tsx).
  */
 export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const { theme } = useTheme();
@@ -187,17 +188,10 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   return (
     <div className="tab-panel">
       <div className="panel-card">
-        <h3>Data summary</h3>
-        <p style={{ marginTop: "-0.2rem", marginBottom: "0.6rem" }}>{scenario.description}</p>
-        {scenario.credits && (
-          <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
-            Dataset credit: {scenario.credits.source} —{" "}
-            <a href={scenario.credits.url} target="_blank" rel="noreferrer">
-              original source
-            </a>
-            {scenario.credits.note ? ` (${scenario.credits.note})` : ""}
-          </p>
-        )}
+        <h3>Data overview</h3>
+        <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
+          See the Scenario tab for what this data is and what each feature means.
+        </p>
         <div className="explore-controls">
           <label>
             Sample size

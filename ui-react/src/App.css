@@ -1894,6 +1894,23 @@ select:focus {
   max-width: 26rem;
 }
 
+/* ── Scenario tab meta pills ───────────────────────────────────────────────── */
+
+.scenario-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scenario-meta-pill {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
 .topbar-settings {
   display: inline-flex;
   align-items: center;

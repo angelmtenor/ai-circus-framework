@@ -153,7 +153,7 @@ dataset:
   default_charts:
     - {type: histogram, x: RUL}
     - {type: scatter, x: time_in_cycles, y: RUL}
-    - {type: scatter, x: sensor_9, y: sensor_14}
+    - {type: heatmap}
 
 model:
   task_type: regression

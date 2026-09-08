@@ -68,7 +68,8 @@ dataset:
     dept: {type: numeric, label: "Department number", min: 1, max: 99, default: 40, step: 1, info: "Numeric ID of the store department (e.g. groceries, electronics)."}
     store: {type: numeric, label: "Store number", min: 1, max: 45, default: 20, step: 1, info: "Numeric ID of the store location."}
     type: {type: categorical, label: "Store type", options: ["A", "B", "C"], default: "A", info: "The store's format/size category: A (largest) through C (smallest)."}
-    month: {type: numeric, label: "Month", min: 1, max: 12, default: 6, step: 1}
+    month: {type: numeric, label: "Month", min: 1, max: 12, default: 6, step: 1,
+       info: "Calendar month (1 = January) — captures seasonal demand swings such as holiday-season peaks."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
