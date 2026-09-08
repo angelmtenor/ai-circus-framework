@@ -61,6 +61,17 @@ env_variables:
     mandatory: true
     secret: false
 
+  # Optional Data Platform profile (see docker-compose.yml's "data-platform"
+  # profile / k8s/data-platform/) — this service always constructs a Kafka
+  # producer/consumer against this address, whether or not that profile is
+  # actually running (see ai_circus_shared.events' module docstring for why
+  # that's safe: lazy, best-effort connection, never blocks a request).
+  - name: KAFKA_BOOTSTRAP_SERVERS
+    description: "Kafka bootstrap server(s), host:port — reachable only once the optional Data Platform profile runs"
+    type: string
+    mandatory: true
+    secret: false
+
   - name: CORS_ALLOWED_ORIGINS
     description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
     type: string
@@ -110,12 +121,14 @@ environments:
     POSTGRES_HOST: "localhost"
     CACHE_URL: "redis://localhost:6379"
     LLM_GATEWAY_URL: "http://localhost:4000"
+    KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     POSTGRES_HOST: "postgres"
     CACHE_URL: "redis://valkey:6379"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
+    KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
 
   staging: {}
     # Staging environment profile — overrides go here

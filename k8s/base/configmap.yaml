@@ -21,3 +21,9 @@ data:
   EMBEDDING_PROVIDER: "local"
   LLM_MODEL: "groq-llama"
   OLLAMA_API_BASE: "http://ollama:11434"
+  # Only data-platform-manager reads this — harmless to share broadly like the
+  # other values above. Points at the optional Data Platform profile's Kafka
+  # Service regardless of whether k8s/data-platform/kafka.yaml has actually been
+  # applied (see that file's own comment for why referencing an absent Service
+  # name is safe: librdkafka connects lazily and retries in the background).
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"

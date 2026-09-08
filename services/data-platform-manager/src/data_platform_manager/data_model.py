@@ -38,6 +38,9 @@ class EnvConfig(BaseSettings):
     POSTGRES_USER: str = Field(description="Postgres user")
     POSTGRES_PASSWORD: SecretStr = Field(description="Postgres password")
     CACHE_URL: str = Field(description="Redis-protocol connection URL (this repo's own docker-compose/k8s run Valkey)")
+    KAFKA_BOOTSTRAP_SERVERS: str = Field(
+        description="Kafka bootstrap server(s), host:port — reachable only once the optional Data Platform profile runs"
+    )
     CORS_ALLOWED_ORIGINS: str = Field(
         description="Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
     )
@@ -50,7 +53,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "856d3a173aa6b0b3066f18b8e1d979d947abbe04eeff7dd105df51f687527627"
+_SOURCE_YAML_HASH = "81a234cb593c41828bc7b32db2c87d5d016dff2d7e9684f0e3a730670f7c970d"
 
 
 EnvConfig.model_rebuild()

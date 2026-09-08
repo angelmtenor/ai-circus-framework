@@ -57,6 +57,8 @@
 <rect x="60" y="682" width="300" height="105" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <rect x="720" y="682" width="300" height="105" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="720" y="682" width="300" height="105" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
+<rect x="390" y="682" width="300" height="105" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="390" y="682" width="300" height="105" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <rect x="1380" y="682" width="300" height="105" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="1380" y="682" width="300" height="105" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <rect x="60" y="857" width="300" height="90" rx="12" fill="#20220a" stroke="#cddc39" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
@@ -148,6 +150,11 @@
 <text x="870.0" y="749" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Per-tenant vector collections</text>
 <line x1="738" y1="761" x2="1002" y2="761" stroke="#22d3ee" stroke-opacity="0.25"/>
 <text x="870.0" y="777" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Qdrant</text>
+<text x="540.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">VALKEY</text>
+<text x="540.0" y="734" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Cache — session, rate-limit</text>
+<text x="540.0" y="749" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">state (Redis-protocol)</text>
+<line x1="408" y1="761" x2="672" y2="761" stroke="#22d3ee" stroke-opacity="0.25"/>
+<text x="540.0" y="777" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Valkey</text>
 <text x="1530.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">SEAWEEDFS</text>
 <text x="1530.0" y="734" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Datasets, models, documents</text>
 <text x="1530.0" y="749" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">(S3-compatible)</text>

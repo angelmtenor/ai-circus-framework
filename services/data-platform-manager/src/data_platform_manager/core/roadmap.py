@@ -78,14 +78,16 @@ ROADMAP: list[Capability] = [
     Capability(
         layer="data-platform",
         name="Real-Time Event Streaming",
-        status="planned",
-        note="Phase 2 of the optional profile",
+        status="live",
+        note="Kafka (KRaft) + ai_circus_shared.events — this service publishes/reads real events",
     ),
     Capability(
         layer="data-platform",
         name="Change-Data-Capture",
         status="partial",
-        note="Batch extraction is live (etl-tabular); live database replication is not built",
+        note="Batch extraction is live (etl-tabular); a real Postgres-to-Kafka change "
+        "feed is not built (psycopg has no logical-replication client — needs its own "
+        "design pass)",
     ),
     Capability(
         layer="data-platform",

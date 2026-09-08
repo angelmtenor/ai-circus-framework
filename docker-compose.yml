@@ -24,6 +24,8 @@ volumes:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
   voice-model-cache:
+  # Optional Data Platform profile (off by default) — Kafka's own log segments.
+  kafka-data:
 
 services:
   # ── Ingress ─────────────────────────────────────────────────────────────────
@@ -192,6 +194,70 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # ── Event streaming — Data Platform optional profile, OFF BY DEFAULT ──────────
+  # Apache Kafka, KRaft mode (no separate Zookeeper container) — one combined
+  # broker+controller node, plenty for demo/dev scale. Not part of `make up`;
+  # start it explicitly with `make data-platform-up` (or `docker compose
+  # --profile data-platform up -d kafka`) when a scenario actually needs it.
+  # data-platform-manager always tries to construct a producer/consumer client
+  # against this hostname regardless of whether this container is running —
+  # librdkafka connects lazily and retries in the background, so that's a no-op
+  # (not an error) until this profile is actually started (see
+  # ai_circus_shared.events' module docstring for the "best-effort" contract
+  # that makes this safe).
+  kafka:
+    image: apache/kafka:3.9.0
+    profiles: ["data-platform"]
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      # Two data listeners, not one: Kafka's protocol has every client re-resolve
+      # the *advertised* address after its initial bootstrap connection (not just
+      # use whatever host:port it originally dialed) — a single PLAINTEXT://kafka:9092
+      # advertised listener works for other containers but breaks host-side tools
+      # (confirmed: bootstraps fine against localhost:9092, then fails resolving
+      # "kafka" for the actual produce/consume connection). EXTERNAL is that
+      # second listener, same "loopback port for non-Docker local dev" pattern as
+      # every other stateful service here (see .env.example's KAFKA_PORT).
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,EXTERNAL://:9094,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,EXTERNAL://localhost:${KAFKA_PORT:-9092}"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Fixed, non-secret opaque cluster identifier the image's entrypoint uses to
+      # format its storage directory on first boot — any valid base64-encoded
+      # 16-byte UUID works; this is the widely-published Kafka/Confluent tutorial
+      # example id, safe to reuse since it identifies nothing but this one
+      # single-node dev cluster.
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      # Laptop-sized JVM heap (default would claim a much larger share of host RAM).
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      # Single-broker cluster — the default replication factor of 3 would leave
+      # every internal topic permanently under-replicated and unable to elect a
+      # leader.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    ports:
+      # Loopback-only (same reasoning as qdrant/valkey above), mapped to the
+      # EXTERNAL listener (container port 9094) — see that env var's comment for
+      # why this can't just reuse the internal 9092 listener other containers use.
+      - "127.0.0.1:${KAFKA_PORT:-9092}:9094"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 768m
+    healthcheck:
+      # No curl/wget/nc in this image — a bare TCP connect is enough to know the
+      # broker is accepting connections.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/9092'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
 
   # ── Object storage (datasets, model artifacts, uploaded documents) ────────────
   # All-in-one SeaweedFS server (master+volume+filer+S3 gateway in one process) —

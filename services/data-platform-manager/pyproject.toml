@@ -25,6 +25,7 @@ classifiers = [
 
 dependencies = [
     "ai-circus-shared",
+    "confluent-kafka>=2.15.0",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "kubernetes>=31.0.0",
@@ -35,6 +36,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
+    "redis>=5.2.0",
     "uvicorn[standard]>=0.52.1",
 ]
 
