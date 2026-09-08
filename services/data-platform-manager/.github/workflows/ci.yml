@@ -1,0 +1,42 @@
+# CI: quality gate for every push and pull request.
+# Mirrors `make check` (qa + test) so local and CI behavior stay identical.
+# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      # Not strictly required: `uv sync` below would auto-install a matching Python
+      # if missing. Kept explicit so a Python provisioning failure shows up as its
+      # own step, separate from dependency resolution.
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # data_model.py is committed, but regenerating it here is idempotent and
+      # surfaces settings.yaml drift as its own failing step, before `make qa`.
+      - name: Generate data model
+        run: make generate-data-model
+
+      - name: QA (pre-commit + config drift check)
+        run: make qa
+
+      - name: Run tests
+        run: make test

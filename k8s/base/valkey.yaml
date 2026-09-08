@@ -1,0 +1,64 @@
+# Mirrors docker-compose.yml's valkey service. Internal-only (no IngressRoute) —
+# same reasoning as qdrant.yaml: Valkey has no built-in auth, so it must never
+# gain a public route. Plain Deployment, not a StatefulSet — this store is
+# deliberately ephemeral (cache / rate-limit / session state), so there's no
+# volumeClaimTemplate to lose sleep over on pod rescheduling.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: valkey}
+  template:
+    metadata:
+      labels: {app: valkey}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: valkey
+          image: valkey/valkey:8-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - {containerPort: 6379}
+          readinessProbe:
+            exec: {command: ["valkey-cli", "ping"]}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: {port: 6379}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: ai-circus
+spec:
+  selector: {app: valkey}
+  ports:
+    - {port: 6379, targetPort: 6379}
+---
+# Valkey has no built-in auth at all (see comment above) — a NetworkPolicy is the
+# only thing standing between it and any other pod in the namespace. Extend this
+# from clause as more services adopt ai_circus_shared.cache.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: valkey
+  namespace: ai-circus
+spec:
+  podSelector:
+    matchLabels: {app: valkey}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: data-platform-manager}}
+      ports:
+        - {protocol: TCP, port: 6379}

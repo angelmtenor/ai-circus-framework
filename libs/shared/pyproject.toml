@@ -18,6 +18,7 @@ dependencies = [
     "prometheus-fastapi-instrumentator>=7.0.0",
     "sqlalchemy>=2.0",
     "psycopg[binary]>=3.3.4",
+    "redis>=5.2.0",
 ]
 
 [build-system]
@@ -28,7 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/ai_circus_shared"]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.11.8"]
+dev = ["pytest>=8.3.5", "ruff>=0.11.8", "fakeredis>=2.26.0"]
 
 [tool.ruff]
 target-version = "py312"

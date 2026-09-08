@@ -2,9 +2,10 @@
 # Runs once, on first container start (postgres image convention: any *.sh under
 # /docker-entrypoint-initdb.d/ is executed). POSTGRES_DB only creates one database
 # (the `platform` schema used by services/platform-registry); Keycloak, llm-gateway
-# (LiteLLM's own spend-tracking schema), and each of assistant/rag-agent/form-agent
+# (LiteLLM's own spend-tracking schema), each of assistant/rag-agent/form-agent
 # (their own persisted conversation-history schema, see
-# ai_circus_shared.conversations) each need their own.
+# ai_circus_shared.conversations), and data-platform-manager (its own document-store
+# schema, see ai_circus_shared.document_store) each need their own.
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
@@ -18,4 +19,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     GRANT ALL PRIVILEGES ON DATABASE rag_agent TO "$POSTGRES_USER";
     CREATE DATABASE form_agent;
     GRANT ALL PRIVILEGES ON DATABASE form_agent TO "$POSTGRES_USER";
+    CREATE DATABASE data_platform_manager;
+    GRANT ALL PRIVILEGES ON DATABASE data_platform_manager TO "$POSTGRES_USER";
 EOSQL

@@ -1,0 +1,104 @@
+# Mirrors docker-compose.yml's data-platform-manager service. Admin-only control
+# surface for the data layer and AI Gateway governance — see
+# services/data-platform-manager/api.py's module docstring for its "admin tenant
+# only" scope. Unlike every other backend service here, this one needs a real
+# Kubernetes API client (to read/trigger the pipeline Jobs in k8s/jobs/) — hence
+# its own ServiceAccount/Role/RoleBinding below, scoped to exactly `batch/v1`
+# Jobs in this one namespace, nothing else. In docker-compose there's no such
+# API to call at all, so that feature reports itself unavailable there instead
+# (see core/k8s_jobs.py's in_cluster_config_available).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-platform-manager
+  namespace: ai-circus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: data-platform-manager-jobs
+  namespace: ai-circus
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: data-platform-manager-jobs
+  namespace: ai-circus
+subjects:
+  - kind: ServiceAccount
+    name: data-platform-manager
+    namespace: ai-circus
+roleRef:
+  kind: Role
+  name: data-platform-manager-jobs
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-platform-manager
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: data-platform-manager}
+  template:
+    metadata:
+      labels: {app: data-platform-manager}
+    spec:
+      serviceAccountName: data-platform-manager
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: data-platform-manager
+          image: ai-circus/data-platform-manager:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-platform-manager-secrets}
+          env:
+            # Renamed from .env's LITELLM_MASTER_KEY.
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: data-platform-manager-secrets, key: LITELLM_MASTER_KEY}}}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-platform-manager
+  namespace: ai-circus
+spec:
+  selector: {app: data-platform-manager}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: data-platform-manager
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`data-platform-manager.localhost`)
+      kind: Rule
+      services:
+        - {name: data-platform-manager, port: 8000}

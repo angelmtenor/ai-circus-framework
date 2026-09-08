@@ -1,0 +1,11 @@
+# Prevent Gemini CLI from reading sensitive files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+*.pem
+*.key
+.cache/
+**/credentials*
+**/secrets*

@@ -8,6 +8,7 @@ resources:
   - keycloak.yaml
   - middleware.yaml
   - qdrant.yaml
+  - valkey.yaml
   - seaweedfs.yaml
   - platform-registry.yaml
   - llm-gateway.yaml
@@ -16,4 +17,5 @@ resources:
   - rag-agent.yaml
   - form-agent.yaml
   - agui-voice.yaml
+  - data-platform-manager.yaml
   - ui-react.yaml

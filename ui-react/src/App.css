@@ -1794,6 +1794,14 @@ select:focus {
   color: var(--dim);
 }
 
+/* Data platform roadmap statuses (see Settings.tsx's Data Platform section) —
+   "on"/"off" above are binary (routed/not routed); the roadmap has a third,
+   in-between state. */
+.settings-badge--partial {
+  background: rgba(138, 83, 0, 0.14);
+  color: var(--amber);
+}
+
 .settings-card-model {
   font-size: 0.78rem;
   color: var(--dim);
