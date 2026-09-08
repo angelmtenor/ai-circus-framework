@@ -74,7 +74,7 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: weekly_sales}
+    - {type: histogram, x: weekly_sales, color_by: type}
     - {type: bar, x: type, y: weekly_sales, agg: mean, color_by: type}
     - {type: scatter, x: size, y: weekly_sales, color_by: type}
 

@@ -100,9 +100,9 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: Appliances}
-    - {type: scatter, x: T_out, y: Appliances}
-    - {type: bar, x: hour, y: Appliances, agg: mean}
+    - {type: histogram, x: Appliances, color_by: is_holiday}
+    - {type: scatter, x: T_out, y: Appliances, color_by: is_holiday}
+    - {type: bar, x: hour, y: Appliances, agg: mean, color_by: is_holiday}
 
 model:
   task_type: regression

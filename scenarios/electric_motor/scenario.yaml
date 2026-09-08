@@ -104,8 +104,8 @@ dataset:
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
     - {type: histogram, x: motor_speed}
-    - {type: scatter, x: torque, y: motor_speed}
-    - {type: scatter, x: i_d, y: i_q}
+    - {type: scatter, x: torque, y: motor_speed, color_by: stator_winding}
+    - {type: scatter3d, x: i_d, y: i_q, z: motor_speed, color_by: torque}
 
 model:
   task_type: regression

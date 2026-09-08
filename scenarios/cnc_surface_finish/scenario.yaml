@@ -88,9 +88,9 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: surface_roughness_ra}
+    - {type: histogram, x: surface_roughness_ra, color_by: material}
     - {type: scatter, x: feed_rate, y: surface_roughness_ra, color_by: material}
-    - {type: scatter, x: tool_wear_time, y: surface_roughness_ra, color_by: material}
+    - {type: scatter3d, x: feed_rate, y: cutting_speed, z: surface_roughness_ra, color_by: material}
 
 model:
   task_type: regression

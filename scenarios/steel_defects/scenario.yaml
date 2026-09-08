@@ -123,8 +123,8 @@ dataset:
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
     - {type: bar, x: Steel_Type, y: Needs_Manual_Review, agg: mean, color_by: Steel_Type}
-    - {type: histogram, x: Luminosity_Index}
-    - {type: scatter, x: Square_Index, y: Orientation_Index, color_by: Needs_Manual_Review}
+    - {type: histogram, x: Luminosity_Index, color_by: Needs_Manual_Review}
+    - {type: scatter3d, x: Square_Index, y: Orientation_Index, z: Luminosity_Index, color_by: Needs_Manual_Review}
 
 model:
   task_type: classification

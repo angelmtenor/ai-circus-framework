@@ -84,9 +84,9 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: ActualShippingDays}
+    - {type: histogram, x: ActualShippingDays, color_by: Carrier}
     - {type: bar, x: Carrier, y: ActualShippingDays, agg: mean, color_by: Carrier}
-    - {type: scatter, x: YShippingDistance, y: XShippingDistance, color_by: ShippingPriority}
+    - {type: scatter3d, x: XShippingDistance, y: YShippingDistance, z: ActualShippingDays, color_by: ShippingPriority}
 
 model:
   task_type: regression

@@ -152,7 +152,7 @@ dataset:
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
     - {type: histogram, x: RUL}
-    - {type: scatter, x: time_in_cycles, y: RUL}
+    - {type: scatter, x: time_in_cycles, y: RUL, color_by: sensor_3}
     - {type: heatmap}
 
 model:

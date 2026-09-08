@@ -100,7 +100,7 @@ dataset:
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: Age}
+    - {type: histogram, x: Age, color_by: Exited}
     - {type: bar, x: Geography, y: Exited, agg: mean, color_by: Geography}
     - {type: scatter, x: Balance, y: EstimatedSalary, color_by: Geography}
 
