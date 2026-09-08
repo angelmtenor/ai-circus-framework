@@ -43,7 +43,7 @@
 <rect x="70" y="470" width="320" height="130" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
 <text x="230.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">DATA-PLATFORM-MANAGER</text>
 <text x="230.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Admin-only (ADMIN_API_KEY)</text>
-<text x="230.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Roadmap · pipeline jobs ·</text>
+<text x="230.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Roadmap · pipeline jobs · CDC ·</text>
 <text x="230.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">gateway rate limits · events</text>
 <line x1="88" y1="574" x2="372" y2="574" stroke="#b388ff" stroke-opacity="0.25"/>
 <text x="230.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI</text>
@@ -62,6 +62,20 @@
 <text x="230.0" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">batch/v1 Jobs in this namespace</text>
 <line x1="88" y1="694" x2="372" y2="694" stroke="#8b93a1" stroke-opacity="0.25"/>
 <text x="230.0" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">kubectl-equivalent client</text>
+<rect x="405" y="630" width="245" height="90" rx="12" fill="#2a1608" stroke="#ff8a5c" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="405" y="630" width="245" height="90" rx="12" fill="none" stroke="#ff8a5c" stroke-width="1.1" opacity="0.9"/>
+<text x="527.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">LAKEHOUSE</text>
+<text x="527.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Versioned Parquet tables on</text>
+<text x="527.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">object store + Postgres catalog</text>
+<line x1="423" y1="694" x2="632" y2="694" stroke="#ff8a5c" stroke-opacity="0.25"/>
+<text x="527.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Apache Iceberg (PyIceberg)</text>
+<rect x="665" y="630" width="245" height="90" rx="12" fill="#2a1608" stroke="#ff8a5c" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="665" y="630" width="245" height="90" rx="12" fill="none" stroke="#ff8a5c" stroke-width="1.1" opacity="0.9"/>
+<text x="787.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">SEMANTIC LAYER</text>
+<text x="787.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Federates lakehouse +</text>
+<text x="787.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">platform-registry in one query</text>
+<line x1="683" y1="694" x2="892" y2="694" stroke="#ff8a5c" stroke-opacity="0.25"/>
+<text x="787.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">DuckDB (embedded)</text>
 <rect x="1000" y="470" width="300" height="130" rx="12" fill="#08211d" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="1000" y="470" width="300" height="130" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
 <text x="1150.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">UI-REACT</text>
@@ -82,6 +96,9 @@
 <path d="M 150 470 C 150 423.0 150 423.0 150 376" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
 <rect x="69.4" y="400" width="161.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
 <text x="150" y="411" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#22d3ee" opacity="0.95">document store + cache</text>
+<path d="M 800 630 L 800 210" fill="none" stroke="#ff8a5c" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
+<rect x="709" y="402" width="182" height="16" rx="4" fill="#050b16" opacity="0.92"/>
+<text x="800" y="413" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#ff8a5c" opacity="0.95">reads scenarios/entitlements</text>
 <circle cx="60" cy="782" r="6.5" fill="#b388ff"/>
 <text x="75" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Identity &amp; platform</text>
 <circle cx="230" cy="782" r="6.5" fill="#22d3ee"/>
