@@ -84,22 +84,24 @@ ROADMAP: list[Capability] = [
     Capability(
         layer="data-platform",
         name="Change-Data-Capture",
-        status="partial",
-        note="Batch extraction is live (etl-tabular); a real Postgres-to-Kafka change "
-        "feed is not built (psycopg has no logical-replication client — needs its own "
-        "design pass)",
+        status="live",
+        note="Real Postgres logical replication -> Kafka (test_decoding, on-demand poll "
+        "via /cdc/poll) — a background loop, not just an on-demand trigger, is a "
+        "tracked follow-up",
     ),
     Capability(
         layer="data-platform",
         name="Lakehouse Table Format",
-        status="planned",
-        note="Upgrades today's raw object storage — not yet built",
+        status="live",
+        note="Real Apache Iceberg tables (PyIceberg) over SeaweedFS, cataloged in Postgres — POST /lakehouse/ingest",
     ),
     Capability(
         layer="data-platform",
         name="Semantic Modeling & Query Federation",
-        status="planned",
-        note="Phase 3 of the optional profile",
+        status="live",
+        note="Embedded DuckDB engine federating the lakehouse's Iceberg table with "
+        "platform-registry's real Postgres tables in one query — "
+        "GET /semantic/views, POST /semantic/views/{name}/query",
     ),
 ]
 

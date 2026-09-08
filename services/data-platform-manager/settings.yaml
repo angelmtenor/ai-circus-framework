@@ -96,6 +96,27 @@ env_variables:
     mandatory: true
     secret: true
 
+  # Lakehouse table format (PyIceberg) — the catalog (table metadata) lives in this
+  # service's own Postgres database above; these three back the *data* side (Parquet
+  # files + table metadata JSON), same SeaweedFS/S3 every other service already uses.
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file
@@ -122,6 +143,7 @@ environments:
     CACHE_URL: "redis://localhost:6379"
     LLM_GATEWAY_URL: "http://localhost:4000"
     KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
@@ -129,6 +151,7 @@ environments:
     CACHE_URL: "redis://valkey:6379"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
 
   staging: {}
     # Staging environment profile — overrides go here

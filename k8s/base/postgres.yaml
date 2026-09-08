@@ -25,6 +25,10 @@ spec:
           # postgres user itself — forcing non-root at the pod level would break that.
           securityContext:
             allowPrivilegeEscalation: false
+          # wal_level=logical (default: replica) — required for the CDC replication
+          # slot data-platform-manager's /cdc/poll creates. Mirrors docker-compose.yml's
+          # postgres service exactly; see that file's comment for the full rationale.
+          args: ["-c", "wal_level=logical"]
           ports:
             - containerPort: 5432
           env:

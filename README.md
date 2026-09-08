@@ -446,16 +446,37 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   ceilings.
 - **Recent events** — every pipeline trigger is published to Kafka as well as recorded durably
   (Postgres); this panel reads the topic directly, proving the stream is real.
+- **Change-Data-Capture** — a genuine Postgres logical-replication read (the built-in
+  `test_decoding` output plugin, no extra extension/image needed — see
+  `ai_circus_shared.cdc`) over the document store's own table, forwarded to Kafka on demand
+  (`POST /cdc/poll`); this is a real WAL read, not the application re-publishing its own writes.
+  On-demand rather than a background loop — see [Reserved for later](#reserved-for-later-documented-not-built).
+- **Lakehouse Table Format** — real, versioned **Apache Iceberg** tables (`PyIceberg`) over the
+  *existing* object store, no new stateful container: the catalog (table/schema/snapshot metadata)
+  is a `SqlCatalog` in this service's own Postgres database, and the data files (Parquet + Iceberg
+  JSON metadata) land in a new SeaweedFS bucket via Iceberg's own `S3FileIO`. `POST
+  /lakehouse/ingest` snapshots the document store's demo collection into a table — every call
+  appends a new snapshot rather than overwriting, so row/snapshot counts genuinely grow run over
+  run (see `core/lakehouse.py`).
+- **Semantic Modeling & Query Federation** — a small named catalog of business-friendly queries
+  (`GET /semantic/views`), each run (`POST /semantic/views/{name}/query`) through an embedded
+  **DuckDB** engine that federates two genuinely separate sources in one SQL statement, without
+  copying either into a new store: the lakehouse's own Iceberg table (handed to DuckDB directly as
+  an Arrow table) and `platform-registry`'s real `entitlements`/`scenarios` tables (a different
+  service's Postgres database, reached over the same shared cluster credentials every service
+  already has). `tenant_activity_360` is the one that actually federates both — per-tenant pipeline
+  activity next to how many scenarios that tenant is entitled to, joined by `org_id` in a single
+  query (see `core/semantic.py`).
 
 **Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
 then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
-the run shows up under **Pipeline jobs** and, moments later, as a real Kafka message under
-**Recent events**.
+the run shows up under **Pipeline jobs**, as a real Kafka message under **Recent events**, and
+(once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**. Click
+**Ingest now** under **Lakehouse Table Format** to snapshot that same data into a real Iceberg
+table — repeat it and watch the snapshot count climb. Then run any query under **Semantic Modeling
+& Query Federation** to see it joined live against `platform-registry`'s real tenant data.
 
-Change-data-capture (a real Postgres → Kafka change feed, rather than today's batch-only
-extraction), a lakehouse table format, and semantic modeling/query federation remain
-[reserved for later](#reserved-for-later-documented-not-built) — the roadmap panel above is the
-live source of truth for exactly what's built versus planned.
+The roadmap panel above is the live source of truth for exactly what's built versus planned.
 
 ---
 
@@ -525,16 +546,18 @@ task queue for on-demand tenant-triggered jobs, distributed
 tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate* limits are
 built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
-litellm's DB-backed proxy mode), a real Postgres-to-Kafka change-data-capture feed (psycopg has
-no logical-replication client — its own design pass, not started), a lakehouse table format and
-semantic-modeling/query-federation layer over the object store, and (optional) extracting
-embedded images out of uploaded PDFs in the chat attachment flow — today
+litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,
+on-demand Postgres-to-Kafka change read — see [Data Platform](#data-platform-optional-profile) —
+continuous polling is the natural next step, not a redesign), and (optional) extracting embedded
+images out of uploaded PDFs in the chat attachment flow — today
 `platform_registry.core.document_extraction` only pulls text/OCR out of a PDF, so a figure or
 diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
-AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, and a shared
-cache for multi-replica deployments, previously listed here, are built — see
-`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile), and
-`ai_circus_shared.cache` respectively.)
+AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, a shared cache
+for multi-replica deployments, a real Postgres-to-Kafka change-data-capture feed, a lakehouse table
+format over the object store, and a semantic-modeling/query-federation layer over both the
+lakehouse and platform-registry's own Postgres tables, previously listed here, are built — see
+`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile) (three
+times), and `ai_circus_shared.cache` respectively.)
 
 ---
 

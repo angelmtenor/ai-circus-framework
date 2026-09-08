@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 import redis
 from ai_circus_shared.auth import ADMIN_ORG_ID, is_admin_bearer_token
 from ai_circus_shared.cache import TenantCache
+from ai_circus_shared.cdc import ensure_slot, poll_changes, slot_status
 from ai_circus_shared.document_store import DbSession, DocumentStore
 from ai_circus_shared.document_store import get_session as get_document_session
 from ai_circus_shared.events import EventConsumer, EventProducer, connect_consumer
@@ -34,7 +35,7 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -52,6 +53,16 @@ _EVENT_POLL_TIMEOUT_SECONDS = 1.0
 # "Refresh" click, not a hot path).
 _EVENT_POLL_ATTEMPTS = 6
 _EVENT_POLL_MAX_MESSAGES = 50
+# The `documents` table (ai_circus_shared.document_store) is the CDC demo
+# source — it's already populated by real usage (the pipeline-trigger audit
+# trail above), so a change genuinely shows up here without needing a
+# separate table just for this.
+_CDC_SLOT_NAME = "data_platform_manager_documents"
+_CDC_EVENTS_TOPIC = "cdc.documents"
+# The lakehouse's demo table snapshots the SAME collection CDC watches — one
+# periodic full-table snapshot (lakehouse) alongside one per-row change feed
+# (CDC), over the same underlying data, showing why a platform wants both.
+_LAKEHOUSE_TABLE_NAME = "pipeline_triggers"
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
@@ -242,3 +253,112 @@ def recent_pipeline_trigger_events() -> list[dict[str, object]]:
     finally:
         consumer.close()
     return events
+
+
+class CdcStatusOut(BaseModel):
+    """Whether the CDC replication slot exists yet, and its current position."""
+
+    slot_exists: bool
+    active: bool | None = None
+    confirmed_flush_lsn: str | None = None
+
+
+@router.get("/cdc/status", response_model=CdcStatusOut, dependencies=[Depends(require_admin)])
+def cdc_status(session: DbSession = Depends(get_document_session)) -> CdcStatusOut:
+    """Whether the `documents` table's logical replication slot has been
+    created yet (see POST /cdc/poll) and its current WAL position — proof the
+    slot is real and advancing, not just "created once and forgotten".
+    """
+    status = slot_status(session, _CDC_SLOT_NAME)
+    if status is None:
+        return CdcStatusOut(slot_exists=False)
+    return CdcStatusOut(slot_exists=True, active=status["active"], confirmed_flush_lsn=status["confirmed_flush_lsn"])
+
+
+@router.post("/cdc/poll", dependencies=[Depends(require_admin)])
+def cdc_poll(
+    session: DbSession = Depends(get_document_session),
+    events: EventProducer = Depends(get_event_producer),
+) -> dict[str, object]:
+    """Change-data-capture, on demand: create the `documents` table's logical
+    replication slot if it doesn't exist yet, fetch every row-level change
+    since the last poll (a real Postgres WAL read — see
+    ai_circus_shared.cdc's module docstring — not the application re-publishing
+    its own writes, unlike POST /pipeline/jobs/{name}/trigger's best-effort
+    publish above), and forward each one to Kafka as its own event.
+
+    On-demand rather than a background loop: this is a reference/demo
+    framework, not a production CDC pipeline — an admin clicking "poll now"
+    (or a cron hitting this endpoint) is a proportionate way to prove the
+    change feed is real without adding a long-running task's lifecycle
+    (start/stop/crash-recovery) to this service.
+    """
+    just_created = ensure_slot(session, _CDC_SLOT_NAME)
+    changes = poll_changes(session, _CDC_SLOT_NAME)
+    for change in changes:
+        try:
+            events.publish(ADMIN_ORG_ID, _CDC_EVENTS_TOPIC, change.to_dict())
+        except Exception:
+            logger.warning("Failed to publish CDC event for %s.%s", change.schema, change.table, exc_info=True)
+    return {"slot_created": just_created, "changes_captured": len(changes), "changes": [c.to_dict() for c in changes]}
+
+
+@router.post("/lakehouse/ingest", dependencies=[Depends(require_admin)])
+def lakehouse_ingest(session: DbSession = Depends(get_document_session)) -> dict[str, object]:
+    """Snapshot the pipeline-trigger audit trail's current rows into a
+    versioned Iceberg table (see core/lakehouse.py) — a real Parquet write to
+    the same SeaweedFS every other service already uses, cataloged in this
+    service's own Postgres database. Every call adds a new snapshot; nothing
+    is overwritten, so the table's row/snapshot counts both grow each time
+    (unlike the CDC endpoints above, which only forward what *changed*).
+    """
+    config = get_env_config()
+    catalog = lakehouse.get_catalog(config)
+    store = DocumentStore(session)
+    return lakehouse.ingest(catalog, store, ADMIN_ORG_ID, _TRIGGER_HISTORY_COLLECTION, _LAKEHOUSE_TABLE_NAME)
+
+
+@router.get("/lakehouse/tables", dependencies=[Depends(require_admin)])
+def lakehouse_tables() -> list[str]:
+    """Every Iceberg table under the lakehouse namespace — [] before the first ingest."""
+    config = get_env_config()
+    return lakehouse.list_tables(lakehouse.get_catalog(config))
+
+
+@router.get("/lakehouse/tables/{table_name}", dependencies=[Depends(require_admin)])
+def lakehouse_table(table_name: str) -> dict[str, object]:
+    """Row/snapshot counts for one Iceberg table."""
+    config = get_env_config()
+    info = lakehouse.table_info(lakehouse.get_catalog(config), table_name)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Unknown lakehouse table {table_name!r}.")
+    return info
+
+
+class SemanticViewOut(BaseModel):
+    """One entry of the semantic model — the named query itself, not its result."""
+
+    name: str
+    description: str
+    sql: str
+
+
+@router.get("/semantic/views", response_model=list[SemanticViewOut], dependencies=[Depends(require_admin)])
+def semantic_views() -> list[semantic.SemanticView]:
+    """The semantic model: every named, federated query this service can run —
+    see core/semantic.py's module docstring for what "federated" means here.
+    """
+    return semantic.SEMANTIC_VIEWS
+
+
+@router.post("/semantic/views/{name}/query", dependencies=[Depends(require_admin)])
+def semantic_query(name: str) -> dict[str, object]:
+    """Run one semantic view: federates the lakehouse's Iceberg table with
+    platform-registry's real entitlements/scenarios tables through an embedded
+    DuckDB engine (see core/semantic.py) and returns the result rows.
+    """
+    view = semantic.get_view(name)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"Unknown semantic view {name!r}.")
+    config = get_env_config()
+    return semantic.run_query(view, config, _LAKEHOUSE_TABLE_NAME)

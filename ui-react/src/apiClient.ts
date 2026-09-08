@@ -597,3 +597,80 @@ export async function getRecentPipelineTriggerEvents(
   const response = await fetch(`${baseUrl}/events/pipeline-triggers`, { headers: headers(accessToken) });
   return asJson<PipelineTriggerEvent[]>(response);
 }
+
+export type CdcStatus = { slot_exists: boolean; active: boolean | null; confirmed_flush_lsn: string | null };
+
+/** Whether the CDC replication slot exists yet, and its current WAL position. */
+export async function getCdcStatus(baseUrl: string, accessToken: string | null): Promise<CdcStatus> {
+  const response = await fetch(`${baseUrl}/cdc/status`, { headers: headers(accessToken) });
+  return asJson<CdcStatus>(response);
+}
+
+export type CdcChange = { schema: string; table: string; operation: string; columns: Record<string, string> };
+export type CdcPollResult = { slot_created: boolean; changes_captured: number; changes: CdcChange[] };
+
+/**
+ * Change-data-capture, on demand: reads real changes off Postgres's logical
+ * replication slot and forwards each to Kafka (see api.py's docstring) —
+ * unlike the pipeline-trigger events above, this is a genuine WAL read, not
+ * the app re-publishing its own writes.
+ */
+export async function pollCdc(baseUrl: string, accessToken: string | null): Promise<CdcPollResult> {
+  const response = await fetch(`${baseUrl}/cdc/poll`, { method: "POST", headers: headers(accessToken) });
+  return asJson<CdcPollResult>(response);
+}
+
+export type LakehouseTableInfo = { table: string; rows_ingested?: number; total_rows: number; snapshot_count: number };
+
+/**
+ * Snapshot the demo collection's current rows into a real, versioned Apache
+ * Iceberg table (see api.py's docstring) — every call appends a new
+ * snapshot, so total_rows/snapshot_count both grow run over run.
+ */
+export async function ingestLakehouse(baseUrl: string, accessToken: string | null): Promise<LakehouseTableInfo> {
+  const response = await fetch(`${baseUrl}/lakehouse/ingest`, { method: "POST", headers: headers(accessToken) });
+  return asJson<LakehouseTableInfo>(response);
+}
+
+/** Every Iceberg table under the lakehouse namespace — [] before the first ingest. */
+export async function getLakehouseTables(baseUrl: string, accessToken: string | null): Promise<string[]> {
+  const response = await fetch(`${baseUrl}/lakehouse/tables`, { headers: headers(accessToken) });
+  return asJson<string[]>(response);
+}
+
+/** Row/snapshot counts for one lakehouse table. */
+export async function getLakehouseTableInfo(
+  baseUrl: string,
+  tableName: string,
+  accessToken: string | null,
+): Promise<LakehouseTableInfo> {
+  const response = await fetch(`${baseUrl}/lakehouse/tables/${tableName}`, { headers: headers(accessToken) });
+  return asJson<LakehouseTableInfo>(response);
+}
+
+export type SemanticView = { name: string; description: string; sql: string };
+export type SemanticQueryResult = { view: string; columns: string[]; rows: Record<string, unknown>[] };
+
+/** The semantic model: every named, federated query data-platform-manager can run. */
+export async function getSemanticViews(baseUrl: string, accessToken: string | null): Promise<SemanticView[]> {
+  const response = await fetch(`${baseUrl}/semantic/views`, { headers: headers(accessToken) });
+  return asJson<SemanticView[]>(response);
+}
+
+/**
+ * Run one semantic view — federates the lakehouse's Iceberg table with
+ * platform-registry's real entitlements/scenarios tables through an embedded
+ * DuckDB engine (see api.py's docstring); a genuine cross-source SQL join,
+ * not a mock.
+ */
+export async function runSemanticQuery(
+  baseUrl: string,
+  viewName: string,
+  accessToken: string | null,
+): Promise<SemanticQueryResult> {
+  const response = await fetch(`${baseUrl}/semantic/views/${viewName}/query`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson<SemanticQueryResult>(response);
+}
