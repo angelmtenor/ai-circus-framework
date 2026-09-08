@@ -19,15 +19,18 @@ def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("POSTGRES_PASSWORD", "test-password")
-    # CACHE_URL, CORS_ALLOWED_ORIGINS, ADMIN_API_KEY, LLM_GATEWAY_URL, and
-    # LLM_GATEWAY_API_KEY intentionally have no settings.yaml default (see that
-    # file) — they must come from real env vars, same reasoning as
-    # platform-registry's ADMIN_API_KEY/CORS_ALLOWED_ORIGINS.
+    # CACHE_URL, CORS_ALLOWED_ORIGINS, ADMIN_API_KEY, LLM_GATEWAY_URL,
+    # LLM_GATEWAY_API_KEY, OBJECT_STORE_ACCESS_KEY, and OBJECT_STORE_SECRET_KEY
+    # intentionally have no settings.yaml default (see that file) — they must
+    # come from real env vars, same reasoning as platform-registry's
+    # ADMIN_API_KEY/CORS_ALLOWED_ORIGINS.
     monkeypatch.setenv("CACHE_URL", "redis://localhost:6379")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "http://react.localhost")
     monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key")
     monkeypatch.setenv("LLM_GATEWAY_URL", "http://localhost:4000")
     monkeypatch.setenv("LLM_GATEWAY_API_KEY", "test-master-key")
+    monkeypatch.setenv("OBJECT_STORE_ACCESS_KEY", "test-access-key")
+    monkeypatch.setenv("OBJECT_STORE_SECRET_KEY", "test-secret-key")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

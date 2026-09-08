@@ -92,8 +92,8 @@ ROADMAP: list[Capability] = [
     Capability(
         layer="data-platform",
         name="Lakehouse Table Format",
-        status="planned",
-        note="Upgrades today's raw object storage — not yet built",
+        status="live",
+        note="Real Apache Iceberg tables (PyIceberg) over SeaweedFS, cataloged in Postgres — POST /lakehouse/ingest",
     ),
     Capability(
         layer="data-platform",

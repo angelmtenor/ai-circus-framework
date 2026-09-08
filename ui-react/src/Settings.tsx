@@ -4,9 +4,11 @@ import {
   getActiveVoiceSettings,
   getCdcStatus,
   getGatewayRateLimits,
+  getLakehouseTables,
   getPipelineJobs,
   getRecentPipelineTriggerEvents,
   getRoadmap,
+  ingestLakehouse,
   listLlmProviders,
   pollCdc,
   setActiveLlmModel,
@@ -17,6 +19,7 @@ import {
   type Capability,
   type CdcPollResult,
   type CdcStatus,
+  type LakehouseTableInfo,
   type LlmProvider,
   type LlmProviderTest,
   type PipelineJobsResult,
@@ -79,6 +82,9 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   const [cdcStatus, setCdcStatus] = useState<CdcStatus | null>(null);
   const [cdcResult, setCdcResult] = useState<CdcPollResult | null>(null);
   const [cdcPolling, setCdcPolling] = useState(false);
+  const [lakehouseTables, setLakehouseTables] = useState<string[] | null>(null);
+  const [lakehouseResult, setLakehouseResult] = useState<LakehouseTableInfo | null>(null);
+  const [lakehouseIngesting, setLakehouseIngesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
 
@@ -127,6 +133,27 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
       setError((e as Error).message);
     } finally {
       setCdcPolling(false);
+    }
+  }
+
+  function loadLakehouseTables() {
+    getLakehouseTables(baseUrl, accessToken)
+      .then(setLakehouseTables)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadLakehouseTables, [baseUrl, accessToken]);
+
+  async function runLakehouseIngest() {
+    setLakehouseIngesting(true);
+    try {
+      const result = await ingestLakehouse(baseUrl, accessToken);
+      setLakehouseResult(result);
+      loadLakehouseTables();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLakehouseIngesting(false);
     }
   }
 
@@ -254,6 +281,36 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <div className="settings-card-header">
+          <h3>Lakehouse Table Format</h3>
+          <button className="btn-secondary" onClick={runLakehouseIngest} disabled={lakehouseIngesting}>
+            {lakehouseIngesting ? "Ingesting…" : "▶ Ingest now"}
+          </button>
+        </div>
+        <p className="panel-hint">
+          Snapshots the same demo collection into a real, versioned Apache Iceberg table (Parquet files on the
+          object store, cataloged in Postgres) — every ingest appends a new snapshot, so row/snapshot counts grow
+          run over run rather than being overwritten.
+        </p>
+        {lakehouseTables && (
+          <p className="panel-hint">
+            {lakehouseTables.length === 0 ? "No tables yet — ingest once to create one." : `Tables: ${lakehouseTables.join(", ")}`}
+          </p>
+        )}
+        {lakehouseResult && (
+          <div className="settings-grid">
+            <div className="settings-card-model">
+              <strong>{lakehouseResult.table}</strong>
+              <div className="panel-hint">
+                {lakehouseResult.rows_ingested !== undefined && `${lakehouseResult.rows_ingested} rows ingested this run, `}
+                {lakehouseResult.total_rows} total rows, {lakehouseResult.snapshot_count} snapshots
+              </div>
+            </div>
           </div>
         )}
       </div>

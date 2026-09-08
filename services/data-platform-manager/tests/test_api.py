@@ -22,7 +22,7 @@ from sqlalchemy.pool import StaticPool
 from data_platform_manager.api import get_client, get_producer, require_admin
 from data_platform_manager.api import get_document_session as api_get_document_session
 from data_platform_manager.app import app
-from data_platform_manager.core import gateway, k8s_jobs
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse
 from tests.conftest import FakeSecret
 
 
@@ -383,3 +383,95 @@ def test_cdc_poll_succeeds_even_if_event_publish_fails(client: TestClient, monke
 def test_cdc_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
     assert unauthenticated_client.get("/cdc/status").status_code == 401
     assert unauthenticated_client.post("/cdc/poll").status_code == 401
+
+
+# Lakehouse (core/lakehouse.py, PyIceberg) needs a real Postgres catalog + real
+# S3-compatible storage to do anything — mocked at the same `get_catalog`
+# boundary the endpoints call through, the same way CDC's SQL functions are
+# mocked above. The real read/write/versioning path was verified live against
+# the actual running Postgres + SeaweedFS before this code was written.
+
+
+class _FakeCatalog:
+    """Stands in for the object lakehouse.get_catalog() would normally return —
+    the endpoints never call any Catalog method directly, only the
+    lakehouse.* functions this test monkeypatches, so its shape doesn't matter.
+    """
+
+
+def test_lakehouse_ingest_returns_the_ingest_summary(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(
+        lakehouse,
+        "ingest",
+        lambda catalog, store, org_id, collection, table_name: {
+            "table": "lakehouse.pipeline_triggers",
+            "rows_ingested": 3,
+            "total_rows": 3,
+            "snapshot_count": 1,
+        },
+    )
+
+    response = client.post("/lakehouse/ingest")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "table": "lakehouse.pipeline_triggers",
+        "rows_ingested": 3,
+        "total_rows": 3,
+        "snapshot_count": 1,
+    }
+
+
+def test_lakehouse_tables_lists_every_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "list_tables", lambda catalog: ["lakehouse.pipeline_triggers"])
+
+    response = client.get("/lakehouse/tables")
+
+    assert response.status_code == 200
+    assert response.json() == ["lakehouse.pipeline_triggers"]
+
+
+def test_lakehouse_tables_is_empty_before_any_ingest(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "list_tables", lambda catalog: [])
+
+    response = client.get("/lakehouse/tables")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_lakehouse_table_returns_404_for_an_unknown_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(lakehouse, "table_info", lambda catalog, table_name: None)
+
+    response = client.get("/lakehouse/tables/does-not-exist")
+
+    assert response.status_code == 404
+
+
+def test_lakehouse_table_returns_info_for_a_known_table(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("data_platform_manager.api.get_env_config", lambda: object())
+    monkeypatch.setattr(lakehouse, "get_catalog", lambda config: _FakeCatalog())
+    monkeypatch.setattr(
+        lakehouse,
+        "table_info",
+        lambda catalog, table_name: {"table": f"lakehouse.{table_name}", "total_rows": 5, "snapshot_count": 2},
+    )
+
+    response = client.get("/lakehouse/tables/pipeline_triggers")
+
+    assert response.status_code == 200
+    assert response.json() == {"table": "lakehouse.pipeline_triggers", "total_rows": 5, "snapshot_count": 2}
+
+
+def test_lakehouse_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.post("/lakehouse/ingest").status_code == 401
+    assert unauthenticated_client.get("/lakehouse/tables").status_code == 401
+    assert unauthenticated_client.get("/lakehouse/tables/x").status_code == 401

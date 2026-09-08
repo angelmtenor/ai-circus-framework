@@ -35,7 +35,7 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -59,6 +59,10 @@ _EVENT_POLL_MAX_MESSAGES = 50
 # separate table just for this.
 _CDC_SLOT_NAME = "data_platform_manager_documents"
 _CDC_EVENTS_TOPIC = "cdc.documents"
+# The lakehouse's demo table snapshots the SAME collection CDC watches — one
+# periodic full-table snapshot (lakehouse) alongside one per-row change feed
+# (CDC), over the same underlying data, showing why a platform wants both.
+_LAKEHOUSE_TABLE_NAME = "pipeline_triggers"
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:
@@ -297,3 +301,35 @@ def cdc_poll(
         except Exception:
             logger.warning("Failed to publish CDC event for %s.%s", change.schema, change.table, exc_info=True)
     return {"slot_created": just_created, "changes_captured": len(changes), "changes": [c.to_dict() for c in changes]}
+
+
+@router.post("/lakehouse/ingest", dependencies=[Depends(require_admin)])
+def lakehouse_ingest(session: DbSession = Depends(get_document_session)) -> dict[str, object]:
+    """Snapshot the pipeline-trigger audit trail's current rows into a
+    versioned Iceberg table (see core/lakehouse.py) — a real Parquet write to
+    the same SeaweedFS every other service already uses, cataloged in this
+    service's own Postgres database. Every call adds a new snapshot; nothing
+    is overwritten, so the table's row/snapshot counts both grow each time
+    (unlike the CDC endpoints above, which only forward what *changed*).
+    """
+    config = get_env_config()
+    catalog = lakehouse.get_catalog(config)
+    store = DocumentStore(session)
+    return lakehouse.ingest(catalog, store, ADMIN_ORG_ID, _TRIGGER_HISTORY_COLLECTION, _LAKEHOUSE_TABLE_NAME)
+
+
+@router.get("/lakehouse/tables", dependencies=[Depends(require_admin)])
+def lakehouse_tables() -> list[str]:
+    """Every Iceberg table under the lakehouse namespace — [] before the first ingest."""
+    config = get_env_config()
+    return lakehouse.list_tables(lakehouse.get_catalog(config))
+
+
+@router.get("/lakehouse/tables/{table_name}", dependencies=[Depends(require_admin)])
+def lakehouse_table(table_name: str) -> dict[str, object]:
+    """Row/snapshot counts for one Iceberg table."""
+    config = get_env_config()
+    info = lakehouse.table_info(lakehouse.get_catalog(config), table_name)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Unknown lakehouse table {table_name!r}.")
+    return info

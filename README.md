@@ -451,13 +451,22 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   `ai_circus_shared.cdc`) over the document store's own table, forwarded to Kafka on demand
   (`POST /cdc/poll`); this is a real WAL read, not the application re-publishing its own writes.
   On-demand rather than a background loop — see [Reserved for later](#reserved-for-later-documented-not-built).
+- **Lakehouse Table Format** — real, versioned **Apache Iceberg** tables (`PyIceberg`) over the
+  *existing* object store, no new stateful container: the catalog (table/schema/snapshot metadata)
+  is a `SqlCatalog` in this service's own Postgres database, and the data files (Parquet + Iceberg
+  JSON metadata) land in a new SeaweedFS bucket via Iceberg's own `S3FileIO`. `POST
+  /lakehouse/ingest` snapshots the document store's demo collection into a table — every call
+  appends a new snapshot rather than overwriting, so row/snapshot counts genuinely grow run over
+  run (see `core/lakehouse.py`).
 
 **Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
 then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
 the run shows up under **Pipeline jobs**, as a real Kafka message under **Recent events**, and
-(once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**.
+(once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**. Click
+**Ingest now** under **Lakehouse Table Format** to snapshot that same data into a real Iceberg
+table — repeat it and watch the snapshot count climb.
 
-A lakehouse table format and semantic modeling/query federation remain
+Semantic modeling and query federation remain
 [reserved for later](#reserved-for-later-documented-not-built) — the roadmap panel above is the
 live source of truth for exactly what's built versus planned.
 
@@ -531,15 +540,15 @@ voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate
 built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
 litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,
 on-demand Postgres-to-Kafka change read — see [Data Platform](#data-platform-optional-profile) —
-continuous polling is the natural next step, not a redesign), a lakehouse table format and
-semantic-modeling/query-federation layer over the object store, and (optional) extracting
-embedded images out of uploaded PDFs in the chat attachment flow — today
-`platform_registry.core.document_extraction` only pulls text/OCR out of a PDF, so a figure or
-diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
-AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, a shared
-cache for multi-replica deployments, and a real Postgres-to-Kafka change-data-capture feed,
-previously listed here, are built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`,
-[Data Platform](#data-platform-optional-profile) (twice), and `ai_circus_shared.cache`
+continuous polling is the natural next step, not a redesign), a semantic-modeling/query-federation
+layer over the object store, and (optional) extracting embedded images out of uploaded PDFs in the
+chat attachment flow — today `platform_registry.core.document_extraction` only pulls text/OCR out
+of a PDF, so a figure or diagram embedded in an otherwise text-native page never reaches a
+vision-capable model. (The AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app
+admin screen, a shared cache for multi-replica deployments, a real Postgres-to-Kafka
+change-data-capture feed, and a lakehouse table format over the object store, previously listed
+here, are built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`,
+[Data Platform](#data-platform-optional-profile) (three times), and `ai_circus_shared.cache`
 respectively.)
 
 ---

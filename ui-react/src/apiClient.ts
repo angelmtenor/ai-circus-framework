@@ -619,3 +619,31 @@ export async function pollCdc(baseUrl: string, accessToken: string | null): Prom
   const response = await fetch(`${baseUrl}/cdc/poll`, { method: "POST", headers: headers(accessToken) });
   return asJson<CdcPollResult>(response);
 }
+
+export type LakehouseTableInfo = { table: string; rows_ingested?: number; total_rows: number; snapshot_count: number };
+
+/**
+ * Snapshot the demo collection's current rows into a real, versioned Apache
+ * Iceberg table (see api.py's docstring) — every call appends a new
+ * snapshot, so total_rows/snapshot_count both grow run over run.
+ */
+export async function ingestLakehouse(baseUrl: string, accessToken: string | null): Promise<LakehouseTableInfo> {
+  const response = await fetch(`${baseUrl}/lakehouse/ingest`, { method: "POST", headers: headers(accessToken) });
+  return asJson<LakehouseTableInfo>(response);
+}
+
+/** Every Iceberg table under the lakehouse namespace — [] before the first ingest. */
+export async function getLakehouseTables(baseUrl: string, accessToken: string | null): Promise<string[]> {
+  const response = await fetch(`${baseUrl}/lakehouse/tables`, { headers: headers(accessToken) });
+  return asJson<string[]>(response);
+}
+
+/** Row/snapshot counts for one lakehouse table. */
+export async function getLakehouseTableInfo(
+  baseUrl: string,
+  tableName: string,
+  accessToken: string | null,
+): Promise<LakehouseTableInfo> {
+  const response = await fetch(`${baseUrl}/lakehouse/tables/${tableName}`, { headers: headers(accessToken) });
+  return asJson<LakehouseTableInfo>(response);
+}

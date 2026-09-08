@@ -825,6 +825,11 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      # Lakehouse Table Format (PyIceberg's S3FileIO) — same SeaweedFS credentials
+      # every other service already uses, see docker-compose.yml's OBJECT_STORE_*
+      # comment near the top.
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
