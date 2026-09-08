@@ -597,3 +597,25 @@ export async function getRecentPipelineTriggerEvents(
   const response = await fetch(`${baseUrl}/events/pipeline-triggers`, { headers: headers(accessToken) });
   return asJson<PipelineTriggerEvent[]>(response);
 }
+
+export type CdcStatus = { slot_exists: boolean; active: boolean | null; confirmed_flush_lsn: string | null };
+
+/** Whether the CDC replication slot exists yet, and its current WAL position. */
+export async function getCdcStatus(baseUrl: string, accessToken: string | null): Promise<CdcStatus> {
+  const response = await fetch(`${baseUrl}/cdc/status`, { headers: headers(accessToken) });
+  return asJson<CdcStatus>(response);
+}
+
+export type CdcChange = { schema: string; table: string; operation: string; columns: Record<string, string> };
+export type CdcPollResult = { slot_created: boolean; changes_captured: number; changes: CdcChange[] };
+
+/**
+ * Change-data-capture, on demand: reads real changes off Postgres's logical
+ * replication slot and forwards each to Kafka (see api.py's docstring) —
+ * unlike the pipeline-trigger events above, this is a genuine WAL read, not
+ * the app re-publishing its own writes.
+ */
+export async function pollCdc(baseUrl: string, accessToken: string | null): Promise<CdcPollResult> {
+  const response = await fetch(`${baseUrl}/cdc/poll`, { method: "POST", headers: headers(accessToken) });
+  return asJson<CdcPollResult>(response);
+}

@@ -61,6 +61,13 @@ services:
   # ── Identity (Keycloak: hosted+branded sign-in, Organizations = tenants, roles) ──
   postgres:
     image: postgres:16-alpine
+    # wal_level=logical (default: replica) is required for logical replication
+    # slots — the mechanism data-platform-manager's optional CDC feature reads
+    # from (via the built-in test_decoding output plugin, already present in
+    # this image — see ai_circus_shared.cdc's module docstring). A small,
+    # always-on WAL-volume increase, accepted so a slot can be created without
+    # a second Postgres restart later.
+    command: ["postgres", "-c", "wal_level=logical"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

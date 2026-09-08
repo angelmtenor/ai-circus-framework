@@ -117,8 +117,9 @@ def test_roadmap_rejects_wrong_token(unauthenticated_client: TestClient) -> None
 def test_roadmap_returns_every_capability(client: TestClient) -> None:
     response = client.get("/roadmap")
     assert response.status_code == 200
-    statuses = {c["status"] for c in response.json()}
-    assert statuses == {"live", "partial", "planned"}
+    capabilities = response.json()
+    assert len(capabilities) > 0
+    assert {c["status"] for c in capabilities} <= {"live", "partial", "planned"}
 
 
 def test_pipeline_jobs_reports_unavailable_outside_a_cluster(client: TestClient) -> None:
@@ -286,3 +287,99 @@ def test_gateway_rate_limits_surfaces_a_gateway_error_as_502(
     response = unauthenticated_client.get("/gateway/rate-limits", headers={"Authorization": "Bearer test-admin-key"})
 
     assert response.status_code == 502
+
+
+# CDC (ai_circus_shared.cdc) calls real Postgres-only SQL functions
+# (pg_create_logical_replication_slot, pg_logical_slot_get_changes) that the
+# in-memory SQLite this test suite otherwise uses can't run — so these tests
+# mock ensure_slot/poll_changes/slot_status at the boundary, the same way
+# gateway.get_rate_limits is mocked above. The parser itself is fully
+# unit-tested (against real captured output) in libs/shared's own
+# tests/test_cdc.py; the real end-to-end read was verified live in
+# docker-compose against the actual running Postgres.
+
+
+def test_cdc_status_reports_no_slot_before_first_poll(
+    unauthenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("data_platform_manager.api.slot_status", lambda session, slot_name: None)
+
+    response = unauthenticated_client.get("/cdc/status", headers={"Authorization": "Bearer test-admin-key"})
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_exists": False, "active": None, "confirmed_flush_lsn": None}
+
+
+def test_cdc_status_reports_an_existing_slots_position(
+    unauthenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "data_platform_manager.api.slot_status",
+        lambda session, slot_name: {"active": True, "confirmed_flush_lsn": "0/37661C0"},
+    )
+
+    response = unauthenticated_client.get("/cdc/status", headers={"Authorization": "Bearer test-admin-key"})
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_exists": True, "active": True, "confirmed_flush_lsn": "0/37661C0"}
+
+
+def test_cdc_poll_publishes_each_captured_change(
+    client: TestClient, fake_producer: _FakeKafkaProducer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ai_circus_shared.cdc import ChangeEvent
+
+    change = ChangeEvent(
+        schema="public", table="documents", operation="INSERT", columns={"doc_id": "doc-1", "org_id": "admin"}
+    )
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: True)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [change])
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slot_created"] is True
+    assert body["changes_captured"] == 1
+    assert body["changes"] == [change.to_dict()]
+    assert len(fake_producer.produced) == 1
+    topic, value = fake_producer.produced[0]
+    assert topic == "tenant-admin.cdc.documents"
+    assert json.loads(value) == change.to_dict()
+
+
+def test_cdc_poll_reports_zero_changes_when_nothing_changed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: False)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [])
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    assert response.json() == {"slot_created": False, "changes_captured": 0, "changes": []}
+
+
+def test_cdc_poll_succeeds_even_if_event_publish_fails(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    from ai_circus_shared.cdc import ChangeEvent
+
+    change = ChangeEvent(schema="public", table="documents", operation="DELETE", columns={"doc_id": "doc-1"})
+    monkeypatch.setattr("data_platform_manager.api.ensure_slot", lambda session, slot_name: False)
+    monkeypatch.setattr("data_platform_manager.api.poll_changes", lambda session, slot_name: [change])
+
+    def _raise(topic: str, value: bytes) -> None:
+        raise RuntimeError("broker unreachable")
+
+    from data_platform_manager.api import get_producer
+
+    app.dependency_overrides[get_producer] = lambda: type("BrokenProducer", (), {"produce": _raise})()
+
+    response = client.post("/cdc/poll")
+
+    assert response.status_code == 200
+    assert response.json()["changes_captured"] == 1
+
+
+def test_cdc_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.get("/cdc/status").status_code == 401
+    assert unauthenticated_client.post("/cdc/poll").status_code == 401

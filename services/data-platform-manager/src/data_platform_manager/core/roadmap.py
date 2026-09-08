@@ -84,10 +84,10 @@ ROADMAP: list[Capability] = [
     Capability(
         layer="data-platform",
         name="Change-Data-Capture",
-        status="partial",
-        note="Batch extraction is live (etl-tabular); a real Postgres-to-Kafka change "
-        "feed is not built (psycopg has no logical-replication client — needs its own "
-        "design pass)",
+        status="live",
+        note="Real Postgres logical replication -> Kafka (test_decoding, on-demand poll "
+        "via /cdc/poll) — a background loop, not just an on-demand trigger, is a "
+        "tracked follow-up",
     ),
     Capability(
         layer="data-platform",

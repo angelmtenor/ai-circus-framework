@@ -446,14 +446,18 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   ceilings.
 - **Recent events** — every pipeline trigger is published to Kafka as well as recorded durably
   (Postgres); this panel reads the topic directly, proving the stream is real.
+- **Change-Data-Capture** — a genuine Postgres logical-replication read (the built-in
+  `test_decoding` output plugin, no extra extension/image needed — see
+  `ai_circus_shared.cdc`) over the document store's own table, forwarded to Kafka on demand
+  (`POST /cdc/poll`); this is a real WAL read, not the application re-publishing its own writes.
+  On-demand rather than a background loop — see [Reserved for later](#reserved-for-later-documented-not-built).
 
 **Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
 then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
-the run shows up under **Pipeline jobs** and, moments later, as a real Kafka message under
-**Recent events**.
+the run shows up under **Pipeline jobs**, as a real Kafka message under **Recent events**, and
+(once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**.
 
-Change-data-capture (a real Postgres → Kafka change feed, rather than today's batch-only
-extraction), a lakehouse table format, and semantic modeling/query federation remain
+A lakehouse table format and semantic modeling/query federation remain
 [reserved for later](#reserved-for-later-documented-not-built) — the roadmap panel above is the
 live source of truth for exactly what's built versus planned.
 
@@ -525,16 +529,18 @@ task queue for on-demand tenant-triggered jobs, distributed
 tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate* limits are
 built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
-litellm's DB-backed proxy mode), a real Postgres-to-Kafka change-data-capture feed (psycopg has
-no logical-replication client — its own design pass, not started), a lakehouse table format and
+litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,
+on-demand Postgres-to-Kafka change read — see [Data Platform](#data-platform-optional-profile) —
+continuous polling is the natural next step, not a redesign), a lakehouse table format and
 semantic-modeling/query-federation layer over the object store, and (optional) extracting
 embedded images out of uploaded PDFs in the chat attachment flow — today
 `platform_registry.core.document_extraction` only pulls text/OCR out of a PDF, so a figure or
 diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
-AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, and a shared
-cache for multi-replica deployments, previously listed here, are built — see
-`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile), and
-`ai_circus_shared.cache` respectively.)
+AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, a shared
+cache for multi-replica deployments, and a real Postgres-to-Kafka change-data-capture feed,
+previously listed here, are built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`,
+[Data Platform](#data-platform-optional-profile) (twice), and `ai_circus_shared.cache`
+respectively.)
 
 ---
 

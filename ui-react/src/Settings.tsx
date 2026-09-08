@@ -2,17 +2,21 @@ import { useEffect, useState } from "react";
 import {
   getActiveLlmModel,
   getActiveVoiceSettings,
+  getCdcStatus,
   getGatewayRateLimits,
   getPipelineJobs,
   getRecentPipelineTriggerEvents,
   getRoadmap,
   listLlmProviders,
+  pollCdc,
   setActiveLlmModel,
   setActiveVoiceSettings,
   testLlmProvider,
   triggerPipelineJob,
   voiceProviders,
   type Capability,
+  type CdcPollResult,
+  type CdcStatus,
   type LlmProvider,
   type LlmProviderTest,
   type PipelineJobsResult,
@@ -72,6 +76,9 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   const [rateLimits, setRateLimits] = useState<RateLimit[] | null>(null);
   const [events, setEvents] = useState<PipelineTriggerEvent[] | null>(null);
   const [eventsLoading, setEventsLoading] = useState(false);
+  const [cdcStatus, setCdcStatus] = useState<CdcStatus | null>(null);
+  const [cdcResult, setCdcResult] = useState<CdcPollResult | null>(null);
+  const [cdcPolling, setCdcPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
 
@@ -101,6 +108,27 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
   }
 
   useEffect(loadEvents, [baseUrl, accessToken]);
+
+  function loadCdcStatus() {
+    getCdcStatus(baseUrl, accessToken)
+      .then(setCdcStatus)
+      .catch((e) => setError((e as Error).message));
+  }
+
+  useEffect(loadCdcStatus, [baseUrl, accessToken]);
+
+  async function runCdcPoll() {
+    setCdcPolling(true);
+    try {
+      const result = await pollCdc(baseUrl, accessToken);
+      setCdcResult(result);
+      loadCdcStatus();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCdcPolling(false);
+    }
+  }
 
   async function trigger(jobName: string) {
     setTriggering(jobName);
@@ -187,6 +215,43 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
             {events.map((e, i) => (
               <div key={`${e.job}-${e.triggered_at}-${i}`} className="settings-card-model">
                 <strong>{e.job}</strong> — {e.triggered_at}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel-card settings-card">
+        <div className="settings-card-header">
+          <h3>Change-Data-Capture</h3>
+          <button className="btn-secondary" onClick={runCdcPoll} disabled={cdcPolling}>
+            {cdcPolling ? "Polling…" : "▶ Poll now"}
+          </button>
+        </div>
+        <p className="panel-hint">
+          Reads real changes off Postgres's own logical replication slot for the document store and forwards each to
+          Kafka — a genuine WAL read, not the app re-publishing its own writes (unlike the pipeline-trigger events
+          above). On demand, not a background loop — see the roadmap note above.
+        </p>
+        {cdcStatus && (
+          <p className="panel-hint">
+            Slot: {cdcStatus.slot_exists ? `active, at ${cdcStatus.confirmed_flush_lsn}` : "not created yet — poll once to create it"}
+          </p>
+        )}
+        {cdcResult && (
+          <div className="settings-grid">
+            {cdcResult.changes.length === 0 && <p className="panel-hint">No changes since the last poll.</p>}
+            {cdcResult.changes.map((c, i) => (
+              <div key={`${c.table}-${i}`} className="settings-card-model">
+                <strong>
+                  {c.operation} {c.table}
+                </strong>
+                <div className="panel-hint">
+                  {Object.entries(c.columns)
+                    .slice(0, 3)
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(", ")}
+                </div>
               </div>
             ))}
           </div>
