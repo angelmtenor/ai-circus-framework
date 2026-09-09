@@ -20,7 +20,6 @@ from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
@@ -105,7 +104,7 @@ def _llm_display(llm_model: str = Depends(_llm_model)) -> tuple[str, str | None,
     return model, label, vision
 
 
-def _chat_llm(request: Request, llm_model: str = Depends(_llm_model)) -> BaseChatModel:
+def _chat_llm(request: Request, llm_model: str = Depends(_llm_model)) -> ChatOpenAI:
     """The LangChain chat model backing the AG-UI route — see app.py's chat_llm_clients."""
     config = get_env_config()
     clients: dict[str, ChatOpenAI] = request.app.state.chat_llm_clients
@@ -258,7 +257,7 @@ async def agui_endpoint(
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     prompt_cache: SystemPromptCache = Depends(_prompt_cache),
-    llm: BaseChatModel = Depends(_chat_llm),
+    llm: ChatOpenAI = Depends(_chat_llm),
     model_name: str = Depends(_llm_model),
     store: ConversationStore = Depends(_conversation_store),
 ) -> StreamingResponse:
@@ -281,7 +280,15 @@ async def agui_endpoint(
     tools = build_prediction_tools(
         prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")
     )
-    graph = build_agui_agent(llm, system_prompt, tools)
+    # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
+    # client (see _chat_llm) without mutating it — per-request only, so concurrent
+    # calls from other orgs through the same cached client never see this one's
+    # user. `user` is a first-class OpenAI Chat Completions field (merged in via
+    # model_kwargs, langchain_openai's documented mechanism for exactly this), so
+    # it reaches llm-gateway's request body untouched — see llm_gateway.budget_hook's
+    # module docstring for the per-tenant budget enforcement this makes possible.
+    llm_for_request = llm.model_copy(update={"model_kwargs": {**llm.model_kwargs, "user": identity.org_id}})
+    graph = build_agui_agent(llm_for_request, system_prompt, tools)
     model_usage = ModelUsageCallback()
     agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config={"callbacks": [model_usage]})
 

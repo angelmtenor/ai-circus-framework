@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import ClassVar
 
 import httpx
 import pytest
@@ -259,6 +260,51 @@ def _fake_http_request() -> Request:
     return Request({"type": "http", "headers": [(b"accept", b"application/json")]})
 
 
+async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-tenant AI Gateway budgets (llm_gateway.budget_hook) are enforced by the
+    org_id carried in each request's `user` field — set via model_copy() per
+    request, never baked into the shared model-name-keyed cached client (see
+    _llm), so concurrent calls from other orgs never see this one's user.
+    """
+    captured_model_kwargs: dict[str, object] = {}
+
+    class FakeLlm:
+        model_kwargs: ClassVar[dict[str, object]] = {}
+
+        def model_copy(self, *, update: dict[str, object]) -> FakeLlm:
+            captured_model_kwargs.update(update["model_kwargs"])
+            return self
+
+    monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
+    monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
+    monkeypatch.setattr(
+        api_module,
+        "LangGraphAGUIAgent",
+        lambda *, name, graph, config=None: SimpleNamespace(run=lambda _input: iter(())),
+    )
+
+    await agui_endpoint(
+        scenario_slug="docs_rag",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={}
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        definition=SimpleNamespace(
+            slug="docs_rag",
+            vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+            chat=ChatConfig(context="Bank account policies and fees."),
+        ),
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        llm=FakeLlm(),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+
+    assert captured_model_kwargs == {"user": "org-1"}
+
+
 async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
     """A provider failure mid-run (e.g. GroqCloud rate-limiting an oversized request)
     must reach the client as a RUN_ERROR event, not just abort the stream — an
@@ -291,7 +337,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
@@ -344,7 +390,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
@@ -486,7 +532,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=store,
     )
