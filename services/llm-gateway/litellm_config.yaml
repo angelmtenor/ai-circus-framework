@@ -147,6 +147,15 @@ litellm_settings:
     - provider: "local-embed"
       custom_handler: llm_gateway.custom_handler.local_embedding_llm
 
+  # Per-tenant monthly spend budgets — a from-scratch, Valkey-backed alternative to
+  # litellm's own DB-backed (Prisma) budget/virtual-key feature, which this repo's
+  # Python 3.14 baseline can't use (see budget_hook.py's module docstring and
+  # data_platform_manager.core.roadmap). An org with no cap configured (nothing
+  # set via data-platform-manager's admin API) is unlimited — opt-in, not a
+  # default ceiling on every tenant.
+  callbacks:
+    - llm_gateway.budget_hook.instance
+
   # Explicit fallback chains only — litellm has no implicit/automatic fallback
   # behavior, so a model_name absent here simply has none. Each entry maps one
   # primary model_name to an ordered list of model_names to retry, in order, on a

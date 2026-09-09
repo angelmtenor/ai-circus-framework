@@ -37,6 +37,7 @@ dependencies = [
     "pydantic>=2.11.4",
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
+    "redis>=5.2.0",
     "sentence-transformers>=5.6.1",
     "torch>=2.0",
 ]
@@ -50,6 +51,7 @@ BugTracker = "https://github.com/angelmtenor/ai-circus-framework/issues"
 dev = [
     "debugpy>=1.8.14",
     "deptry>=0.23.0",
+    "fakeredis>=2.26.0",
     "packaging>=24.0",      # used directly by check_full_env.py
     "pre-commit>=4.2.0",
     "pyinstrument>=5.0.1",
