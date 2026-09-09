@@ -3,7 +3,7 @@
 - Author:   ai-circus-framework contributors
 
 A machine-readable version of the "unified AI platform architecture" status
-matrix: which capabilities are LIVE in AI Liquid Core today, PARTIAL, or still
+matrix: which capabilities are LIVE in this platform today, PARTIAL, or still
 PLANNED. Deliberately pure/static data, not a live probe of each capability —
 LIVE here means "this code has shipped", not "this container is currently
 healthy" (the readiness/liveness probes already answer that). Update this

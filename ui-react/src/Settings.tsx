@@ -205,7 +205,7 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
         <h3>Data Platform</h3>
       </div>
       <p className="panel-hint">
-        What's live in AI Liquid Core today, partially built, or still planned — plus pipeline job control and AI
+        What's live in this platform today, partially built, or still planned — plus pipeline job control and AI
         Gateway rate limits.
       </p>
       {error && <p className="error">{error}</p>}
