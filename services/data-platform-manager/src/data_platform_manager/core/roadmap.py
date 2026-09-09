@@ -166,14 +166,15 @@ ROADMAP: list[Capability] = [
     Capability(
         pillar="governance",
         name="AI Gateway per-tenant budgets",
-        status="planned",
-        note="litellm's own DB-backed proxy mode depends on prisma-client-py "
-        "(github.com/RobertCraigie/prisma-client-py), which the maintainer archived "
-        "2025-04-15 (read-only, no more releases) — it never added Python 3.13/3.14 "
-        "support, and importing it on this repo's Python 3.14 baseline hangs for "
-        "minutes at 100% CPU (confirmed empirically). Permanently closed via that path; "
-        "a real fix means litellm dropping prisma, or a from-scratch budget tracker in "
-        "data-platform-manager that never touches llm-gateway's DB-backed mode",
+        status="live",
+        note="litellm's own DB-backed proxy mode depends on prisma-client-py, which "
+        "the maintainer archived 2025-04-15 and never added Python 3.13/3.14 support "
+        "to (hangs importing on this repo's Python 3.14 baseline) — so this is a "
+        "from-scratch tracker instead: llm_gateway.budget_hook (a stock litellm "
+        "CustomLogger, no Prisma) checks/records each org's monthly spend directly "
+        "in Valkey; POST/GET/DELETE /gateway/budgets here sets the durable cap "
+        "(this service's own document store) and mirrors it into the same Valkey "
+        "keys for the gateway's hot path to read with zero calls back here",
     ),
 ]
 

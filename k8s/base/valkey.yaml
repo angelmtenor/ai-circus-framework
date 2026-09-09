@@ -47,7 +47,11 @@ spec:
 ---
 # Valkey has no built-in auth at all (see comment above) — a NetworkPolicy is the
 # only thing standing between it and any other pod in the namespace. Extend this
-# from clause as more services adopt ai_circus_shared.cache.
+# from clause as more services adopt ai_circus_shared.cache — or, like
+# llm-gateway's budget_hook.py, talk to Valkey directly (it can't take
+# ai-circus-shared as a dependency: that library requires fastapi>=0.141.1, which
+# conflicts with the fastapi==0.136.3 litellm[proxy] needs — see that module's
+# docstring).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -60,5 +64,6 @@ spec:
   ingress:
     - from:
         - podSelector: {matchLabels: {app: data-platform-manager}}
+        - podSelector: {matchLabels: {app: llm-gateway}}
       ports:
         - {protocol: TCP, port: 6379}

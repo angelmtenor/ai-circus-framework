@@ -109,6 +109,36 @@ class RateLimitOut(BaseModel):
     tpm: int | None
 
 
+class BudgetOut(BaseModel):
+    """One org's configured monthly AI Gateway spend cap plus its current spend."""
+
+    org_id: str
+    monthly_cap_usd: float
+    spend_usd: float
+
+
+class BudgetSetIn(BaseModel):
+    """Body for PUT /gateway/budgets/{org_id}."""
+
+    monthly_cap_usd: float
+
+
+# Collection this service's own document store keeps every configured budget
+# cap under (see ai_circus_shared.document_store) — owned by ADMIN_ORG_ID with
+# one doc per target org, not each org's own collection, so /gateway/budgets can
+# list every configured org in a single query.
+_BUDGETS_COLLECTION = "ai-gateway-budgets"
+# Must match llm_gateway.budget_hook's _CAP_KEY/_spend_key exactly — that hook
+# can't import ai_circus_shared.cache itself (fastapi version conflict with
+# litellm[proxy], see its module docstring) and hand-matches this key format.
+_BUDGET_CAP_KEY = "llm_budget_cap"
+_BUDGET_SPEND_KEY_PREFIX = "llm_budget_spend"
+
+
+def _budget_spend_key() -> str:
+    return f"{_BUDGET_SPEND_KEY_PREFIX}:{datetime.now(UTC):%Y-%m}"
+
+
 @router.get("/healthz")
 def healthz() -> dict[str, str]:
     """Liveness check — no auth, matches every other service's convention."""
@@ -129,6 +159,63 @@ def gateway_rate_limits() -> list[dict[str, object]]:
         return gateway.get_rate_limits(config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value())
     except gateway.LlmGatewayError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/gateway/budgets", response_model=list[BudgetOut], dependencies=[Depends(require_admin)])
+def list_gateway_budgets(
+    cache: TenantCache = Depends(get_cache),
+    session: DbSession = Depends(get_document_session),
+) -> list[BudgetOut]:
+    """Every org with a configured monthly AI Gateway spend cap, plus its current
+    month's spend — read straight from the same Valkey counter llm-gateway's
+    budget_hook increments after every real completion. An org with no cap set
+    here is unlimited and never appears in this list (budgets are opt-in).
+    """
+    store = DocumentStore(session)
+    return [
+        BudgetOut(
+            org_id=doc.doc_id,
+            monthly_cap_usd=doc.content["monthly_cap_usd"],
+            spend_usd=float(cache.get(doc.doc_id, _budget_spend_key()) or 0.0),
+        )
+        for doc in store.list(ADMIN_ORG_ID, _BUDGETS_COLLECTION)
+    ]
+
+
+@router.put("/gateway/budgets/{org_id}", response_model=BudgetOut, dependencies=[Depends(require_admin)])
+def set_gateway_budget(
+    org_id: str,
+    body: BudgetSetIn,
+    cache: TenantCache = Depends(get_cache),
+    session: DbSession = Depends(get_document_session),
+) -> BudgetOut:
+    """Set (or update) one org's monthly AI Gateway spend cap.
+
+    Durable in this service's own document store (survives a Valkey flush/
+    restart) and mirrored into Valkey so llm-gateway's budget_hook can enforce
+    it on its hot path with zero calls back to this service.
+    """
+    store = DocumentStore(session)
+    store.put(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id, {"monthly_cap_usd": body.monthly_cap_usd})
+    cache.set(org_id, _BUDGET_CAP_KEY, str(body.monthly_cap_usd))
+    return BudgetOut(
+        org_id=org_id,
+        monthly_cap_usd=body.monthly_cap_usd,
+        spend_usd=float(cache.get(org_id, _budget_spend_key()) or 0.0),
+    )
+
+
+@router.delete("/gateway/budgets/{org_id}", dependencies=[Depends(require_admin)])
+def delete_gateway_budget(
+    org_id: str,
+    cache: TenantCache = Depends(get_cache),
+    session: DbSession = Depends(get_document_session),
+) -> dict[str, bool]:
+    """Remove an org's cap — makes it unlimited again, not "zero budget"."""
+    store = DocumentStore(session)
+    deleted = store.delete(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
+    cache.delete(org_id, _BUDGET_CAP_KEY)
+    return {"deleted": deleted}
 
 
 @router.get("/pipeline/jobs", response_model=PipelineJobsOut, dependencies=[Depends(require_admin)])

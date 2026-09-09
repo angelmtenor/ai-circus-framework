@@ -35,6 +35,12 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: CACHE_URL
+    description: "Redis-protocol connection URL (docker-compose/k8s run Valkey) - backs the budget tracker"
+    type: string
+    mandatory: true
+    secret: false
+
   # Referenced by litellm_config.yaml via `os.environ/<NAME>` — read directly by the
   # litellm process, not by this service's own code. Declared here for discoverability
   # (`make setup`/.env.example) even though EnvConfig never reads them itself.
@@ -107,11 +113,12 @@ environments:
     HTTP_PORT: "4000"
     LITELLM_CONFIG_PATH: "litellm_config.yaml"
 
-  local: {}
-    # Local development overrides
+  local:
+    CACHE_URL: "redis://localhost:6379"
 
-  docker: {}
+  docker:
     # Running as a container inside docker-compose's `ai-circus` network.
+    CACHE_URL: "redis://valkey:6379"
 
   staging: {}
     # Staging environment profile — overrides go here

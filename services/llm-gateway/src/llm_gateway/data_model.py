@@ -34,6 +34,9 @@ class EnvConfig(BaseSettings):
     LITELLM_MASTER_KEY: SecretStr = Field(
         description="Master API key callers must present to the gateway (Bearer token)"
     )
+    CACHE_URL: str = Field(
+        description="Redis-protocol connection URL (docker-compose/k8s run Valkey) - backs the budget tracker"
+    )
     OPENAI_API_KEY: SecretStr | None = Field(
         description="OpenAI API key (only needed if litellm_config.yaml routes to an openai/* model)", default=None
     )
@@ -69,7 +72,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "1402ec30cea72d5e111391cb78c58d0993fd9494c343810483e77fe2c29016fc"
+_SOURCE_YAML_HASH = "56c168e32a42643614a4cbffa6f872d95288c0f5b846dcd6d5ab8d559473c53f"
 
 
 EnvConfig.model_rebuild()

@@ -16,9 +16,12 @@ from llm_gateway.data_model import get_env_config
 
 @pytest.fixture(autouse=True)
 def _prepare_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the lru_cache and set the one mandatory secret every profile needs."""
+    """Clear the lru_cache and set the mandatory fields with no profile default."""
     get_env_config.cache_clear()
     monkeypatch.setenv("LITELLM_MASTER_KEY", "test-master-key")
+    # CACHE_URL only has a default for local/docker (see settings.yaml) — staging/
+    # production must come from a real env var.
+    monkeypatch.setenv("CACHE_URL", "redis://localhost:6379")
 
 
 def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:

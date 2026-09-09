@@ -7,6 +7,7 @@ and the _llm/_llm_model_name dependencies.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import httpx
 import pytest
@@ -407,6 +408,46 @@ def _fake_http_request() -> Request:
     return Request({"type": "http", "headers": [(b"accept", b"application/json")]})
 
 
+async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Per-tenant AI Gateway budgets (llm_gateway.budget_hook) are enforced by the
+    org_id carried in each request's `user` field — set via model_copy() per
+    request, never baked into the shared model-name-keyed cached client (see
+    _llm), so concurrent calls from other orgs never see this one's user.
+    """
+    captured_model_kwargs: dict[str, object] = {}
+
+    class FakeLlm:
+        model_kwargs: ClassVar[dict[str, object]] = {}
+
+        def model_copy(self, *, update: dict[str, object]) -> FakeLlm:
+            captured_model_kwargs.update(update["model_kwargs"])
+            return self
+
+    monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
+    monkeypatch.setattr(
+        api_module,
+        "LangGraphAGUIAgent",
+        lambda *, name, graph, config=None: SimpleNamespace(run=lambda _input: iter(())),
+    )
+
+    await agui_endpoint(
+        scenario_slug="service_request",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={}
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:service_request"})),
+        definition=_fake_definition(classification=False),
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        llm=FakeLlm(),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+
+    assert captured_model_kwargs == {"user": "org-1"}
+
+
 async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -446,7 +487,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         definition=_fake_definition(classification=False),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=store,
     )
@@ -498,7 +539,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         definition=_fake_definition(classification=False),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
