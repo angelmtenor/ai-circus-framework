@@ -1221,6 +1221,12 @@ select:focus {
   color: var(--dim);
 }
 
+.chat-fallback-note {
+  font-size: 0.72rem;
+  color: var(--amber);
+  margin-top: 0.3rem;
+}
+
 .chat-samples {
   display: flex;
   flex-wrap: wrap;

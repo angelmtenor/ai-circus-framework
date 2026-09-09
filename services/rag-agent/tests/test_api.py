@@ -274,7 +274,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
     monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
     monkeypatch.setattr(
-        api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_raising_agent_run)
+        api_module, "LangGraphAGUIAgent", lambda *, name, graph, config=None: SimpleNamespace(run=_raising_agent_run)
     )
 
     response = await agui_endpoint(
@@ -292,6 +292,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
         llm=SimpleNamespace(),
+        model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
 
@@ -299,6 +300,62 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
 
     assert '"type":"RUN_ERROR"' in body
     assert "rate_limit_exceeded" in body
+
+
+async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When litellm_config.yaml's `litellm_settings.fallbacks` fires, the model that
+    actually answered differs from the one requested — this must reach the client as
+    a CUSTOM `model_fallback` event (see ChatPanel.tsx's `onCustomEvent`), not a
+    silent swap the user is never told about.
+    """
+    from ag_ui.core import EventType, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent
+
+    async def _fake_agent_run(_input: object):  # ruff: ignore[missing-return-type-private-function, unused-async]
+        yield TextMessageStartEvent(type=EventType.TEXT_MESSAGE_START, message_id="m1", role="assistant")
+        yield TextMessageContentEvent(
+            type=EventType.TEXT_MESSAGE_CONTENT, message_id="m1", delta="Overdraft fee is $25."
+        )
+        yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, message_id="m1")
+
+    def _fake_langgraph_agui_agent(*, name: str, graph: object, config: dict | None = None) -> SimpleNamespace:
+        # Simulates the underlying LLM call's on_llm_end having already fired by the
+        # time this message streams out — see ModelUsageCallback's docstring.
+        assert config is not None
+        config["callbacks"][0].served_model = "groq-llama"
+        return SimpleNamespace(run=_fake_agent_run)
+
+    monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
+    monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
+    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", _fake_langgraph_agui_agent)
+
+    response = await agui_endpoint(
+        scenario_slug="docs_rag",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={}
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        definition=SimpleNamespace(
+            slug="docs_rag",
+            vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+            chat=ChatConfig(context="Bank account policies and fees."),
+        ),
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        llm=SimpleNamespace(),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+
+    body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+
+    assert '"name":"model_fallback"' in body
+    assert '"requested_model":"gemini-flash"' in body
+    assert '"served_model":"groq-llama"' in body
+    # Emitted within the live stream, not after the run has already finished.
+    assert body.index('"name":"model_fallback"') < body.index('"type":"TEXT_MESSAGE_END"')
 
 
 def test_list_conversations_returns_the_fixtures_seeded_conversation() -> None:
@@ -404,7 +461,9 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
 
     monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
-    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", lambda *, name, graph: SimpleNamespace(run=_fake_agent_run))
+    monkeypatch.setattr(
+        api_module, "LangGraphAGUIAgent", lambda *, name, graph, config=None: SimpleNamespace(run=_fake_agent_run)
+    )
 
     store = _seeded_conversation_store()
     response = await agui_endpoint(
@@ -428,6 +487,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
         llm=SimpleNamespace(),
+        model_name="gemini-flash",
         store=store,
     )
 
