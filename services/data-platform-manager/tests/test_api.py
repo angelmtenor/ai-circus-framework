@@ -289,6 +289,65 @@ def test_gateway_rate_limits_surfaces_a_gateway_error_as_502(
     assert response.status_code == 502
 
 
+def test_set_gateway_budget_then_list_shows_it_with_zero_spend(client: TestClient) -> None:
+    """A freshly-set budget has no spend recorded against it yet."""
+    set_response = client.put("/gateway/budgets/org-1", json={"monthly_cap_usd": 25.0})
+    assert set_response.status_code == 200
+    assert set_response.json() == {"org_id": "org-1", "monthly_cap_usd": 25.0, "spend_usd": 0.0}
+
+    listed = client.get("/gateway/budgets")
+    assert listed.status_code == 200
+    assert listed.json() == [{"org_id": "org-1", "monthly_cap_usd": 25.0, "spend_usd": 0.0}]
+
+
+def test_list_gateway_budgets_reads_llm_gateways_spend_key_format(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """budget_hook.py (llm-gateway) can't import ai_circus_shared.cache, so it
+    hand-writes the same `tenant-{org}:llm_budget_spend:{YYYY-MM}` key format
+    this reads back — confirms the two sides actually agree on it.
+    """
+    from data_platform_manager import api as api_module
+
+    fake_redis: fakeredis.FakeStrictRedis = app.dependency_overrides[api_module.get_client]()
+    fake_redis.set("tenant-org-1:llm_budget_spend:2026-01", "12.34")
+    monkeypatch.setattr(api_module, "_budget_spend_key", lambda: "llm_budget_spend:2026-01")
+
+    client.put("/gateway/budgets/org-1", json={"monthly_cap_usd": 25.0})
+    listed = client.get("/gateway/budgets")
+
+    assert listed.json() == [{"org_id": "org-1", "monthly_cap_usd": 25.0, "spend_usd": 12.34}]
+
+
+def test_gateway_budgets_are_scoped_per_org(client: TestClient) -> None:
+    client.put("/gateway/budgets/org-1", json={"monthly_cap_usd": 10.0})
+    client.put("/gateway/budgets/org-2", json={"monthly_cap_usd": 20.0})
+
+    listed = client.get("/gateway/budgets").json()
+
+    assert {b["org_id"]: b["monthly_cap_usd"] for b in listed} == {"org-1": 10.0, "org-2": 20.0}
+
+
+def test_delete_gateway_budget_removes_it_from_the_list(client: TestClient) -> None:
+    client.put("/gateway/budgets/org-1", json={"monthly_cap_usd": 10.0})
+
+    deleted = client.delete("/gateway/budgets/org-1")
+
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": True}
+    assert client.get("/gateway/budgets").json() == []
+
+
+def test_delete_unknown_gateway_budget_reports_not_deleted(client: TestClient) -> None:
+    response = client.delete("/gateway/budgets/no-such-org")
+
+    assert response.json() == {"deleted": False}
+
+
+def test_list_gateway_budgets_is_empty_when_none_configured(client: TestClient) -> None:
+    assert client.get("/gateway/budgets").json() == []
+
+
 # CDC (ai_circus_shared.cdc) calls real Postgres-only SQL functions
 # (pg_create_logical_replication_slot, pg_logical_slot_get_changes) that the
 # in-memory SQLite this test suite otherwise uses can't run — so these tests
