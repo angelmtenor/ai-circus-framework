@@ -205,7 +205,7 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
         <h3>Data Platform</h3>
       </div>
       <p className="panel-hint">
-        What's live in AI Liquid Core today, partially built, or still planned — plus pipeline job control and AI
+        What's live in this platform today, partially built, or still planned — plus pipeline job control and AI
         Gateway rate limits.
       </p>
       {error && <p className="error">{error}</p>}
@@ -214,14 +214,28 @@ function DataPlatformSection({ baseUrl, accessToken }: { baseUrl: string; access
       {roadmap && (
         <div className="panel-card settings-card">
           <h3>Capability roadmap</h3>
-          <div className="settings-grid">
-            {roadmap.map((c) => (
-              <div key={`${c.layer}-${c.name}`} className="settings-card-model">
-                <span className={statusBadgeClass(c.status)}>{c.status}</span> <strong>{c.name}</strong>
-                <div className="panel-hint">{c.note}</div>
+          <p className="panel-hint">
+            Two layers — <strong>Data</strong> (source/generation) and <strong>AI / BI / ML</strong> (consumption
+            built on top of it) — plus <strong>Governance</strong>, which applies transversally across both rather
+            than sitting alongside them as a third layer.
+          </p>
+          {(["data", "ai-bi-ml", "governance"] as const).map((pillar) => (
+            <div key={pillar} style={{ marginTop: "0.9rem" }}>
+              <h4 style={{ margin: "0 0 0.4rem" }}>
+                {pillar === "data" ? "Data" : pillar === "ai-bi-ml" ? "AI / BI / ML" : "Governance (transversal)"}
+              </h4>
+              <div className="settings-grid">
+                {roadmap
+                  .filter((c) => c.pillar === pillar)
+                  .map((c) => (
+                    <div key={c.name} className="settings-card-model">
+                      <span className={statusBadgeClass(c.status)}>{c.status}</span> <strong>{c.name}</strong>
+                      <div className="panel-hint">{c.note}</div>
+                    </div>
+                  ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 

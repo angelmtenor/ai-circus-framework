@@ -23,14 +23,16 @@
 <rect x="0" y="0" width="1740" height="1097" fill="url(#grid)"/>
 <text x="870.0" y="38" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="2" fill="#f3f8fc">AI OPEN FRAMEWORK</text>
 <text x="870.0" y="58" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12.5" letter-spacing="0.5" fill="#5c7288">Realistic view — verified service-to-service calls</text>
-<rect x="368" y="252" width="674" height="175" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="384" y="270" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.85">IDENTITY &amp; PLATFORM</text>
-<rect x="38" y="437" width="1664" height="175" rx="14" fill="#34d399" fill-opacity="0.035" stroke="#34d399" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="54" y="455" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#34d399" fill-opacity="0.85">SCENARIO SERVICES — one Deployment per kind, every scenario of that kind</text>
+<rect x="368" y="102" width="674" height="325" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="384" y="120" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.85">GOVERNANCE — transversal, applies across Data and AI / BI / ML alike</text>
+<rect x="1050" y="252" width="630" height="175" rx="14" fill="#ffca28" fill-opacity="0.035" stroke="#ffca28" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="1066" y="270" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#ffca28" fill-opacity="0.85">AI / BI / ML — routing</text>
+<rect x="38" y="437" width="1664" height="175" rx="14" fill="#ffca28" fill-opacity="0.035" stroke="#ffca28" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="54" y="455" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#ffca28" fill-opacity="0.85">AI / BI / ML — consumption: one Deployment per scenario kind</text>
 <rect x="38" y="634" width="1664" height="175" rx="14" fill="#22d3ee" fill-opacity="0.035" stroke="#22d3ee" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="54" y="652" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#22d3ee" fill-opacity="0.85">DATA</text>
+<text x="54" y="652" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#22d3ee" fill-opacity="0.85">DATA — source of record</text>
 <rect x="38" y="809" width="1334" height="160" rx="14" fill="#cddc39" fill-opacity="0.035" stroke="#cddc39" stroke-opacity="0.35" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="54" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#cddc39" fill-opacity="0.85">BATCH / ETL — k8s Jobs, run once or on demand</text>
+<text x="54" y="827" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#cddc39" fill-opacity="0.85">DATA — generation: k8s Jobs, run once or on demand</text>
 <rect x="720" y="150" width="300" height="90" rx="12" fill="#0a1c2a" stroke="#4fc3f7" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="720" y="150" width="300" height="90" rx="12" fill="none" stroke="#4fc3f7" stroke-width="1.1" opacity="0.9"/>
 <rect x="60" y="300" width="300" height="105" rx="12" fill="#08211d" stroke="#2dd4bf" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
@@ -43,16 +45,16 @@
 <rect x="1050" y="300" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
 <rect x="1380" y="300" width="300" height="105" rx="12" fill="#14161c" stroke="#8b93a1" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="1380" y="300" width="300" height="105" rx="12" fill="none" stroke="#8b93a1" stroke-width="1.1" opacity="0.9"/>
-<rect x="60" y="485" width="300" height="105" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="60" y="485" width="300" height="105" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
-<rect x="390" y="485" width="300" height="105" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="390" y="485" width="300" height="105" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
-<rect x="720" y="485" width="300" height="105" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="720" y="485" width="300" height="105" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
-<rect x="1050" y="485" width="300" height="105" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="1050" y="485" width="300" height="105" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
-<rect x="1380" y="485" width="300" height="105" rx="12" fill="#07211a" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="1380" y="485" width="300" height="105" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
+<rect x="60" y="485" width="300" height="105" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="60" y="485" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
+<rect x="390" y="485" width="300" height="105" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="390" y="485" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
+<rect x="720" y="485" width="300" height="105" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="720" y="485" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
+<rect x="1050" y="485" width="300" height="105" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1050" y="485" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
+<rect x="1380" y="485" width="300" height="105" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="1380" y="485" width="300" height="105" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
 <rect x="60" y="682" width="300" height="105" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="60" y="682" width="300" height="105" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <rect x="720" y="682" width="300" height="105" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
@@ -141,26 +143,26 @@
 <text x="210.0" y="515" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">PREDICTION</text>
 <text x="210.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Tabular ML — predictions + SHAP</text>
 <text x="210.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">explainability</text>
-<line x1="78" y1="564" x2="342" y2="564" stroke="#34d399" stroke-opacity="0.25"/>
+<line x1="78" y1="564" x2="342" y2="564" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="210.0" y="580" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + scikit-learn/LightGBM</text>
 <text x="540.0" y="515" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">ASSISTANT</text>
 <text x="540.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Chat copilot for tabular_ml scenarios</text>
-<line x1="408" y1="564" x2="672" y2="564" stroke="#34d399" stroke-opacity="0.25"/>
+<line x1="408" y1="564" x2="672" y2="564" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="540.0" y="580" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain</text>
 <text x="870.0" y="515" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">RAG-AGENT</text>
 <text x="870.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Document Q&amp;A over a scenario's knowledge</text>
 <text x="870.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">base</text>
-<line x1="738" y1="564" x2="1002" y2="564" stroke="#34d399" stroke-opacity="0.25"/>
+<line x1="738" y1="564" x2="1002" y2="564" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="870.0" y="580" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain + Qdrant</text>
 <text x="1200.0" y="515" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">FORM-AGENT</text>
 <text x="1200.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Conversational form-filling,</text>
 <text x="1200.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">RAG-grounded</text>
-<line x1="1068" y1="564" x2="1332" y2="564" stroke="#34d399" stroke-opacity="0.25"/>
+<line x1="1068" y1="564" x2="1332" y2="564" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="1200.0" y="580" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + LangChain + Qdrant</text>
 <text x="1530.0" y="515" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">AGUI-VOICE</text>
 <text x="1530.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Voice front-end — bridges into the 3</text>
 <text x="1530.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">agents</text>
-<line x1="1398" y1="564" x2="1662" y2="564" stroke="#34d399" stroke-opacity="0.25"/>
+<line x1="1398" y1="564" x2="1662" y2="564" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="1530.0" y="580" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + Pipecat (Whisper/Piper)</text>
 <text x="210.0" y="712" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">POSTGRES</text>
 <text x="210.0" y="734" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Keycloak · platform · per-agent</text>
@@ -195,19 +197,17 @@
 <text x="1200.0" y="937" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">k8s Job · embeddings</text>
 <circle cx="365.0" cy="977" r="6.5" fill="#4fc3f7"/>
 <text x="380.0" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Ingress</text>
-<circle cx="446.9" cy="977" r="6.5" fill="#2dd4bf"/>
-<text x="461.9" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Frontend</text>
-<circle cx="535.5" cy="977" r="6.5" fill="#b388ff"/>
-<text x="550.5" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Identity &amp; platform</text>
-<circle cx="724.6" cy="977" r="6.5" fill="#ffca28"/>
-<text x="739.6" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">LLM routing</text>
-<circle cx="833.3" cy="977" r="6.5" fill="#34d399"/>
-<text x="848.3" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Scenario services</text>
-<circle cx="982.2" cy="977" r="6.5" fill="#22d3ee"/>
-<text x="997.2" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data</text>
-<circle cx="1044.0" cy="977" r="6.5" fill="#cddc39"/>
-<text x="1059.0" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Batch / ETL</text>
-<circle cx="1152.7" cy="977" r="6.5" fill="#8b93a1"/>
-<text x="1167.7" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">External</text>
+<circle cx="454.1" cy="977" r="6.5" fill="#2dd4bf"/>
+<text x="469.1" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Frontend</text>
+<circle cx="549.5" cy="977" r="6.5" fill="#b388ff"/>
+<text x="564.5" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Governance (transversal)</text>
+<circle cx="778.1" cy="977" r="6.5" fill="#ffca28"/>
+<text x="793.1" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">AI / BI / ML</text>
+<circle cx="878.1" cy="977" r="6.5" fill="#22d3ee"/>
+<text x="893.1" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data</text>
+<circle cx="948.3" cy="977" r="6.5" fill="#cddc39"/>
+<text x="963.3" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Batch / ETL (data)</text>
+<circle cx="1092.6" cy="977" r="6.5" fill="#8b93a1"/>
+<text x="1107.6" y="981" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">External</text>
 <text x="870.0" y="1063" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5c7288">Runs identically on Kubernetes (k3s), namespace ai-circus, and via docker compose</text>
 </svg>
