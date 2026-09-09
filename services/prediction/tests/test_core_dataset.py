@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from prediction.core.dataset import evaluate, load_normalized
+from prediction.core.dataset import DatasetNotAvailableError, evaluate, load_normalized
 from prediction.core.model_cache import ModelArtifacts
 
 
@@ -59,6 +59,19 @@ def test_load_normalized_falls_back_to_shared_baseline_org_when_tenant_has_no_da
     df = load_normalized(store, "new-tenant-with-no-dataset", fallback_org_id="fallback-org")
 
     assert df["a"].tolist() == [99]
+
+
+def test_load_normalized_raises_a_clean_error_when_neither_org_has_a_dataset() -> None:
+    """Neither the tenant's own org nor the fallback org has ETL'd data yet (e.g.
+    `etl-tabular` never ran for this scenario) — must raise DatasetNotAvailableError
+    (caught by api.py's ModelUnavailableError handler for a clean 503) rather than let
+    a raw storage KeyError/ClientError bubble up as an unhandled 500, which would skip
+    CORSMiddleware and surface to the browser as an opaque "Failed to fetch".
+    """
+    store = FakeObjectStore()
+
+    with pytest.raises(DatasetNotAvailableError):
+        load_normalized(store, "new-tenant-with-no-dataset", fallback_org_id="also-empty-fallback-org")
 
 
 @pytest.fixture
