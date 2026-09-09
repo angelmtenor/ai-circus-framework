@@ -9,8 +9,10 @@
 <rect x="0" y="0" width="1740" height="840" fill="url(#grid)"/>
 <text x="870.0" y="38" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="2" fill="#f3f8fc">AI OPEN FRAMEWORK</text>
 <text x="870.0" y="58" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12.5" letter-spacing="0.5" fill="#5c7288">Data Platform — same repo &amp; cluster, one optional profile (off by default)</text>
-<rect x="368" y="96" width="674" height="130" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="384" y="114" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.9">IDENTITY &amp; PLATFORM (existing)</text>
+<rect x="380" y="96" width="320" height="130" rx="14" fill="#ffca28" fill-opacity="0.035" stroke="#ffca28" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="396" y="114" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#ffca28" fill-opacity="0.9">AI / BI / ML (existing)</text>
+<rect x="710" y="96" width="320" height="130" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="726" y="114" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.9">GOVERNANCE (existing)</text>
 <rect x="720" y="130" width="300" height="80" rx="12" fill="#160f2b" stroke="#b388ff" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="720" y="130" width="300" height="80" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
 <text x="870.0" y="160" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">PLATFORM-REGISTRY</text>
@@ -23,8 +25,8 @@
 <text x="540.0" y="182" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Routes every LLM call</text>
 <line x1="408" y1="184" x2="672" y2="184" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="540.0" y="200" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">LiteLLM proxy</text>
-<rect x="38" y="262" width="1664" height="130" rx="14" fill="#34d399" fill-opacity="0.035" stroke="#34d399" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#34d399" fill-opacity="0.9">EXISTING DATA LAYER — always on</text>
+<rect x="38" y="262" width="1664" height="130" rx="14" fill="#22d3ee" fill-opacity="0.035" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
+<text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#22d3ee" fill-opacity="0.9">DATA — always on</text>
 <rect x="60" y="296" width="300" height="80" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="60" y="296" width="300" height="80" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <text x="210.0" y="326" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">POSTGRES</text>
@@ -47,13 +49,13 @@
 <text x="230.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">gateway rate limits · events</text>
 <line x1="88" y1="574" x2="372" y2="574" stroke="#b388ff" stroke-opacity="0.25"/>
 <text x="230.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI</text>
-<rect x="470" y="470" width="320" height="130" rx="12" fill="#2a1608" stroke="#ff8a5c" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="470" y="470" width="320" height="130" rx="12" fill="none" stroke="#ff8a5c" stroke-width="1.1" opacity="0.9"/>
+<rect x="470" y="470" width="320" height="130" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="470" y="470" width="320" height="130" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <text x="630.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">KAFKA</text>
 <text x="630.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Real-time event streaming</text>
 <text x="630.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">(KRaft, single node)</text>
 <text x="630.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">e.g. topic: pipeline-triggers</text>
-<line x1="488" y1="574" x2="772" y2="574" stroke="#ff8a5c" stroke-opacity="0.25"/>
+<line x1="488" y1="574" x2="772" y2="574" stroke="#22d3ee" stroke-opacity="0.25"/>
 <text x="630.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Apache Kafka</text>
 <rect x="70" y="630" width="320" height="90" rx="12" fill="#14161c" stroke="#8b93a1" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="70" y="630" width="320" height="90" rx="12" fill="none" stroke="#8b93a1" stroke-width="1.1" opacity="0.9"/>
@@ -62,19 +64,19 @@
 <text x="230.0" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">batch/v1 Jobs in this namespace</text>
 <line x1="88" y1="694" x2="372" y2="694" stroke="#8b93a1" stroke-opacity="0.25"/>
 <text x="230.0" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">kubectl-equivalent client</text>
-<rect x="405" y="630" width="245" height="90" rx="12" fill="#2a1608" stroke="#ff8a5c" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="405" y="630" width="245" height="90" rx="12" fill="none" stroke="#ff8a5c" stroke-width="1.1" opacity="0.9"/>
+<rect x="405" y="630" width="245" height="90" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="405" y="630" width="245" height="90" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
 <text x="527.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">LAKEHOUSE</text>
 <text x="527.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Versioned Parquet tables on</text>
 <text x="527.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">object store + Postgres catalog</text>
-<line x1="423" y1="694" x2="632" y2="694" stroke="#ff8a5c" stroke-opacity="0.25"/>
+<line x1="423" y1="694" x2="632" y2="694" stroke="#22d3ee" stroke-opacity="0.25"/>
 <text x="527.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Apache Iceberg (PyIceberg)</text>
-<rect x="665" y="630" width="245" height="90" rx="12" fill="#2a1608" stroke="#ff8a5c" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="665" y="630" width="245" height="90" rx="12" fill="none" stroke="#ff8a5c" stroke-width="1.1" opacity="0.9"/>
+<rect x="665" y="630" width="245" height="90" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
+<rect x="665" y="630" width="245" height="90" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
 <text x="787.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">SEMANTIC LAYER</text>
 <text x="787.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Federates lakehouse +</text>
 <text x="787.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">platform-registry in one query</text>
-<line x1="683" y1="694" x2="892" y2="694" stroke="#ff8a5c" stroke-opacity="0.25"/>
+<line x1="683" y1="694" x2="892" y2="694" stroke="#ffca28" stroke-opacity="0.25"/>
 <text x="787.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">DuckDB (embedded)</text>
 <rect x="1000" y="470" width="300" height="130" rx="12" fill="#08211d" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
 <rect x="1000" y="470" width="300" height="130" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
@@ -87,27 +89,28 @@
 <path d="M 1000 615 C 1000 615.0 390 615.0 390 615" fill="none" stroke="#b388ff" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
 <rect x="627.6" y="604" width="134.8" height="16" rx="4" fill="#050b16" opacity="0.92"/>
 <text x="695" y="615" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#b388ff" opacity="0.95">admin bearer token</text>
-<path d="M 710 535 C 710 535.0 470 535.0 470 535" fill="none" stroke="#ff8a5c" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
+<path d="M 710 535 C 710 535.0 470 535.0 470 535" fill="none" stroke="#22d3ee" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
 <rect x="365.9" y="507" width="128.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="430" y="518" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#ff8a5c" opacity="0.95">publish / consume</text>
+<text x="430" y="518" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#22d3ee" opacity="0.95">publish / consume</text>
 <path d="M 150 600 C 150 615.0 150 615.0 150 630" fill="none" stroke="#8b93a1" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
 <rect x="89.2" y="607" width="121.6" height="16" rx="4" fill="#050b16" opacity="0.92"/>
 <text x="150" y="618" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#8b93a1" opacity="0.95">trigger / status</text>
 <path d="M 150 470 C 150 423.0 150 423.0 150 376" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
 <rect x="69.4" y="400" width="161.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
 <text x="150" y="411" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#22d3ee" opacity="0.95">document store + cache</text>
-<path d="M 800 630 L 800 210" fill="none" stroke="#ff8a5c" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
+<path d="M 800 630 L 800 210" fill="none" stroke="#ffca28" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
 <rect x="709" y="402" width="182" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="800" y="413" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#ff8a5c" opacity="0.95">reads scenarios/entitlements</text>
+<text x="800" y="413" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#ffca28" opacity="0.95">reads scenarios/entitlements</text>
 <circle cx="60" cy="782" r="6.5" fill="#b388ff"/>
-<text x="75" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Identity &amp; platform</text>
-<circle cx="230" cy="782" r="6.5" fill="#22d3ee"/>
-<text x="245" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data (always on)</text>
-<circle cx="400" cy="782" r="6.5" fill="#ff8a5c"/>
-<text x="415" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Optional profile</text>
+<text x="75" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Governance (transversal)</text>
+<circle cx="270" cy="782" r="6.5" fill="#ffca28"/>
+<text x="285" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">AI / BI / ML</text>
+<circle cx="390" cy="782" r="6.5" fill="#22d3ee"/>
+<text x="405" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data (always on)</text>
 <circle cx="560" cy="782" r="6.5" fill="#34d399"/>
 <text x="575" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Frontend</text>
 <circle cx="680" cy="782" r="6.5" fill="#8b93a1"/>
 <text x="695" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">External (k3s only)</text>
+<text x="850" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" font-style="italic" fill="#5c7288">(dashed border = optional profile, off by default)</text>
 <text x="870.0" y="816" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5c7288">See architecture-detailed.svg for the full platform — this supplement covers only what changed.</text>
 </svg>

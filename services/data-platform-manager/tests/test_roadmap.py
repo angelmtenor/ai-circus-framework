@@ -21,6 +21,16 @@ def test_every_capability_has_a_non_empty_note() -> None:
         assert capability.note.strip() != ""
 
 
+def test_every_capability_has_a_valid_pillar() -> None:
+    for capability in get_roadmap():
+        assert capability.pillar in {"data", "ai-bi-ml", "governance"}
+
+
+def test_every_pillar_is_represented() -> None:
+    pillars = {c.pillar for c in get_roadmap()}
+    assert pillars == {"data", "ai-bi-ml", "governance"}
+
+
 def test_non_relational_and_cache_are_reported_live_via_this_services_own_adoption() -> None:
     by_name = {c.name: c for c in get_roadmap()}
     assert by_name["Non-Relational Store"].status == "live"
