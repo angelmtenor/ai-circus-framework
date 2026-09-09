@@ -147,6 +147,23 @@ litellm_settings:
     - provider: "local-embed"
       custom_handler: llm_gateway.custom_handler.local_embedding_llm
 
+  # Explicit fallback chains only — litellm has no implicit/automatic fallback
+  # behavior, so a model_name absent here simply has none. Each entry maps one
+  # primary model_name to an ordered list of model_names to retry, in order, on a
+  # provider error/rate-limit/timeout. The caller-facing services (assistant/
+  # rag-agent/form-agent) detect when the response's actual serving model differs
+  # from the one requested and surface that to the end user — see
+  # ai_circus_shared.entitlements' sibling note in each agent service's api.py
+  # (ModelUsageCallback) rather than silently swapping models on the user.
+  #
+  # This default chain covers gemini-flash (the free-tier default active model —
+  # see rag_agent/assistant/form_agent settings.yaml's LLM_MODEL) with two other
+  # free-tier providers so a single provider outage doesn't stall every chat
+  # scenario. Add further `<primary>: [<fallback>, ...]` entries here as needed —
+  # nothing falls back unless it's listed.
+  fallbacks:
+    - gemini-flash: [groq-llama, claude-haiku]
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   # Persistent spend-tracking (general_settings.database_url) is deliberately NOT

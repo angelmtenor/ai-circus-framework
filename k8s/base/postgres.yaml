@@ -105,10 +105,11 @@ spec:
     - {port: 5432, targetPort: 5432}
 ---
 # Postgres has real password auth, but nothing else in the namespace stops any other
-# pod from reaching it over Service DNS — only keycloak, platform-registry, and each of
-# assistant/rag-agent/form-agent (their own conversation-history database) actually
-# have a database here (see infra/postgres/init-multiple-databases.sh), so lock
-# ingress down to just those five.
+# pod from reaching it over Service DNS — only keycloak, platform-registry, each of
+# assistant/rag-agent/form-agent (their own conversation-history database), and
+# data-platform-manager (its own document-store database) actually have a database
+# here (see infra/postgres/init-multiple-databases.sh), so lock ingress down to just
+# those six.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -125,5 +126,6 @@ spec:
         - podSelector: {matchLabels: {app: assistant}}
         - podSelector: {matchLabels: {app: rag-agent}}
         - podSelector: {matchLabels: {app: form-agent}}
+        - podSelector: {matchLabels: {app: data-platform-manager}}
       ports:
         - {protocol: TCP, port: 5432}

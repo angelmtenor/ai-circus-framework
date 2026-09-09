@@ -309,6 +309,7 @@ export function ChatPanel({
   // *later* render than the one where `agent` first changed.
   useEffect(() => {
     agent.setMessages(initialMessages ?? []);
+    setFallbackByMessageId({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent, initialMessages]);
   const [message, setMessage] = useState("");
@@ -316,6 +317,15 @@ export function ChatPanel({
   const [activity, setActivity] = useState<string | null>(null);
   const [vision, setVision] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  // Keyed by assistant message id — set only when the backend's ModelUsageCallback
+  // (see rag-agent/assistant/form-agent api.py) detects that the model which actually
+  // answered differs from the one requested, i.e. litellm_config.yaml's
+  // `litellm_settings.fallbacks` fired. Absent for the common case (no fallback),
+  // distinct from the static once-per-chat `.chat-model-badge` above, which only ever
+  // shows the *configured* model and can't reflect a mid-conversation fallback.
+  const [fallbackByMessageId, setFallbackByMessageId] = useState<
+    Record<string, { requestedModel: string; servedModel: string }>
+  >({});
   const historyRef = useRef<HTMLDivElement>(null);
 
   // Merges newly picked files onto whatever's already pending, capped at
@@ -350,6 +360,15 @@ export function ChatPanel({
       onTextMessageStartEvent: () => setActivity(null),
       onRunFinishedEvent: () => setActivity(null),
       onRunErrorEvent: () => setActivity(null),
+      onCustomEvent: ({ event }) => {
+        if (event.name !== "model_fallback") return;
+        const { message_id, requested_model, served_model } = event.value as {
+          message_id: string;
+          requested_model: string;
+          served_model: string;
+        };
+        setFallbackByMessageId((prev) => ({ ...prev, [message_id]: { requestedModel: requested_model, servedModel: served_model } }));
+      },
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -428,6 +447,12 @@ export function ChatPanel({
                         accessToken={accessToken}
                       />
                     )}
+                  </div>
+                )}
+                {turn.role === "assistant" && fallbackByMessageId[turn.id] && (
+                  <div className="chat-fallback-note">
+                    ⚠️ Answered by {fallbackByMessageId[turn.id].servedModel} — {fallbackByMessageId[turn.id].requestedModel} was
+                    unavailable.
                   </div>
                 )}
                 {turn.role === "assistant" &&
