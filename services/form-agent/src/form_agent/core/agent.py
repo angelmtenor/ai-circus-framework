@@ -13,17 +13,49 @@ for the client to handle, the same way `render_chart`/`render_table` already wor
 
 from __future__ import annotations
 
+from typing import Any
+
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
+from langchain_core.outputs import LLMResult
 from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
 
 from form_agent.core.retrieval import retrieve
+
+
+class ModelUsageCallback(BaseCallbackHandler):
+    """Captures the model that actually served the most recent completion in this
+    run, straight off each response's `response_metadata["model_name"]`. litellm
+    rewrites that field to the fallback model's name when litellm_config.yaml's
+    `litellm_settings.fallbacks` kicks in, so comparing it against the requested
+    model_name (see api.py's `_llm_model_name`) after the run is how a fallback is
+    detected — never inferred/guessed, since a silent swap would mislead the user
+    about which model actually answered.
+
+    Built fresh per request (like rag_agent.core.agent's sibling implementation)
+    and passed to `LangGraphAGUIAgent(config={"callbacks": [...]})` so concurrent
+    requests never share state.
+    """
+
+    def __init__(self) -> None:
+        """Start with no served model recorded — set on this run's first on_llm_end."""
+        self.served_model: str | None = None
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        """Record the model_name off the last generation's response_metadata."""
+        for generation in response.generations:
+            for chunk in generation:
+                message = getattr(chunk, "message", None)
+                model_name = getattr(message, "response_metadata", {}).get("model_name") if message else None
+                if model_name:
+                    self.served_model = model_name
 
 
 def build_catalog_retrieve_tool(

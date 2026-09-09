@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from ag_ui.core import EventType, RunAgentInput, RunErrorEvent
+from ag_ui.core import CustomEvent, EventType, RunAgentInput, RunErrorEvent
 from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
@@ -25,7 +25,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from assistant import get_env_config
-from assistant.core.agent import build_agui_agent
+from assistant.core.agent import ModelUsageCallback, build_agui_agent
 from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
 from assistant.core.prediction_client import PredictionServiceClient
@@ -259,6 +259,7 @@ async def agui_endpoint(
     definition: ScenarioDefinition = Depends(_scenario_definition),
     prompt_cache: SystemPromptCache = Depends(_prompt_cache),
     llm: BaseChatModel = Depends(_chat_llm),
+    model_name: str = Depends(_llm_model),
     store: ConversationStore = Depends(_conversation_store),
 ) -> StreamingResponse:
     """AG-UI (CopilotKit) streaming endpoint — same `resolve_identity`/
@@ -281,10 +282,12 @@ async def agui_endpoint(
         prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")
     )
     graph = build_agui_agent(llm, system_prompt, tools)
-    agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph)
+    model_usage = ModelUsageCallback()
+    agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config={"callbacks": [model_usage]})
 
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
     assistant_text_by_message_id: dict[str, list[str]] = {}
+    fallback_reported_message_ids: set[str] = set()
 
     async def event_generator() -> AsyncIterator[str]:
         # Left uncaught, a mid-run exception (e.g. the LLM provider rate-limiting or
@@ -298,6 +301,27 @@ async def agui_endpoint(
             async for event in agent.run(input_data):
                 if event.type == EventType.TEXT_MESSAGE_CONTENT:
                     assistant_text_by_message_id.setdefault(event.message_id, []).append(event.delta)
+                elif (
+                    event.type == EventType.TEXT_MESSAGE_END
+                    and event.message_id not in fallback_reported_message_ids
+                    and "".join(assistant_text_by_message_id.get(event.message_id, []))
+                    and model_usage.served_model
+                    and model_usage.served_model != model_name
+                ):
+                    # Emitted before RUN_FINISHED (not after — see rag_agent.api's
+                    # sibling implementation), so ChatPanel.tsx's onCustomEvent
+                    # subscriber sees it within the same run's live event stream.
+                    fallback_reported_message_ids.add(event.message_id)
+                    yield encoder.encode(
+                        CustomEvent(
+                            name="model_fallback",
+                            value={
+                                "message_id": event.message_id,
+                                "requested_model": model_name,
+                                "served_model": model_usage.served_model,
+                            },
+                        )
+                    )
                 yield encoder.encode(event)
         except Exception as exc:
             logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)

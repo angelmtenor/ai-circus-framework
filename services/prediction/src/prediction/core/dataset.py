@@ -34,10 +34,21 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
-from prediction.core.model_cache import ModelArtifacts
+from prediction.core.model_cache import ModelArtifacts, ModelUnavailableError
 
 TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 0
+
+
+class DatasetNotAvailableError(ModelUnavailableError):
+    """Raised when neither the tenant's own org nor the shared fallback org has the
+    normalized dataset in SeaweedFS yet (e.g. `etl-tabular` never ran for this scenario).
+    A `ModelUnavailableError` subclass so api.py's existing handler for that base class
+    catches this too — without it, this would bubble up as an unhandled 500 from
+    `store.get()`, which (like any unhandled exception) skips CORSMiddleware entirely
+    and surfaces to the browser as an opaque "Failed to fetch" instead of a readable
+    error.
+    """
 
 
 def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd.DataFrame:
@@ -48,7 +59,15 @@ def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd
     organization) gets `fallback_org_id`'s (matching training's ORG_ID) instead of a
     404 — every tenant otherwise 500s on the Data tab until it's retrained its own.
     """
-    load_org_id = org_id if store.exists(org_id, NORMALIZED_DATASET_KEY) else fallback_org_id
+    if store.exists(org_id, NORMALIZED_DATASET_KEY):
+        load_org_id = org_id
+    elif store.exists(fallback_org_id, NORMALIZED_DATASET_KEY):
+        load_org_id = fallback_org_id
+    else:
+        raise DatasetNotAvailableError(
+            f"No normalized dataset for org={org_id!r} (fallback org={fallback_org_id!r} also has none — "
+            "has `etl-tabular` run for this scenario?)."
+        )
     return pd.read_parquet(io.BytesIO(store.get(load_org_id, NORMALIZED_DATASET_KEY)))
 
 

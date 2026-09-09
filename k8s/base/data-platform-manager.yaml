@@ -20,7 +20,10 @@ metadata:
   namespace: ai-circus
 rules:
   - apiGroups: ["batch"]
-    resources: ["jobs"]
+    # "jobs/status" is a distinct RBAC resource from "jobs" — read_namespaced_job_status
+    # (core/k8s_jobs.py's per-job status check) 403s without it even though plain
+    # get/list/watch on "jobs" already works.
+    resources: ["jobs", "jobs/status"]
     verbs: ["get", "list", "watch", "create", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
