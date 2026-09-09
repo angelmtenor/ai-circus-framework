@@ -87,3 +87,25 @@ def test_incr_applies_ttl_only_on_first_call(cache: TenantCache) -> None:
 
     assert ttl_after_first > 0
     assert ttl_after_second > 0
+
+
+def test_incr_by_float_starts_at_amount_and_accumulates(cache: TenantCache) -> None:
+    assert cache.incr_by_float("org-1", "spend", 0.15) == pytest.approx(0.15)
+    assert cache.incr_by_float("org-1", "spend", 0.10) == pytest.approx(0.25)
+
+
+def test_incr_by_float_is_scoped_to_org(cache: TenantCache) -> None:
+    cache.incr_by_float("org-1", "spend", 1.0)
+
+    assert cache.incr_by_float("org-2", "spend", 0.5) == pytest.approx(0.5)
+
+
+def test_incr_by_float_applies_ttl_only_on_first_call(cache: TenantCache) -> None:
+    cache.incr_by_float("org-1", "spend", 1.0, ttl_seconds=60)
+    ttl_after_first = cache._client.ttl(cache._key("org-1", "spend"))
+
+    cache.incr_by_float("org-1", "spend", 1.0, ttl_seconds=60)
+    ttl_after_second = cache._client.ttl(cache._key("org-1", "spend"))
+
+    assert ttl_after_first > 0
+    assert ttl_after_second > 0

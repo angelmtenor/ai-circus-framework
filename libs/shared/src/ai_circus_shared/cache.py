@@ -82,3 +82,15 @@ class TenantCache:
             pipe.expire(full_key, ttl_seconds, nx=True)
         results = pipe.execute()
         return int(results[0])
+
+    def incr_by_float(self, tenant_org_id: str, key: str, amount: float, ttl_seconds: int | None = None) -> float:
+        """Same idiom as incr(), generalized to a non-integer amount (e.g. a dollar
+        cost rather than a request count) via Redis's INCRBYFLOAT.
+        """
+        full_key = self._key(tenant_org_id, key)
+        pipe = self._client.pipeline()
+        pipe.incrbyfloat(full_key, amount)
+        if ttl_seconds is not None:
+            pipe.expire(full_key, ttl_seconds, nx=True)
+        results = pipe.execute()
+        return float(results[0])
