@@ -526,9 +526,10 @@ export async function voiceProviders(
 // only ever rendered when `isAdmin` is true (see Settings.tsx).
 
 export type DataPlatformStatus = "live" | "partial" | "planned";
+export type CapabilityPillar = "data" | "ai-bi-ml" | "governance";
 
 export type Capability = {
-  layer: string;
+  pillar: CapabilityPillar;
   name: string;
   status: DataPlatformStatus;
   note: string;

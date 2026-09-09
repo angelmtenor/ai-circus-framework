@@ -354,6 +354,22 @@ Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the reco
 [Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
 env-configured microservices either way, just a different orchestrator.
 
+The whole platform is built from two layers plus one cross-cutting concern, not three parallel
+silos:
+
+- **Data** — the source/generation layer: object/relational/non-relational/vector storage, the
+  cache, and everything that produces or moves data (batch ETL, model training, event streaming,
+  CDC, the lakehouse).
+- **AI / BI / ML** — consumption, built on top of that data: the scenario-serving stack (tabular ML
+  inference, the conversational/RAG and assisted-form agents, voice), the AI Gateway that routes
+  every LLM call, and the semantic/BI query layer.
+- **Governance** — transversal, not a third layer: identity/tenancy, ingress, and AI Gateway usage
+  controls (rate limits, budgets) apply *across* both of the above.
+
+`data-platform-manager`'s **Settings → Data Platform → Capability roadmap** is the live,
+machine-readable version of this split (see `core/roadmap.py`) — which capabilities are live,
+partial, or still planned, grouped exactly this way.
+
 <p align="center">
   <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
 </p>
@@ -437,8 +453,9 @@ make k3s-data-platform-up  # kubectl apply -f k8s/data-platform/kafka.yaml (k3s 
 `data-platform-manager` (gated on `ADMIN_API_KEY`, never a Keycloak end-user token) is reachable
 both as an API and from **Settings → Data Platform** in `ui-react` once logged in as `admin`:
 
-- **Capability roadmap** — which of these pieces are live, partial, or still planned, read from
-  the running service, not a static doc.
+- **Capability roadmap** — every capability across all three pillars ([Architecture](#architecture)
+  above), grouped by Data / AI-BI-ML / Governance, live/partial/planned, read from the running
+  service, not a static doc.
 - **Pipeline job status/trigger** for `etl-tabular`/`training`/`etl-vectorize` — via the real
   Kubernetes Jobs API (RBAC-scoped to `batch/v1` Jobs only), so k3s only; in docker-compose, run
   `make pipeline` directly.
