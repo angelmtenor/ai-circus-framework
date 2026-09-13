@@ -149,11 +149,70 @@ and `form-agent` does the same for every `assisted_form` scenario.
 - **Docker Compose (alternative)** — Docker + Docker Compose, `make`.
 - **At least one LLM provider**, either way — a free API key (Google Gemini's free tier is
   easiest) *or* the bundled local Ollama fallback. Chat features simply won't answer without one.
+- **To contribute** (not just run): `git-flow` (AVH), `uv`, Node.js 22 — all installed by step 0.
+
+Already have all that? Skip to step 1. Otherwise step 0 provisions a fresh Ubuntu machine —
+native, VM, or WSL2 — in a few minutes.
+
+### 0. Provision the machine (fresh Ubuntu 24.04+ — native, VM, or WSL2)
+
+**On Windows**, first enable WSL2 with an Ubuntu distro — steps 1–6 of
+[`docs/windows-wsl.md`](docs/windows-wsl.md) — and do *everything* below inside that distro (its
+own filesystem, its own `git`; the doc explains why). No Docker Desktop needed or wanted.
+
+`git` is preinstalled on Ubuntu images (`sudo apt install -y git` if not); the setup scripts
+live in the repo, so clone first:
+
+```bash
+mkdir -p ~/PROJECTS && cd ~/PROJECTS && git clone https://github.com/angelmtenor/ai-circus-framework && cd ai-circus-framework
+```
+
+Two idempotent, non-interactive scripts, split by privilege level — the **root half** (system
+update; `make`, `git-flow`, `curl`, compilers, `python3`, `pipx`, UTC timezone) and the **user
+half** (`uv`, `nvm` + Node.js 22, `~/.local/bin` on `PATH`, git defaults — it warns if
+`user.name`/`user.email` are unset, so set those first):
+
+```bash
+sudo ./scripts/setup_sudo.sh
+```
+
+```bash
+./scripts/setup_user.sh && source ~/.bashrc
+```
+
+**Docker Engine** is deliberately *not* in the scripts — install it from the official
+[Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/) guide (apt
+repository method), then the official
+[post-install step](https://docs.docker.com/engine/install/linux-postinstall/#add-your-user-to-the-docker-group)
+so every `make` target here can call `docker` without `sudo`:
+
+```bash
+sudo groupadd docker; sudo usermod -aG docker $USER
+```
+
+…and log out and back in (on WSL: `wsl --terminate <distro>` from PowerShell, then relaunch).
+
+For the **Kubernetes (recommended)** path, add [`k3d`](https://k3d.io/#installation) and
+[`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/):
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+```
+
+```bash
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+```
+
+Confirm the whole toolchain answers before moving on:
+
+```bash
+docker run --rm hello-world && docker compose version && make --version | head -1 && git flow version && uv --version && node --version && k3d version && kubectl version --client
+```
 
 ### 1. Clone and bootstrap the environment
 
 ```bash
-git clone <this-repo-url> && cd ai-circus-framework
+git clone https://github.com/angelmtenor/ai-circus-framework && cd ai-circus-framework   # skip if you did step 0
 make bootstrap   # copies .env.example -> .env
 ```
 
@@ -609,6 +668,20 @@ provider wiring, the React frontend, infra).
 
 - [AGENTS.md](AGENTS.md) — mandates for AI-assisted and human contributions alike.
 - [styleguide.md](styleguide.md) — commit message conventions (Conventional Commits).
+- [docs/windows-wsl.md](docs/windows-wsl.md) — contributing (or just running the platform) from
+  Windows via WSL2.
+
+The flow, in short — git-flow per `AGENTS.md` §5:
+
+1. Fork the repo, clone **your fork** (step 0 above provisions the toolchain), then once per
+   clone: `git flow init -d`.
+2. `git flow feature start <name>` — branches from `develop`; commit with Conventional Commits.
+3. Before opening a PR: `make check` inside every service you touched (`make check-all` from
+   the root for cross-service changes), `npm run build` in `ui-react/` for frontend changes, and
+   an actual `docker compose up` smoke test of the affected service(s) — CI's `compose-validate`
+   never boots containers.
+4. Push `feature/<name>` to your fork and open a pull request against **`develop`** (never
+   `main`).
 
 ## Author & license
 
