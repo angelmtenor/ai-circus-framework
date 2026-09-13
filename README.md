@@ -157,8 +157,10 @@ native, VM, or WSL2 — in a few minutes.
 ### 0. Provision the machine (fresh Ubuntu 24.04+ — native, VM, or WSL2)
 
 **On Windows**, first enable WSL2 with an Ubuntu distro — steps 1–6 of
-[`docs/windows-wsl.md`](docs/windows-wsl.md) — and do *everything* below inside that distro (its
-own filesystem, its own `git`; the doc explains why). No Docker Desktop needed or wanted.
+[`docs/windows-wsl.md`](docs/windows-wsl.md), including the `.wslconfig` RAM/CPU limits — and do
+*everything* below inside that distro (its own filesystem, its own `git`; the doc explains why).
+No Docker Desktop needed or wanted. The doc also covers the one WSL-specific chore that bites
+later: the distro's virtual disk grows on the Windows drive and never shrinks by itself.
 
 `git` is preinstalled on Ubuntu images (`sudo apt install -y git` if not); the setup scripts
 live in the repo, so clone first:
@@ -674,7 +676,9 @@ provider wiring, the React frontend, infra).
 The flow, in short — git-flow per `AGENTS.md` §5:
 
 1. Fork the repo, clone **your fork** (step 0 above provisions the toolchain), then once per
-   clone: `git flow init -d`.
+   clone: `git flow init -d` — it refuses on unstaged changes to tracked files, so run it before
+   editing anything (on a fresh clone also `git branch --track develop origin/develop` first, or
+   it creates `develop` from `main`).
 2. `git flow feature start <name>` — branches from `develop`; commit with Conventional Commits.
 3. Before opening a PR: `make check` inside every service you touched (`make check-all` from
    the root for cross-service changes), `npm run build` in `ui-react/` for frontend changes, and
