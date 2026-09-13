@@ -134,11 +134,86 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    config digest vs. containerd manifest digest) and will never string-match even for identical
    content; pod age vs. build time is the reliable signal.
 
+6. **A hard VM kill mid-`k3s-build` (WSL `--shutdown`/restart, host power loss) can leave
+   *truncated files* in BuildKit's shared `uv-cache` mount — and every later `uv sync` copies
+   them into its venv as if they were fine.** Symptom: a pod dies with exit code **135 (SIGBUS)**
+   within seconds and *no log output* (buffered stdout is lost in the crash); `PYTHONFAULTHANDLER=1`
+   shows the top frame inside `dlopen()` — a `.so` being mmapped past its truncated end. Seen for
+   real once: `libllvmlite.so` at exactly 44 MiB instead of 178 MB in both `prediction` and
+   `training` (shap → numba → llvmlite), after two WSL restarts during builds. ext4 had persisted
+   the rename of the extracted wheel but not its data. Diagnose definitively — don't guess which
+   images are affected — with `verify_records.py` next to this skill (checks every installed
+   file's size/sha256 against its package `RECORD`):
+   ```bash
+   for svc in <every K3S_IMAGES entry>; do printf '%-24s' "$svc"; docker run --rm --entrypoint sh \
+     -v "$PWD/.claude/skills/k3s-deploy-verify/verify_records.py:/verify.py:ro" "ai-circus/$svc:local" \
+     -c 'cd /app/services/*/ && .venv/bin/python /verify.py' | head -3; done
+   ```
+   Fix: `docker builder prune -f --filter type=exec.cachemount` (plain `--no-cache` does NOT
+   clear cache mounts — the corrupt wheel would be reused), then `docker build --no-cache` only
+   the affected images, re-verify, `k3d image import` them, and `rollout restart` their
+   deployments (Gotcha 5). Prevention: never `wsl --shutdown` / restart the VM while a build is
+   running — the doc (`docs/windows-wsl.md`) says so; a clean `systemctl restart docker` only
+   costs the in-flight build, not the cache.
+
+7. **SeaweedFS silently pre-allocates ~70 GB.** `weed server` 3.97 `fallocate()`s **1 GiB per
+   volume** (the master's grow log says `"preallocate":1073741824` even though
+   `-master.volumePreallocate` reads as off) and grows **7 volumes per collection = per S3 bucket =
+   per scenario**. Observed for real: 70 `.dat` files, 70 GB allocated, 14.6 MB of actual data —
+   inside the k3d node's docker volume, so `df` inside WSL balloons and the Windows `.vhdx` with it.
+   `k8s/base/seaweedfs.yaml` and `docker-compose.yml` now pass `-master.volumePreallocate=false`
+   (tested: 0 bytes allocated on volume grow). A cluster/volume created *before* that flag still
+   holds the preallocation; reclaim it without losing data — the space is entirely beyond each
+   file's EOF, so a shrink-truncate frees it (ext4 ignores punch-hole past EOF; truncating to the
+   same size is a no-op; extend by 1 byte then shrink back is what releases the blocks):
+   ```bash
+   kubectl -n ai-circus scale statefulset/seaweedfs --replicas=0 && kubectl -n ai-circus wait --for=delete pod/seaweedfs-0 --timeout=90s
+   V=$(docker volume ls -q | while read v; do docker run --rm -v "$v:/v:ro" alpine sh -c 'ls /v/storage 2>/dev/null | grep -q seaweedfs && echo ok' | grep -q ok && echo "$v"; done)
+   docker run --rm -v "$V:/v" alpine sh -c 'apk add -q coreutils; cd /v/storage/pvc-*seaweedfs*/ && for f in *.dat; do sz=$(stat -c %s "$f"); truncate -s $((sz+1)) "$f" && truncate -s "$sz" "$f"; done; stat -c %b *.dat | awk "{s+=\$1} END {printf \"allocated now: %.1f MB\n\", s*512/1024/1024}"'
+   kubectl -n ai-circus scale statefulset/seaweedfs --replicas=1 && kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=120s
+   ```
+   Verify afterwards with `kubectl -n ai-circus rollout restart deployment/prediction` (forces a
+   model reload from S3) and a real prediction. Diagnosis path that found it: `df -h /` vs
+   `docker system df -v` → the one huge volume → `du` inside it via `alpine` → `stat -c %b` vs
+   `%s` on a `.dat` (1 GiB of blocks for 688 bytes) → `filefrag -v` showing `unwritten,eof`
+   extents → the master log's `volume grow … preallocate`.
+
+## Operational notes (things that had to be done on the machine, not in the repo)
+
+- **Run the slow steps detached, not just backgrounded.** `k3s-build` (10–20 min cold),
+  `k3s-wait`, `k3s-pipeline` were each killed at least once by a session ending or a WSL restart.
+  `nohup setsid bash -c 'make k3s-build; echo "exit code: $?"' > ~/.cache/ai-circus-k3s-build.log 2>&1 < /dev/null &`
+  survives the agent session (not a `wsl --shutdown`); tail the log for progress. Log under
+  `~/.cache`, not `/tmp` — WSL wipes `/tmp` on restart.
+- **A clean `systemctl restart docker` mid-build** (e.g. applying `/etc/docker/daemon.json`)
+  fails the in-flight `docker build` with `failed to solve: Unavailable: error reading from
+  server: EOF` — harmless, cache intact, just re-run. A WSL restart mid-build is *not* harmless
+  (Gotcha 6).
+- **`apt-get` lock held on a fresh Ubuntu boot** (`Could not get lock /var/lib/apt/lists/lock …
+  held by process N (apt-get)`) — the first-boot `apt-daily`/unattended-upgrades timers. Don't
+  kill it; `apt-get -o DPkg::Lock::Timeout=600` waits (`scripts/setup_sudo.sh` does this).
+- **`wsl.exe`/`cmd.exe` from inside the distro suddenly fail with `cannot execute binary file:
+  Exec format error`** — the `WSLInterop` binfmt registration dropped (seen right after starting/
+  stopping *another* distro via `wsl.exe -d …`). Only affects calling Windows binaries from Linux;
+  Docker/k3d unaffected. Re-register without a restart:
+  `sudo sh -c 'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register'`.
+- **Silent crash with exit code 135 and empty logs → get a traceback first.** Copy the Job
+  manifest to a scratch dir, add `env: [{name: PYTHONFAULTHANDLER, value: "1"}, {name:
+  PYTHONUNBUFFERED, value: "1"}]`, rename it (`training-diag`), apply, read `kubectl logs` — the
+  fault handler prints the Python and C stacks at the signal (this is how Gotcha 6 was pinned to
+  `dlopen()` of `libllvmlite.so` in ~2 minutes). Delete the diag job afterwards.
+- **`kubectl`/`k3d` in `~/.local/bin`** (see Setup above) is fine for `make k3s-*` — the Makefile
+  only needs them on `PATH`; the README's `/usr/local/bin` install is the sudo-having equivalent.
+
 ## Key rules
 
 - Diagnose with `kubectl -n ai-circus describe pod -l app=<service>` (Events section) and
   `kubectl -n ai-circus logs -l app=<service>` before assuming a crash-looping pod is an app bug —
   check the four gotchas above first.
+- Exit code 135 + empty logs is Gotcha 6 (truncated `.so` from a killed build), not an app
+  bug — verify with `verify_records.py` before rebuilding blindly.
+- `df` inside WSL jumping by tens of GB right after `k3s-up`/the pipeline is Gotcha 7 (SeaweedFS
+  preallocation), not the images.
 - Never read/print `.env` content (root `AGENTS.md` §1) — use presence-only checks
   (`grep -q "^KEY=" .env`) when diagnosing or patching missing keys.
 - A real browser check (via `playwright-headless-verify`) catches failures `k3s-verify`'s curl
