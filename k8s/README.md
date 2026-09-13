@@ -146,6 +146,13 @@ set on a local k3d cluster:
   (add a Deployment/PVC for it yourself if you need the free local LLM fallback here too), and the
   pipeline services are `k8s/jobs/*` applied only via `make k3s-pipeline`, matching their
   one-shot, non-`k3s-up` nature in docker-compose.yml too (`profiles: ["pipeline"]`).
+- **SeaweedFS runs with `-master.volumePreallocate=false`** (same in `docker-compose.yml`).
+  Without it, `weed server` 3.97 `fallocate()`s 1 GiB per volume and grows 7 volumes per S3
+  bucket — one bucket per scenario — so a fresh install "uses" ~70 GB of disk for ~15 MB of
+  datasets and models, inside the k3d node's docker volume (and, on WSL, the Windows `.vhdx`).
+  A PVC created before this flag still holds that preallocation — the `k3s-deploy-verify` skill's
+  Gotcha 7 has the data-preserving reclaim procedure (stop the StatefulSet, shrink-truncate the
+  `.dat` files, start it again).
 - **`rag-agent`/`form-agent` readiness/liveness probes are deliberately loose**
   (`timeoutSeconds: 5`, `failureThreshold: 6`) — their FastAPI startup makes a live call to
   `llm-gateway` (embedding dimension probe), which queues behind every other scenario service
