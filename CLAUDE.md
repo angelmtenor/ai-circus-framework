@@ -67,8 +67,8 @@ exactly).
 **Other symptoms with a known, non-obvious cause** (details in `.claude/skills/k3s-deploy-verify/SKILL.md`):
 a pod dying with exit code **135** and *no logs* is a truncated `.so` from a build that a WSL restart
 killed (Gotcha 6 — verify images with `verify_records.py`, never rebuild blindly); disk usage jumping
-by ~70 GB after start-up is SeaweedFS preallocation (Gotcha 7 — fixed in the manifests, reclaim
-procedure for old volumes); `wsl.exe: Exec format error` inside the distro is a dropped binfmt
+by ~70 GB after start-up is SeaweedFS preallocation (Gotcha 7 — fixed in the manifests and compose;
+reclaim procedures for pre-existing k3d PVCs *and* compose volumes, on any Linux, not just WSL); `wsl.exe: Exec format error` inside the distro is a dropped binfmt
 registration, not a broken machine. On WSL specifically, read `docs/windows-wsl.md` before touching
 `.wslconfig`, Docker, or the virtual disk. Run `make k3s-build`/`k3s-pipeline` detached (`nohup setsid`)
 and log under `~/.cache` — sessions end and `/tmp` is wiped on WSL restart.
