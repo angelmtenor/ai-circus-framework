@@ -276,7 +276,9 @@ services:
   # pattern as infra/traefik/console.htpasswd below.
   seaweedfs:
     image: chrislusf/seaweedfs:3.97
-    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    # -master.volumePreallocate=false: weed server otherwise fallocate()s 1 GiB per volume and grows
+    # 7 volumes per S3 bucket (= per scenario) — ~70 GB of empty disk for ~15 MB of data.
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -master.volumePreallocate=false
     volumes:
       - seaweedfs-data:/data
       - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro

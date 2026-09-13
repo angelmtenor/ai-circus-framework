@@ -66,6 +66,21 @@ const { chromium } = require('playwright-core');
 Run with `node /tmp/pw-verify/shot.js`, then read `/tmp/pw-verify/out.png` with the Read tool to
 inspect visually.
 
+### On a fresh WSL2 Ubuntu (26.04) the native path stops one step short
+
+`npx playwright install chromium` succeeds (downloads `chromium_headless_shell-<rev>/
+chrome-headless-shell-linux64/chrome-headless-shell`), but the binary can't load — `ldd` shows
+`libnspr4.so`, `libnss3.so`, `libnssutil3.so`, `libasound.so.2` **not found**. Those are OS
+packages, so this needs root once:
+
+```bash
+sudo apt-get install -y libnss3 libnspr4 libasound2t64
+```
+
+Without sudo, go straight to the Docker fallback below — that's what was used for the first k3s
+verification on this box; it works unchanged. (`ldd <chrome-headless-shell> | grep "not found"`
+is the 2-second check that tells you which path you're on.)
+
 ## If `node`/`npx` aren't on the host either: the Docker fallback
 
 Some sandboxes have Docker but no Node at all (`node`/`npm`/`npx` all `command not found`), which
@@ -125,6 +140,30 @@ A successful login lands on the scenario dashboard with zero failed/non-2xx requ
 scenario card can show `Loading dataset…` for several seconds while it fetches/renders a
 multi-thousand-row sample — that's normal render time, not a hang; wait it out before concluding
 something's broken.
+
+**Two working scripts live next to this skill — copy them into the scratch dir instead of
+rewriting them:**
+
+- `k3s-ui-check.js` — login → gallery → churn scenario → **Data & BI** tab (counts Plotly charts
+  and table rows) → **ML Predictions** tab; screenshots each step. Env: `OUT_DIR`, `ADMIN_API_KEY`;
+  `PW_MODULE=playwright` in the container (defaults to `playwright-core` + `CHROME_PATH` natively).
+- `k3s-predict-check.js` — the one that actually proves the pipeline: clicks **Run Customer Churn
+  Prediction** and `waitForResponse` on the `POST` to `prediction.localhost`, then reports the HTTP
+  status, response keys, and the rendered probability. Don't trust text heuristics for this — a
+  first attempt matched the word "Churn" in the page title and reported a result that wasn't
+  there; wait for the network call.
+
+Exact invocation used (image tag must match `npx playwright --version`, 1.63.0 at the time):
+
+```bash
+docker run --rm --network host -v "$SCRATCH:/work" -w /work -v "$REPO/.env:/work/.env:ro" \
+  -e OUT_DIR=/work/out -e PW_MODULE=playwright mcr.microsoft.com/playwright:v1.63.0-noble \
+  bash -c "npm install playwright@1.63.0 --no-save >/dev/null 2>&1; set -a; source /work/.env; set +a; node k3s-ui-check.js"
+```
+
+Pipe the output through `grep -v -i "api_key=\|password="` as belt-and-braces — the scripts never
+print the key, but the habit costs nothing. Screenshots land in `$SCRATCH/out/` owned by root (see
+Cleanup).
 
 ## Isolating rendering-only bugs — don't fight app auth for those
 

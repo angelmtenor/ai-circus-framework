@@ -6,7 +6,8 @@ contribute is **WSL2** — the whole toolchain *and* Docker Engine live inside a
 and you use a normal Windows browser to open the app. Nothing is installed on the Windows side
 except WSL itself — no Docker Desktop, so no Docker Desktop subscription terms to worry about.
 
-Ubuntu-26.04 is used as the example throughout; any current Ubuntu LTS works the same way.
+This project is itself developed inside WSL2 on **Ubuntu 26.04 LTS**, which is the example
+throughout; any current Ubuntu LTS works the same way.
 
 ## 1. Enable WSL
 
@@ -62,6 +63,26 @@ wsl -l -v
 ```
 
 `wsl -l -v` should list `Ubuntu-26.04` with `VERSION 2` — WSL1 doesn't support Docker's engine.
+
+### Resource limits (`.wslconfig`)
+
+WSL2 grabs up to half the host's RAM and every core by default, and a full k3s stack plus image
+builds will happily use all of that — enough to starve Windows. Pin it in
+`%UserProfile%\.wslconfig` (create the file if it doesn't exist; adjust to your machine — the
+whole platform on k3d is comfortable at 10 GB):
+
+```ini
+[wsl2]
+memory=10GB
+processors=14
+```
+
+Apply with `wsl --shutdown` from PowerShell, then relaunch the distro. **`wsl --shutdown` kills
+everything running inside — a `make k3s-build` in progress included — so do this before
+starting long jobs, not during.** It's worse than lost time: it is a hard power-off of the VM,
+and a file being written at that instant can survive *truncated* in Docker's build cache, then
+get baked into images and crash at import time (exit code 135) — the `k3s-deploy-verify`
+skill's Gotcha 6 has the diagnosis and fix if it ever happens.
 
 ## 7. Clone — inside the Linux filesystem
 
@@ -205,6 +226,63 @@ whole toolchain from step 8 is on `PATH`:
 docker run --rm hello-world && docker compose version && make --version | head -1 && git flow version && uv --version && node --version && k3d version && kubectl version --client
 ```
 
+### Keep the virtual disk in check
+
+The distro's whole filesystem — Docker images, build cache and volumes included — lives in one
+`ext4.vhdx` on the Windows drive (`%LocalAppData%\wsl\{guid}\` for distros installed with
+`wsl --install`, `%LocalAppData%\Packages\CanonicalGroupLimited…\LocalState\` for
+Store-installed ones). That file **grows on demand and never shrinks on its own** — `docker
+system prune` frees space *inside* Linux, but the `.vhdx` stays as big as it ever was, and when
+it fills the Windows drive the VM stalls (see Troubleshooting). Three habits keep it sane:
+
+1. **Compact the `.vhdx` now and then.** Don't reach for `wsl --manage <distro> --set-sparse
+   true` — WSL 2.7+ refuses it ("*disabled due to potential data corruption*") unless you pass
+   `--allow-unsafe`, and the name is accurate. Instead, TRIM inside the distro first (so the
+   compact has zeroed blocks to reclaim), then compact from Windows with the distro stopped:
+
+   ```bash
+   sudo fstrim -v /        # inside the distro; systemd also runs this weekly via fstrim.timer
+   ```
+
+   ```powershell
+   wsl --shutdown
+   diskpart
+   ```
+
+   …and inside `diskpart`, one line at a time (`Optimize-VHD -Mode Full` does the same if you
+   have the Hyper-V PowerShell module):
+
+   ```
+   select vdisk file="<path-to-ext4.vhdx>"
+   attach vdisk readonly
+   compact vdisk
+   detach vdisk
+   exit
+   ```
+
+2. **Cap Docker's build cache.** BuildKit reserves a percentage of the disk by default — on WSL's
+   nominally 1 TB virtual disk that's ~100 GB of cache before it garbage-collects anything. Cap
+   it in `/etc/docker/daemon.json` inside the distro (create the file if needed), then
+   `sudo systemctl restart docker`. `50GB` is deliberate: a full build of the 12 images is ~10 GB
+   of layers today, and a cap too close to that makes every rebuild evict the cache it just
+   built — leave room for the repo to grow and for a few rebuilds' worth of layers to coexist.
+
+   ```json
+   {
+     "builder": {
+       "gc": {
+         "enabled": true,
+         "defaultKeepStorage": "50GB"
+       }
+     }
+   }
+   ```
+
+3. **Unregister distros you no longer use** — each keeps its own multi-GB `.vhdx`
+   (`wsl -l -v` lists them; `wsl --unregister <Distro>` deletes it, *everything inside
+   included*). A leftover Docker Desktop install also keeps a `docker-desktop` distro and a
+   `docker_data.vhdx` — uninstalling Docker Desktop removes both.
+
 From here, continue with the root README's [Getting started](../README.md#getting-started) from
 **step 1** — `make bootstrap`, pick an LLM, then `make k3s-all` (Kubernetes) or `make all`
 (Docker Compose) — exactly as on native Linux.
@@ -255,6 +333,50 @@ and `docker` are the Linux ones.
 | `/bin/bash^M: bad interpreter`, or `.env` values ending in `\r` | The repo was cloned with Windows `git` (CRLF). Re-clone from inside WSL. |
 | Pods stuck `Pending`/`Evicted`, containers OOM-killed, `make k3s-wait` timing out | WSL2 defaults to a fraction of host RAM. Raise it in `%UserProfile%\.wslconfig` (`[wsl2]` → `memory=16GB`, adjust to your machine), then `wsl --shutdown` from PowerShell and relaunch. |
 | Cluster/containers eating CPU while idle | `make k3s-pause` (k3d) or `make down` (compose) — or `wsl --shutdown` stops the whole VM; state on named volumes survives. |
+| `df -h /` inside the distro jumps by ~70 GB right after the platform starts | Not the images: SeaweedFS pre-allocates 1 GiB × 7 volumes per scenario bucket unless started with `-master.volumePreallocate=false` — which this repo's manifests/compose now do. On a data volume created before that, see the `k3s-deploy-verify` skill's Gotcha 7 to reclaim it without losing data. |
+| `wsl.exe`/`cmd.exe` from inside the distro: `cannot execute binary file: Exec format error` | The Windows-binary interop registration dropped (happens e.g. after starting/stopping another distro from inside this one). Docker and everything Linux keep working. Re-register without a restart: `sudo sh -c 'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register'` — or just restart the distro. |
+| Windows drive filling up although `df -h /` inside the distro shows plenty free | The distro's `ext4.vhdx` (and any old distro's) has grown and never shrinks by itself — see [Keep the virtual disk in check](#keep-the-virtual-disk-in-check): `fstrim` + `diskpart compact`, cap the build cache, unregister unused distros. |
+
+### When WSL itself misbehaves
+
+**`wsl --install` hangs forever on "Provisioning the new WSL instance…"** — the first-run setup
+needs an interactive console to ask for a UNIX username/password. Run from a non-interactive
+shell (a script, CI, an agent) it hangs indefinitely, and can wedge the whole WSL service so
+that even `wsl --terminate` / `wsl --shutdown` hang too. Kill the stuck processes, then finish
+the setup non-interactively:
+
+```powershell
+Get-Process wsl, wslhost, vmmemWSL -ErrorAction SilentlyContinue | Stop-Process -Force
+wsl -d Ubuntu-26.04 -u root -- passwd <username>   # sets the password without needing a login shell
+```
+
+**`passwd: Authentication token manipulation error`** — the account has no password yet
+(locked), so `passwd` as that user fails, and an interactive `wsl -u root` login shell gets
+hijacked back to the default user by Ubuntu's first-run setup. Set it as a one-off root command
+instead — the same `wsl -d Ubuntu-26.04 -u root -- passwd <username>` as above.
+
+**WSL "disconnects", commands hang or fail at random** — usually one of two things:
+
+1. **The Windows drive is full.** The virtual disk lives there; when it fills, the VM
+   effectively stalls. Check with `Get-PSDrive C` in PowerShell and free space (see the disk
+   section above). Anything that was running inside — a build, the cluster — is gone once WSL
+   restarts.
+2. **Filesystem corruption.** Inside the distro:
+
+   ```bash
+   mount | grep ' / '
+   ```
+
+   `emergency_ro` among the mount options means ext4 hit corruption and force-remounted
+   read-only. Repair it from *outside* the instance, using any other registered distro:
+
+   ```powershell
+   wsl --shutdown
+   wsl --mount <path-to-ext4.vhdx> --vhd --bare
+   wsl -d <OtherDistro> -u root -- lsblk -f          # find the attached disk, e.g. /dev/sdd
+   wsl -d <OtherDistro> -u root -- e2fsck -f -y /dev/sdd
+   wsl --unmount <path-to-ext4.vhdx>
+   ```
 
 ## Contributing from Windows
 
