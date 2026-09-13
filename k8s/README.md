@@ -73,6 +73,14 @@ This is different from `make k3s-down` (deletes the applied k8s manifests, clust
 and `k3d cluster delete ai-circus` (deletes the cluster itself, full wipe including volumes) —
 see "Tear down" below.
 
+**After a Docker daemon or host restart** (a WSL `--shutdown`, a reboot) the cluster's containers
+come back on their own, but Docker may hand the server node and the load balancer each other's
+IP — k3s then crash-loops (`failed to find interface with specified node ip`) and `kubectl` only
+answers for seconds at a time. The `k3s-deploy-verify` skill's Gotcha 8 has the two-line
+recovery (restart the two containers in the order that restores the server's old IP). To make
+it impossible, create the cluster with a pinned subnet: `make k3s-cluster K3S_SUBNET=172.28.0.0/16`
+— k3d then assigns static node IPs (its `--subnet` is marked experimental, so this is opt-in).
+
 Open `http://aiopen.localhost` once `k3s-verify` passes — same login flow as the docker-compose
 setup. `ui-react`'s bundled default for `VITE_PLATFORM_REGISTRY_URL` is `http://localhost:8010`
 (matching docker-compose.yml's `127.0.0.1:8010` host-published port), so the browser needs a

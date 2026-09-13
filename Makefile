@@ -221,9 +221,11 @@ K3S_CLUSTER ?= ai-circus
 K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice data-platform-manager
 K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
 
-k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes
+K3S_SUBNET   ?=  # optional, e.g. 172.28.0.0/16 — pins static node IPs so a Docker/host restart can't swap them (k3d marks --subnet experimental; see k8s/README.md)
+
+k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes; K3S_SUBNET=… pins node IPs
 	@k3d cluster list "$(K3S_CLUSTER)" >/dev/null 2>&1 || \
-		k3d cluster create "$(K3S_CLUSTER)" -p "80:80@loadbalancer" -v "$$(pwd)/scenarios:/scenarios@all"
+		k3d cluster create "$(K3S_CLUSTER)" -p "80:80@loadbalancer" -v "$$(pwd)/scenarios:/scenarios@all" $(if $(strip $(K3S_SUBNET)),--subnet "$(strip $(K3S_SUBNET))")
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' ready"
 
 k3s-build: ## Build every service image locally (same Dockerfiles docker-compose uses), tagged ai-circus/<service>:local

@@ -188,6 +188,31 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    `%s` on a `.dat` (1 GiB of blocks for 688 bytes) → `filefrag -v` showing `unwritten,eof`
    extents → the master log's `volume grow … preallocate`.
 
+8. **After a Docker/host restart, k3s can crash-loop with `failed to start networking: unable to
+   initialize network policy controller: error getting node subnet: failed to find interface with
+   specified node ip`.** Docker re-assigns IPs on the `k3d-<cluster>` network in whatever order
+   the containers come up, so the server node and the load balancer can swap addresses
+   (`172.19.0.3` ↔ `172.19.0.2` seen here after a `wsl --shutdown`). k3s persists the old node IP
+   on the Node object (`k3s.io/internal-ip` and friends); its netpol controller looks for an
+   interface with *that* IP, fails, and k3s exits — the k3d entrypoint restarts it forever.
+   Symptoms: `kubectl` answers for a few seconds then `connection refused`; `docker inspect
+   k3d-<cluster>-server-0` shows a climbing `RestartCount`; `make k3s-resume` dies with `node …
+   is running=true in status=restarting`; every pod ends up `Pending`. Confirm with
+   `docker logs k3d-<cluster>-server-0 2>&1 | grep -E "Shutdown request|NodeIPs changed"` — the
+   `NodeIPs changed … oldNodeIPs=[…]` line tells you the IP the server *used to* have.
+   Fix (no data loss): stop both containers and start them in the order that gives the server
+   its old IP back — Docker hands out the lowest free address to whichever starts first:
+   ```bash
+   docker stop k3d-ai-circus-server-0 k3d-ai-circus-serverlb
+   docker start k3d-ai-circus-serverlb && docker start k3d-ai-circus-server-0   # LB first → server gets .3 again
+   docker inspect k3d-ai-circus-server-0 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+   ```
+   Then `make k3s-portforward` (the standing port-forward died with the VM) and `make k3s-verify`.
+   `make k3s-pause`/`k3s-resume` (`k3d cluster stop/start`) does **not** fix it — it starts the
+   server first and reproduces the swap. Prevention: create the cluster with a pinned subnet so
+   k3d assigns static node IPs — `make k3s-cluster K3S_SUBNET=172.28.0.0/16` (k3d marks
+   `--subnet` experimental, hence opt-in; requires recreating the cluster).
+
 ## Operational notes (things that had to be done on the machine, not in the repo)
 
 - **Run the slow steps detached, not just backgrounded.** `k3s-build` (10–20 min cold),
@@ -224,6 +249,8 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
   bug — verify with `verify_records.py` before rebuilding blindly.
 - `df` inside WSL jumping by tens of GB right after `k3s-up`/the pipeline is Gotcha 7 (SeaweedFS
   preallocation), not the images.
+- `kubectl` flapping between answering and `connection refused` right after a host/Docker restart
+  is Gotcha 8 (k3d node IP swap) — check `RestartCount` on the server container before anything else.
 - Never read/print `.env` content (root `AGENTS.md` §1) — use presence-only checks
   (`grep -q "^KEY=" .env`) when diagnosing or patching missing keys.
 - A real browser check (via `playwright-headless-verify`) catches failures `k3s-verify`'s curl
