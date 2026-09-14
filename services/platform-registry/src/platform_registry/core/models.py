@@ -70,6 +70,10 @@ class Scenario(Base):
     # assisted_form only — drives both UIs' generic form renderer (see
     # ai_circus_shared.scenario_schema.FormConfig).
     form: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+    # workspace tabs (see ai_circus_shared.scenario_schema.UiExtras). None is the
+    # common case (the plain 4-tab workspace every tabular_ml scenario already gets).
+    ui_extras: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

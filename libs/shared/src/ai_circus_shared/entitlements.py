@@ -84,6 +84,10 @@ class ScenarioSummary(BaseModel):
     # scenario_schema.FormConfig); a plain dict here, not the pydantic model, matching
     # feature_schema's own wire/ORM-facing shape above.
     form: dict[str, Any] | None = None
+    # tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+    # workspace tabs (see scenario_schema.UiExtras); a plain dict here, same reasoning
+    # as `form` above. None is the common case (the plain 4-tab workspace).
+    ui_extras: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
