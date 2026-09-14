@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CopilotKit, useCopilotReadable } from "@copilotkit/react-core";
 import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { submitForm } from "./apiClient";
@@ -58,6 +58,19 @@ function AssistedFormContent({
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
 
   const errors = form ? validateForm(form, values) : {};
+
+  // The form is per-request, not per-scenario-mount: switching to a new or different
+  // conversation (ConversationSidebar's "+ New conversation" / picking a past one)
+  // must not leave a previous request's filled-in values or "Submitted" banner
+  // showing, or it reads as though the new request had already been sent.
+  useEffect(() => {
+    setValues({});
+    setAssistantFilled(new Set());
+    setSubmitting(false);
+    setSubmitError(null);
+    setCaseNumber(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.conversationId]);
 
   function handleChange(fieldId: string, value: string) {
     setValues((v) => ({ ...v, [fieldId]: value }));

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ScenarioSummary } from "./apiClient";
 
 type Category = {
@@ -61,12 +61,16 @@ function mlSubtype(scenario: ScenarioSummary): string | null {
 export function ScenarioPicker({
   scenarios,
   onSelect,
+  industry,
+  onIndustryChange,
 }: {
   scenarios: ScenarioSummary[];
   onSelect: (scenario: ScenarioSummary) => void;
+  // Owned by the parent (not local state) so the filter survives this component
+  // unmounting when the user opens a scenario and comes back — see App.tsx.
+  industry: string;
+  onIndustryChange: (industry: string) => void;
 }) {
-  const [industry, setIndustry] = useState<string>("all");
-
   const availableIndustries = useMemo(
     () => Object.keys(INDUSTRY_LABELS).filter((key) => scenarios.some((s) => s.industry === key)),
     [scenarios],
@@ -94,7 +98,7 @@ export function ScenarioPicker({
       {availableIndustries.length > 1 && (
         <div className="scenario-industry-filter">
           <label htmlFor="scenario-industry-select">Industry</label>
-          <select id="scenario-industry-select" value={industry} onChange={(e) => setIndustry(e.target.value)}>
+          <select id="scenario-industry-select" value={industry} onChange={(e) => onIndustryChange(e.target.value)}>
             <option value="all">All industries</option>
             {availableIndustries.map((key) => (
               <option key={key} value={key}>
