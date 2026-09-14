@@ -147,6 +147,9 @@ export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  // Owned here (not inside ScenarioPicker) so it survives ScenarioPicker unmounting
+  // while a scenario is open — otherwise picking a scenario and coming back resets it.
+  const [scenarioIndustry, setScenarioIndustry] = useState<string>("all");
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenariosError, setScenariosError] = useState<string | null>(null);
 
@@ -241,7 +244,12 @@ export default function App() {
             {scenariosError && <p className="error">{scenariosError}</p>}
             {scenariosLoading && <div className="app-loading">Loading scenarios…</div>}
             {!scenariosLoading && !scenariosError && !selected && (
-              <ScenarioPicker scenarios={scenarios} onSelect={setSelected} />
+              <ScenarioPicker
+                scenarios={scenarios}
+                onSelect={setSelected}
+                industry={scenarioIndustry}
+                onIndustryChange={setScenarioIndustry}
+              />
             )}
             {!scenariosLoading && selected?.kind === "tabular_ml" && (
               <TabularView scenario={selected} accessToken={identity.accessToken} />
