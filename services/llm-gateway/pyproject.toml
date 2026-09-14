@@ -30,7 +30,7 @@ dependencies = [
     # startup with an ImportError, not just a resolver warning. See DEP002 below.
     "fastapi==0.136.3",
     "httpx>=0.28.1",
-    "litellm[proxy]>=1.95.0",
+    "litellm[proxy]>=1.97.0",
     "loguru>=0.7.3",
     # LiteLLM's `langfuse_otel` callback (litellm_config.yaml) imports these lazily —
     # they're only in litellm's `proxy-runtime` extra, which this image doesn't use.
