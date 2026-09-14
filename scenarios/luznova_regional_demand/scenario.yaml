@@ -1,0 +1,148 @@
+# Seed definition for the "luznova_regional_demand" scenario — loaded into the
+# `platform` Postgres schema by services/platform-registry at bootstrap. Editing this
+# file and re-seeding is how a developer adds/changes a scenario; it is never read
+# directly by any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# First of three scenarios for "Luznova Utilities", a fictional Spanish electricity +
+# gas distributor — mirroring real-world utility AI use cases (regional demand
+# forecasting, non-technical-loss detection, EV charging prediction) with entirely
+# original/synthetic data. Like `cnc_surface_finish`, this is NOT a ported public
+# dataset (hence no `credits` block) — it's a designed synthetic generator grounded
+# in real geography: Spain's 17 Comunidades Autónomas at their real capitals'
+# lat/lon, real-order-of-magnitude 2023 population figures, and a physically
+# plausible demand formula (population x per-capita baseline x an industrial-
+# intensity multiplier x a temperature "bathtub curve" x weekend/holiday
+# suppression x lognormal noise) — see scripts/generate_luznova_regional_demand.py
+# for the exact formula. Disclosed as a designed combination of real geography and a
+# directionally realistic demand model, not fitted to any real consumption dataset.
+#
+# This is the flagship scenario for ui-react's `ui_extras: region_map` 5th workspace
+# tab (see RegionMapView.tsx) — batch-predicts all 17 regions at once and plots them
+# as a Spain bubble map, grouped by `region`.
+
+slug: luznova_regional_demand
+kind: tabular_ml
+title: "Regional Electricity Demand Forecasting"
+description: >
+  Predicts a Spanish region's daily electricity demand (in MWh) from calendar/weather
+  conditions and the region's own population and industrial intensity — utility grid
+  planning and reserve allocation, viewable on a live Spain regional map.
+role_required: "scenario:luznova_regional_demand"
+industry: energy_utilities
+icon: "⚡"
+
+chat:
+  context: >
+    Luznova Utilities' regional electricity demand-forecasting model, covering all 17
+    Comunidades Autónomas of Spain — predicts a region's total daily grid demand (MWh)
+    from the date's calendar context (month, weekend, national holiday), mean daily
+    temperature, and the region's own population and industrial-intensity index.
+    Demand rises both in cold winter months (heating) and hot summer months
+    (air conditioning) relative to a mild ~18°C day, and drops on weekends/holidays.
+  sample_questions:
+    - "Which factors matter most for predicting regional demand?"
+    - "How accurate is the trained model?"
+    - "Why does a colder-than-average day increase predicted demand?"
+    - "Does a region's industrial index matter more than its population?"
+    - "How much does demand drop on a national holiday?"
+
+dataset:
+  bucket: "scenario-luznova-regional-demand"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/luznova_regional_demand.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/luznova_regional_demand.csv"
+  index_col: "row_id"
+  target: "demand_mwh"
+  feature_columns:
+    - region
+    - month
+    - is_weekend
+    - is_holiday
+    - mean_temperature_c
+    - population_thousands
+    - industrial_index
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the generator's own real region table / a full year's synthetic
+  # weather (see scripts/generate_luznova_regional_demand.py).
+  feature_schema:
+    region:
+      {type: categorical, label: "Region (Comunidad Autónoma)",
+       options: [andalucia, cataluna, madrid, valenciana, galicia, castilla_y_leon, pais_vasco, castilla_la_mancha, canarias, murcia, aragon, baleares, extremadura, asturias, navarra, cantabria, la_rioja],
+       default: madrid,
+       info: "Which of Spain's 17 Comunidades Autónomas this demand figure is for — the map tab predicts all 17 at once."}
+    month:
+      {type: numeric, label: "Month", min: 1, max: 12, default: 1, step: 1,
+       info: "Calendar month (1=January). Drives the seasonal component of demand via that day's temperature."}
+    is_weekend:
+      {type: numeric, label: "Weekend", min: 0, max: 1, default: 0, step: 1,
+       info: "1 if Saturday/Sunday — weekend demand runs lower (less commercial/industrial activity)."}
+    is_holiday:
+      {type: numeric, label: "National holiday", min: 0, max: 1, default: 0, step: 1,
+       info: "1 on a Spanish national holiday — demand drops further than a plain weekend."}
+    mean_temperature_c:
+      {type: numeric, label: "Mean temperature", min: -3.0, max: 31.0, default: 15.0, step: 0.5,
+       info: "That day's mean temperature in °C. Demand rises both well below and well above a mild ~18°C point (heating/cooling load)."}
+    population_thousands:
+      {type: numeric, label: "Region population", min: 300, max: 8600, default: 6700, step: 50,
+       info: "The region's population, in thousands — the main driver of baseline demand scale. Fixed per region on the map tab."}
+    industrial_index:
+      {type: numeric, label: "Industrial intensity index", min: 0, max: 100, default: 55, step: 1,
+       info: "A 0-100 proxy for how industrial (vs. purely residential) the region's economy is — higher values add proportionally more demand on top of the population baseline. Fixed per region on the map tab."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: scatter, x: mean_temperature_c, y: demand_mwh, color_by: region}
+    - {type: bar, x: region, y: demand_mwh, agg: mean, color_by: region}
+    - {type: line, x: month, y: demand_mwh, agg: mean}
+
+model:
+  task_type: regression
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "MWh"
+  target_label: "Predicted regional demand"
+  target_description: "Total electricity demand forecast for this region on this day, in megawatt-hours."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant
+
+# Opt-in 5th workspace tab (see ui-react's RegionMapView.tsx) — one bubble per region,
+# batch-predicted in a single /predict/luznova_regional_demand call, colored/sized by
+# demand_mwh. `feature_overrides` pins each region's own real population/industrial
+# index so the shared what-if controls (month/weekend/holiday/temperature) apply the
+# same day-scenario across all 17 regions while each keeps its own real profile.
+ui_extras:
+  kind: region_map
+  group_by: region
+  value_label: "Predicted demand (MWh)"
+  regions:
+    - {key: andalucia, label: "Andalucía", lat: 37.39, lon: -5.99, feature_overrides: {population_thousands: 8500, industrial_index: 45}}
+    - {key: cataluna, label: "Cataluña", lat: 41.39, lon: 2.16, feature_overrides: {population_thousands: 7700, industrial_index: 75}}
+    - {key: madrid, label: "Comunidad de Madrid", lat: 40.42, lon: -3.70, feature_overrides: {population_thousands: 6700, industrial_index: 55}}
+    - {key: valenciana, label: "Comunitat Valenciana", lat: 39.47, lon: -0.38, feature_overrides: {population_thousands: 5100, industrial_index: 60}}
+    - {key: galicia, label: "Galicia", lat: 42.88, lon: -8.55, feature_overrides: {population_thousands: 2700, industrial_index: 35}}
+    - {key: castilla_y_leon, label: "Castilla y León", lat: 41.65, lon: -4.73, feature_overrides: {population_thousands: 2380, industrial_index: 30}}
+    - {key: pais_vasco, label: "País Vasco", lat: 42.85, lon: -2.67, feature_overrides: {population_thousands: 2200, industrial_index: 80}}
+    - {key: castilla_la_mancha, label: "Castilla-La Mancha", lat: 39.86, lon: -4.02, feature_overrides: {population_thousands: 2050, industrial_index: 25}}
+    - {key: canarias, label: "Canarias", lat: 28.10, lon: -15.41, feature_overrides: {population_thousands: 2170, industrial_index: 20}}
+    - {key: murcia, label: "Región de Murcia", lat: 37.99, lon: -1.13, feature_overrides: {population_thousands: 1550, industrial_index: 40}}
+    - {key: aragon, label: "Aragón", lat: 41.65, lon: -0.88, feature_overrides: {population_thousands: 1330, industrial_index: 40}}
+    - {key: baleares, label: "Illes Balears", lat: 39.57, lon: 2.65, feature_overrides: {population_thousands: 1200, industrial_index: 15}}
+    - {key: extremadura, label: "Extremadura", lat: 38.92, lon: -6.34, feature_overrides: {population_thousands: 1060, industrial_index: 20}}
+    - {key: asturias, label: "Asturias", lat: 43.36, lon: -5.85, feature_overrides: {population_thousands: 1010, industrial_index: 45}}
+    - {key: navarra, label: "Navarra", lat: 42.82, lon: -1.65, feature_overrides: {population_thousands: 660, industrial_index: 55}}
+    - {key: cantabria, label: "Cantabria", lat: 43.46, lon: -3.81, feature_overrides: {population_thousands: 580, industrial_index: 35}}
+    - {key: la_rioja, label: "La Rioja", lat: 42.47, lon: -2.45, feature_overrides: {population_thousands: 320, industrial_index: 40}}
