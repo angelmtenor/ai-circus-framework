@@ -1,7 +1,7 @@
 ---
 name: k3s-deploy-verify
 description: Deploy and verify ai-circus-framework on the local k3d/k3s cluster end-to-end (cluster up through a real browser check) — includes sandbox-specific setup and the known k3s-vs-compose gotchas found doing this the first time.
-version: 1.2.0
+version: 1.3.0
 ---
 
 # k3s Deploy & Verify
@@ -10,7 +10,7 @@ version: 1.2.0
 
 `k8s/README.md` documents the `make k3s-*` workflow itself. This skill is the operational
 runbook for actually driving that workflow end-to-end in an agent sandbox where `kubectl`/`k3d`
-usually aren't preinstalled, plus five gotchas that look like real bugs but are really
+usually aren't preinstalled, plus nine gotchas that look like real bugs but are really
 compose-vs-k3s environment gaps — found and fixed once already; check here before re-diagnosing
 them from scratch.
 
@@ -42,8 +42,10 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
 1. Stop any docker-compose stack first (`make down`) — it and k3d's Traefik both want host port
    80.
 2. Run the `k8s/README.md` sequence in order: `k3s-cluster` -> `k3s-build` -> `k3s-import` ->
-   `k3s-secrets` -> `k3s-up` -> `k3s-wait` -> `k3s-verify` -> (optional) `k3s-pipeline`.
-   `k3s-build`/`k3s-import` are the slow steps (image builds, then a full `docker save`/import
+   `k3s-secrets` -> `k3s-up` -> `k3s-wait` -> `k3s-verify` -> `k3s-pipeline`. **`k3s-pipeline` is
+   required, not optional** — see Gotcha 9 below; a fresh/recreated cluster has zero trained
+   models and every `tabular_ml` scenario 503s on its first real prediction until it runs, even
+   though `k3s-verify` passes either way. `k3s-build`/`k3s-import` are the slow steps (image builds, then a full `docker save`/import
    cycle per image) — run them with a long timeout or in the background. If `k3s-cluster` found an
    *existing* cluster (paused or already running — check `k3d cluster list`'s `SERVERS` column, and
    see `k8s/README.md`'s pause/resume section), its pods were NOT freshly created by `k3s-up` and
@@ -211,7 +213,37 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
    `make k3s-pause`/`k3s-resume` (`k3d cluster stop/start`) does **not** fix it — it starts the
    server first and reproduces the swap. Prevention: create the cluster with a pinned subnet so
    k3d assigns static node IPs — `make k3s-cluster K3S_SUBNET=172.28.0.0/16` (k3d marks
-   `--subnet` experimental, hence opt-in; requires recreating the cluster).
+   `--subnet` experimental, hence opt-in; requires recreating the cluster). If this is bad enough
+   to warrant `k3d cluster delete` + recreate rather than the two-container reorder, that recreate
+   wipes every trained model along with the rest of the cluster's state — go straight to Gotcha 9,
+   don't stop at `k3s-verify` passing.
+
+9. **A freshly created (or freshly recreated) cluster silently has zero trained models — every
+   `tabular_ml` scenario 503s on its first real prediction, and nothing before that point catches
+   it.** `k3s-cluster` -> `k3s-build` -> `k3s-import` -> `k3s-secrets` -> `k3s-up` -> `k3s-wait` ->
+   `k3s-verify` can all pass clean; `k3s-verify` only curl-checks that `prediction` is reachable
+   and authenticated, never that any scenario actually has a trained model behind it (same blind
+   spot as Gotcha 2, different cause). The failure shows up client-side instead, as a 503 from the
+   prediction call itself:
+   ```
+   {"detail":"No trained model artifacts for scenario='<slug>' (org='<org>', fallback org='demo'
+   also has none — has `training` run for it?)."}
+   ```
+   Seen for real right after recovering from Gotcha 8 by deleting and recreating the cluster —
+   `k3s-verify` and a full browser login/navigation all passed, and the very next scenario
+   prediction 503'd. Fix: `make k3s-pipeline` (trains **every** `tabular_ml` scenario in
+   `SCENARIOS`, empty/unset = all — not just churn, despite older references to a "churn
+   pipeline"; ~1 minute for the seeded sample datasets). For a `conversational_rag`/
+   `assisted_form` scenario's document catalog (Qdrant), there's no `make k3s-*` wrapper yet —
+   apply the Job directly:
+   ```bash
+   kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
+   kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
+   kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=300s
+   ```
+   Treat `k3s-pipeline` as a mandatory step of "the cluster is ready," not an optional extra —
+   run it every time right after `k3s-verify`, especially after any cluster recreate, not just the
+   first time you bring one up.
 
 ## Operational notes (things that had to be done on the machine, not in the repo)
 
@@ -244,13 +276,17 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | \
 
 - Diagnose with `kubectl -n ai-circus describe pod -l app=<service>` (Events section) and
   `kubectl -n ai-circus logs -l app=<service>` before assuming a crash-looping pod is an app bug —
-  check the four gotchas above first.
+  check the gotchas above first.
 - Exit code 135 + empty logs is Gotcha 6 (truncated `.so` from a killed build), not an app
   bug — verify with `verify_records.py` before rebuilding blindly.
 - `df` inside WSL jumping by tens of GB right after `k3s-up`/the pipeline is Gotcha 7 (SeaweedFS
   preallocation), not the images.
 - `kubectl` flapping between answering and `connection refused` right after a host/Docker restart
   is Gotcha 8 (k3d node IP swap) — check `RestartCount` on the server container before anything else.
+- A `tabular_ml` scenario 503ing with "No trained model artifacts" — on a cluster that otherwise
+  looks healthy and passed `k3s-verify` — is Gotcha 9 (pipeline never ran, most often after a
+  fresh/recreated cluster), not an app bug. Run `make k3s-pipeline` before trusting any prediction
+  request against a cluster you just brought up or recreated.
 - Never read/print `.env` content (root `AGENTS.md` §1) — use presence-only checks
   (`grep -q "^KEY=" .env`) when diagnosing or patching missing keys.
 - A real browser check (via `playwright-headless-verify`) catches failures `k3s-verify`'s curl
