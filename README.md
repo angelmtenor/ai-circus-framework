@@ -127,17 +127,32 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Supermarket Weekly Sales** (`supermarket_sales`) | `tabular_ml` — regression | Weekly department sales | Kaggle — Walmart dataset |
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
 | **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression | Appliance energy use (Wh) | UCI — Appliances Energy Prediction |
+| **CNC Turning Surface Finish** (`cnc_surface_finish`) | `tabular_ml` — regression | Machined-part surface roughness (Ra) | Original content (synthetic, physically grounded) |
+| **Steel Plate Defect Triage** (`steel_defects`) | `tabular_ml` — classification | Unrecognized optical-scan defect flag | UCI — Steel Plates Faults |
+| **Turbofan Engine Remaining Useful Life** (`turbofan_rul`) | `tabular_ml` — regression | Jet engine RUL (operating cycles) | NASA C-MAPSS FD001 |
+| **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression | Daily electricity demand per region (MWh) — with a live Spain regional map tab | Original content (synthetic, real Spain geography) |
+| **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
+| **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 
-Every `tabular_ml` scenario above is ported from a real public dataset rather than original
-content — full credit/link lives in each `scenarios/<slug>/scenario.yaml`'s `credits` field and is
-surfaced in the Data tab.
+Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
+each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
+(`cnc_surface_finish` and the three `luznova_*` utility scenarios) are original content instead: a
+physically-grounded synthetic generator (real geography/tariff structure, a designed formula, no
+real customer data) rather than a ported dataset — each one's `scenario.yaml` discloses this, and
+its generator script lives at `scripts/generate_<slug>.py`.
 
 **One consolidated service instance serves every scenario of a given kind** — `prediction` and
 `assistant` both load every `tabular_ml` scenario from the same running container, routed by a
 `{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
 and `form-agent` does the same for every `assisted_form` scenario.
+
+**Two scenarios carry an opt-in 5th workspace tab** (`ui_extras` in `scenario.yaml`, still no
+per-scenario UI code — see below): `luznova_regional_demand`'s "Regional Map" tab batch-predicts
+all 17 Comunidades Autónomas at once and plots them on a Spain bubble map; `mpm`'s "Live Plant" tab
+simulates a fictional factory floor of machines ticking every few seconds, each scored by the same
+unmodified `/predict/mpm`, with a client-side-only "Shut down" demo control.
 
 ---
 
