@@ -112,8 +112,16 @@ model:
 ui_extras:
   kind: live_plant
   machine_count: 6
-  tick_seconds: 7
+  tick_seconds: 5
   machine_label_prefix: "Press"
+  # Each 5s real-time tick advances the floor's displayed clock by 5 simulated
+  # minutes, and "Tool wear [min]" — already measured in minutes in the real AI4I
+  # 2020 dataset — accumulates by the same 5 simulated minutes each tick (up to its
+  # real feature_schema max of 260), so failure risk climbs as a genuine, trained
+  # consequence of the real model's own learned tool-wear sensitivity, not a
+  # scripted animation.
+  sim_minutes_per_tick: 5
+  wear_feature: "Tool wear [min]"
 
 # Dedicated compose instances (etl-tabular-mpm/training-mpm/prediction-mpm/
 # assistant-mpm) of the SAME generic images used by the churn scenario — proves the
