@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCopilotReadable } from "@copilotkit/react-core";
-import { predict, type ScenarioSummary, type RegionMapExtra, type MapRegion } from "./apiClient";
+import { predict, type ScenarioSummary, type RegionMapExtra, type RegionMapLevel, type MapRegion } from "./apiClient";
 import { config } from "./config";
 import { useTheme } from "./useTheme";
 import { PlotlyChart } from "./PlotlyChart";
@@ -16,27 +16,56 @@ type RegionResult = { region: MapRegion; prediction: number; contributions: Reco
  * scenario-specific: `luznova_regional_demand` is the first user, but any future
  * region-map scenario gets this same renderer for free.
  *
- * One shared "what-if" form (every feature except the map's `group_by` column) is
- * applied to every region at once, plus each region's own pinned real values
- * (`feature_overrides`, e.g. its population) — a single batched /predict call scores
- * all regions together, then renders as a Spain bubble map (grouped, spatially) or a
- * flat ranked table (non-grouped) of the same result, per the user's "grouped or
- * non-grouped" toggle. Plotly's built-in `scattergeo` needs no GeoJSON file and no
- * mapbox token — see PlotlyChart.tsx.
+ * `levels` lets the scenario offer more than one aggregation granularity (e.g.
+ * region vs. province) against the SAME trained model — a pill selector switches
+ * which level's `group_by`/`regions` drives the map, all still against real batched
+ * predictions and real per-bubble SHAP. One shared "what-if" form (every feature
+ * except any level's group_by column) is applied to every bubble at once, plus each
+ * bubble's own pinned real values (`feature_overrides`) — a single batched /predict
+ * call scores the active level's bubbles together, then renders as a Spain bubble
+ * map (grouped, spatially) or a flat ranked table (non-grouped) of the same result.
+ * Plotly's built-in `scattergeo` needs no GeoJSON file and no mapbox token — see
+ * PlotlyChart.tsx.
  */
 export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const extras = scenario.ui_extras as RegionMapExtra;
   const { theme } = useTheme();
   const featureColumns = useMemo(() => scenario.feature_columns ?? [], [scenario.feature_columns]);
   const featureSchema = scenario.feature_schema ?? {};
-  const sharedFeatureColumns = useMemo(() => featureColumns.filter((f) => f !== extras.group_by), [featureColumns, extras.group_by]);
+
+  const [levelKey, setLevelKey] = useState(extras.levels[0].key);
+  const activeLevel: RegionMapLevel = extras.levels.find((l) => l.key === levelKey) ?? extras.levels[0];
+
+  // Every level's group_by column is hidden from the shared what-if form — each
+  // bubble at ANY level always pins its own group_by value via the request builder
+  // below, so a stray "region"/"province" slider would be misleading (its value is
+  // never actually used).
+  const groupByColumns = useMemo(() => new Set(extras.levels.map((l) => l.group_by).filter((g): g is string => g !== null)), [extras.levels]);
+  const sharedFeatureColumns = useMemo(() => featureColumns.filter((f) => !groupByColumns.has(f)), [featureColumns, groupByColumns]);
 
   const [shared, setShared] = useState<Record_>(() => initialRecord(sharedFeatureColumns, featureSchema));
+
+  // A level with no group_by (e.g. a coarser level reusing a finer level's real
+  // trained feature — see luznova_regional_demand's "region" level, which relies
+  // entirely on feature_overrides rather than injecting its own key into a feature
+  // that isn't actually trained) leaves every bubble's request built from
+  // feature_overrides alone.
+  const buildRecord = useCallback(
+    (region: MapRegion) => (activeLevel.group_by ? { ...shared, ...region.feature_overrides, [activeLevel.group_by]: region.key } : { ...shared, ...region.feature_overrides }),
+    [shared, activeLevel.group_by],
+  );
   const [results, setResults] = useState<RegionResult[] | null>(null);
   const [selected, setSelected] = useState<RegionResult | null>(null);
   const [view, setView] = useState<"map" | "table">("map");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Switching aggregation level invalidates the last batch — its bubbles no longer
+  // match the level now on screen.
+  useEffect(() => {
+    setResults(null);
+    setSelected(null);
+  }, [levelKey]);
 
   function update(feature: string, value: number | string) {
     setShared((r) => ({ ...r, [feature]: value }));
@@ -46,9 +75,9 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
     setLoading(true);
     setError(null);
     try {
-      const records = extras.regions.map((region) => ({ ...shared, ...region.feature_overrides, [extras.group_by]: region.key }));
+      const records = activeLevel.regions.map(buildRecord);
       const response = await predict(config.predictionUrl, scenario.slug, records, accessToken);
-      const rows: RegionResult[] = extras.regions.map((region, i) => ({
+      const rows: RegionResult[] = activeLevel.regions.map((region, i) => ({
         region,
         prediction: response.predictions[i].prediction,
         contributions: response.predictions[i].contributions,
@@ -65,8 +94,8 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
   // Live "what's on the map right now" context for the chat agent — same pattern as
   // MlPredictionsView/ExploreModelView's useCopilotReadable calls.
   useCopilotReadable({
-    description: `Batched ${scenario.title} predictions across all ${extras.regions.length} regions, currently shown on the map/table. Use this if asked which region is highest/lowest, or to compare regions.`,
-    value: results ? results.map((r) => ({ region: r.region.label, prediction: r.prediction })) : null,
+    description: `Batched ${scenario.title} predictions across all ${activeLevel.regions.length} ${activeLevel.label.toLowerCase()} areas, currently shown on the map/table. Use this if asked which area is highest/lowest, or to compare areas.`,
+    value: results ? results.map((r) => ({ area: r.region.label, prediction: r.prediction })) : null,
   });
 
   const isRegression = scenario.task_type === "regression";
@@ -80,9 +109,9 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
       return [
         {
           type: "scattergeo",
-          lat: extras.regions.map((r) => r.lat),
-          lon: extras.regions.map((r) => r.lon),
-          text: extras.regions.map((r) => r.label),
+          lat: activeLevel.regions.map((r) => r.lat),
+          lon: activeLevel.regions.map((r) => r.lon),
+          text: activeLevel.regions.map((r) => r.label),
           mode: "markers",
           marker: { size: 13, color: theme.categoryPalette[0], opacity: 0.75 },
           hovertemplate: "%{text}<extra></extra>",
@@ -101,7 +130,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
         text: results.map((r) => `${r.region.label}<br>${extras.value_label}: ${formatValue(r.prediction)}`),
         mode: "markers",
         marker: {
-          size: results.map((r) => 12 + ((r.prediction - lo) / span) * 28),
+          size: results.map((r) => 9 + ((r.prediction - lo) / span) * 26),
           color: values,
           colorscale: "YlOrRd",
           showscale: true,
@@ -111,24 +140,25 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
         hovertemplate: "%{text}<extra></extra>",
       },
     ];
-  }, [results, extras, theme.categoryPalette, theme.cssVars, formatValue]);
+  }, [results, activeLevel, extras.value_label, theme.categoryPalette, theme.cssVars, formatValue]);
 
-  // Computed from the scenario's own regions (padded), not hardcoded to Iberia — so
-  // this same renderer frames correctly for any future region_map scenario's
-  // geography. `scope: "world"` (not "europe") is required for this to actually
-  // work: Plotly's continent-scoped base maps clip to a fixed template extent
-  // regardless of lataxis/lonaxis, which silently drops any region outside that
-  // template's frame (confirmed empirically: Spain's Canary Islands, well outside
-  // mainland Europe's usual frame, disappeared entirely under scope: "europe").
+  // Computed from the ACTIVE level's own regions (padded), not hardcoded to Iberia
+  // — so this same renderer frames correctly for any future region_map scenario's
+  // geography, at any of its levels. `scope: "world"` (not "europe") is required
+  // for this to actually work: Plotly's continent-scoped base maps clip to a fixed
+  // template extent regardless of lataxis/lonaxis, which silently drops any region
+  // outside that template's frame (confirmed empirically: Spain's Canary Islands,
+  // well outside mainland Europe's usual frame, disappeared entirely under
+  // scope: "europe").
   const geoBounds = useMemo(() => {
-    const lats = extras.regions.map((r) => r.lat);
-    const lons = extras.regions.map((r) => r.lon);
+    const lats = activeLevel.regions.map((r) => r.lat);
+    const lons = activeLevel.regions.map((r) => r.lon);
     const pad = 2.5;
     return {
       lat: [Math.min(...lats) - pad, Math.max(...lats) + pad] as [number, number],
       lon: [Math.min(...lons) - pad, Math.max(...lons) + pad] as [number, number],
     };
-  }, [extras.regions]);
+  }, [activeLevel]);
 
   const geoLayout: PlotlyLayout = {
     paper_bgcolor: "rgba(0,0,0,0)",
@@ -152,17 +182,33 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
     margin: { t: 10, r: 10, b: 10, l: 10 },
   };
 
-  const contributionItems = selected ? mapContributions({ ...shared, ...selected.region.feature_overrides, [extras.group_by]: selected.region.key }, selected.contributions).map((item) => ({ ...item, label: featureLabel(scenario, item.label) })) : [];
+  const contributionItems = selected
+    ? mapContributions(buildRecord(selected.region), selected.contributions).map((item) => ({
+        ...item,
+        label: featureLabel(scenario, item.label),
+      }))
+    : [];
 
   const rankedForTable = results ? [...results].sort((a, b) => b.prediction - a.prediction) : null;
 
   return (
     <div className="tab-panel">
       <div className="panel-card">
-        <h3>Scenario applied to every region</h3>
+        <div className="region-map-header">
+          <h3>Scenario applied to every area</h3>
+          {extras.levels.length > 1 && (
+            <div className="sub-tabs">
+              {extras.levels.map((level) => (
+                <button key={level.key} className={level.key === levelKey ? "active" : ""} onClick={() => setLevelKey(level.key)}>
+                  {level.label} ({level.regions.length})
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <p className="panel-hint">
-          Set a shared day/context below — it's applied to all {extras.regions.length} regions at once. Each region keeps its own real profile
-          ({sharedFeatureColumns.length < featureColumns.length ? "population/industrial index, etc." : "fixed attributes"}), so this isolates the effect of what you change here.
+          Set a shared day/context below — it's applied to all {activeLevel.regions.length} {activeLevel.label.toLowerCase()} areas at once. Each area keeps
+          its own real profile (population/industrial index, etc.), so this isolates the effect of what you change here.
         </p>
         <div className="feature-grid">
           {sharedFeatureColumns.map((feature) => (
@@ -170,7 +216,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
           ))}
         </div>
         <button className="btn-primary" onClick={run} disabled={loading}>
-          {loading ? "Predicting…" : `Predict all ${extras.regions.length} regions`}
+          {loading ? "Predicting…" : `Predict all ${activeLevel.regions.length} ${activeLevel.label.toLowerCase()} areas`}
         </button>
         {error && <p className="error">{error}</p>}
       </div>
@@ -210,31 +256,46 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
                     <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(3)} />
                   </>
                 ) : (
-                  <p className="panel-hint">Click a bubble to see that region's SHAP explanation.</p>
+                  <p className="panel-hint">Click a bubble to see that area's SHAP explanation.</p>
                 )}
               </div>
             </div>
           ) : (
-            <div className="table-scroll">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Region</th>
-                    <th>{extras.value_label}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankedForTable!.map((row, i) => (
-                    <tr key={row.region.key} onClick={() => setSelected(row)} style={{ cursor: "pointer" }}>
-                      <td>{i + 1}</td>
-                      <td>{row.region.label}</td>
-                      <td>{formatValue(row.prediction)}</td>
+            <>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>{activeLevel.label}</th>
+                      <th>{extras.value_label}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rankedForTable!.map((row, i) => (
+                      <tr key={row.region.key} onClick={() => setSelected(row)} className={selected?.region.key === row.region.key ? "row-selected" : ""}>
+                        <td>{i + 1}</td>
+                        <td>{row.region.label}</td>
+                        <td>{formatValue(row.prediction)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="region-map-detail region-map-detail--below-table">
+                {selected ? (
+                  <>
+                    <h4>{selected.region.label}</h4>
+                    <p className="panel-hint">
+                      {extras.value_label}: <strong>{formatValue(selected.prediction)}</strong>
+                    </p>
+                    <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(3)} />
+                  </>
+                ) : (
+                  <p className="panel-hint">Click a row to see that area's SHAP explanation.</p>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}

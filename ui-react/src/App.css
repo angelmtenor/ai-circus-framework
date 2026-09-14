@@ -905,6 +905,12 @@ select:focus {
   background: color-mix(in srgb, var(--amber) 12%, transparent);
 }
 
+.badge--danger {
+  color: var(--red);
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
 /* ── KPI tiles ─────────────────────────────────────────────────────────────── */
 
 .kpi-row {
@@ -2218,6 +2224,18 @@ select:focus {
   color: var(--text);
 }
 
+.region-map-detail--below-table {
+  margin-top: 1rem;
+}
+
+.region-map-panel .data-table tbody tr {
+  cursor: pointer;
+}
+
+.region-map-panel .data-table tbody tr.row-selected {
+  background: var(--accent-soft);
+}
+
 /* ── Live plant floor tab (LivePlantView.tsx) ─────────────────────────────────── */
 
 .plant-floor-toolbar {
@@ -2283,7 +2301,7 @@ select:focus {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  width: 168px;
+  width: 190px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2303,6 +2321,12 @@ select:focus {
 
 .machine-tile--stopped {
   opacity: 0.55;
+}
+
+.machine-tile--broken {
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, var(--panel));
+  box-shadow: 0 0 0 1px var(--red);
 }
 
 .machine-tile-header {
@@ -2341,8 +2365,47 @@ select:focus {
   font-weight: 600;
 }
 
+.machine-tile-readout--wear span,
+.machine-tile-readout--wear strong {
+  color: var(--accent-2);
+}
+
+.machine-tile-gauge {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: opacity 0.15s;
+}
+
+.machine-tile-gauge:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.machine-tile-gauge:disabled {
+  cursor: default;
+}
+
+.machine-tile-button-row {
+  display: flex;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.machine-tile-button-row .btn-secondary {
+  flex: 1;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+}
+
 .machine-tile .btn-danger,
-.machine-tile .btn-secondary {
+.machine-tile .btn-secondary,
+.machine-tile .btn-primary {
   width: 100%;
   justify-content: center;
+}
+
+.plant-floor-clock {
+  font-variant-numeric: tabular-nums;
 }
