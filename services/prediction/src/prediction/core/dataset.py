@@ -130,6 +130,9 @@ def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: in
         x = x.iloc[idx]
 
     x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
+    # See core/predict.py's matching comment: densify before handing this to SHAP.
+    if hasattr(x_transformed, "toarray"):
+        x_transformed = x_transformed.toarray()
     shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
     if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
         shap_values = shap_values[:, :, 1]

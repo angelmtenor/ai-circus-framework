@@ -145,6 +145,18 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
     """Build a SHAP explainer appropriate for the pipeline's fitted estimator."""
     model = pipeline.named_steps["model"]
     x_transformed = pipeline.named_steps["preprocessor"].transform(x_background)
+    # OneHotEncoder emits a sparse matrix; LightGBM's own predict path handles that
+    # fine, but shap.TreeExplainer's internal background-subsampling (see
+    # "Background dataset has N samples but max_samples=100" above) hits a real
+    # LightGBM C-extension crash ("Found a NULL input array") once a categorical
+    # feature's cardinality is high enough that a random 100-row subsample lands on
+    # a very sparse slice — confirmed empirically at 50 categories (never surfaced
+    # by this repo's other scenarios, whose categoricals top out at a handful).
+    # Densifying costs nothing at this repo's MAX_DATASET_ROWS scale (well under
+    # 30,000 rows x a few hundred one-hot columns) and changes no explanation
+    # values for any already-passing scenario.
+    if hasattr(x_transformed, "toarray"):
+        x_transformed = x_transformed.toarray()
 
     if isinstance(model, LGBMClassifier):
         return shap.TreeExplainer(
@@ -222,6 +234,9 @@ def global_shap_importance(
         x = x.iloc[idx]
 
     x_transformed = pipeline.named_steps["preprocessor"].transform(x)
+    # See build_explainer's matching comment: densify before handing this to SHAP.
+    if hasattr(x_transformed, "toarray"):
+        x_transformed = x_transformed.toarray()
     # pyrefly: ignore [missing-attribute]
     shap_values = np.asarray(explainer.shap_values(x_transformed))
     if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
