@@ -41,6 +41,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "luznova_regional_demand",
         "luznova_gas_anomaly",
         "luznova_ev_charging",
+        "luznova_gas_prospects",
         "ai_circus_reference",
         "service_request",
     }
@@ -162,6 +163,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "luznova_regional_demand",
         "luznova_gas_anomaly",
         "luznova_ev_charging",
+        "luznova_gas_prospects",
         "ai_circus_reference",
         "service_request",
     }
@@ -180,8 +182,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 14
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 14
+    assert session.query(Scenario).count() == 15
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 15
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
