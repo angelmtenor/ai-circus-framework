@@ -104,6 +104,17 @@ model:
   target_description: "Whether the machine failed during this operating window."
   target_value_labels: {"0": "Healthy", "1": "Broken"}
 
+# Opt-in 5th workspace tab (see ui-react's LivePlantView.tsx) — a fictional live
+# plant floor of simulated machines, ticking client-side every tick_seconds, each
+# scored on every tick by this same scenario's own /predict/mpm (unchanged, already
+# batches). Simulation and "shut down" controls are client-side only — no real
+# telemetry ingestion, no real actuation.
+ui_extras:
+  kind: live_plant
+  machine_count: 6
+  tick_seconds: 7
+  machine_label_prefix: "Press"
+
 # Dedicated compose instances (etl-tabular-mpm/training-mpm/prediction-mpm/
 # assistant-mpm) of the SAME generic images used by the churn scenario — proves the
 # pipeline is scenario-agnostic rather than needing a new service per scenario.

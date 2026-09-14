@@ -49,6 +49,7 @@ def _extract_org_id(claims: dict) -> str | None:
         return None
     return next(iter(organizations.values())).get("id")
 
+
 # The tenant every scenario auto-grants access to at seed time (see
 # platform-registry/core/seed.py) — not a bypass of entitlement checking, just a
 # real, auditable, self-maintaining entitlement row for the admin credential below.

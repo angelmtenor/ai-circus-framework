@@ -870,6 +870,41 @@ select:focus {
   color: var(--accent-2);
 }
 
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+.btn-danger:hover {
+  background: var(--red);
+  color: #1a0508;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+
+.badge--warning {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+}
+
 /* ── KPI tiles ─────────────────────────────────────────────────────────────── */
 
 .kpi-row {
@@ -2140,4 +2175,174 @@ select:focus {
   border: 1px solid var(--accent-border);
   border-radius: 999px;
   padding: 0.3rem 0.75rem;
+}
+
+/* ── Region map tab (RegionMapView.tsx) ───────────────────────────────────────── */
+
+.region-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.region-map-header h3 {
+  margin: 0;
+}
+
+.region-map-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(220px, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .region-map-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.region-map-detail {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  min-height: 12rem;
+}
+
+.region-map-detail h4 {
+  margin: 0 0 0.4rem;
+  color: var(--text);
+}
+
+/* ── Live plant floor tab (LivePlantView.tsx) ─────────────────────────────────── */
+
+.plant-floor-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.plant-floor-toolbar h3 {
+  margin: 0 0 0.35rem;
+}
+
+.plant-floor-toolbar code {
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.85em;
+}
+
+.plant-floor-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.plant-floor {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  padding: 2.25rem 1rem 1rem;
+}
+
+.plant-floor-belt {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 1.1rem;
+  height: 6px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, var(--accent) 0 14px, var(--panel-2) 14px 28px);
+  background-size: 200% 100%;
+  opacity: 0.35;
+  animation: plant-belt-scroll 3.5s linear infinite;
+}
+
+@keyframes plant-belt-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -56px 0;
+  }
+}
+
+.machine-tile {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 168px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 0.8rem 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.machine-tile--warning {
+  border-color: var(--amber);
+}
+
+.machine-tile--critical {
+  border-color: var(--red);
+  box-shadow: 0 0 0 1px var(--red);
+}
+
+.machine-tile--stopped {
+  opacity: 0.55;
+}
+
+.machine-tile-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.machine-tile-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.machine-tile-readouts {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.machine-tile-readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.machine-tile-readout strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.machine-tile .btn-danger,
+.machine-tile .btn-secondary {
+  width: 100%;
+  justify-content: center;
 }

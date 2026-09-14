@@ -1,0 +1,107 @@
+# Seed definition for the "luznova_ev_charging" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# Third of three scenarios for "Luznova Utilities", a fictional Spanish electricity +
+# gas distributor (see luznova_regional_demand's scenario.yaml for the fuller
+# disclosure note). Not a ported public dataset — a designed synthetic generator
+# deliberately built from a small set of noisy behavioral session features (mirroring
+# how a real EV charging network only ever observes session behavior, not the
+# underlying charge curve): session duration is itself unobserved noise, and energy
+# delivered is capped by whichever is smaller — the energy needed to reach full
+# charge, or what the charger's power tier could deliver in that (unobserved)
+# session length — see scripts/generate_luznova_ev_charging.py for the exact formula.
+
+slug: luznova_ev_charging
+kind: tabular_ml
+title: "EV Charging Session Energy Prediction"
+description: >
+  Predicts the energy delivered (in kWh) by an electric-vehicle charging session from
+  a small set of behavioral features — start hour, initial battery charge, charger
+  power tier, and vehicle battery size — for station-level demand planning.
+role_required: "scenario:luznova_ev_charging"
+industry: energy_utilities
+icon: "🔌"
+
+chat:
+  context: >
+    Luznova Utilities' EV charging network demand model — predicts how much energy
+    (kWh) a charging session will deliver from the session's start hour, the
+    vehicle's initial battery charge (state of charge, %), the charger's power tier
+    (slow/fast/rapid/ultra), the vehicle's battery capacity, the station's region,
+    and whether it's a weekend. Session length itself isn't observed — only these
+    behavioral inputs — so predictions are inherently noisier than a physics-based
+    charge-curve model would be.
+  sample_questions:
+    - "Which factors matter most for predicting energy delivered?"
+    - "How accurate is the trained model?"
+    - "Does a lower starting charge always mean more energy delivered?"
+    - "How much more energy does an ultra-fast charger deliver than a slow one?"
+    - "Does the station's region affect predicted energy delivered?"
+
+dataset:
+  bucket: "scenario-luznova-ev-charging"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/luznova_ev_charging.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/luznova_ev_charging.csv"
+  index_col: "session_id"
+  target: "energy_charged_kwh"
+  feature_columns:
+    - session_start_hour
+    - initial_soc_pct
+    - charger_type
+    - vehicle_battery_kwh
+    - station_region
+    - is_weekend
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the generator's own sampling bounds (9,000-row synthetic set).
+  feature_schema:
+    session_start_hour:
+      {type: numeric, label: "Session start hour", min: 0, max: 23, default: 18, step: 1,
+       info: "Hour of day (0-23) the charging session began."}
+    initial_soc_pct:
+      {type: numeric, label: "Initial state of charge", min: 2, max: 90, default: 35, step: 1,
+       info: "The vehicle's battery charge (%) when the session started — lower values leave more room to charge."}
+    charger_type:
+      {type: categorical, label: "Charger power tier", options: [slow_7kw, fast_22kw, rapid_50kw, ultra_150kw], default: fast_22kw,
+       info: "The charging point's hardware power tier — the single biggest driver of how much energy a session can deliver in a given time."}
+    vehicle_battery_kwh:
+      {type: numeric, label: "Vehicle battery capacity", min: 28, max: 110, default: 62, step: 1,
+       info: "The vehicle's total battery capacity, in kWh — caps how much energy a session could ever need to reach full charge."}
+    station_region:
+      {type: categorical, label: "Station region", options: [madrid, barcelona, valencia, sevilla, bilbao, zaragoza, malaga, murcia], default: madrid,
+       info: "Which city's charging network this station belongs to — operational metadata; its effect on energy delivered is weak relative to the charger tier and state of charge."}
+    is_weekend:
+      {type: numeric, label: "Weekend", min: 0, max: 1, default: 0, step: 1,
+       info: "1 if Saturday/Sunday — overnight (slow-charger) sessions run a little longer on weekends."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: box, x: charger_type, y: energy_charged_kwh, color_by: charger_type}
+    - {type: scatter, x: initial_soc_pct, y: energy_charged_kwh, color_by: charger_type}
+    - {type: bar, x: station_region, y: energy_charged_kwh, agg: mean, color_by: station_region}
+
+model:
+  task_type: regression
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "kWh"
+  target_label: "Predicted energy delivered"
+  target_description: "Total energy this charging session is predicted to deliver, in kilowatt-hours."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

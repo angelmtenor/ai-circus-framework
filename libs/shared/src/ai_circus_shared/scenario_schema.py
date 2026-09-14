@@ -21,7 +21,7 @@ class NumericFeatureUI(BaseModel):
     # Human-friendly display name (e.g. "Quadrature-axis current" for column `i_q`) —
     # both UIs render this instead of the raw column name everywhere a feature is shown.
     label: str
-    # One–two sentence technical explanation, shown behind an info button rather than
+    # One-two sentence technical explanation, shown behind an info button rather than
     # inline, for a user who wants the precise (e.g. engineering/domain) meaning.
     info: str | None = None
     min: float
@@ -135,6 +135,56 @@ class TabularServices(BaseModel):
     training: str
     prediction: str
     assistant: str
+
+
+class MapRegion(BaseModel):
+    """One bubble on a `RegionMapExtra` map: a real-world point plus the categorical
+    value (matching one of `group_by`'s `feature_schema` options) it represents.
+
+    `feature_overrides` fixes any other `feature_columns` entry to this region's own
+    real value (e.g. its population or an industrial-intensity index) instead of the
+    one shared, user-adjustable value ui-react's RegionMapView applies to every
+    region for the rest of the form — generic key-value, not tied to any one
+    scenario's feature names, so a region-map scenario can pin as many or as few
+    region-specific features as its dataset actually has.
+    """
+
+    key: str  # must match one of group_by's feature_schema categorical `options`
+    label: str  # display name, e.g. "Andalucía"
+    lat: float
+    lon: float
+    feature_overrides: dict[str, float | str] = {}
+
+
+class RegionMapExtra(BaseModel):
+    """Opt-in 5th workspace tab: a geographic bubble map of batched predictions, one
+    per `regions` entry, grouped by the `group_by` categorical feature (see
+    ui-react's RegionMapView.tsx — the single generic renderer for this `kind`,
+    reused by any `tabular_ml` scenario that sets this block; not scenario-specific
+    UI code).
+    """
+
+    kind: Literal["region_map"] = "region_map"
+    group_by: str  # a categorical entry in dataset.feature_columns
+    regions: list[MapRegion]
+    value_label: str  # e.g. "Predicted demand (MWh)"
+
+
+class LivePlantExtra(BaseModel):
+    """Opt-in 5th workspace tab: a fictional live plant floor of `machine_count`
+    simulated machines, ticking client-side every `tick_seconds`, each scored by this
+    scenario's own `/predict/{slug}` on every tick (see ui-react's LivePlantView.tsx —
+    the single generic renderer for this `kind`). Simulation and "shut down" controls
+    are client-side only — no real telemetry ingestion, no real actuation.
+    """
+
+    kind: Literal["live_plant"] = "live_plant"
+    machine_count: int = 6
+    tick_seconds: int = 7
+    machine_label_prefix: str = "Machine"
+
+
+UiExtras = Annotated[RegionMapExtra | LivePlantExtra, Field(discriminator="kind")]
 
 
 class DocumentChunking(BaseModel):
@@ -330,7 +380,30 @@ class ScenarioDefinition(BaseModel):
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
+    # tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+    # workspace tabs (see UiExtras above). None (the common case) means the plain
+    # 4-tab workspace every tabular_ml scenario already gets.
+    ui_extras: UiExtras | None = None
     services: TabularServices | RagServices | FormServices
+
+    @model_validator(mode="after")
+    def _region_map_columns_are_real_features(self) -> ScenarioDefinition:
+        """Fail fast if `ui_extras.group_by` or a region's `feature_overrides` key
+        doesn't name a real feature — ui-react's RegionMapView would otherwise
+        silently send `undefined`/an ignored extra key for that region.
+        """
+        if not isinstance(self.ui_extras, RegionMapExtra) or self.dataset is None:
+            return self
+        known = set(self.dataset.feature_columns)
+        if self.ui_extras.group_by not in known:
+            raise ValueError(f"ui_extras.group_by {self.ui_extras.group_by!r} is not among dataset.feature_columns.")
+        for region in self.ui_extras.regions:
+            unknown = set(region.feature_overrides) - known
+            if unknown:
+                raise ValueError(
+                    f"region {region.key!r} feature_overrides {sorted(unknown)} not in dataset.feature_columns."
+                )
+        return self
 
     @model_validator(mode="after")
     def _classification_needs_a_retrieval_source(self) -> ScenarioDefinition:
