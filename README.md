@@ -75,6 +75,15 @@ that makes step 3 of Getting Started concrete.
 
 <p align="center"><img src="docs/screenshots/settings.png" alt="Settings — LLM provider status" width="850"></p>
 
+### Platform dashboard & monitors (admin)
+
+Logged in as `admin`, a **Platform** button next to Settings opens a live health dashboard of
+every microservice, store and monitor — up / degraded / down, probe latency, and (on k3s) each
+pod's readiness and restart count, re-checked every 15 s — with one-click links to the admin
+consoles: **Langfuse** (the GenAI monitor: every LLM call, per tenant/scenario/conversation),
+**MLflow** (the MLOps monitor: every training run's candidates, scores and selected model),
+Keycloak and the object store. See [Observability](#observability-admin-only) below.
+
 ### Themes
 
 The whole app is skinned from one `Theme` object (colors + a logo, see `ui-react/src/themes/`) —
@@ -327,6 +336,15 @@ dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`ai-ci
 default) as the password — it comes pre-granted access to every scenario. For real
 multi-user/multi-tenant login, see "First-time Keycloak setup" further down.
 
+Logged in as `admin`, the topbar's **Platform** button is the health dashboard of every service
+and store, with links to the monitors it also watches — **Langfuse** at
+[http://langfuse.localhost](http://langfuse.localhost) (sign in with `.env`'s
+`LANGFUSE_INIT_USER_EMAIL`/`LANGFUSE_INIT_USER_PASSWORD`) and **MLflow** at
+[http://mlflow.localhost](http://mlflow.localhost) (the console Basic-Auth user from
+`make bootstrap`, like `admin.keycloak.localhost`). If you bootstrapped `.env` before these
+existed, copy the `LANGFUSE_*`/`CLICKHOUSE_PASSWORD` block from `.env.example` into it first —
+see [Observability](#observability-admin-only).
+
 The dropdown's other option, **demo engineering**, is the same bypass mechanism scoped to a
 narrower demo tenant — entitled to only the three engineering scenarios (Predictive Maintenance,
 Electric Motor Speed, Building Energy Consumption), not every scenario. Its key/password is
@@ -571,6 +589,30 @@ table — repeat it and watch the snapshot count climb. Then run any query under
 
 The roadmap panel above is the live source of truth for exactly what's built versus planned.
 
+### Observability (admin-only)
+
+Three admin-only monitors, always on (`k8s/base` and `docker-compose.yml` alike) and sized for a
+single laptop — every new container carries `resources.limits`, and the stack reuses the Postgres,
+Valkey and SeaweedFS the platform already runs instead of bringing its own:
+
+| Monitor | What it shows | Where | Backed by |
+| --- | --- | --- | --- |
+| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, not deployed; probe latency; on k3s also pod readiness + restarts | `ui-react` → **Platform** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus a read-only pod listing via RBAC |
+| **GenAI monitor — Langfuse v4** | A trace per LLM call (prompt, completion, tokens, cost, latency), grouped into sessions per conversation, filterable by tenant (`org:<id>`), scenario (`scenario:<slug>`) and service | `http://langfuse.localhost` (Langfuse's own sign-in; user/password from `.env`'s `LANGFUSE_INIT_USER_*`) | `llm-gateway`'s LiteLLM `langfuse_otel` callback — switched on at start-up when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (`app.py`); the agent services attach tenant/scenario/thread as request `metadata` (`ai_circus_shared.observability.langfuse_request_metadata`). Stores: the shared Postgres (`langfuse` db), Valkey (`langfuse:` keys), SeaweedFS (`langfuse` bucket) and one new **ClickHouse** container (`k8s/base/langfuse.yaml`) |
+| **MLOps monitor — MLflow** | One experiment per scenario, one run per tenant × training: every candidate's held-out score, the selected model, dataset size, `metadata.json`, and the SeaweedFS keys + checksums of the served artifacts | `http://mlflow.localhost` (behind the same `admin-basicauth` gate as the Keycloak/SeaweedFS consoles — MLflow has no auth of its own) | `training` mirrors each run when `MLFLOW_TRACKING_URI` is set (`core/mlflow_tracking.py`, never fails the job); the server is `infra/mlflow/Dockerfile` (official MLflow + Postgres driver + boto3), run metadata in the shared Postgres (`mlflow` db), artifacts in SeaweedFS (`mlflow` bucket) |
+
+Because *every* LLM call in the system — `assistant`, `rag-agent`, `form-agent`, and voice
+through `agui-voice` — goes through `llm-gateway`, one callback there covers every scenario kind;
+no service links a Langfuse SDK. Langfuse v2's Postgres-only mode is end-of-life (Q1 2025), so
+v4's ClickHouse is the one genuinely new store; it runs with a low-memory `config.d`
+(`infra/clickhouse/`, mirrored in the k8s ConfigMap) and a 1 GiB cap. Existing Postgres volumes
+get the two new databases created on first start by an idempotent init container, so a cluster
+created before this needs no `make reset-all`.
+
+**Keycloak SSO for Langfuse** and **prediction-time drift monitoring** (Langfuse and MLflow both
+see training/inference *events*, not live feature distributions) are the natural next steps —
+see [Reserved for later](#reserved-for-later-documented-not-built).
+
 ---
 
 ## LLM providers
@@ -635,8 +677,12 @@ and validates `docker-compose.yml`, on every push/PR to `main`/`develop`.
 A Helm chart (plain YAML + Kustomize exists instead — see
 [Getting started > Kubernetes](#getting-started) and [`k8s/README.md`](k8s/README.md) — for local
 dev-parity; Helm would only matter for a real multi-environment/production rollout), a
-task queue for on-demand tenant-triggered jobs, distributed
-tracing/OpenTelemetry, evaluation tooling (Opik/Giskard),
+task queue for on-demand tenant-triggered jobs, cross-service distributed
+tracing/OpenTelemetry beyond the LLM calls Langfuse already traces (see
+[Observability](#observability-admin-only)), Keycloak SSO into Langfuse (today it has its own
+seeded admin sign-in), prediction-time data/model drift monitoring (Evidently-style — `prediction`
+doesn't log inference rows yet, so there is nothing to compare against training), evaluation
+tooling (Opik/Giskard),
 voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate* limits are
 built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
 litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,

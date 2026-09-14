@@ -1,0 +1,432 @@
+# Langfuse v4 — the platform's GenAI monitor (traces/cost/latency of every LLM call).
+# Mirrors docker-compose.yml's langfuse-web/langfuse-worker/clickhouse services.
+#
+# Nothing in this repo talks to Langfuse's SDK directly: llm-gateway's LiteLLM proxy
+# is the single choke point every assistant/rag-agent/form-agent (and, through them,
+# agui-voice) completion goes through, and its `langfuse_otel` callback (see
+# services/llm-gateway/litellm_config.yaml + app.py) exports each call as an OTel
+# span to langfuse-web's /api/public/otel endpoint, tagged with the calling tenant
+# (`user` = org_id) and scenario. One integration point, every scenario kind covered.
+#
+# Footprint on a laptop-class single-node cluster is the design constraint here.
+# Langfuse v4 needs web + worker + Postgres + ClickHouse + Redis + S3; v2's Postgres-
+# only mode reached end-of-life in Q1 2025, so the "lightweight" option is instead
+# to reuse what the cluster already runs — the existing Postgres StatefulSet (its own
+# `langfuse` database), Valkey (keys namespaced under `langfuse:`) and SeaweedFS (S3
+# bucket `langfuse`, auto-created on first PutObject) — leaving ClickHouse as the only
+# genuinely new store, and to cap every container with `resources.limits` (the only
+# other manifest doing so is keycloak.yaml, for the same OOM-on-a-laptop reason).
+# ClickHouse honours its cgroup memory limit (max_server_memory_usage_to_ram_ratio
+# below is applied to the limit, not the host's RAM) and the extra config.d file
+# shrinks its caches/thread pools well below the analytics-server defaults.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config
+  namespace: ai-circus
+data:
+  # Dropped into /etc/clickhouse-server/config.d/ — merged over the image's defaults.
+  low-memory.xml: |
+    <clickhouse>
+        <!-- Langfuse requires UTC (it compares ClickHouse and Postgres timestamps). -->
+        <timezone>UTC</timezone>
+        <logger><level>warning</level><console>1</console></logger>
+        <!-- Relative to the cgroup limit (resources.limits.memory), not host RAM. -->
+        <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+        <mark_cache_size>134217728</mark_cache_size>
+        <index_mark_cache_size>33554432</index_mark_cache_size>
+        <uncompressed_cache_size>0</uncompressed_cache_size>
+        <max_concurrent_queries>32</max_concurrent_queries>
+        <!-- Merge/mutation pool sizes are left at their defaults on purpose: ClickHouse refuses
+             to start when background_pool_size * background_merges_mutations_concurrency_ratio
+             drops below number_of_free_entries_in_pool_to_execute_mutation (20). -->
+        <max_thread_pool_size>256</max_thread_pool_size>
+        <background_schedule_pool_size>16</background_schedule_pool_size>
+        <background_fetches_pool_size>2</background_fetches_pool_size>
+        <background_common_pool_size>4</background_common_pool_size>
+    </clickhouse>
+  # Per-query ceiling for the default profile (Langfuse's user is `default`-profiled).
+  low-memory-users.xml: |
+    <clickhouse>
+        <profiles>
+            <default>
+                <max_memory_usage>536870912</max_memory_usage>
+                <max_threads>2</max_threads>
+                <max_bytes_before_external_group_by>268435456</max_bytes_before_external_group_by>
+                <max_bytes_before_external_sort>268435456</max_bytes_before_external_sort>
+            </default>
+        </profiles>
+    </clickhouse>
+---
+# Langfuse-only trace store (ClickHouse has real password auth, but see the
+# NetworkPolicy below — nothing else in the namespace has any business here).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  namespace: ai-circus
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels: {app: clickhouse}
+  template:
+    metadata:
+      labels: {app: clickhouse}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # The image's `clickhouse` user — same as docker-compose.yml's `user: "101:101"`.
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: clickhouse
+          # Langfuse v4 needs >= 25.12; 26.4 is the version its docs recommend.
+          image: clickhouse/clickhouse-server:26.4-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+          env:
+            - {name: CLICKHOUSE_DB, value: default}
+            - {name: CLICKHOUSE_USER, value: clickhouse}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: clickhouse-secrets, key: CLICKHOUSE_PASSWORD}}
+          ports:
+            - {containerPort: 8123, name: http}
+            - {containerPort: 9000, name: native}
+          volumeMounts:
+            - {name: clickhouse-data, mountPath: /var/lib/clickhouse}
+            - {name: clickhouse-logs, mountPath: /var/log/clickhouse-server}
+            - {name: clickhouse-config, mountPath: /etc/clickhouse-server/config.d/low-memory.xml, subPath: low-memory.xml, readOnly: true}
+            - {name: clickhouse-config, mountPath: /etc/clickhouse-server/users.d/low-memory-users.xml, subPath: low-memory-users.xml, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /ping, port: 8123}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet: {path: /ping, port: 8123}
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: {memory: "256Mi", cpu: "100m"}
+            limits: {memory: "1Gi"}
+      volumes:
+        - name: clickhouse-config
+          configMap: {name: clickhouse-config}
+        - name: clickhouse-logs
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata: {name: clickhouse-data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 5Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: ai-circus
+spec:
+  selector: {app: clickhouse}
+  ports:
+    - {name: http, port: 8123, targetPort: 8123}
+    - {name: native, port: 9000, targetPort: 9000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse
+  namespace: ai-circus
+spec:
+  podSelector:
+    matchLabels: {app: clickhouse}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: langfuse-web}}
+        - podSelector: {matchLabels: {app: langfuse-worker}}
+        # Read-only /ping probe for the admin platform-status dashboard
+        # (data_platform_manager.core.platform_status) — nothing else.
+        - podSelector: {matchLabels: {app: data-platform-manager}}
+      ports:
+        - {protocol: TCP, port: 8123}
+        - {protocol: TCP, port: 9000}
+---
+# Non-secret config shared by langfuse-web and langfuse-worker (Langfuse requires the
+# two to see identical settings). Secrets, and the handful of variables Langfuse
+# spells differently from .env (SALT, DATABASE_URL, the S3 credentials), are explicit
+# `env:` entries on each Deployment below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langfuse-config
+  namespace: ai-circus
+data:
+  # Public URL — what the browser opens and what Langfuse builds its own links with.
+  NEXTAUTH_URL: "http://langfuse.localhost"
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  # Only the seeded admin below can sign in — no self-service sign-up on a demo box.
+  AUTH_DISABLE_SIGNUP: "true"
+  CLICKHOUSE_URL: "http://clickhouse:8123"
+  CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+  CLICKHOUSE_USER: "clickhouse"
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: "valkey"
+  REDIS_PORT: "6379"
+  REDIS_KEY_PREFIX: "langfuse:"
+  # SeaweedFS is S3-compatible, path-style, and auto-creates buckets on first write.
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: "langfuse"
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: "us-east-1"
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://seaweedfs:8333"
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: "events/"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: "langfuse"
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: "us-east-1"
+  # Browser-facing (presigned media URLs) vs. in-cluster — same split as the
+  # objectstore.localhost IngressRoute in seaweedfs.yaml.
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: "http://objectstore.localhost"
+  LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: "http://seaweedfs:8333"
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: "media/"
+  LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+  # First-boot seed: the org/project llm-gateway's API keys (LANGFUSE_PUBLIC_KEY/
+  # LANGFUSE_SECRET_KEY in .env) belong to, plus the single admin sign-in.
+  LANGFUSE_INIT_ORG_ID: "ai-circus"
+  LANGFUSE_INIT_ORG_NAME: "ai-circus"
+  LANGFUSE_INIT_PROJECT_ID: "ai-circus-platform"
+  LANGFUSE_INIT_PROJECT_NAME: "ai-circus platform"
+  LANGFUSE_INIT_USER_NAME: "admin"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-web
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}  # runs the Postgres/ClickHouse migrations on start — never two at once
+  selector:
+    matchLabels: {app: langfuse-web}
+  template:
+    metadata:
+      labels: {app: langfuse-web}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # infra/postgres/init-multiple-databases.sh only runs on a *fresh* Postgres
+        # volume — a cluster created before Langfuse existed has no `langfuse` database.
+        # Idempotent create-if-missing, so `make k3s-up` on such a cluster just works.
+        - name: ensure-database
+          image: postgres:16-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+          env:
+            - name: PGUSER
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_USER}}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_PASSWORD}}
+          command: ["sh", "-c"]
+          args:
+            - |
+              until pg_isready -h postgres -q; do echo "waiting for postgres"; sleep 2; done
+              if [ "$(psql -h postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='langfuse'")" != "1" ]; then
+                psql -h postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE langfuse' -c "GRANT ALL PRIVILEGES ON DATABASE langfuse TO \"$PGUSER\""
+              fi
+        # SeaweedFS (3.97) accepts a PutObject into a bucket that was never created and
+        # even lists it afterwards, but its bucket registry never learns about it, so
+        # every later GetObject 404s with NoSuchBucket — found the hard way: Langfuse's
+        # worker could not read back the OTel events its web pod had just uploaded.
+        # Only an explicit CreateBucket registers it (which is what every services/*
+        # image does via ai_circus_shared.storage.ObjectStore.connect); neither Langfuse
+        # nor MLflow does, hence this idempotent PUT-bucket (200 created / 409 exists)
+        # with curl's built-in SigV4 — no S3 CLI image needed.
+        - name: ensure-bucket
+          image: curlimages/curl:8.12.1
+          securityContext:
+            allowPrivilegeEscalation: false
+          env:
+            - name: OBJECT_STORE_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_ACCESS_KEY}}
+            - name: OBJECT_STORE_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_SECRET_KEY}}
+          command: ["sh", "-c"]
+          args:
+            - |
+              until curl -sf -o /dev/null http://seaweedfs:8888/; do echo "waiting for seaweedfs"; sleep 2; done
+              code=$(curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 "aws:amz:us-east-1:s3" \
+                --user "$OBJECT_STORE_ACCESS_KEY:$OBJECT_STORE_SECRET_KEY" -X PUT "http://seaweedfs:8333/langfuse")
+              case "$code" in 200|409) echo "bucket langfuse ready ($code)";; *) echo "bucket langfuse: HTTP $code"; exit 1;; esac
+      containers:
+        - name: langfuse-web
+          image: docker.langfuse.com/langfuse/langfuse:4
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - {containerPort: 3000}
+          envFrom:
+            - configMapRef: {name: langfuse-config}
+          env:
+            # Node sizes its heap from the cgroup limit and lands near 256 MB, which the
+            # first-boot seeding (default model prices, dashboards) blows through with a
+            # "JavaScript heap out of memory" — pin the heap below the limit explicitly.
+            - {name: NODE_OPTIONS, value: "--max-old-space-size=768"}
+            - name: POSTGRES_USER
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DATABASE_URL, value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/langfuse"}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: CLICKHOUSE_PASSWORD}}
+            - name: SALT
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_SALT}}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_ENCRYPTION_KEY}}
+            - name: NEXTAUTH_SECRET
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_NEXTAUTH_SECRET}}
+            - name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_ACCESS_KEY}}
+            - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_SECRET_KEY}}
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_ACCESS_KEY}}
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_SECRET_KEY}}
+            - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_PUBLIC_KEY}}
+            - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_SECRET_KEY}}
+            - name: LANGFUSE_INIT_USER_EMAIL
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_INIT_USER_EMAIL}}
+            - name: LANGFUSE_INIT_USER_PASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_INIT_USER_PASSWORD}}
+          # First boot runs every Prisma + ClickHouse migration before answering — on a
+          # laptop that is a couple of minutes, hence the generous failureThreshold.
+          readinessProbe:
+            httpGet: {path: /api/public/ready, port: 3000}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /api/public/health, port: 3000}
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: {memory: "256Mi", cpu: "100m"}
+            limits: {memory: "1Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-web
+  namespace: ai-circus
+spec:
+  selector: {app: langfuse-web}
+  ports:
+    - {port: 3000, targetPort: 3000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: langfuse-worker
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: langfuse-worker}
+  template:
+    metadata:
+      labels: {app: langfuse-worker}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: langfuse-worker
+          image: docker.langfuse.com/langfuse/langfuse-worker:4
+          securityContext:
+            allowPrivilegeEscalation: false
+          ports:
+            - {containerPort: 3030}
+          envFrom:
+            - configMapRef: {name: langfuse-config}
+          env:
+            - {name: NODE_OPTIONS, value: "--max-old-space-size=512"}  # see langfuse-web
+            - name: POSTGRES_USER
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: POSTGRES_PASSWORD}}
+            - {name: DATABASE_URL, value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/langfuse"}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: CLICKHOUSE_PASSWORD}}
+            - name: SALT
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_SALT}}
+            - name: ENCRYPTION_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: LANGFUSE_ENCRYPTION_KEY}}
+            - name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_ACCESS_KEY}}
+            - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_SECRET_KEY}}
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_ACCESS_KEY}}
+            - name: LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: langfuse-secrets, key: OBJECT_STORE_SECRET_KEY}}
+          # The worker refuses to start until langfuse-web has applied the schema — on a
+          # fresh cluster that means a few restarts while web migrates; expected.
+          readinessProbe:
+            httpGet: {path: /api/health, port: 3030}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /api/health, port: 3030}
+            initialDelaySeconds: 180
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests: {memory: "128Mi", cpu: "50m"}
+            limits: {memory: "768Mi"}
+---
+# Nothing calls the worker — this Service exists only so the admin platform-status
+# dashboard (data_platform_manager.core.platform_status) can reach its /api/health by
+# the same DNS name docker-compose.yml resolves.
+apiVersion: v1
+kind: Service
+metadata:
+  name: langfuse-worker
+  namespace: ai-circus
+spec:
+  selector: {app: langfuse-worker}
+  ports:
+    - {port: 3030, targetPort: 3030}
+---
+# Deliberately NOT behind the admin-basicauth Middleware the Keycloak/SeaweedFS consoles
+# use: Langfuse ships its own sign-in (the LANGFUSE_INIT_USER_* admin, sign-up
+# disabled), and its public API authenticates with HTTP Basic (pk-lf/sk-lf pairs) on
+# the very same Authorization header — a Traefik Basic Auth gate in front would make
+# every SDK/API call from outside the cluster fail. In-cluster ingestion (llm-gateway
+# -> langfuse-web:3000) never touches this route at all.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: langfuse
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`langfuse.localhost`)
+      kind: Rule
+      services:
+        - {name: langfuse-web, port: 3000}

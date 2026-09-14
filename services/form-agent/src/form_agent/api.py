@@ -16,6 +16,7 @@ from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
+from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.storage import ObjectStore
 from copilotkit import LangGraphAGUIAgent
@@ -321,7 +322,23 @@ async def agui_endpoint(
     # model_kwargs, langchain_openai's documented mechanism for exactly this), so
     # it reaches llm-gateway's request body untouched — see llm_gateway.budget_hook's
     # module docstring for the per-tenant budget enforcement this makes possible.
-    llm_for_request = llm.model_copy(update={"model_kwargs": {**llm.model_kwargs, "user": identity.org_id}})
+    # `extra_body.metadata` rides along the same way and is what llm-gateway's Langfuse
+    # callback turns into the trace's tenant/session/scenario tags — see
+    # ai_circus_shared.observability.langfuse_request_metadata.
+    llm_for_request = llm.model_copy(
+        update={
+            "model_kwargs": {**llm.model_kwargs, "user": identity.org_id},
+            "extra_body": {
+                **(llm.extra_body or {}),
+                "metadata": langfuse_request_metadata(
+                    service="form-agent",
+                    org_id=identity.org_id,
+                    scenario_slug=scenario_slug,
+                    thread_id=input_data.thread_id,
+                ),
+            },
+        }
+    )
     graph = build_agui_agent(llm_for_request, system_prompt, tools)
     model_usage = ModelUsageCallback()
     agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config={"callbacks": [model_usage]})

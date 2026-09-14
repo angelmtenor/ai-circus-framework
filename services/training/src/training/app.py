@@ -38,6 +38,7 @@ from sklearn.model_selection import train_test_split
 
 from training import get_env_config
 from training.core.logger import configure_logger, get_logger
+from training.core.mlflow_tracking import log_training_run
 from training.core.training import (
     build_explainer,
     fit_quantile_pipelines,
@@ -134,6 +135,19 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
     }
     store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
+
+    # Observability mirror only (MLOps monitor) — runs after every artifact is safely
+    # in SeaweedFS and can never fail the job; see training.core.mlflow_tracking.
+    log_training_run(
+        config.MLFLOW_TRACKING_URI,
+        org_id=config.ORG_ID,
+        scenario_slug=slug,
+        candidates=candidates,
+        selected=best,
+        metadata=metadata,
+        dataset_rows=len(df),
+        accuracy_gain_threshold=definition.model.accuracy_gain_threshold_for_complexity,
+    )
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
 

@@ -575,6 +575,43 @@ export async function getRoadmap(baseUrl: string, accessToken: string | null): P
   return asJson<Capability[]>(response);
 }
 
+// ── Admin platform dashboard (data-platform-manager GET /platform/status) ────────
+// Mirrors data_platform_manager.core.platform_status's dataclasses exactly.
+
+export type ComponentGroup = "services" | "infra" | "observability";
+export type ComponentHealth = "up" | "degraded" | "down" | "not_deployed";
+
+export type PodInfo = {
+  ready: boolean;
+  restarts: number;
+  phase: string;
+  age_seconds: number | null;
+};
+
+export type ComponentStatus = {
+  name: string;
+  group: ComponentGroup;
+  status: ComponentHealth;
+  latency_ms: number | null;
+  detail: string;
+  description: string;
+  /** Browser-facing admin console for this component (Langfuse, MLflow, ...), if any. */
+  console_url: string | null;
+  /** Only populated when data-platform-manager itself runs inside k8s. */
+  pod: PodInfo | null;
+};
+
+export type PlatformStatus = {
+  checked_at: string;
+  in_cluster: boolean;
+  components: ComponentStatus[];
+};
+
+export async function getPlatformStatus(baseUrl: string, accessToken: string | null): Promise<PlatformStatus> {
+  const response = await fetch(`${baseUrl}/platform/status`, { headers: headers(accessToken) });
+  return asJson<PlatformStatus>(response);
+}
+
 export type RateLimit = {
   model_name: string | null;
   rpm: number | null;

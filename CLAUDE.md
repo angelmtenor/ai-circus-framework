@@ -135,6 +135,21 @@ today only `infra/postgres/` (a multi-database init script) and `infra/seaweedfs
 gateway credentials file, see `scripts/generate_seaweedfs_s3_config.sh`) have real content; the rest is
 inline in `docker-compose.yml`.
 
+### Observability (admin-only)
+
+Three monitors, always deployed, all reachable from `ui-react`'s admin-only **Platform** view:
+the health dashboard itself (`data-platform-manager` `GET /platform/status`, `core/platform_status.py`
+— a static, hand-synced list of every component's in-cluster health URL; add a row there whenever
+a service/container is added to `k8s/base`/`docker-compose.yml`, `tests/test_platform_status.py`
+pins the names), **Langfuse v4** for GenAI (`k8s/base/langfuse.yaml`; fed solely by `llm-gateway`'s
+LiteLLM `langfuse_otel` callback, which `app.py` enables only when `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`
+are set — never add a Langfuse SDK to an agent service, attach request `metadata` via
+`ai_circus_shared.observability.langfuse_request_metadata` instead), and **MLflow** for ML
+(`infra/mlflow/Dockerfile` + `k8s/base/mlflow.yaml`; `training` mirrors runs via
+`core/mlflow_tracking.py`, which must never fail the job). They reuse the shared Postgres/Valkey/
+SeaweedFS; ClickHouse is the only new store, and every new container has `resources.limits` —
+keep it that way, this runs on one laptop.
+
 ### ui-react specifics
 
 The SPA reaches every backend only through Traefik's `*.localhost` hostnames (browser-side, never

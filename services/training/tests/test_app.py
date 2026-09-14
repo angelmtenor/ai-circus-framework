@@ -60,6 +60,7 @@ class FakeEnvConfig:
         self.OBJECT_STORE_ENDPOINT = "http://seaweedfs:8333"
         self.OBJECT_STORE_ACCESS_KEY = "ai_circus"
         self.OBJECT_STORE_SECRET_KEY = FakeSecret("s3cret")
+        self.MLFLOW_TRACKING_URI = None
 
 
 class FakeObjectStore:

@@ -8,13 +8,15 @@ import { RagView } from "./RagView";
 import { AssistedFormView } from "./AssistedFormView";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { Settings } from "./Settings";
+import { PlatformStatusView } from "./PlatformStatus";
 import { Icon } from "./Icon";
 import "./App.css";
 
 // Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider section manages
 // shared LLM-gateway infrastructure, not a per-tenant entitlement, so it's gated to
 // the admin tenant; the Appearance (theme) section is a per-browser preference open
-// to every org.
+// to every org. The Platform dashboard (service health + Langfuse/MLflow consoles) is
+// admin-only for the same reason, and its backend feed is admin-bearer-gated regardless.
 const ADMIN_ORG_ID = "admin";
 
 // EU AI Act Art. 50(1): systems that interact directly with natural persons must
@@ -147,6 +149,7 @@ export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([]);
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPlatform, setShowPlatform] = useState(false);
   // Owned here (not inside ScenarioPicker) so it survives ScenarioPicker unmounting
   // while a scenario is open — otherwise picking a scenario and coming back resets it.
   const [scenarioIndustry, setScenarioIndustry] = useState<string>("all");
@@ -157,6 +160,7 @@ export default function App() {
     setSelected(null);
     setScenarios([]);
     setShowSettings(false);
+    setShowPlatform(false);
     if (!identity) return;
     setScenariosLoading(true);
     setScenariosError(null);
@@ -179,6 +183,8 @@ export default function App() {
       />
     );
 
+  const isAdmin = identity.orgId === ADMIN_ORG_ID;
+
   return (
     <div className="app-shell">
       <div className="app-header-group">
@@ -189,11 +195,12 @@ export default function App() {
             onClick={() => {
               setSelected(null);
               setShowSettings(false);
+              setShowPlatform(false);
             }}
           >
             <img src={theme.logo} alt="AI Open Framework" className="topbar-brand-icon" />
           </button>
-          {selected && !showSettings && (
+          {selected && !showSettings && !showPlatform && (
             <div className="topbar-scenario">
               <button className="topbar-back" onClick={() => setSelected(null)}>
                 <Icon name="back" size={14} /> Scenarios
@@ -203,18 +210,37 @@ export default function App() {
               </span>
             </div>
           )}
-          {showSettings && (
+          {(showSettings || showPlatform) && (
             <div className="topbar-scenario">
-              <button className="topbar-back" onClick={() => setShowSettings(false)}>
+              <button
+                className="topbar-back"
+                onClick={() => {
+                  setShowSettings(false);
+                  setShowPlatform(false);
+                }}
+              >
                 <Icon name="back" size={14} /> Scenarios
               </button>
             </div>
           )}
           <div className="topbar-spacer" />
+          {isAdmin && (
+            <button
+              className={`topbar-settings ${showPlatform ? "active" : ""}`}
+              onClick={() => {
+                setShowPlatform((p) => !p);
+                setShowSettings(false);
+                setSelected(null);
+              }}
+            >
+              <Icon name="pulse" size={14} /> Platform
+            </button>
+          )}
           <button
             className={`topbar-settings ${showSettings ? "active" : ""}`}
             onClick={() => {
               setShowSettings((s) => !s);
+              setShowPlatform(false);
               setSelected(null);
             }}
           >
@@ -227,10 +253,12 @@ export default function App() {
         </header>
       </div>
       <main className="app-main">
-        {showSettings ? (
+        {showPlatform && isAdmin ? (
+          <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} />
+        ) : showSettings ? (
           <Settings
             accessToken={identity.accessToken}
-            isAdmin={identity.orgId === ADMIN_ORG_ID}
+            isAdmin={isAdmin}
             theme={theme}
             themes={themes}
             onThemeChange={setThemeId}

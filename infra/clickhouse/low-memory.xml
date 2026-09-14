@@ -1,0 +1,21 @@
+<!-- Laptop-class ClickHouse settings for Langfuse — mounted by docker-compose.yml's
+     clickhouse service. Mirrors k8s/base/langfuse.yaml's clickhouse-config ConfigMap
+     exactly; keep the two in sync by hand. -->
+<clickhouse>
+    <!-- Langfuse requires UTC (it compares ClickHouse and Postgres timestamps). -->
+    <timezone>UTC</timezone>
+    <logger><level>warning</level><console>1</console></logger>
+    <!-- Relative to the cgroup limit (resources.limits.memory), not host RAM. -->
+    <max_server_memory_usage_to_ram_ratio>0.8</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>134217728</mark_cache_size>
+    <index_mark_cache_size>33554432</index_mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <max_concurrent_queries>32</max_concurrent_queries>
+    <!-- Merge/mutation pool sizes are left at their defaults on purpose: ClickHouse refuses
+             to start when background_pool_size * background_merges_mutations_concurrency_ratio
+             drops below number_of_free_entries_in_pool_to_execute_mutation (20). -->
+        <max_thread_pool_size>256</max_thread_pool_size>
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+    <background_fetches_pool_size>2</background_fetches_pool_size>
+    <background_common_pool_size>4</background_common_pool_size>
+</clickhouse>

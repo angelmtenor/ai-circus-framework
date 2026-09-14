@@ -26,6 +26,8 @@ volumes:
   voice-model-cache:
   # Optional Data Platform profile (off by default) — Kafka's own log segments.
   kafka-data:
+  # Langfuse's trace store (see the clickhouse service below).
+  clickhouse-data:
 
 services:
   # ── Ingress ─────────────────────────────────────────────────────────────────
@@ -317,6 +319,190 @@ services:
       # real OBJECT_STORE_ACCESS_KEY/SECRET_KEY in s3.json.
       - "traefik.http.routers.seaweedfs-console.middlewares=admin-basicauth@docker"
 
+  # ── Observability (admin-only) — mirrors k8s/base/langfuse.yaml + mlflow.yaml ──
+  # Langfuse v4 = web + worker + ClickHouse, reusing the postgres/valkey/seaweedfs
+  # services above (its own `langfuse` database / `langfuse:` key prefix / `langfuse`
+  # bucket). See k8s/base/langfuse.yaml for the why behind every setting; the two
+  # files must stay in sync by hand. mem_limits are the laptop-class ceilings.
+  # One-shot: registers the `langfuse` and `mlflow` buckets. SeaweedFS accepts writes
+  # into a bucket nobody created but never serves reads from it (NoSuchBucket) — see
+  # k8s/base/langfuse.yaml's ensure-bucket init container for the full story. Every
+  # services/* image creates its own buckets (ai_circus_shared.storage); these two
+  # third-party images don't, so langfuse-web/langfuse-worker/mlflow depend on this.
+  seaweedfs-buckets:
+    image: curlimages/curl:8.12.1
+    environment:
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        for b in langfuse mlflow; do
+          code=$$(curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 "aws:amz:us-east-1:s3" \
+            --user "$$OBJECT_STORE_ACCESS_KEY:$$OBJECT_STORE_SECRET_KEY" -X PUT "http://seaweedfs:8333/$$b")
+          case "$$code" in 200|409) echo "bucket $$b ready ($$code)";; *) echo "bucket $$b: HTTP $$code"; exit 1;; esac
+        done
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    networks: [ai-circus]
+    restart: "no"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.4-alpine
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./infra/clickhouse/low-memory.xml:/etc/clickhouse-server/config.d/low-memory.xml:ro
+      - ./infra/clickhouse/low-memory-users.xml:/etc/clickhouse-server/users.d/low-memory-users.xml:ro
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4
+    environment: &langfuse-env
+      # Node sizes its heap from the cgroup limit and lands near 256 MB, which the
+      # first-boot seeding blows through ("JavaScript heap out of memory") — pin it.
+      NODE_OPTIONS: --max-old-space-size=512
+      NEXTAUTH_URL: http://langfuse.localhost
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      AUTH_DISABLE_SIGNUP: "true"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: valkey
+      REDIS_PORT: "6379"
+      REDIS_KEY_PREFIX: "langfuse:"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://seaweedfs:8333
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://objectstore.localhost
+      LANGFUSE_S3_MEDIA_UPLOAD_INTERNAL_ENDPOINT: http://seaweedfs:8333
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      seaweedfs-buckets:
+        condition: service_completed_successfully
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 768m
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4
+    environment:
+      <<: *langfuse-env
+      NODE_OPTIONS: --max-old-space-size=768
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      # First-boot seed: the org/project llm-gateway's keys belong to + the admin login.
+      LANGFUSE_INIT_ORG_ID: ai-circus
+      LANGFUSE_INIT_ORG_NAME: ai-circus
+      LANGFUSE_INIT_PROJECT_ID: ai-circus-platform
+      LANGFUSE_INIT_PROJECT_NAME: ai-circus platform
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL}
+      LANGFUSE_INIT_USER_NAME: admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      seaweedfs-buckets:
+        condition: service_completed_successfully
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/public/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.langfuse.rule=Host(`langfuse.localhost`)"
+      - "traefik.http.routers.langfuse.entrypoints=web"
+      - "traefik.http.services.langfuse.loadbalancer.server.port=3000"
+      # No admin-basicauth here, on purpose: Langfuse has its own sign-in, and its
+      # public API uses HTTP Basic (pk-lf/sk-lf) on the same Authorization header a
+      # Traefik gate would consume — see k8s/base/langfuse.yaml's IngressRoute note.
+
+  # MLflow tracking server (infra/mlflow/Dockerfile) — MLOps monitor for `training`
+  # runs. No auth of its own, hence admin-basicauth like the other infra consoles.
+  mlflow:
+    build:
+      context: .
+      dockerfile: infra/mlflow/Dockerfile
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      MLFLOW_ARTIFACTS_DESTINATION: s3://mlflow
+      # MLflow >= 3 rejects Host headers outside localhost/private IPs — allow Traefik's.
+      MLFLOW_SERVER_ALLOWED_HOSTS: mlflow.localhost,mlflow,mlflow:5000,localhost,127.0.0.1,10.*,172.*,192.168.*
+      # ...and its CORS guard, which the UI's own POSTs trip over (403 -> "internal error").
+      MLFLOW_SERVER_CORS_ALLOWED_ORIGINS: http://mlflow.localhost
+      MLFLOW_S3_ENDPOINT_URL: http://seaweedfs:8333
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+      seaweedfs-buckets:
+        condition: service_completed_successfully
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mlflow.rule=Host(`mlflow.localhost`)"
+      - "traefik.http.routers.mlflow.entrypoints=web"
+      - "traefik.http.services.mlflow.loadbalancer.server.port=5000"
+      - "traefik.http.routers.mlflow.middlewares=admin-basicauth@docker"
+
   # ── Backend services (each generated via `scripts/new_service.sh`) ────────────
   platform-registry:
     build:
@@ -463,6 +649,12 @@ services:
       # so this is only reachable once you run `make ollama-up`. Override in .env to
       # point at an Ollama instance you run yourself instead.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
+      # GenAI observability: LiteLLM's `langfuse_otel` callback (litellm_config.yaml,
+      # switched on by app.py only when both keys are set) exports every completion
+      # to the langfuse-web service below, tagged with the calling tenant + scenario.
+      LANGFUSE_HOST: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
     ports:
       # Loopback-only (like platform-registry/qdrant above) — no caller in ui-react
       # ever hits llm-gateway directly (only assistant/rag-agent/platform-registry do,
@@ -582,6 +774,8 @@ services:
       APP_ENVIRONMENT: docker
       OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
       OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+      # MLOps monitor: each run is mirrored to the mlflow service below (unset = off).
+      MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:

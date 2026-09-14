@@ -267,12 +267,15 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
     _llm), so concurrent calls from other orgs never see this one's user.
     """
     captured_model_kwargs: dict[str, object] = {}
+    captured_extra_body: dict[str, object] = {}
 
     class FakeLlm:
         model_kwargs: ClassVar[dict[str, object]] = {}
+        extra_body: ClassVar[dict[str, object] | None] = None
 
         def model_copy(self, *, update: dict[str, object]) -> FakeLlm:
             captured_model_kwargs.update(update["model_kwargs"])
+            captured_extra_body.update(update["extra_body"])
             return self
 
     monkeypatch.setattr(api_module, "build_retrieve_tool", lambda *_a, **_kw: (SimpleNamespace(), None))
@@ -303,6 +306,12 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
     )
 
     assert captured_model_kwargs == {"user": "org-1"}
+    # The same per-request copy carries the Langfuse trace tags llm-gateway forwards —
+    # tenant, scenario and the conversation thread as the Langfuse session.
+    metadata = captured_extra_body["metadata"]
+    assert metadata["trace_user_id"] == "org-1"
+    assert metadata["session_id"] == "t"
+    assert any(tag.startswith("scenario:") for tag in metadata["tags"])
 
 
 async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -337,7 +346,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
@@ -390,7 +399,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
     )
@@ -532,7 +541,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ),
         qdrant=SimpleNamespace(),
         embedder=SimpleNamespace(),
-        llm=SimpleNamespace(model_kwargs={}, model_copy=lambda **_kw: SimpleNamespace()),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=store,
     )

@@ -1,0 +1,13 @@
+<!-- Laptop-class ClickHouse settings for Langfuse — mounted by docker-compose.yml's
+     clickhouse service. Mirrors k8s/base/langfuse.yaml's clickhouse-config ConfigMap
+     exactly; keep the two in sync by hand. -->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_memory_usage>536870912</max_memory_usage>
+            <max_threads>2</max_threads>
+            <max_bytes_before_external_group_by>268435456</max_bytes_before_external_group_by>
+            <max_bytes_before_external_sort>268435456</max_bytes_before_external_sort>
+        </default>
+    </profiles>
+</clickhouse>

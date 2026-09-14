@@ -161,6 +161,11 @@ wait-services: ## Wait for platform-registry and every Traefik-routed backend to
 		i=$$((i+1)); [ $$i -ge 60 ] && { echo "❌ aiopen.localhost never answered — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; }; \
 		sleep 2; \
 	done
+	@echo "⏳ waiting for langfuse.localhost (first boot migrates Postgres + ClickHouse — a few minutes on a laptop)..."
+	@i=0; until curl -sf "http://langfuse.localhost/api/public/health" >/dev/null 2>&1; do \
+		i=$$((i+1)); [ $$i -ge 150 ] && { echo "❌ langfuse.localhost never answered — check: docker compose logs langfuse-web clickhouse"; exit 1; }; \
+		sleep 2; \
+	done
 	@echo "✓ all services answering"
 
 verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant end-to-end — the exact calls the login screen makes — catches "Failed to fetch"-class setup issues before you open a browser
@@ -183,6 +188,12 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://aiopen.localhost/"); \
 	if [ "$$code" = "200" ]; then echo "  ✓ aiopen.localhost reachable ($$code)"; \
 	else echo "❌ aiopen.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://langfuse.localhost/api/public/health"); \
+	if [ "$$code" = "200" ]; then echo "  ✓ langfuse.localhost reachable ($$code) — GenAI monitor"; \
+	else echo "❌ langfuse.localhost -> $$code — check: logs of langfuse-web / clickhouse (first boot runs migrations for a few minutes)"; exit 1; fi
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://mlflow.localhost/health"); \
+	if [ "$$code" = "401" ]; then echo "  ✓ mlflow.localhost reachable ($$code, admin-basicauth in front) — MLOps monitor"; \
+	else echo "❌ mlflow.localhost -> $$code (expected 401 from the admin-basicauth gate) — check: logs of mlflow"; exit 1; fi
 	@echo "✓ admin tenant verified — http://aiopen.localhost is ready for the 'admin' User dropdown login"
 	@demo_key="$${ENGINEERING_DEMO_API_KEY:-}"; \
 	if [ -z "$$demo_key" ]; then \
@@ -234,6 +245,8 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 		echo "── ai-circus/$$svc:local ──"; \
 		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
 	done
+	@echo "── ai-circus/mlflow:local (infra/mlflow/Dockerfile — MLOps monitor) ──"
+	@docker build -f infra/mlflow/Dockerfile -t ai-circus/mlflow:local infra/mlflow || exit 1
 	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local \
 		--build-arg VITE_KEYCLOAK_ISSUER="$(VITE_KEYCLOAK_ISSUER)" \
 		--build-arg VITE_KEYCLOAK_CLIENT_ID="$(if $(VITE_KEYCLOAK_CLIENT_ID),$(VITE_KEYCLOAK_CLIENT_ID),ui-react)" \
@@ -244,7 +257,7 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 	@echo "✓ all images built"
 
 k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd
-	@for svc in $(K3S_IMAGES) ui-react; do \
+	@for svc in $(K3S_IMAGES) ui-react mlflow; do \
 		k3d image import "ai-circus/$$svc:local" -c "$(K3S_CLUSTER)" || exit 1; \
 	done
 	@echo "✓ all images imported into k3d cluster '$(K3S_CLUSTER)'"
@@ -266,6 +279,12 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice data-platform-manager ui-react; do \
 		echo "⏳ waiting for $$svc..."; \
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
+	done
+	@echo "⏳ waiting for the observability stack (Langfuse's first boot migrates Postgres + ClickHouse — a few minutes on a laptop)..."
+	@kubectl -n ai-circus rollout status statefulset/clickhouse --timeout=180s
+	@for svc in mlflow langfuse-web langfuse-worker; do \
+		echo "⏳ waiting for $$svc..."; \
+		kubectl -n ai-circus rollout status deployment/$$svc --timeout=300s || exit 1; \
 	done
 	@echo "✓ all pods ready"
 	@$(MAKE) k3s-portforward

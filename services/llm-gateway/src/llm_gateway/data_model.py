@@ -70,9 +70,18 @@ class EnvConfig(BaseSettings):
         description="Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable",
         default=None,
     )
+    LANGFUSE_HOST: str | None = Field(
+        description="Langfuse base URL (in-cluster, e.g. http://langfuse-web:3000); unset = no tracing", default=None
+    )
+    LANGFUSE_PUBLIC_KEY: SecretStr | None = Field(
+        description="Langfuse project public key (pk-lf-...); unset = no tracing", default=None
+    )
+    LANGFUSE_SECRET_KEY: SecretStr | None = Field(
+        description="Langfuse project secret key (sk-lf-...); unset = no tracing", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "56c168e32a42643614a4cbffa6f872d95288c0f5b846dcd6d5ab8d559473c53f"
+_SOURCE_YAML_HASH = "5695c6c172e287b8b3416286ae1afd109d8313bfdbc2cacd6ff231b3413e4183"
 
 
 EnvConfig.model_rebuild()

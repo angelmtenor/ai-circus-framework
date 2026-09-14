@@ -98,6 +98,27 @@ env_variables:
     mandatory: false
     secret: false
 
+  # GenAI observability — read by app.py (which switches LiteLLM's `langfuse_otel`
+  # callback on only when both keys are present) and then by litellm itself. Every
+  # completion through this gateway becomes a Langfuse trace; see k8s/base/langfuse.yaml.
+  - name: LANGFUSE_HOST
+    description: "Langfuse base URL (in-cluster, e.g. http://langfuse-web:3000); unset = no tracing"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LANGFUSE_PUBLIC_KEY
+    description: "Langfuse project public key (pk-lf-...); unset = no tracing"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: LANGFUSE_SECRET_KEY
+    description: "Langfuse project secret key (sk-lf-...); unset = no tracing"
+    type: string
+    mandatory: false
+    secret: true
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file

@@ -10,6 +10,8 @@ resources:
   - qdrant.yaml
   - valkey.yaml
   - seaweedfs.yaml
+  - langfuse.yaml
+  - mlflow.yaml
   - platform-registry.yaml
   - llm-gateway.yaml
   - prediction.yaml
