@@ -1854,10 +1854,79 @@ select:focus {
   color: var(--amber);
 }
 
+/* Platform dashboard's "down" — the one state the Settings badges never needed. */
+.settings-badge--fail {
+  background: rgba(255, 95, 122, 0.14);
+  color: var(--red);
+}
+
 .settings-card-model {
   font-size: 0.78rem;
   color: var(--dim);
   margin: 0.2rem 0;
+}
+
+/* ── Platform dashboard (PlatformStatus.tsx) ───────────────────────────────── */
+
+.platform-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.platform-consoles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.platform-consoles .btn-secondary,
+.platform-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.platform-group {
+  margin-top: 1.5rem;
+}
+
+.platform-group h3 {
+  margin-bottom: 0.25rem;
+}
+
+.platform-card {
+  border-left: 3px solid var(--border);
+}
+
+.platform-card--up {
+  border-left-color: var(--green);
+}
+
+.platform-card--degraded {
+  border-left-color: var(--amber);
+}
+
+.platform-card--down {
+  border-left-color: var(--red);
+}
+
+.platform-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+  margin: 0.4rem 0 0.2rem;
+}
+
+.platform-card-link {
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
 }
 
 .settings-card-envvars {

@@ -4,9 +4,11 @@
 # only" scope. Unlike every other backend service here, this one needs a real
 # Kubernetes API client (to read/trigger the pipeline Jobs in k8s/jobs/) — hence
 # its own ServiceAccount/Role/RoleBinding below, scoped to exactly `batch/v1`
-# Jobs in this one namespace, nothing else. In docker-compose there's no such
-# API to call at all, so that feature reports itself unavailable there instead
-# (see core/k8s_jobs.py's in_cluster_config_available).
+# Jobs in this one namespace plus read-only pod listing (the admin platform-status
+# dashboard's ready/restart counts, core/platform_status.py), nothing else. In
+# docker-compose there's no such API to call at all, so job control reports itself
+# unavailable there (see core/k8s_jobs.py's in_cluster_config_available) and the
+# status dashboard falls back to health probes alone.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -25,6 +27,12 @@ rules:
     # get/list/watch on "jobs" already works.
     resources: ["jobs", "jobs/status"]
     verbs: ["get", "list", "watch", "create", "delete"]
+  # Read-only pod listing for the admin platform-status dashboard (core/platform_status.py):
+  # ready/restart counts next to each component's health probe. List only — no exec,
+  # no logs, no writes.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

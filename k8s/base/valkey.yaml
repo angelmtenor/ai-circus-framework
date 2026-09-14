@@ -65,5 +65,10 @@ spec:
     - from:
         - podSelector: {matchLabels: {app: data-platform-manager}}
         - podSelector: {matchLabels: {app: llm-gateway}}
+        # Langfuse's ingestion queue (BullMQ) — keys namespaced under `langfuse:`
+        # (REDIS_KEY_PREFIX in langfuse.yaml) so they never collide with the budget/
+        # cache keys above.
+        - podSelector: {matchLabels: {app: langfuse-web}}
+        - podSelector: {matchLabels: {app: langfuse-worker}}
       ports:
         - {protocol: TCP, port: 6379}

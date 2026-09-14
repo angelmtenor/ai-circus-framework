@@ -43,9 +43,12 @@ class EnvConfig(BaseSettings):
     OBJECT_STORE_SECRET_KEY: SecretStr = Field(
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
+    MLFLOW_TRACKING_URI: str | None = Field(
+        description="MLflow tracking server runs are mirrored to (e.g. http://mlflow:5000); unset = off", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "d23cf0d62c373b93722a8b2e57ba1d26da8a3806177cedea555c7ae9b5c15ced"
+_SOURCE_YAML_HASH = "bd32b08acd96f2c2f1c510ffe4163d6a7635850673e9f9a6a3a4ed17d5997d96"
 
 
 EnvConfig.model_rebuild()

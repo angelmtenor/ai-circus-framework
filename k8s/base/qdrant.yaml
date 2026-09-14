@@ -69,5 +69,8 @@ spec:
         - podSelector: {matchLabels: {app: rag-agent}}
         - podSelector: {matchLabels: {app: form-agent}}
         - podSelector: {matchLabels: {job-name: etl-vectorize}}
+        # Read-only /healthz probe for the admin platform-status dashboard
+        # (data_platform_manager.core.platform_status) — nothing else.
+        - podSelector: {matchLabels: {app: data-platform-manager}}
       ports:
         - {protocol: TCP, port: 6333}

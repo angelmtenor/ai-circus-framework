@@ -32,6 +32,11 @@ dependencies = [
     "httpx>=0.28.1",
     "litellm[proxy]>=1.95.0",
     "loguru>=0.7.3",
+    # LiteLLM's `langfuse_otel` callback (litellm_config.yaml) imports these lazily —
+    # they're only in litellm's `proxy-runtime` extra, which this image doesn't use.
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
     "psutil>=7.0.0",
     "py-cpuinfo>=9.0.0",
     "pydantic>=2.11.4",

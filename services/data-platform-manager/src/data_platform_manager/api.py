@@ -13,7 +13,9 @@ Settings page, which already gates its own "Data Platform" section on
 Pipeline job status/control (GET/POST /pipeline/jobs*) only works when this
 process is itself running inside a real k3s cluster — see
 core.k8s_jobs.in_cluster_config_available — since a docker-compose deployment
-has no Kubernetes API to call. /roadmap and /gateway/rate-limits work in both.
+has no Kubernetes API to call. /roadmap, /gateway/rate-limits and /platform/status
+(the admin dashboard's health feed — probes only, without pod details, outside k8s)
+work in both.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, semantic
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -143,6 +145,15 @@ def _budget_spend_key() -> str:
 def healthz() -> dict[str, str]:
     """Liveness check — no auth, matches every other service's convention."""
     return {"status": "ok"}
+
+
+@router.get("/platform/status", dependencies=[Depends(require_admin)])
+async def platform_status_endpoint() -> dict[str, object]:
+    """Admin dashboard feed: every microservice/infra/observability component's health
+    (concurrent in-cluster probes, plus pod ready/restart counts when running on k8s)
+    and the admin console URL of each — see core.platform_status for the target list.
+    """
+    return (await platform_status.collect()).as_dict()
 
 
 @router.get("/roadmap", response_model=list[Capability], dependencies=[Depends(require_admin)])

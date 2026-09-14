@@ -153,6 +153,14 @@ litellm_settings:
   # data_platform_manager.core.roadmap). An org with no cap configured (nothing
   # set via data-platform-manager's admin API) is unlimited — opt-in, not a
   # default ceiling on every tenant.
+  #
+  # GenAI observability is deliberately NOT listed here: app.py appends litellm's
+  # built-in `langfuse_otel` callback to this list at start-up when (and only when)
+  # LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY are set — see resolve_config_path() for why
+  # an unconditional entry would be worse than none. Every completion then lands in the
+  # platform's Langfuse (k8s/base/langfuse.yaml) as a trace carrying the calling
+  # tenant (`user`) plus whatever `metadata` the agent services attach (scenario,
+  # session/thread — see ai_circus_shared.observability.langfuse_request_metadata).
   callbacks:
     - llm_gateway.budget_hook.instance
 

@@ -27,3 +27,9 @@ data:
   # applied (see that file's own comment for why referencing an absent Service
   # name is safe: librdkafka connects lazily and retries in the background).
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  # Observability (langfuse.yaml / mlflow.yaml). llm-gateway exports every LLM call
+  # to Langfuse's OTel endpoint here (keys come from llm-gateway-secrets); training
+  # logs each run to MLflow here. Both are "if set" integrations in the services —
+  # unset either to switch that export off without touching the service.
+  LANGFUSE_HOST: "http://langfuse-web:3000"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"

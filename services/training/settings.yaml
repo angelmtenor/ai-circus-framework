@@ -53,6 +53,12 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: MLFLOW_TRACKING_URI
+    description: "MLflow tracking server runs are mirrored to (e.g. http://mlflow:5000); unset = off"
+    type: string
+    mandatory: false
+    secret: false
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file

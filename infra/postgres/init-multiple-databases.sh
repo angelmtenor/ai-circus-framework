@@ -4,8 +4,15 @@
 # (the `platform` schema used by services/platform-registry); Keycloak, llm-gateway
 # (LiteLLM's own spend-tracking schema), each of assistant/rag-agent/form-agent
 # (their own persisted conversation-history schema, see
-# ai_circus_shared.conversations), and data-platform-manager (its own document-store
-# schema, see ai_circus_shared.document_store) each need their own.
+# ai_circus_shared.conversations), data-platform-manager (its own document-store
+# schema, see ai_circus_shared.document_store), Langfuse (GenAI observability, its
+# own Prisma-managed schema) and MLflow (ML experiment tracking backend store) each
+# need their own.
+#
+# Existing volumes never re-run this script — k8s/base/langfuse.yaml and
+# k8s/base/mlflow.yaml therefore also create their own database on start-up when it
+# is missing (an idempotent `CREATE DATABASE` init container), so a cluster created
+# before those two existed doesn't need a `make reset-all`.
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
@@ -21,4 +28,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     GRANT ALL PRIVILEGES ON DATABASE form_agent TO "$POSTGRES_USER";
     CREATE DATABASE data_platform_manager;
     GRANT ALL PRIVILEGES ON DATABASE data_platform_manager TO "$POSTGRES_USER";
+    CREATE DATABASE langfuse;
+    GRANT ALL PRIVILEGES ON DATABASE langfuse TO "$POSTGRES_USER";
+    CREATE DATABASE mlflow;
+    GRANT ALL PRIVILEGES ON DATABASE mlflow TO "$POSTGRES_USER";
 EOSQL

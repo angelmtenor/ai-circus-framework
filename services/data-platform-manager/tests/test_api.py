@@ -8,6 +8,7 @@ naturally always False here, exactly the path a docker-compose deployment hits.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Generator
 
@@ -22,7 +23,7 @@ from sqlalchemy.pool import StaticPool
 from data_platform_manager.api import get_client, get_producer, require_admin
 from data_platform_manager.api import get_document_session as api_get_document_session
 from data_platform_manager.app import app
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, semantic
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, semantic
 from tests.conftest import FakeSecret
 
 
@@ -575,3 +576,44 @@ def test_semantic_query_returns_404_for_an_unknown_view(client: TestClient) -> N
 def test_semantic_endpoints_require_admin_token(unauthenticated_client: TestClient) -> None:
     assert unauthenticated_client.get("/semantic/views").status_code == 401
     assert unauthenticated_client.post("/semantic/views/tenant_activity_360/query").status_code == 401
+
+
+def test_platform_status_endpoint_requires_admin_and_returns_the_feed(
+    unauthenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def fake_collect() -> platform_status.PlatformStatus:
+        await asyncio.sleep(0)
+        return platform_status.PlatformStatus(
+            checked_at="2026-01-01T00:00:00+00:00",
+            in_cluster=False,
+            components=[
+                platform_status.ComponentStatus(
+                    name="prediction",
+                    group="services",
+                    status="up",
+                    latency_ms=3,
+                    detail="HTTP 200",
+                    description="d",
+                    console_url=None,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(platform_status, "collect", fake_collect)
+
+    assert unauthenticated_client.get("/platform/status").status_code == 401
+
+    response = unauthenticated_client.get("/platform/status", headers={"Authorization": "Bearer test-admin-key"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["in_cluster"] is False
+    assert body["components"][0] == {
+        "name": "prediction",
+        "group": "services",
+        "status": "up",
+        "latency_ms": 3,
+        "detail": "HTTP 200",
+        "description": "d",
+        "console_url": None,
+        "pod": None,
+    }

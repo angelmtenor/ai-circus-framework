@@ -172,6 +172,19 @@ set on a local k3d cluster:
   (add a Deployment/PVC for it yourself if you need the free local LLM fallback here too), and the
   pipeline services are `k8s/jobs/*` applied only via `make k3s-pipeline`, matching their
   one-shot, non-`k3s-up` nature in docker-compose.yml too (`profiles: ["pipeline"]`).
+- **The observability stack (`langfuse.yaml`, `mlflow.yaml`) is in the base, always on, and is
+  the only place besides `keycloak.yaml` that sets `resources.limits`** — Langfuse v4 needs
+  web + worker + ClickHouse, and on a laptop-class node the way to keep that affordable is to reuse
+  the existing Postgres (`langfuse`/`mlflow` databases), Valkey (`langfuse:` key prefix) and
+  SeaweedFS (`langfuse`/`mlflow` buckets), cap ClickHouse at 1 GiB with a low-memory `config.d`,
+  and cap the two Langfuse pods and MLflow too. Expect roughly 1.5–2 GB more resident memory than
+  before; on WSL check `.wslconfig`'s memory (see `docs/windows-wsl.md`) before `make k3s-all`.
+  Both manifests carry an `ensure-database` init container (idempotent `CREATE DATABASE`) because
+  `postgres.yaml`'s init script only ever runs on a fresh volume. `data-platform-manager`'s Role
+  additionally lists pods (read-only) so the admin Platform dashboard can show readiness/restarts —
+  the same dashboard works on docker-compose, minus that pod detail. The MLflow image is built by
+  `make k3s-build` from `infra/mlflow/Dockerfile` (not `services/*` — it isn't a cookiecutter
+  service, just the official MLflow with a Postgres driver and boto3 added).
 - **SeaweedFS runs with `-master.volumePreallocate=false`** (same in `docker-compose.yml`).
   Without it, `weed server` 3.97 `fallocate()`s 1 GiB per volume and grows 7 volumes per S3
   bucket — one bucket per scenario — so a fresh install "uses" ~70 GB of disk for ~15 MB of
