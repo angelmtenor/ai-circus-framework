@@ -108,12 +108,17 @@ def test_seed_scenarios_populates_ui_extras_for_opted_in_scenarios_only(session:
 
     region_map = session.get(Scenario, "luznova_regional_demand")
     assert region_map.ui_extras["kind"] == "region_map"
-    assert region_map.ui_extras["group_by"] == "region"
-    assert len(region_map.ui_extras["regions"]) == 17
+    levels = {level["key"]: level for level in region_map.ui_extras["levels"]}
+    assert levels["region"]["group_by"] is None
+    assert len(levels["region"]["regions"]) == 17
+    assert levels["province"]["group_by"] == "province"
+    assert len(levels["province"]["regions"]) == 50
 
     live_plant = session.get(Scenario, "mpm")
     assert live_plant.ui_extras["kind"] == "live_plant"
     assert live_plant.ui_extras["machine_count"] == 6
+    assert live_plant.ui_extras["wear_feature"] == "Tool wear [min]"
+    assert live_plant.ui_extras["sim_minutes_per_tick"] == 5
 
     assert session.get(Scenario, "churn").ui_extras is None
 
