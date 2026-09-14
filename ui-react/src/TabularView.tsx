@@ -8,12 +8,14 @@ import { ScenarioView } from "./ScenarioView";
 import { DataView } from "./DataView";
 import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
+import { RegionMapView } from "./RegionMapView";
+import { LivePlantView } from "./LivePlantView";
 import { Icon } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
-type Tab = "scenario" | "data" | "predict" | "explore";
+type Tab = "scenario" | "data" | "predict" | "explore" | "extra";
 
 /**
  * Generic tabular_ml workspace, driven entirely by the scenario's feature_columns/
@@ -28,6 +30,12 @@ type Tab = "scenario" | "data" | "predict" | "explore";
  * partial dependence, held-out performance). The assistant chat is a single
  * persistent dock here rather than duplicated per tab, since it's the same
  * scenario-grounded conversation regardless of which tab is open.
+ *
+ * A 5th tab is opt-in per scenario via `scenario.ui_extras` (see
+ * libs/shared/scenario_schema.py's UiExtras) — still no scenario-specific UI code:
+ * RegionMapView/LivePlantView are two generic renderers any tabular_ml scenario can
+ * reuse by setting the matching YAML block, the same way `form`/`feature_schema`
+ * already drive generic renderers instead of per-scenario components.
  *
  * The whole workspace (not just the chat dock) is wrapped in one <CopilotKit> so
  * MlPredictionsView/ExploreModelView's useCopilotReadable calls share their current
@@ -83,6 +91,12 @@ function TabularViewContent({
         <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
           <Icon name="scan" /> ML Insights
         </button>
+        {scenario.ui_extras && (
+          <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
+            <Icon name={scenario.ui_extras.kind === "region_map" ? "map" : "factory"} />
+            {scenario.ui_extras.kind === "region_map" ? "Regional Map" : "Live Plant"}
+          </button>
+        )}
       </div>
 
       <button className="chat-dock-toggle" onClick={() => setChatOpen((o) => !o)}>
@@ -93,6 +107,8 @@ function TabularViewContent({
       {tab === "data" && <DataView scenario={scenario} accessToken={accessToken} />}
       {tab === "predict" && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
       {tab === "explore" && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
+      {tab === "extra" && scenario.ui_extras?.kind === "region_map" && <RegionMapView scenario={scenario} accessToken={accessToken} />}
+      {tab === "extra" && scenario.ui_extras?.kind === "live_plant" && <LivePlantView scenario={scenario} accessToken={accessToken} />}
 
       {chatOpen && (
         <div className="chat-dock-overlay" onClick={() => setChatOpen(false)}>

@@ -127,17 +127,32 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Supermarket Weekly Sales** (`supermarket_sales`) | `tabular_ml` — regression | Weekly department sales | Kaggle — Walmart dataset |
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
 | **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression | Appliance energy use (Wh) | UCI — Appliances Energy Prediction |
+| **CNC Turning Surface Finish** (`cnc_surface_finish`) | `tabular_ml` — regression | Machined-part surface roughness (Ra) | Original content (synthetic, physically grounded) |
+| **Steel Plate Defect Triage** (`steel_defects`) | `tabular_ml` — classification | Unrecognized optical-scan defect flag | UCI — Steel Plates Faults |
+| **Turbofan Engine Remaining Useful Life** (`turbofan_rul`) | `tabular_ml` — regression | Jet engine RUL (operating cycles) | NASA C-MAPSS FD001 |
+| **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression | Daily electricity demand per region (MWh) — with a live Spain regional map tab | Original content (synthetic, real Spain geography) |
+| **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
+| **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 
-Every `tabular_ml` scenario above is ported from a real public dataset rather than original
-content — full credit/link lives in each `scenarios/<slug>/scenario.yaml`'s `credits` field and is
-surfaced in the Data tab.
+Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
+each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
+(`cnc_surface_finish` and the three `luznova_*` utility scenarios) are original content instead: a
+physically-grounded synthetic generator (real geography/tariff structure, a designed formula, no
+real customer data) rather than a ported dataset — each one's `scenario.yaml` discloses this, and
+its generator script lives at `scripts/generate_<slug>.py`.
 
 **One consolidated service instance serves every scenario of a given kind** — `prediction` and
 `assistant` both load every `tabular_ml` scenario from the same running container, routed by a
 `{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
 and `form-agent` does the same for every `assisted_form` scenario.
+
+**Two scenarios carry an opt-in 5th workspace tab** (`ui_extras` in `scenario.yaml`, still no
+per-scenario UI code — see below): `luznova_regional_demand`'s "Regional Map" tab batch-predicts
+all 17 Comunidades Autónomas at once and plots them on a Spain bubble map; `mpm`'s "Live Plant" tab
+simulates a fictional factory floor of machines ticking every few seconds, each scored by the same
+unmodified `/predict/mpm`, with a client-side-only "Shut down" demo control.
 
 ---
 
@@ -149,11 +164,72 @@ and `form-agent` does the same for every `assisted_form` scenario.
 - **Docker Compose (alternative)** — Docker + Docker Compose, `make`.
 - **At least one LLM provider**, either way — a free API key (Google Gemini's free tier is
   easiest) *or* the bundled local Ollama fallback. Chat features simply won't answer without one.
+- **To contribute** (not just run): `git-flow` (AVH), `uv`, Node.js 22 — all installed by step 0.
+
+Already have all that? Skip to step 1. Otherwise step 0 provisions a fresh Ubuntu machine —
+native, VM, or WSL2 — in a few minutes.
+
+### 0. Provision the machine (fresh Ubuntu 24.04+ — native, VM, or WSL2)
+
+**On Windows**, first enable WSL2 with an Ubuntu distro — steps 1–6 of
+[`docs/windows-wsl.md`](docs/windows-wsl.md), including the `.wslconfig` RAM/CPU limits — and do
+*everything* below inside that distro (its own filesystem, its own `git`; the doc explains why).
+No Docker Desktop needed or wanted. The doc also covers the one WSL-specific chore that bites
+later: the distro's virtual disk grows on the Windows drive and never shrinks by itself.
+
+`git` is preinstalled on Ubuntu images (`sudo apt install -y git` if not); the setup scripts
+live in the repo, so clone first:
+
+```bash
+mkdir -p ~/PROJECTS && cd ~/PROJECTS && git clone https://github.com/angelmtenor/ai-circus-framework && cd ai-circus-framework
+```
+
+Two idempotent, non-interactive scripts, split by privilege level — the **root half** (system
+update; `make`, `git-flow`, `curl`, compilers, `python3`, `pipx`, UTC timezone) and the **user
+half** (`uv`, `nvm` + Node.js 22, `~/.local/bin` on `PATH`, git defaults — it warns if
+`user.name`/`user.email` are unset, so set those first):
+
+```bash
+sudo ./scripts/setup_sudo.sh
+```
+
+```bash
+./scripts/setup_user.sh && source ~/.bashrc
+```
+
+**Docker Engine** is deliberately *not* in the scripts — install it from the official
+[Install Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/) guide (apt
+repository method), then the official
+[post-install step](https://docs.docker.com/engine/install/linux-postinstall/#add-your-user-to-the-docker-group)
+so every `make` target here can call `docker` without `sudo`:
+
+```bash
+sudo groupadd docker; sudo usermod -aG docker $USER
+```
+
+…and log out and back in (on WSL: `wsl --terminate <distro>` from PowerShell, then relaunch).
+
+For the **Kubernetes (recommended)** path, add [`k3d`](https://k3d.io/#installation) and
+[`kubectl`](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/):
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+```
+
+```bash
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+```
+
+Confirm the whole toolchain answers before moving on:
+
+```bash
+docker run --rm hello-world && docker compose version && make --version | head -1 && git flow version && uv --version && node --version && k3d version && kubectl version --client
+```
 
 ### 1. Clone and bootstrap the environment
 
 ```bash
-git clone <this-repo-url> && cd ai-circus-framework
+git clone https://github.com/angelmtenor/ai-circus-framework && cd ai-circus-framework   # skip if you did step 0
 make bootstrap   # copies .env.example -> .env
 ```
 
@@ -609,6 +685,22 @@ provider wiring, the React frontend, infra).
 
 - [AGENTS.md](AGENTS.md) — mandates for AI-assisted and human contributions alike.
 - [styleguide.md](styleguide.md) — commit message conventions (Conventional Commits).
+- [docs/windows-wsl.md](docs/windows-wsl.md) — contributing (or just running the platform) from
+  Windows via WSL2.
+
+The flow, in short — git-flow per `AGENTS.md` §5:
+
+1. Fork the repo, clone **your fork** (step 0 above provisions the toolchain), then once per
+   clone: `git flow init -d` — it refuses on unstaged changes to tracked files, so run it before
+   editing anything (on a fresh clone also `git branch --track develop origin/develop` first, or
+   it creates `develop` from `main`).
+2. `git flow feature start <name>` — branches from `develop`; commit with Conventional Commits.
+3. Before opening a PR: `make check` inside every service you touched (`make check-all` from
+   the root for cross-service changes), `npm run build` in `ui-react/` for frontend changes, and
+   an actual `docker compose up` smoke test of the affected service(s) — CI's `compose-validate`
+   never boots containers.
+4. Push `feature/<name>` to your fork and open a pull request against **`develop`** (never
+   `main`).
 
 ## Author & license
 

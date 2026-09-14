@@ -61,6 +61,7 @@ export function PlotlyChart({
   data,
   layout,
   height = 320,
+  onPointClick,
 }: {
   data: PlotlyDatum[];
   layout?: PlotlyLayout;
@@ -69,6 +70,11 @@ export function PlotlyChart({
    * canvas/camera math is recalibrated to match — not react-plotly.js's own
    * `useResizeHandler` or `config.responsive`, see why below. */
   height?: number | string;
+  /** Optional click-to-drill-down (e.g. RegionMapView.tsx's map bubbles) — the
+   * clicked trace's point index, or nothing for charts that don't need it. Plain
+   * `unknown` for the raw Plotly click event to avoid pulling a full plotly.js type
+   * dependency into this otherwise loosely-typed wrapper (see plotly.ts). */
+  onPointClick?: (pointIndex: number, raw: unknown) => void;
 }) {
   const { theme } = useTheme();
   const gdRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +124,15 @@ export function PlotlyChart({
       onInitialized={(_figure: unknown, gd: HTMLDivElement) => {
         gdRef.current = gd;
       }}
+      onClick={
+        onPointClick
+          ? (raw: unknown) => {
+              const points = (raw as { points?: { pointIndex?: number }[] } | undefined)?.points;
+              const pointIndex = points?.[0]?.pointIndex;
+              if (pointIndex !== undefined) onPointClick(pointIndex, raw);
+            }
+          : undefined
+      }
     />
   );
 }

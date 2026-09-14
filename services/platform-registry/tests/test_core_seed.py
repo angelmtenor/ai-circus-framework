@@ -35,6 +35,12 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "supermarket_sales",
         "electric_motor",
         "energy_building",
+        "cnc_surface_finish",
+        "steel_defects",
+        "turbofan_rul",
+        "luznova_regional_demand",
+        "luznova_gas_anomaly",
+        "luznova_ev_charging",
         "ai_circus_reference",
         "service_request",
     }
@@ -96,6 +102,22 @@ def test_seed_scenarios_populates_form_config_for_assisted_form_only(session: Se
     assert session.get(Scenario, "ai_circus_reference").form is None
 
 
+def test_seed_scenarios_populates_ui_extras_for_opted_in_scenarios_only(session: Session) -> None:
+    """`ui_extras` (the opt-in 5th workspace tab) is seeded only for scenarios that set it."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    region_map = session.get(Scenario, "luznova_regional_demand")
+    assert region_map.ui_extras["kind"] == "region_map"
+    assert region_map.ui_extras["group_by"] == "region"
+    assert len(region_map.ui_extras["regions"]) == 17
+
+    live_plant = session.get(Scenario, "mpm")
+    assert live_plant.ui_extras["kind"] == "live_plant"
+    assert live_plant.ui_extras["machine_count"] == 6
+
+    assert session.get(Scenario, "churn").ui_extras is None
+
+
 def test_seed_scenarios_populates_target(session: Session) -> None:
     """tabular_ml scenarios get the predicted column's name; conversational_rag ones don't."""
     seed_scenarios(session, SCENARIOS_DIR)
@@ -129,6 +151,12 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "supermarket_sales",
         "electric_motor",
         "energy_building",
+        "cnc_surface_finish",
+        "steel_defects",
+        "turbofan_rul",
+        "luznova_regional_demand",
+        "luznova_gas_anomaly",
+        "luznova_ev_charging",
         "ai_circus_reference",
         "service_request",
     }
@@ -147,8 +175,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 8
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 8
+    assert session.query(Scenario).count() == 14
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 14
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

@@ -44,7 +44,9 @@ def test_validate_token_reads_nested_realm_roles_and_org_claim(monkeypatch: pyte
     monkeypatch.setattr(
         auth_module,
         "_jwks_client",
-        lambda _url: type("FakeJwksClient", (), {"get_signing_key_from_jwt": lambda self, _t: type("Key", (), {"key": "k"})()})(),
+        lambda _url: type(
+            "FakeJwksClient", (), {"get_signing_key_from_jwt": lambda self, _t: type("Key", (), {"key": "k"})()}
+        )(),
     )
 
     identity = auth_module.validate_token(

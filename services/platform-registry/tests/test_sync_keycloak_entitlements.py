@@ -157,6 +157,8 @@ def test_admin_request_raises_actionable_error_on_403(mock_client: httpx.Client)
     def forbidden(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(403, json={"error": "not_authorized"})
 
-    with httpx.Client(base_url=REALM_BASE_URL, transport=httpx.MockTransport(forbidden)) as forbidden_client:
-        with pytest.raises(RuntimeError, match="manage-users"):
-            admin_request(forbidden_client, "GET", "/organizations")
+    with (
+        httpx.Client(base_url=REALM_BASE_URL, transport=httpx.MockTransport(forbidden)) as forbidden_client,
+        pytest.raises(RuntimeError, match="manage-users"),
+    ):
+        admin_request(forbidden_client, "GET", "/organizations")

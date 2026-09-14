@@ -1,0 +1,105 @@
+# Seed definition for the "luznova_gas_anomaly" scenario — loaded into the `platform`
+# Postgres schema by services/platform-registry at bootstrap. Editing this file and
+# re-seeding is how a developer adds/changes a scenario; it is never read directly by
+# any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# Second of three scenarios for "Luznova Utilities", a fictional Spanish electricity +
+# gas distributor (see luznova_regional_demand's scenario.yaml for the fuller
+# disclosure note). Not a ported public dataset — a designed synthetic generator: each
+# meter's expected ("baseline") consumption is a function of its tariff type and that
+# month's heating-degree-days, and a minority of meters are made anomalous (under- or
+# over-registering relative to their own baseline) with probability rising in meter
+# age — see scripts/generate_luznova_gas_anomaly.py for the exact formula. No real
+# customer data of any kind.
+
+slug: luznova_gas_anomaly
+kind: tabular_ml
+title: "Gas Meter Anomaly Detection"
+description: >
+  Flags a gas meter reading as anomalous relative to that customer's own historical
+  baseline — meter drift, tampering, or other non-technical loss — from tariff type,
+  current vs. baseline consumption, weather demand, and meter/building age.
+role_required: "scenario:luznova_gas_anomaly"
+industry: energy_utilities
+icon: "🔥"
+
+chat:
+  context: >
+    Luznova Utilities' gas meter anomaly-detection model — predicts the probability
+    that a meter reading is anomalous (possible drift, tampering, or other
+    non-technical loss) by comparing this month's consumption against the customer's
+    own weather-normalized baseline, along with tariff type and meter/building age.
+    Older meters drift more, and industrial meters (bigger equipment, more failure
+    modes) run a somewhat higher baseline anomaly rate than residential ones.
+  sample_questions:
+    - "Which factors matter most for flagging an anomalous reading?"
+    - "How accurate is the trained model?"
+    - "Does meter age alone predict an anomaly, or does tariff type matter too?"
+    - "Why would a reading far above baseline still not be flagged?"
+    - "Are industrial meters more likely to be anomalous than residential ones?"
+
+dataset:
+  bucket: "scenario-luznova-gas-anomaly"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/luznova_gas_anomaly.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/luznova_gas_anomaly.csv"
+  index_col: "meter_id"
+  target: "is_anomaly"
+  feature_columns:
+    - tariff_type
+    - monthly_consumption_m3
+    - baseline_consumption_m3
+    - heating_degree_days
+    - building_age_years
+    - meter_age_years
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the generator's own sampling bounds (8,000-row synthetic set).
+  feature_schema:
+    tariff_type:
+      {type: categorical, label: "Tariff type", options: [residential, commercial, industrial], default: residential,
+       info: "The customer's contracted gas tariff — industrial meters run a somewhat higher baseline anomaly rate (bigger equipment, more failure modes)."}
+    monthly_consumption_m3:
+      {type: numeric, label: "This month's consumption", min: 0, max: 10000, default: 150, step: 10,
+       info: "Metered gas consumption for the current billing month, in cubic metres."}
+    baseline_consumption_m3:
+      {type: numeric, label: "Expected baseline consumption", min: 0, max: 4200, default: 150, step: 10,
+       info: "This customer's own weather-normalized expected consumption for a month like this one, in cubic metres — the reference an anomaly is measured against."}
+    heating_degree_days:
+      {type: numeric, label: "Heating degree-days", min: 0, max: 480, default: 220, step: 5,
+       info: "A measure of that month's heating demand (higher = colder) — gas consumption for heating rises with degree-days."}
+    building_age_years:
+      {type: numeric, label: "Building age", min: 0, max: 80, default: 30, step: 1,
+       info: "Age of the building the meter serves, in years."}
+    meter_age_years:
+      {type: numeric, label: "Meter age", min: 0, max: 30, default: 12, step: 1,
+       info: "Years since this meter was installed/last replaced — the single biggest driver of anomaly risk (older meters drift more)."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
+  default_charts:
+    - {type: scatter, x: baseline_consumption_m3, y: monthly_consumption_m3, color_by: is_anomaly}
+    - {type: histogram, x: meter_age_years, color_by: is_anomaly}
+    - {type: bar, x: tariff_type, y: is_anomaly, agg: mean, color_by: tariff_type}
+
+model:
+  task_type: classification
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_label: "Anomalous reading"
+  target_description: "The probability this meter reading is anomalous relative to the customer's own baseline — worth routing to a human inspector."
+  target_value_labels: {"0": "Normal reading", "1": "Flagged for inspection"}
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

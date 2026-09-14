@@ -61,6 +61,30 @@ export type FormConfig = {
   classification_options?: string[] | null;
 };
 
+// Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's RegionMapExtra/
+// LivePlantExtra/UiExtras — a scenario's opt-in 5th workspace tab (see
+// RegionMapView.tsx/LivePlantView.tsx, the two generic renderers for these `kind`s).
+export type MapRegion = {
+  key: string;
+  label: string;
+  lat: number;
+  lon: number;
+  feature_overrides: Record<string, number | string>;
+};
+export type RegionMapExtra = {
+  kind: "region_map";
+  group_by: string;
+  regions: MapRegion[];
+  value_label: string;
+};
+export type LivePlantExtra = {
+  kind: "live_plant";
+  machine_count: number;
+  tick_seconds: number;
+  machine_label_prefix: string;
+};
+export type UiExtras = RegionMapExtra | LivePlantExtra;
+
 export type ScenarioSummary = {
   slug: string;
   kind: string;
@@ -94,6 +118,10 @@ export type ScenarioSummary = {
   target_value_labels?: Record<string, string> | null;
   // assisted_form only — drives ui-react's generic form renderer (see FormPanel.tsx).
   form?: FormConfig | null;
+  // tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+  // workspace tabs (see TabularView.tsx). Absent/null is the common case (the plain
+  // 4-tab workspace).
+  ui_extras?: UiExtras | null;
 };
 
 export type PredictionResult = {
