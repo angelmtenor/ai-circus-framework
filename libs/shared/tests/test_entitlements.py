@@ -302,7 +302,14 @@ def test_list_scenarios_omits_authorization_header_when_not_given(monkeypatch: p
 def test_list_scenarios_parses_scenario_summaries(monkeypatch: pytest.MonkeyPatch) -> None:
     """The JSON list body is parsed into ScenarioSummary models."""
     payload = [
-        {"slug": "churn", "kind": "tabular_ml", "title": "Churn", "description": "d", "icon": "x"},
+        {
+            "slug": "churn",
+            "kind": "tabular_ml",
+            "title": "Churn",
+            "description": "d",
+            "icon": "x",
+            "industry": "banking_finance",
+        },
     ]
     monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=payload))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
