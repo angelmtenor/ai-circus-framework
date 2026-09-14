@@ -1556,6 +1556,11 @@ select:focus {
   font-size: 0.8rem;
 }
 
+.sub-tabs button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .sub-tabs button.active {
   background: var(--accent);
   color: #04121c;

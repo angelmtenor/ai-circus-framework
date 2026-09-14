@@ -31,7 +31,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
   const extras = scenario.ui_extras as RegionMapExtra;
   const { theme } = useTheme();
   const featureColumns = useMemo(() => scenario.feature_columns ?? [], [scenario.feature_columns]);
-  const featureSchema = scenario.feature_schema ?? {};
+  const featureSchema = useMemo(() => scenario.feature_schema ?? {}, [scenario.feature_schema]);
 
   const [levelKey, setLevelKey] = useState(extras.levels[0].key);
   const activeLevel: RegionMapLevel = extras.levels.find((l) => l.key === levelKey) ?? extras.levels[0];
@@ -41,9 +41,40 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
   // below, so a stray "region"/"province" slider would be misleading (its value is
   // never actually used).
   const groupByColumns = useMemo(() => new Set(extras.levels.map((l) => l.group_by).filter((g): g is string => g !== null)), [extras.levels]);
-  const sharedFeatureColumns = useMemo(() => featureColumns.filter((f) => !groupByColumns.has(f)), [featureColumns, groupByColumns]);
+
+  // Any feature EVERY bubble in the active level pins via feature_overrides (e.g.
+  // population_thousands/industrial_index — every luznova_regional_demand region
+  // and province supplies its own) is hidden from the shared form too, for the same
+  // reason: dragging that slider would silently do nothing, since every bubble's
+  // own real value always wins over it. Computed generically from the data (not a
+  // hardcoded feature name), and per active level — a feature only some bubbles
+  // override still needs the shared slider for the rest.
+  const pinnedByActiveLevel = useMemo(() => {
+    const [first, ...rest] = activeLevel.regions;
+    if (!first) return new Set<string>();
+    return new Set(Object.keys(first.feature_overrides).filter((key) => rest.every((r) => key in r.feature_overrides)));
+  }, [activeLevel]);
+
+  const sharedFeatureColumns = useMemo(
+    () => featureColumns.filter((f) => !groupByColumns.has(f) && !pinnedByActiveLevel.has(f)),
+    [featureColumns, groupByColumns, pinnedByActiveLevel],
+  );
 
   const [shared, setShared] = useState<Record_>(() => initialRecord(sharedFeatureColumns, featureSchema));
+
+  // Backfills a default for any shared feature that just became editable after a
+  // level switch (not reachable today — luznova_regional_demand's two levels pin
+  // the same feature set — but a future region_map scenario's levels needn't, so
+  // this keeps every rendered slider backed by a real value rather than undefined).
+  useEffect(() => {
+    setShared((prev) => {
+      const missing = sharedFeatureColumns.filter((f) => !(f in prev));
+      if (missing.length === 0) return prev;
+      const next = { ...prev };
+      for (const f of missing) next[f] = featureSchema[f].default;
+      return next;
+    });
+  }, [sharedFeatureColumns, featureSchema]);
 
   // A level with no group_by (e.g. a coarser level reusing a finer level's real
   // trained feature — see luznova_regional_demand's "region" level, which relies
@@ -191,6 +222,22 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
 
   const rankedForTable = results ? [...results].sort((a, b) => b.prediction - a.prediction) : null;
 
+  const detailPanel = (
+    <>
+      {selected ? (
+        <>
+          <h4>{selected.region.label}</h4>
+          <p className="panel-hint">
+            {extras.value_label}: <strong>{formatValue(selected.prediction)}</strong>
+          </p>
+          <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(3)} />
+        </>
+      ) : (
+        <p className="panel-hint">Click a {view === "map" ? "bubble" : "row"} to see that area's SHAP explanation.</p>
+      )}
+    </>
+  );
+
   return (
     <div className="tab-panel">
       <div className="panel-card">
@@ -199,7 +246,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
           {extras.levels.length > 1 && (
             <div className="sub-tabs">
               {extras.levels.map((level) => (
-                <button key={level.key} className={level.key === levelKey ? "active" : ""} onClick={() => setLevelKey(level.key)}>
+                <button key={level.key} className={level.key === levelKey ? "active" : ""} onClick={() => setLevelKey(level.key)} disabled={loading}>
                   {level.label} ({level.regions.length})
                 </button>
               ))}
@@ -246,19 +293,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
                   if (row) setSelected(row);
                 }}
               />
-              <div className="region-map-detail">
-                {selected ? (
-                  <>
-                    <h4>{selected.region.label}</h4>
-                    <p className="panel-hint">
-                      {extras.value_label}: <strong>{formatValue(selected.prediction)}</strong>
-                    </p>
-                    <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(3)} />
-                  </>
-                ) : (
-                  <p className="panel-hint">Click a bubble to see that area's SHAP explanation.</p>
-                )}
-              </div>
+              <div className="region-map-detail">{detailPanel}</div>
             </div>
           ) : (
             <>
@@ -282,19 +317,7 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
                   </tbody>
                 </table>
               </div>
-              <div className="region-map-detail region-map-detail--below-table">
-                {selected ? (
-                  <>
-                    <h4>{selected.region.label}</h4>
-                    <p className="panel-hint">
-                      {extras.value_label}: <strong>{formatValue(selected.prediction)}</strong>
-                    </p>
-                    <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(3)} />
-                  </>
-                ) : (
-                  <p className="panel-hint">Click a row to see that area's SHAP explanation.</p>
-                )}
-              </div>
+              <div className="region-map-detail region-map-detail--below-table">{detailPanel}</div>
             </>
           )}
         </div>

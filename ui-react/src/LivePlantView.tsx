@@ -176,32 +176,39 @@ export function LivePlantView({ scenario, accessToken }: { scenario: ScenarioSum
 
   const tick = useCallback(async () => {
     const stepped = machinesRef.current.map((m) => stepMachine(m, numeric, featureSchema, extras.wear_feature, extras.sim_minutes_per_tick));
+    // Applied immediately (not held back for the predict round-trip below) — sensor
+    // readouts stay live even under slow network/backend latency, and it closes a
+    // race window: without this, a Shut down/Restart/Maintenance/Replace click that
+    // lands *while* this tick's request is in flight would otherwise get silently
+    // reverted when that request resolves and overwrites the whole machine list from
+    // a snapshot taken before the click.
+    setMachines(stepped);
     const toScore = stepped.filter((m) => m.status === "running");
     setSimClock((c) => new Date(c.getTime() + extras.sim_minutes_per_tick * 60_000));
-    if (toScore.length === 0) {
-      setMachines(stepped);
-      return;
-    }
+    if (toScore.length === 0) return;
     try {
       const records = toScore.map((m) => m.record);
       const response = await predict(config.predictionUrl, scenario.slug, records, accessToken);
-      let ri = 0;
-      const next = stepped.map((m) => {
-        if (m.status !== "running") return m;
-        const p = response.predictions[ri];
-        ri += 1;
-        const history = [...m.history, p.prediction].slice(-HISTORY_LEN);
-        // The model's own predicted risk IS this tick's failure hazard — no
-        // separate arbitrary threshold, so a break is a genuine (if stochastic)
-        // consequence of what the trained model actually says right now.
-        const broke = Math.random() < p.prediction;
-        const status: MachineStatus = broke ? "broken" : "running";
-        return { ...m, probability: p.prediction, contributions: p.contributions, history, status };
-      });
-      setMachines(next);
+      const resultById = new Map(toScore.map((m, i) => [m.id, response.predictions[i]]));
+      setMachines((latest) =>
+        latest.map((m) => {
+          const result = resultById.get(m.id);
+          // Only merge this tick's prediction into a machine that's STILL running
+          // — the user may have shut it down (or Replace/Maintenance may have
+          // reset it) while this request was in flight, in which case their own,
+          // newer action wins instead of being clobbered by a now-stale result.
+          if (!result || m.status !== "running") return m;
+          // The model's own predicted risk IS this tick's failure hazard — no
+          // separate arbitrary threshold, so a break is a genuine (if stochastic)
+          // consequence of what the trained model actually says right now.
+          const broke = Math.random() < result.prediction;
+          const status: MachineStatus = broke ? "broken" : "running";
+          const history = [...m.history, result.prediction].slice(-HISTORY_LEN);
+          return { ...m, probability: result.prediction, contributions: result.contributions, history, status };
+        }),
+      );
       setError(null);
     } catch (e) {
-      setMachines(stepped);
       setError((e as Error).message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -241,7 +248,11 @@ export function LivePlantView({ scenario, accessToken }: { scenario: ScenarioSum
   const atRiskCount = machines.filter((m) => m.status === "running" && (m.probability ?? 0) >= 0.01).length;
   const brokenCount = machines.filter((m) => m.status === "broken").length;
 
-  const detailMachine = detailId ? (machines.find((m) => m.id === detailId) ?? null) : null;
+  const detailCandidate = detailId ? (machines.find((m) => m.id === detailId) ?? null) : null;
+  // A machine just Replaced/serviced still resolves here (same id) but has no
+  // contributions yet — treat that the same as nothing selected rather than
+  // rendering a "failure risk: 0.00%" with an empty bar list underneath it.
+  const detailMachine = detailCandidate && Object.keys(detailCandidate.contributions).length > 0 ? detailCandidate : null;
   const detailContributions = detailMachine
     ? mapContributions(detailMachine.record, detailMachine.contributions).map((item) => ({ ...item, label: featureLabel(scenario, item.label) }))
     : [];
@@ -335,6 +346,8 @@ export function LivePlantView({ scenario, accessToken }: { scenario: ScenarioSum
             </p>
             <BarList items={detailContributions} valueFormatter={(v) => v.toFixed(4)} />
           </>
+        ) : detailCandidate ? (
+          <p className="panel-hint">{detailCandidate.name} was just reset — waiting for its next prediction.</p>
         ) : (
           <p className="panel-hint">Click a machine's gauge above to see what's driving its current prediction.</p>
         )}
