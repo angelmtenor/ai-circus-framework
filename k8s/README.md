@@ -43,13 +43,31 @@ make k3s-import     # import those images into the k3d cluster's containerd
 make k3s-secrets    # generate the per-workload/traefik-basicauth/seaweedfs-s3-config Secrets
 make k3s-up         # kubectl apply -k k8s/base
 make k3s-wait       # wait for every pod to actually be Ready (not just Running)
-make k3s-pipeline   # optional: run the churn ETL -> training pipeline as k8s Jobs
+make k3s-pipeline   # run the ETL -> training pipeline (every tabular_ml scenario, not just
+                    # churn — SCENARIOS is unset/empty) as k8s Jobs
 make k3s-verify     # reuse `make verify`'s curl checks against this cluster
 ```
 
 Or run the first six of those in one shot with `make k3s-all` (still run `make k3s-pipeline`/
-`make k3s-verify` yourself afterward — they're not part of it since they're optional/verification
-steps, not "getting the cluster up").
+`make k3s-verify` yourself afterward — they're not part of it, since they're separate steps, not
+"getting the cluster up").
+
+**`make k3s-pipeline` is required, not optional, before any `tabular_ml` scenario can serve a
+prediction** — a freshly created or freshly recreated cluster (including after `k3d cluster
+delete`/`k3s-cluster` again, e.g. to recover from Gotcha 8) starts with zero trained model
+artifacts in SeaweedFS. Skipping it doesn't fail loudly at deploy time: `k3s-up`/`k3s-wait`/
+`k3s-verify` all pass, because they only check that `prediction` is reachable, not that any
+scenario actually has a model — the first real prediction request 503s instead, with `No trained
+model artifacts for scenario='<slug>' (org='<org>', fallback org='demo' also has none — has
+`training` run for it?)`. There's no equivalent `make k3s-*` target yet for
+`k8s/jobs/etl-vectorize-job.yaml` (the `conversational_rag`/`assisted_form` counterpart, seeding
+each scenario's document catalog into Qdrant) — apply it the same way as the other Jobs when a
+RAG-backed scenario needs its documents seeded on a fresh cluster:
+```bash
+kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
+kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
+kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=300s
+```
 
 ### Pausing vs. tearing down
 

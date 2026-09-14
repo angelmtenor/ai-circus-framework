@@ -49,7 +49,7 @@ down: ## Stop and remove all containers
 logs: ## Tail logs for all running containers
 	@docker compose logs -f --tail=200
 
-pipeline: ## Run the one-shot churn ETL -> training pipeline, then (re)start prediction
+pipeline: ## Run the one-shot ETL -> training pipeline (every tabular_ml scenario in SCENARIOS, empty/unset = all), then (re)start prediction
 	@docker compose up --build etl-tabular
 	@docker compose up --build training
 	@docker compose up -d --build prediction
@@ -270,14 +270,14 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@echo "✓ all pods ready"
 	@$(MAKE) k3s-portforward
 
-k3s-pipeline: ## Run the one-shot churn ETL -> training pipeline as k8s Jobs (mirrors `make pipeline`)
+k3s-pipeline: ## Run the one-shot ETL -> training pipeline (every tabular_ml scenario) as k8s Jobs (mirrors `make pipeline`) — REQUIRED before any tabular_ml scenario can serve a prediction; a fresh/recreated cluster has no trained models until this runs
 	@kubectl -n ai-circus delete job etl-tabular training --ignore-not-found
 	@kubectl apply -f k8s/jobs/etl-tabular-job.yaml
 	@kubectl -n ai-circus wait --for=condition=complete job/etl-tabular --timeout=300s
 	@kubectl apply -f k8s/jobs/training-job.yaml
 	@kubectl -n ai-circus wait --for=condition=complete job/training --timeout=600s
 	@kubectl -n ai-circus rollout restart deployment/prediction
-	@echo "✓ churn pipeline complete"
+	@echo "✓ tabular_ml pipeline complete (every scenario in SCENARIOS, empty/unset = all)"
 
 k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl checks unchanged (same *.localhost + localhost:$${PLATFORM_REGISTRY_PORT:-8010} assertions, now against k3d's Traefik)
 	@kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-verify-port-forward.log 2>&1 & \
