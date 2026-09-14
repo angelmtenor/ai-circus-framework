@@ -156,32 +156,66 @@ class MapRegion(BaseModel):
     feature_overrides: dict[str, float | str] = {}
 
 
+class RegionMapLevel(BaseModel):
+    """One selectable aggregation granularity on a `RegionMapExtra` map (e.g. "region"
+    vs "province") — its own `group_by` categorical feature and its own set of
+    bubbles. Every level scores against the exact same trained model; a finer level
+    is only meaningful if its `regions` entries' `feature_overrides` supply real,
+    differentiated values for that granularity (not just a copy of the coarser
+    level's numbers) — otherwise its predictions/SHAP would be indistinguishable
+    from the coarser level's, which defeats the point of offering it.
+    """
+
+    key: str  # stable id for this level, e.g. "region" — used by the UI's selector
+    label: str  # display name, e.g. "Comunidad Autónoma" / "Provincia"
+    # A categorical entry in dataset.feature_columns whose value ui-react's
+    # RegionMapView sets to each bubble's own `key` when building that bubble's
+    # /predict request. None when this level has no dedicated trained feature of
+    # its own (e.g. a coarser level whose bubbles are fully specified through
+    # `feature_overrides` instead — see `luznova_regional_demand`'s "region" level,
+    # which reuses `province`'s trained signal rather than training a second,
+    # perfectly-collinear "region" feature).
+    group_by: str | None = None
+    regions: list[MapRegion]
+
+
 class RegionMapExtra(BaseModel):
-    """Opt-in 5th workspace tab: a geographic bubble map of batched predictions, one
-    per `regions` entry, grouped by the `group_by` categorical feature (see
-    ui-react's RegionMapView.tsx — the single generic renderer for this `kind`,
-    reused by any `tabular_ml` scenario that sets this block; not scenario-specific
-    UI code).
+    """Opt-in 5th workspace tab: a geographic bubble map of batched predictions,
+    grouped by one of `levels`' `group_by` categorical features (see ui-react's
+    RegionMapView.tsx — the single generic renderer for this `kind`, reused by any
+    `tabular_ml` scenario that sets this block; not scenario-specific UI code). At
+    least one level; more than one lets the user switch aggregation granularity
+    (e.g. region vs. province) without leaving the tab.
     """
 
     kind: Literal["region_map"] = "region_map"
-    group_by: str  # a categorical entry in dataset.feature_columns
-    regions: list[MapRegion]
     value_label: str  # e.g. "Predicted demand (MWh)"
+    levels: list[RegionMapLevel] = Field(min_length=1)
 
 
 class LivePlantExtra(BaseModel):
     """Opt-in 5th workspace tab: a fictional live plant floor of `machine_count`
     simulated machines, ticking client-side every `tick_seconds`, each scored by this
     scenario's own `/predict/{slug}` on every tick (see ui-react's LivePlantView.tsx —
-    the single generic renderer for this `kind`). Simulation and "shut down" controls
-    are client-side only — no real telemetry ingestion, no real actuation.
+    the single generic renderer for this `kind`). Simulation and "shut down"/
+    "maintenance"/"replace" controls are client-side only — no real telemetry
+    ingestion, no real actuation.
     """
 
     kind: Literal["live_plant"] = "live_plant"
     machine_count: int = 6
     tick_seconds: int = 7
     machine_label_prefix: str = "Machine"
+    # How much simulated time one tick represents — the displayed clock advances by
+    # this many minutes every `tick_seconds`, so a short real-time session can still
+    # show a machine aging meaningfully (see `wear_feature`).
+    sim_minutes_per_tick: int = 5
+    # A numeric feature_columns entry that accumulates by `sim_minutes_per_tick` each
+    # tick while a machine is running (e.g. "Tool wear [min]") — its own real
+    # min/max from feature_schema bounds the ramp, and it resets on
+    # maintenance/replace. None falls back to a generic bounded random walk with no
+    # forced aging trend, for a live_plant scenario with no such feature.
+    wear_feature: str | None = None
 
 
 UiExtras = Annotated[RegionMapExtra | LivePlantExtra, Field(discriminator="kind")]
@@ -388,21 +422,48 @@ class ScenarioDefinition(BaseModel):
 
     @model_validator(mode="after")
     def _region_map_columns_are_real_features(self) -> ScenarioDefinition:
-        """Fail fast if `ui_extras.group_by` or a region's `feature_overrides` key
+        """Fail fast if a level's `group_by` or a region's `feature_overrides` key
         doesn't name a real feature — ui-react's RegionMapView would otherwise
         silently send `undefined`/an ignored extra key for that region.
         """
         if not isinstance(self.ui_extras, RegionMapExtra) or self.dataset is None:
             return self
         known = set(self.dataset.feature_columns)
-        if self.ui_extras.group_by not in known:
-            raise ValueError(f"ui_extras.group_by {self.ui_extras.group_by!r} is not among dataset.feature_columns.")
-        for region in self.ui_extras.regions:
-            unknown = set(region.feature_overrides) - known
-            if unknown:
+        for level in self.ui_extras.levels:
+            if level.group_by is not None and level.group_by not in known:
                 raise ValueError(
-                    f"region {region.key!r} feature_overrides {sorted(unknown)} not in dataset.feature_columns."
+                    f"ui_extras level {level.key!r}: group_by {level.group_by!r} is not among dataset.feature_columns."
                 )
+            for region in level.regions:
+                unknown = set(region.feature_overrides) - known
+                if unknown:
+                    raise ValueError(
+                        f"ui_extras level {level.key!r} region {region.key!r} "
+                        f"feature_overrides {sorted(unknown)} not in dataset.feature_columns."
+                    )
+        return self
+
+    @model_validator(mode="after")
+    def _live_plant_wear_feature_is_real_and_numeric(self) -> ScenarioDefinition:
+        """Fail fast if `ui_extras.wear_feature` doesn't name a real numeric
+        feature — ui-react's LivePlantView would otherwise silently no-op the aging
+        ramp (or crash trying to increment a categorical value).
+        """
+        if (
+            not isinstance(self.ui_extras, LivePlantExtra)
+            or self.ui_extras.wear_feature is None
+            or self.dataset is None
+        ):
+            return self
+        spec = self.dataset.feature_schema.get(self.ui_extras.wear_feature)
+        if spec is None:
+            raise ValueError(
+                f"ui_extras.wear_feature {self.ui_extras.wear_feature!r} is not among dataset.feature_columns."
+            )
+        if spec.type != "numeric":
+            raise ValueError(
+                f"ui_extras.wear_feature {self.ui_extras.wear_feature!r} must be a numeric feature, got {spec.type!r}."
+            )
         return self
 
     @model_validator(mode="after")

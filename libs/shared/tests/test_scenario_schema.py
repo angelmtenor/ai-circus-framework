@@ -12,8 +12,11 @@ from ai_circus_shared.scenario_schema import (
     DocumentEmbedding,
     DocumentsConfig,
     GithubDocsSource,
+    LivePlantExtra,
     MapRegion,
+    NumericFeatureUI,
     RegionMapExtra,
+    RegionMapLevel,
     ScenarioDefinition,
     TabularDataset,
     TabularModel,
@@ -28,16 +31,17 @@ EMBEDDING = DocumentEmbedding(model="sentence-transformers/all-MiniLM-L6-v2")
 SERVICES = TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant")
 
 
-def _region_map_scenario(ui_extras: RegionMapExtra) -> ScenarioDefinition:
-    """A minimal, otherwise-valid tabular_ml ScenarioDefinition, varying only ui_extras
-    — for testing the region-map cross-field validators in isolation.
+def _ui_extras_scenario(ui_extras: RegionMapExtra | LivePlantExtra) -> ScenarioDefinition:
+    """A minimal, otherwise-valid tabular_ml ScenarioDefinition (one categorical
+    feature "region", one numeric feature "wear"), varying only ui_extras — for
+    testing the region-map/live-plant cross-field validators in isolation.
     """
     return ScenarioDefinition(
-        slug="test_region_map",
+        slug="test_ui_extras",
         kind="tabular_ml",
-        title="Test Region Map",
-        description="A minimal scenario for testing region-map validation.",
-        role_required="scenario:test_region_map",
+        title="Test UI Extras",
+        description="A minimal scenario for testing ui_extras validation.",
+        role_required="scenario:test_ui_extras",
         icon="🧪",
         industry="general",
         chat=ChatConfig(context="test"),
@@ -47,8 +51,11 @@ def _region_map_scenario(ui_extras: RegionMapExtra) -> ScenarioDefinition:
             seed_file="sample_data/x.csv",
             index_col="row_id",
             target="y",
-            feature_columns=["region"],
-            feature_schema={"region": CategoricalFeatureUI(label="Region", options=["a", "b"], default="a")},
+            feature_columns=["region", "wear"],
+            feature_schema={
+                "region": CategoricalFeatureUI(label="Region", options=["a", "b"], default="a"),
+                "wear": NumericFeatureUI(label="Wear", min=0, max=100, default=0),
+            },
         ),
         model=TabularModel(
             task_type="regression",
@@ -119,29 +126,86 @@ def test_documents_config_accepts_both_seed_sources_as_github_primary_with_local
 
 
 def test_region_map_extra_accepts_a_valid_group_by_and_overrides() -> None:
-    """A ui_extras.region_map whose group_by and every region's feature_overrides key
-    are real dataset.feature_columns is valid.
+    """A ui_extras.region_map whose every level's group_by and every region's
+    feature_overrides key are real dataset.feature_columns is valid.
     """
-    scenario = _region_map_scenario(
+    scenario = _ui_extras_scenario(
         RegionMapExtra(
-            group_by="region",
             value_label="Predicted value",
-            regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0, feature_overrides={"region": "a"})],
+            levels=[
+                RegionMapLevel(
+                    key="region",
+                    label="Region",
+                    group_by="region",
+                    regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0, feature_overrides={"region": "a"})],
+                )
+            ],
         )
     )
 
     assert scenario.ui_extras is not None
-    assert scenario.ui_extras.group_by == "region"
+    assert scenario.ui_extras.levels[0].group_by == "region"
+
+
+def test_region_map_level_accepts_no_group_by() -> None:
+    """A level with group_by=None (a coarser level reusing a finer level's real
+    trained feature entirely through feature_overrides) is valid.
+    """
+    scenario = _ui_extras_scenario(
+        RegionMapExtra(
+            value_label="Predicted value",
+            levels=[
+                RegionMapLevel(
+                    key="region",
+                    label="Region",
+                    regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0, feature_overrides={"wear": 5})],
+                )
+            ],
+        )
+    )
+
+    assert scenario.ui_extras.levels[0].group_by is None
+
+
+def test_region_map_extra_accepts_multiple_levels() -> None:
+    """Two levels (e.g. region + province) can coexist, each with its own group_by/regions."""
+    scenario = _ui_extras_scenario(
+        RegionMapExtra(
+            value_label="Predicted value",
+            levels=[
+                RegionMapLevel(
+                    key="region",
+                    label="Region",
+                    group_by="region",
+                    regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0)],
+                ),
+                RegionMapLevel(
+                    key="wear_group",
+                    label="Wear group",
+                    group_by="region",
+                    regions=[MapRegion(key="b", label="B", lat=1.0, lon=1.0, feature_overrides={"wear": 10})],
+                ),
+            ],
+        )
+    )
+
+    assert len(scenario.ui_extras.levels) == 2
 
 
 def test_region_map_extra_rejects_a_group_by_not_in_feature_columns() -> None:
-    """ui_extras.group_by must name a real dataset.feature_columns entry."""
+    """Every level's group_by must name a real dataset.feature_columns entry."""
     with pytest.raises(ValidationError, match="group_by"):
-        _region_map_scenario(
+        _ui_extras_scenario(
             RegionMapExtra(
-                group_by="not_a_feature",
                 value_label="Predicted value",
-                regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0)],
+                levels=[
+                    RegionMapLevel(
+                        key="region",
+                        label="Region",
+                        group_by="not_a_feature",
+                        regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0)],
+                    )
+                ],
             )
         )
 
@@ -149,10 +213,51 @@ def test_region_map_extra_rejects_a_group_by_not_in_feature_columns() -> None:
 def test_region_map_extra_rejects_a_feature_override_not_in_feature_columns() -> None:
     """Every region's feature_overrides key must also name a real dataset.feature_columns entry."""
     with pytest.raises(ValidationError, match="feature_overrides"):
-        _region_map_scenario(
+        _ui_extras_scenario(
             RegionMapExtra(
-                group_by="region",
                 value_label="Predicted value",
-                regions=[MapRegion(key="a", label="A", lat=0.0, lon=0.0, feature_overrides={"not_a_feature": 1})],
+                levels=[
+                    RegionMapLevel(
+                        key="region",
+                        label="Region",
+                        group_by="region",
+                        regions=[
+                            MapRegion(key="a", label="A", lat=0.0, lon=0.0, feature_overrides={"not_a_feature": 1})
+                        ],
+                    )
+                ],
             )
         )
+
+
+def test_region_map_extra_rejects_zero_levels() -> None:
+    """At least one level is required — an empty region map tab would have nothing to show."""
+    with pytest.raises(ValidationError):
+        RegionMapExtra(value_label="Predicted value", levels=[])
+
+
+def test_live_plant_extra_accepts_a_valid_numeric_wear_feature() -> None:
+    """A ui_extras.live_plant whose wear_feature names a real numeric feature is valid."""
+    scenario = _ui_extras_scenario(LivePlantExtra(wear_feature="wear"))
+
+    assert scenario.ui_extras is not None
+    assert scenario.ui_extras.wear_feature == "wear"
+
+
+def test_live_plant_extra_accepts_no_wear_feature() -> None:
+    """wear_feature is optional — None falls back to the generic random-walk simulation."""
+    scenario = _ui_extras_scenario(LivePlantExtra())
+
+    assert scenario.ui_extras.wear_feature is None
+
+
+def test_live_plant_extra_rejects_a_wear_feature_not_in_feature_columns() -> None:
+    """wear_feature must name a real dataset.feature_columns entry."""
+    with pytest.raises(ValidationError, match="wear_feature"):
+        _ui_extras_scenario(LivePlantExtra(wear_feature="not_a_feature"))
+
+
+def test_live_plant_extra_rejects_a_categorical_wear_feature() -> None:
+    """wear_feature must be numeric — a categorical column can't be incremented."""
+    with pytest.raises(ValidationError, match="numeric"):
+        _ui_extras_scenario(LivePlantExtra(wear_feature="region"))

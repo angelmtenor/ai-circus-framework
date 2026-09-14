@@ -71,17 +71,24 @@ export type MapRegion = {
   lon: number;
   feature_overrides: Record<string, number | string>;
 };
+export type RegionMapLevel = {
+  key: string;
+  label: string;
+  group_by: string | null;
+  regions: MapRegion[];
+};
 export type RegionMapExtra = {
   kind: "region_map";
-  group_by: string;
-  regions: MapRegion[];
   value_label: string;
+  levels: RegionMapLevel[];
 };
 export type LivePlantExtra = {
   kind: "live_plant";
   machine_count: number;
   tick_seconds: number;
   machine_label_prefix: string;
+  sim_minutes_per_tick: number;
+  wear_feature: string | null;
 };
 export type UiExtras = RegionMapExtra | LivePlantExtra;
 

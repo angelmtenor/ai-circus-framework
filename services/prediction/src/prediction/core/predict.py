@@ -57,6 +57,12 @@ def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[Prediction
     else:
         predictions = np.asarray(artifacts.pipeline.predict_proba(x))[:, 1]
     x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
+    # See training.core.training.build_explainer's matching comment: a sparse
+    # OneHotEncoder output crashes LightGBM's SHAP path once a categorical's
+    # cardinality is high enough (confirmed empirically at 50 categories) —
+    # densifying costs nothing at this repo's per-request batch sizes.
+    if hasattr(x_transformed, "toarray"):
+        x_transformed = x_transformed.toarray()
     shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
     # Binary-classification TreeExplainer with model_output="probability" returns
     # (n_samples, n_features, n_classes); keep just the positive class's contributions.

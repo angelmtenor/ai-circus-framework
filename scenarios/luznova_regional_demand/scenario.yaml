@@ -13,42 +13,56 @@
 # forecasting, non-technical-loss detection, EV charging prediction) with entirely
 # original/synthetic data. Like `cnc_surface_finish`, this is NOT a ported public
 # dataset (hence no `credits` block) — it's a designed synthetic generator grounded
-# in real geography: Spain's 17 Comunidades Autónomas at their real capitals'
-# lat/lon, real-order-of-magnitude 2023 population figures, and a physically
-# plausible demand formula (population x per-capita baseline x an industrial-
-# intensity multiplier x a temperature "bathtub curve" x weekend/holiday
+# in real geography: every real row is a (day, provincia) observation at one of
+# Spain's 50 real provinces (real provincial-capital lat/lon, real-order-of-magnitude
+# population figures summing to each parent region's own real total), and a
+# physically plausible demand formula (population x per-capita baseline x an
+# industrial-intensity multiplier x a temperature "bathtub curve" x weekend/holiday
 # suppression x lognormal noise) — see scripts/generate_luznova_regional_demand.py
 # for the exact formula. Disclosed as a designed combination of real geography and a
 # directionally realistic demand model, not fitted to any real consumption dataset.
 #
 # This is the flagship scenario for ui-react's `ui_extras: region_map` 5th workspace
-# tab (see RegionMapView.tsx) — batch-predicts all 17 regions at once and plots them
-# as a Spain bubble map, grouped by `region`.
+# tab (see RegionMapView.tsx) — two selectable aggregation levels (Comunidad
+# Autónoma / Provincia) batch-predict all of their bubbles at once from the SAME
+# trained model and plot them on a Spain map. Only `province` (50 categories) is an
+# actual trained feature — `region` (17 categories) is *not*, deliberately: every
+# province belongs to exactly one region, so a "region" column would be perfectly
+# collinear with `province` and add nothing but a second, redundant high-cardinality
+# categorical (confirmed empirically: training both together crashed SHAP's sparse-
+# matrix subsampling). A "province" map query pins `province` to its own key plus
+# its own real, smaller population/industrial_index; a "region" query instead pins
+# `province` to that region's largest (capital) province and population_thousands/
+# industrial_index to the region's own real aggregate — both genuinely different,
+# genuinely explainable (SHAP) predictions from the one trained model, not a
+# client-side split of one number.
 
 slug: luznova_regional_demand
 kind: tabular_ml
 title: "Regional Electricity Demand Forecasting"
 description: >
-  Predicts a Spanish region's daily electricity demand (in MWh) from calendar/weather
-  conditions and the region's own population and industrial intensity — utility grid
-  planning and reserve allocation, viewable on a live Spain regional map.
+  Predicts daily electricity demand (in MWh) for a Spanish Comunidad Autónoma or
+  provincia from calendar/weather conditions and the area's own population and
+  industrial intensity — utility grid planning and reserve allocation, viewable on a
+  live Spain map at either aggregation level.
 role_required: "scenario:luznova_regional_demand"
 industry: energy_utilities
 icon: "⚡"
 
 chat:
   context: >
-    Luznova Utilities' regional electricity demand-forecasting model, covering all 17
-    Comunidades Autónomas of Spain — predicts a region's total daily grid demand (MWh)
-    from the date's calendar context (month, weekend, national holiday), mean daily
-    temperature, and the region's own population and industrial-intensity index.
-    Demand rises both in cold winter months (heating) and hot summer months
-    (air conditioning) relative to a mild ~18°C day, and drops on weekends/holidays.
+    Luznova Utilities' electricity demand-forecasting model, covering both of
+    Spain's administrative granularities — its 17 Comunidades Autónomas and its 50
+    provincias — predicts an area's total daily grid demand (MWh) from the date's
+    calendar context (month, weekend, national holiday), mean daily temperature, and
+    that area's own population and industrial-intensity index. Demand rises both in
+    cold winter months (heating) and hot summer months (air conditioning) relative
+    to a mild ~18°C day, and drops on weekends/holidays.
   sample_questions:
-    - "Which factors matter most for predicting regional demand?"
+    - "Which factors matter most for predicting demand?"
     - "How accurate is the trained model?"
     - "Why does a colder-than-average day increase predicted demand?"
-    - "Does a region's industrial index matter more than its population?"
+    - "Does an area's industrial index matter more than its population?"
     - "How much does demand drop on a national holiday?"
 
 dataset:
@@ -61,7 +75,7 @@ dataset:
   index_col: "row_id"
   target: "demand_mwh"
   feature_columns:
-    - region
+    - province
     - month
     - is_weekend
     - is_holiday
@@ -70,14 +84,14 @@ dataset:
     - industrial_index
 
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
-  # ranges taken from the generator's own real region table / a full year's synthetic
-  # weather (see scripts/generate_luznova_regional_demand.py).
+  # ranges taken from the generator's own real province table / a full year's
+  # synthetic weather (see scripts/generate_luznova_regional_demand.py).
   feature_schema:
-    region:
-      {type: categorical, label: "Region (Comunidad Autónoma)",
-       options: [andalucia, cataluna, madrid, valenciana, galicia, castilla_y_leon, pais_vasco, castilla_la_mancha, canarias, murcia, aragon, baleares, extremadura, asturias, navarra, cantabria, la_rioja],
-       default: madrid,
-       info: "Which of Spain's 17 Comunidades Autónomas this demand figure is for — the map tab predicts all 17 at once."}
+    province:
+      {type: categorical, label: "Province (Provincia)",
+       options: [sevilla, malaga, cadiz, cordoba, granada, jaen, almeria, huelva, barcelona, tarragona, girona, lleida, valencia, alicante, castellon, a_coruna, pontevedra, lugo, ourense, valladolid, leon, burgos, salamanca, palencia, zamora, avila, segovia, soria, vizcaya, guipuzcoa, alava, toledo, ciudad_real, albacete, cuenca, guadalajara, las_palmas, santa_cruz_tenerife, zaragoza, huesca, teruel, badajoz, caceres, asturias, baleares, cantabria, madrid_prov, murcia, navarra, la_rioja],
+       default: madrid_prov,
+       info: "Which of Spain's 50 provincias this demand figure is for — the map tab can predict all 50 at once, or all 17 regions at once."}
     month:
       {type: numeric, label: "Month", min: 1, max: 12, default: 1, step: 1,
        info: "Calendar month (1=January). Drives the seasonal component of demand via that day's temperature."}
@@ -91,17 +105,17 @@ dataset:
       {type: numeric, label: "Mean temperature", min: -3.0, max: 31.0, default: 15.0, step: 0.5,
        info: "That day's mean temperature in °C. Demand rises both well below and well above a mild ~18°C point (heating/cooling load)."}
     population_thousands:
-      {type: numeric, label: "Region population", min: 300, max: 8600, default: 6700, step: 50,
-       info: "The region's population, in thousands — the main driver of baseline demand scale. Fixed per region on the map tab."}
+      {type: numeric, label: "Population", min: 90, max: 8600, default: 6700, step: 10,
+       info: "The area's population, in thousands — the main driver of baseline demand scale. Fixed per area on the map tab (a province's own population at province granularity, or the whole region's at region granularity)."}
     industrial_index:
       {type: numeric, label: "Industrial intensity index", min: 0, max: 100, default: 55, step: 1,
-       info: "A 0-100 proxy for how industrial (vs. purely residential) the region's economy is — higher values add proportionally more demand on top of the population baseline. Fixed per region on the map tab."}
+       info: "A 0-100 proxy for how industrial (vs. purely residential) the area's economy is — higher values add proportionally more demand on top of the population baseline. Fixed per area on the map tab."}
 
   # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
   # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: scatter, x: mean_temperature_c, y: demand_mwh, color_by: region}
-    - {type: bar, x: region, y: demand_mwh, agg: mean, color_by: region}
+    - {type: scatter, x: mean_temperature_c, y: demand_mwh, color_by: is_weekend}
+    - {type: bar, x: province, y: demand_mwh, agg: mean}
     - {type: line, x: month, y: demand_mwh, agg: mean}
 
 model:
@@ -110,8 +124,8 @@ model:
   accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
   target_units: "MWh"
-  target_label: "Predicted regional demand"
-  target_description: "Total electricity demand forecast for this region on this day, in megawatt-hours."
+  target_label: "Predicted demand"
+  target_description: "Total electricity demand forecast for this area on this day, in megawatt-hours."
 
 services:
   etl: etl-tabular
@@ -119,30 +133,92 @@ services:
   prediction: prediction
   assistant: assistant
 
-# Opt-in 5th workspace tab (see ui-react's RegionMapView.tsx) — one bubble per region,
-# batch-predicted in a single /predict/luznova_regional_demand call, colored/sized by
-# demand_mwh. `feature_overrides` pins each region's own real population/industrial
-# index so the shared what-if controls (month/weekend/holiday/temperature) apply the
-# same day-scenario across all 17 regions while each keeps its own real profile.
+# Opt-in 5th workspace tab (see ui-react's RegionMapView.tsx) — two selectable
+# aggregation levels, each batch-predicted in a single /predict/luznova_regional_demand
+# call from the SAME trained model, colored/sized by demand_mwh. Every bubble's
+# `feature_overrides` pins its own real values (both `region`+`province`, plus
+# population/industrial_index at that granularity) so the shared what-if controls
+# (month/weekend/holiday/temperature) apply the same day-scenario across every
+# bubble while each keeps its own real profile.
 ui_extras:
   kind: region_map
-  group_by: region
   value_label: "Predicted demand (MWh)"
-  regions:
-    - {key: andalucia, label: "Andalucía", lat: 37.39, lon: -5.99, feature_overrides: {population_thousands: 8500, industrial_index: 45}}
-    - {key: cataluna, label: "Cataluña", lat: 41.39, lon: 2.16, feature_overrides: {population_thousands: 7700, industrial_index: 75}}
-    - {key: madrid, label: "Comunidad de Madrid", lat: 40.42, lon: -3.70, feature_overrides: {population_thousands: 6700, industrial_index: 55}}
-    - {key: valenciana, label: "Comunitat Valenciana", lat: 39.47, lon: -0.38, feature_overrides: {population_thousands: 5100, industrial_index: 60}}
-    - {key: galicia, label: "Galicia", lat: 42.88, lon: -8.55, feature_overrides: {population_thousands: 2700, industrial_index: 35}}
-    - {key: castilla_y_leon, label: "Castilla y León", lat: 41.65, lon: -4.73, feature_overrides: {population_thousands: 2380, industrial_index: 30}}
-    - {key: pais_vasco, label: "País Vasco", lat: 42.85, lon: -2.67, feature_overrides: {population_thousands: 2200, industrial_index: 80}}
-    - {key: castilla_la_mancha, label: "Castilla-La Mancha", lat: 39.86, lon: -4.02, feature_overrides: {population_thousands: 2050, industrial_index: 25}}
-    - {key: canarias, label: "Canarias", lat: 28.10, lon: -15.41, feature_overrides: {population_thousands: 2170, industrial_index: 20}}
-    - {key: murcia, label: "Región de Murcia", lat: 37.99, lon: -1.13, feature_overrides: {population_thousands: 1550, industrial_index: 40}}
-    - {key: aragon, label: "Aragón", lat: 41.65, lon: -0.88, feature_overrides: {population_thousands: 1330, industrial_index: 40}}
-    - {key: baleares, label: "Illes Balears", lat: 39.57, lon: 2.65, feature_overrides: {population_thousands: 1200, industrial_index: 15}}
-    - {key: extremadura, label: "Extremadura", lat: 38.92, lon: -6.34, feature_overrides: {population_thousands: 1060, industrial_index: 20}}
-    - {key: asturias, label: "Asturias", lat: 43.36, lon: -5.85, feature_overrides: {population_thousands: 1010, industrial_index: 45}}
-    - {key: navarra, label: "Navarra", lat: 42.82, lon: -1.65, feature_overrides: {population_thousands: 660, industrial_index: 55}}
-    - {key: cantabria, label: "Cantabria", lat: 43.46, lon: -3.81, feature_overrides: {population_thousands: 580, industrial_index: 35}}
-    - {key: la_rioja, label: "La Rioja", lat: 42.47, lon: -2.45, feature_overrides: {population_thousands: 320, industrial_index: 40}}
+  levels:
+    - key: region
+      label: "Comunidad Autónoma"
+      # No group_by: `region` isn't a trained feature (see the disclosure note at
+      # the top of this file) — every bubble here is fully specified by
+      # feature_overrides alone (province: <capital>, population/industrial_index:
+      # <region aggregate>).
+      regions:
+        - {key: andalucia, label: "Andalucía", lat: 37.39, lon: -5.99, feature_overrides: {province: sevilla, population_thousands: 8500, industrial_index: 45}}
+        - {key: cataluna, label: "Cataluña", lat: 41.39, lon: 2.16, feature_overrides: {province: barcelona, population_thousands: 7700, industrial_index: 75}}
+        - {key: madrid, label: "Comunidad de Madrid", lat: 40.42, lon: -3.70, feature_overrides: {province: madrid_prov, population_thousands: 6700, industrial_index: 55}}
+        - {key: valenciana, label: "Comunitat Valenciana", lat: 39.47, lon: -0.38, feature_overrides: {province: valencia, population_thousands: 5100, industrial_index: 60}}
+        - {key: galicia, label: "Galicia", lat: 42.88, lon: -8.55, feature_overrides: {province: a_coruna, population_thousands: 2700, industrial_index: 35}}
+        - {key: castilla_y_leon, label: "Castilla y León", lat: 41.65, lon: -4.73, feature_overrides: {province: valladolid, population_thousands: 2380, industrial_index: 30}}
+        - {key: pais_vasco, label: "País Vasco", lat: 42.85, lon: -2.67, feature_overrides: {province: vizcaya, population_thousands: 2200, industrial_index: 80}}
+        - {key: castilla_la_mancha, label: "Castilla-La Mancha", lat: 39.86, lon: -4.02, feature_overrides: {province: toledo, population_thousands: 2050, industrial_index: 25}}
+        - {key: canarias, label: "Canarias", lat: 28.10, lon: -15.41, feature_overrides: {province: las_palmas, population_thousands: 2170, industrial_index: 20}}
+        - {key: murcia, label: "Región de Murcia", lat: 37.99, lon: -1.13, feature_overrides: {province: murcia, population_thousands: 1550, industrial_index: 40}}
+        - {key: aragon, label: "Aragón", lat: 41.65, lon: -0.88, feature_overrides: {province: zaragoza, population_thousands: 1330, industrial_index: 40}}
+        - {key: baleares, label: "Illes Balears", lat: 39.57, lon: 2.65, feature_overrides: {province: baleares, population_thousands: 1200, industrial_index: 15}}
+        - {key: extremadura, label: "Extremadura", lat: 38.92, lon: -6.34, feature_overrides: {province: badajoz, population_thousands: 1060, industrial_index: 20}}
+        - {key: asturias, label: "Asturias", lat: 43.36, lon: -5.85, feature_overrides: {province: asturias, population_thousands: 1010, industrial_index: 45}}
+        - {key: navarra, label: "Navarra", lat: 42.82, lon: -1.65, feature_overrides: {province: navarra, population_thousands: 660, industrial_index: 55}}
+        - {key: cantabria, label: "Cantabria", lat: 43.46, lon: -3.81, feature_overrides: {province: cantabria, population_thousands: 580, industrial_index: 35}}
+        - {key: la_rioja, label: "La Rioja", lat: 42.47, lon: -2.45, feature_overrides: {province: la_rioja, population_thousands: 320, industrial_index: 40}}
+    - key: province
+      label: "Provincia"
+      group_by: province
+      regions:
+        - {key: sevilla, label: "Sevilla", lat: 37.39, lon: -5.99, feature_overrides: {population_thousands: 1950, industrial_index: 55}}
+        - {key: malaga, label: "Málaga", lat: 36.72, lon: -4.42, feature_overrides: {population_thousands: 1700, industrial_index: 40}}
+        - {key: cadiz, label: "Cádiz", lat: 36.53, lon: -6.30, feature_overrides: {population_thousands: 1240, industrial_index: 50}}
+        - {key: cordoba, label: "Córdoba", lat: 37.89, lon: -4.78, feature_overrides: {population_thousands: 780, industrial_index: 35}}
+        - {key: granada, label: "Granada", lat: 37.18, lon: -3.60, feature_overrides: {population_thousands: 915, industrial_index: 30}}
+        - {key: jaen, label: "Jaén", lat: 37.77, lon: -3.79, feature_overrides: {population_thousands: 610, industrial_index: 25}}
+        - {key: almeria, label: "Almería", lat: 36.84, lon: -2.47, feature_overrides: {population_thousands: 730, industrial_index: 45}}
+        - {key: huelva, label: "Huelva", lat: 37.26, lon: -6.95, feature_overrides: {population_thousands: 525, industrial_index: 40}}
+        - {key: barcelona, label: "Barcelona", lat: 41.39, lon: 2.16, feature_overrides: {population_thousands: 5700, industrial_index: 85}}
+        - {key: tarragona, label: "Tarragona", lat: 41.12, lon: 1.24, feature_overrides: {population_thousands: 830, industrial_index: 70}}
+        - {key: girona, label: "Girona", lat: 41.98, lon: 2.82, feature_overrides: {population_thousands: 780, industrial_index: 55}}
+        - {key: lleida, label: "Lleida", lat: 41.62, lon: 0.62, feature_overrides: {population_thousands: 430, industrial_index: 45}}
+        - {key: valencia, label: "Valencia", lat: 39.47, lon: -0.38, feature_overrides: {population_thousands: 2650, industrial_index: 65}}
+        - {key: alicante, label: "Alicante", lat: 38.35, lon: -0.48, feature_overrides: {population_thousands: 1950, industrial_index: 55}}
+        - {key: castellon, label: "Castellón", lat: 39.99, lon: -0.04, feature_overrides: {population_thousands: 580, industrial_index: 60}}
+        - {key: a_coruna, label: "A Coruña", lat: 43.36, lon: -8.41, feature_overrides: {population_thousands: 1120, industrial_index: 40}}
+        - {key: pontevedra, label: "Pontevedra", lat: 42.43, lon: -8.64, feature_overrides: {population_thousands: 945, industrial_index: 45}}
+        - {key: lugo, label: "Lugo", lat: 43.01, lon: -7.56, feature_overrides: {population_thousands: 320, industrial_index: 25}}
+        - {key: ourense, label: "Ourense", lat: 42.34, lon: -7.86, feature_overrides: {population_thousands: 305, industrial_index: 25}}
+        - {key: valladolid, label: "Valladolid", lat: 41.65, lon: -4.73, feature_overrides: {population_thousands: 520, industrial_index: 45}}
+        - {key: leon, label: "León", lat: 42.60, lon: -5.57, feature_overrides: {population_thousands: 440, industrial_index: 30}}
+        - {key: burgos, label: "Burgos", lat: 42.34, lon: -3.70, feature_overrides: {population_thousands: 360, industrial_index: 40}}
+        - {key: salamanca, label: "Salamanca", lat: 40.97, lon: -5.66, feature_overrides: {population_thousands: 330, industrial_index: 25}}
+        - {key: palencia, label: "Palencia", lat: 42.01, lon: -4.53, feature_overrides: {population_thousands: 155, industrial_index: 30}}
+        - {key: zamora, label: "Zamora", lat: 41.50, lon: -5.75, feature_overrides: {population_thousands: 165, industrial_index: 20}}
+        - {key: avila, label: "Ávila", lat: 40.66, lon: -4.70, feature_overrides: {population_thousands: 155, industrial_index: 20}}
+        - {key: segovia, label: "Segovia", lat: 40.95, lon: -4.12, feature_overrides: {population_thousands: 150, industrial_index: 20}}
+        - {key: soria, label: "Soria", lat: 41.76, lon: -2.47, feature_overrides: {population_thousands: 90, industrial_index: 20}}
+        - {key: vizcaya, label: "Vizcaya", lat: 43.26, lon: -2.92, feature_overrides: {population_thousands: 1150, industrial_index: 85}}
+        - {key: guipuzcoa, label: "Guipúzcoa", lat: 43.32, lon: -1.98, feature_overrides: {population_thousands: 715, industrial_index: 80}}
+        - {key: alava, label: "Álava", lat: 42.85, lon: -2.67, feature_overrides: {population_thousands: 335, industrial_index: 70}}
+        - {key: toledo, label: "Toledo", lat: 39.86, lon: -4.02, feature_overrides: {population_thousands: 730, industrial_index: 30}}
+        - {key: ciudad_real, label: "Ciudad Real", lat: 38.99, lon: -3.93, feature_overrides: {population_thousands: 485, industrial_index: 25}}
+        - {key: albacete, label: "Albacete", lat: 38.99, lon: -1.86, feature_overrides: {population_thousands: 385, industrial_index: 25}}
+        - {key: cuenca, label: "Cuenca", lat: 40.07, lon: -2.14, feature_overrides: {population_thousands: 195, industrial_index: 15}}
+        - {key: guadalajara, label: "Guadalajara", lat: 40.63, lon: -3.17, feature_overrides: {population_thousands: 255, industrial_index: 30}}
+        - {key: las_palmas, label: "Las Palmas", lat: 28.10, lon: -15.41, feature_overrides: {population_thousands: 1150, industrial_index: 20}}
+        - {key: santa_cruz_tenerife, label: "Santa Cruz de Tenerife", lat: 28.47, lon: -16.25, feature_overrides: {population_thousands: 1020, industrial_index: 20}}
+        - {key: zaragoza, label: "Zaragoza", lat: 41.65, lon: -0.88, feature_overrides: {population_thousands: 980, industrial_index: 50}}
+        - {key: huesca, label: "Huesca", lat: 42.14, lon: -0.41, feature_overrides: {population_thousands: 220, industrial_index: 30}}
+        - {key: teruel, label: "Teruel", lat: 40.34, lon: -1.11, feature_overrides: {population_thousands: 130, industrial_index: 20}}
+        - {key: badajoz, label: "Badajoz", lat: 38.88, lon: -6.97, feature_overrides: {population_thousands: 670, industrial_index: 22}}
+        - {key: caceres, label: "Cáceres", lat: 39.48, lon: -6.37, feature_overrides: {population_thousands: 390, industrial_index: 18}}
+        - {key: asturias, label: "Asturias", lat: 43.36, lon: -5.85, feature_overrides: {population_thousands: 1010, industrial_index: 45}}
+        - {key: baleares, label: "Illes Balears", lat: 39.57, lon: 2.65, feature_overrides: {population_thousands: 1200, industrial_index: 15}}
+        - {key: cantabria, label: "Cantabria", lat: 43.46, lon: -3.81, feature_overrides: {population_thousands: 580, industrial_index: 35}}
+        - {key: madrid_prov, label: "Madrid", lat: 40.42, lon: -3.70, feature_overrides: {population_thousands: 6700, industrial_index: 55}}
+        - {key: murcia, label: "Murcia", lat: 37.99, lon: -1.13, feature_overrides: {population_thousands: 1550, industrial_index: 40}}
+        - {key: navarra, label: "Navarra", lat: 42.82, lon: -1.65, feature_overrides: {population_thousands: 660, industrial_index: 55}}
+        - {key: la_rioja, label: "La Rioja", lat: 42.47, lon: -2.45, feature_overrides: {population_thousands: 320, industrial_index: 40}}
