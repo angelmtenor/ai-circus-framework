@@ -1,0 +1,201 @@
+# Seed definition for the "luznova_gas_prospects" scenario — loaded into the
+# `platform` Postgres schema by services/platform-registry at bootstrap. Editing this
+# file and re-seeding is how a developer adds/changes a scenario; it is never read
+# directly by any other service (see AGENTS.md / plan: "Scenario registry").
+#
+# The scenario-specific services (etl-tabular, training, prediction) also read this
+# file directly for their own operational config (dataset schema, model candidates) —
+# that's build-time parameterization analogous to each service's own settings.yaml,
+# not tenant/entitlement data, so it doesn't need to go through platform-registry's API.
+#
+# Fourth scenario for "Luznova Utilities", a fictional Spanish electricity + gas
+# distributor — a sales/CRM use case: which households in a gas-network expansion
+# area are likely to actually sign up, and how much gas/revenue is at stake. Like
+# `luznova_regional_demand`, this is NOT a ported public dataset (hence no `credits`
+# block) — a designed synthetic generator grounded in real geography: every row is a
+# (day, censal_area) observation for one of 8 fictional census-tract-like segments
+# split across two REAL Spanish municipios chosen for deliberately different climate
+# and economics — Rincón de la Victoria (Málaga, Andalucía; mild Mediterranean coast)
+# and Miranda de Ebro (Burgos, Castilla y León; cold continental — same regional
+# climate profile `luznova_regional_demand` uses for castilla_y_leon) — plus a
+# logistic conversion-probability formula and a heating-degree-driven consumption/
+# revenue formula. See scripts/generate_luznova_gas_prospects.py for the exact
+# formulas. Disclosed as a designed combination of real geography and directionally
+# realistic CRM/demand models, not fitted to any real dataset.
+#
+# `municipio` is NOT a trained feature — deliberately: every censal_area belongs to
+# exactly one municipio, so it would be perfectly collinear with `censal_area` and add
+# nothing (same reasoning `luznova_regional_demand` uses to exclude `region` in favor
+# of `province`). It's kept in the raw CSV only as human-readable provenance.
+#
+# This is the flagship scenario for ui-react's `ui_extras: region_map` 5th workspace
+# tab (see RegionMapView.tsx) — two selectable levels (Municipio / Censal area)
+# batch-predict all their bubbles at once from the SAME trained classifier and plot
+# signup probability on a map. `month`/`mean_temperature_c`/`competitor_price_delta_pct`/
+# `marketing_touches`/`referral_lead` stay shared what-if knobs applied identically to
+# every bubble (same convention as `luznova_regional_demand`'s month/temperature) —
+# the two municipios' real climate/economics contrast instead shows up in the trained
+# dataset itself and in the Data tab's charts.
+
+slug: luznova_gas_prospects
+kind: tabular_ml
+title: "Gas Contract Conversion & Revenue Potential"
+description: >
+  Predicts the probability that a household prospect in a gas-network expansion area
+  signs up for a supply contract, and the potential daily/monthly gas consumption and
+  billing revenue at stake — across census-tract-like areas in two Spanish municipios
+  with very different climate and economics.
+role_required: "scenario:luznova_gas_prospects"
+industry: energy_utilities
+icon: "🏘️"
+
+chat:
+  context: >
+    Luznova Utilities' gas-signup CRM model for a network expansion campaign, covering
+    8 census-tract-like "censal_area" segments across two municipios with very
+    different climate and economics — Rincón de la Victoria (Málaga, mild coastal) and
+    Miranda de Ebro (Burgos, cold continental). Predicts the probability a prospect
+    signs a gas contract from network distance, competitor price gap, marketing
+    touches, referrals, income, current (non-gas) heating source, and season. Also
+    carries each prospect's potential daily gas consumption/revenue if they convert —
+    driven mostly by household size, building type, and how cold that day is.
+  sample_questions:
+    - "Which factors matter most for predicting a signup?"
+    - "How accurate is the trained model?"
+    - "Why does distance to the gas network hurt conversion so much?"
+    - "Does a colder month actually increase signup probability?"
+    - "Which censal areas have the most revenue potential per prospect?"
+
+dataset:
+  bucket: "scenario-luznova-gas-prospects"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/luznova_gas_prospects.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/luznova_gas_prospects.csv"
+  index_col: "row_id"
+  target: "signed_contract"
+  feature_columns:
+    - censal_area
+    - month
+    - mean_temperature_c
+    - household_income_index
+    - building_type
+    - avg_household_size
+    - current_heating_source
+    - distance_to_gas_network_m
+    - competitor_price_delta_pct
+    - marketing_touches
+    - referral_lead
+    - potential_daily_consumption_m3
+    - potential_daily_revenue_eur
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the generator's own formulas / a full year's synthetic data (see
+  # scripts/generate_luznova_gas_prospects.py).
+  feature_schema:
+    censal_area:
+      {type: categorical, label: "Censal area",
+       options: [rv_centro, rv_torre_benagalbon, rv_cala_del_moral, rv_benagalbon_pueblo, me_casco_historico, me_ircio, me_industrial_norte, me_bayas],
+       default: rv_centro,
+       info: "Which census-tract-like segment this prospect belongs to (rv_ = Rincón de la Victoria, me_ = Miranda de Ebro) — the map tab can predict all 8 at once, or both municipios at once."}
+    month:
+      {type: numeric, label: "Month", min: 1, max: 12, default: 1, step: 1,
+       info: "Calendar month (1=January). Drives seasonal urgency (pre-winter signup bump) and, indirectly, heating-driven consumption."}
+    mean_temperature_c:
+      {type: numeric, label: "Mean temperature", min: -4.0, max: 29.0, default: 15.0, step: 0.5,
+       info: "That day's mean temperature in °C. Colder days below ~16°C increase potential gas consumption for heating; doesn't directly affect signup probability."}
+    household_income_index:
+      {type: numeric, label: "Household income index", min: 0, max: 100, default: 50, step: 1,
+       info: "A 0-100 proxy for the tract's average household income — higher tracts convert slightly more (can better absorb any installation cost)."}
+    building_type:
+      {type: categorical, label: "Dominant building type", options: [apartment, terraced_house, detached_house], default: apartment,
+       info: "The tract's dominant housing type — detached houses use more gas for heating than apartments of the same household size."}
+    avg_household_size:
+      {type: numeric, label: "Average household size", min: 1.0, max: 6.0, default: 3.0, step: 0.1,
+       info: "Average number of people per household in this tract — scales baseline daily gas consumption."}
+    current_heating_source:
+      {type: categorical, label: "Current heating source", options: [electric, butane_lpg, diesel, none], default: electric,
+       info: "What the prospect heats with today (not gas yet). Switching away from butane/diesel is a stronger sell than starting from no heating at all."}
+    distance_to_gas_network_m:
+      {type: numeric, label: "Distance to gas network", min: 0, max: 3000, default: 500, step: 50,
+       info: "Metres from the prospect's building to the nearest gas main — the single biggest drag on conversion (install cost/hassle)."}
+    competitor_price_delta_pct:
+      {type: numeric, label: "Price advantage vs. current provider", min: -30, max: 30, default: 0, step: 1,
+       info: "How much cheaper (positive) or costlier (negative) Luznova's offer is versus the prospect's current energy provider, in percent."}
+    marketing_touches:
+      {type: numeric, label: "Marketing touches", min: 0, max: 8, default: 2, step: 1,
+       info: "How many times this prospect has been contacted by the current campaign (calls, mailers, door-to-door)."}
+    referral_lead:
+      {type: numeric, label: "Referral lead", min: 0, max: 1, default: 0, step: 1,
+       info: "1 if this prospect came from a neighbour/friend referral rather than cold outreach — referrals convert noticeably better."}
+    potential_daily_consumption_m3:
+      {type: numeric, label: "Potential daily consumption", min: 0, max: 13, default: 3, step: 0.1,
+       info: "Estimated gas usage in m³/day if this prospect converts, from household size/building type/that day's heating demand."}
+    potential_daily_revenue_eur:
+      {type: numeric, label: "Potential daily revenue", min: 0, max: 10, default: 2, step: 0.1,
+       info: "Estimated billing value in €/day if this prospect converts (potential consumption × regulated gas price)."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there. Covers both the aggregated view
+  # (conversion rate and mean monthly revenue by area) and the non-aggregated,
+  # per-day view (consumption distribution, income vs. revenue scatter).
+  default_charts:
+    - {type: bar, x: censal_area, y: signed_contract, agg: mean}
+    - {type: line, x: month, y: potential_daily_revenue_eur, agg: mean, color_by: censal_area}
+    - {type: histogram, x: potential_daily_consumption_m3, color_by: censal_area}
+    - {type: scatter, x: household_income_index, y: potential_daily_revenue_eur, color_by: censal_area}
+
+model:
+  task_type: classification
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_label: "Signed gas contract"
+  target_description: "Whether this prospect's marketing contact converted into a signed gas supply contract."
+  target_value_labels: {"0": "No contract", "1": "Signed contract"}
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant
+
+# Opt-in 5th workspace tab (see ui-react's RegionMapView.tsx) — two selectable
+# aggregation levels, each batch-predicted in a single /predict/luznova_gas_prospects
+# call from the SAME trained model, colored/sized by signup probability. The
+# "municipio" level has no group_by (municipio isn't a trained feature — see the
+# disclosure note at the top of this file); each of its 2 bubbles pins `censal_area`
+# to one representative tract plus that municipio's own averaged economics. The
+# "censal_area" level pins each of its 8 bubbles to its own real tract profile.
+ui_extras:
+  kind: region_map
+  value_label: "Signup probability"
+  levels:
+    - key: municipio
+      label: "Municipio"
+      regions:
+        - {key: rincon_de_la_victoria, label: "Rincón de la Victoria", lat: 36.7169, lon: -4.2753,
+           feature_overrides: {censal_area: rv_centro, household_income_index: 56, building_type: apartment, avg_household_size: 2.9, current_heating_source: electric, distance_to_gas_network_m: 875, potential_daily_consumption_m3: 2.15, potential_daily_revenue_eur: 1.68}}
+        - {key: miranda_de_ebro, label: "Miranda de Ebro", lat: 42.4113, lon: -2.9440,
+           feature_overrides: {censal_area: me_ircio, household_income_index: 48, building_type: apartment, avg_household_size: 2.9, current_heating_source: diesel, distance_to_gas_network_m: 705, potential_daily_consumption_m3: 3.55, potential_daily_revenue_eur: 2.77}}
+    - key: censal_area
+      label: "Censal area"
+      group_by: censal_area
+      regions:
+        - {key: rv_centro, label: "Rincón Centro", lat: 36.7175, lon: -4.2740,
+           feature_overrides: {household_income_index: 58, building_type: apartment, avg_household_size: 2.6, current_heating_source: electric, distance_to_gas_network_m: 150, potential_daily_consumption_m3: 1.80, potential_daily_revenue_eur: 1.40}}
+        - {key: rv_torre_benagalbon, label: "Torre de Benagalbón", lat: 36.7280, lon: -4.2450,
+           feature_overrides: {household_income_index: 52, building_type: apartment, avg_household_size: 2.8, current_heating_source: butane_lpg, distance_to_gas_network_m: 650, potential_daily_consumption_m3: 2.04, potential_daily_revenue_eur: 1.59}}
+        - {key: rv_cala_del_moral, label: "La Cala del Moral", lat: 36.7300, lon: -4.3150,
+           feature_overrides: {household_income_index: 72, building_type: detached_house, avg_household_size: 3.0, current_heating_source: electric, distance_to_gas_network_m: 900, potential_daily_consumption_m3: 2.22, potential_daily_revenue_eur: 1.73}}
+        - {key: rv_benagalbon_pueblo, label: "Benagalbón Pueblo", lat: 36.7450, lon: -4.2600,
+           feature_overrides: {household_income_index: 44, building_type: terraced_house, avg_household_size: 3.2, current_heating_source: none, distance_to_gas_network_m: 1800, potential_daily_consumption_m3: 2.56, potential_daily_revenue_eur: 2.00}}
+        - {key: me_casco_historico, label: "Casco Histórico (Miranda)", lat: 42.4090, lon: -2.9470,
+           feature_overrides: {household_income_index: 48, building_type: apartment, avg_household_size: 2.4, current_heating_source: diesel, distance_to_gas_network_m: 120, potential_daily_consumption_m3: 2.97, potential_daily_revenue_eur: 2.32}}
+        - {key: me_ircio, label: "Ircio (Miranda)", lat: 42.4230, lon: -2.9600,
+           feature_overrides: {household_income_index: 55, building_type: apartment, avg_household_size: 2.7, current_heating_source: electric, distance_to_gas_network_m: 400, potential_daily_consumption_m3: 3.02, potential_daily_revenue_eur: 2.36}}
+        - {key: me_industrial_norte, label: "Zona Industrial Norte (Miranda)", lat: 42.4260, lon: -2.9300,
+           feature_overrides: {household_income_index: 40, building_type: terraced_house, avg_household_size: 3.1, current_heating_source: diesel, distance_to_gas_network_m: 700, potential_daily_consumption_m3: 3.82, potential_daily_revenue_eur: 2.98}}
+        - {key: me_bayas, label: "Bayas (Miranda)", lat: 42.3950, lon: -2.9750,
+           feature_overrides: {household_income_index: 50, building_type: detached_house, avg_household_size: 3.4, current_heating_source: butane_lpg, distance_to_gas_network_m: 1600, potential_daily_consumption_m3: 4.37, potential_daily_revenue_eur: 3.42}}
