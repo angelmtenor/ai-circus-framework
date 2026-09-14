@@ -22,6 +22,8 @@ const PATHS: Record<string, string> = {
   plus: "M12 5v14M5 12h14",
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v.01M12 11v6",
   book: "M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5ZM4 20.5A2.5 2.5 0 0 1 6.5 18H20",
+  map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-14v14",
+  factory: "M3 21V10l5 3.5V10l5 3.5V10l5 3.5V21H3Zm3-4h2m4 0h2m4 0h2M7 21v-3M3 10l3-2 3 2M17 6V3h3v5",
 };
 
 export function Icon({ name, size = 16, className }: { name: keyof typeof PATHS; size?: number; className?: string }) {
