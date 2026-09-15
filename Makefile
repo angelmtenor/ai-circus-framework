@@ -71,15 +71,15 @@ ollama-up: ## Start the optional bundled Ollama (free, no-API-key LLM fallback; 
 # deployment" for the full checklist; the two commands below cover the parts that
 # are easy to forget.
 
-generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.keycloak/console.objectstore — usage: make generate-console-auth [CONSOLE_USER=admin]
-	@./scripts/generate_console_auth.sh "$(CONSOLE_USER)"
+generate-console-auth: ## (Re)generate infra/traefik/console.htpasswd — the Basic Auth credential gating admin.keycloak/console.objectstore/mlflow — usage: make generate-console-auth [CONSOLE_USER=admin] [CONSOLE_PASSWORD=...] (omit the password for a random one)
+	@./scripts/generate_console_auth.sh "$(CONSOLE_USER)" "$(CONSOLE_PASSWORD)"
 
 check-public-ready: ## Verify .env/console.htpasswd don't still hold shipped demo values before a public deployment (does not start/stop anything)
 	@ok=1; \
 	if [ "$${DEPLOYMENT_TARGET:-local}" != "public" ]; then \
 		echo "❌ DEPLOYMENT_TARGET is not 'public' in .env — every service's boot-time guard is a no-op until it is"; ok=0; \
 	fi; \
-	if [ "$${ADMIN_API_KEY:-ai-circus-2026}" = "ai-circus-2026" ]; then \
+	if [ "$${ADMIN_API_KEY:-angel2026}" = "angel2026" ]; then \
 		echo "❌ ADMIN_API_KEY is still the shipped demo default — rotate it or blank it in .env"; ok=0; \
 	fi; \
 	if [ "$${ENGINEERING_DEMO_API_KEY:-}" = "ai-circus-engineering-2026" ]; then \
@@ -170,13 +170,13 @@ wait-services: ## Wait for platform-registry and every Traefik-routed backend to
 
 verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant end-to-end — the exact calls the login screen makes — catches "Failed to fetch"-class setup issues before you open a browser
 	@echo "🔎 verifying admin tenant end-to-end..."
-	@key="$${ADMIN_API_KEY:-ai-circus-2026}"; \
+	@key="$${ADMIN_API_KEY:-angel2026}"; \
 	code=$$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/llm-settings/active-model"); \
 	if [ "$$code" = "401" ]; then \
 		echo "❌ ADMIN_API_KEY in .env doesn't match what platform-registry is running with — after editing .env, run 'make up' to recreate it"; exit 1; \
 	fi; \
 	echo "  ✓ admin key accepted by platform-registry ($$code)"
-	@key="$${ADMIN_API_KEY:-ai-circus-2026}"; \
+	@key="$${ADMIN_API_KEY:-angel2026}"; \
 	n=$$(curl -s -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/entitlements/admin" | grep -o '"slug"' | wc -l); \
 	if [ "$$n" -gt 0 ]; then echo "  ✓ admin tenant is entitled to $$n scenario(s)"; \
 	else echo "❌ admin tenant has 0 entitled scenarios — scenario seeding may have failed, check: docker compose logs platform-registry"; exit 1; fi

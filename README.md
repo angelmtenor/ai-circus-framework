@@ -332,7 +332,7 @@ postgres/keycloak/qdrant/seaweedfs** — and reruns `make all` from a clean slat
 **[http://aiopen.localhost](http://aiopen.localhost)**
 
 For a quick look without configuring an identity provider at all, use the login screen's **User**
-dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`ai-circus-2026` by
+dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`angel2026` by
 default) as the password — it comes pre-granted access to every scenario. For real
 multi-user/multi-tenant login, see "First-time Keycloak setup" further down.
 
@@ -341,9 +341,16 @@ and store, with links to the monitors it also watches — **Langfuse** at
 [http://langfuse.localhost](http://langfuse.localhost) (sign in with `.env`'s
 `LANGFUSE_INIT_USER_EMAIL`/`LANGFUSE_INIT_USER_PASSWORD`) and **MLflow** at
 [http://mlflow.localhost](http://mlflow.localhost) (the console Basic-Auth user from
-`make bootstrap`, like `admin.keycloak.localhost`). If you bootstrapped `.env` before these
-existed, copy the `LANGFUSE_*`/`CLICKHOUSE_PASSWORD` block from `.env.example` into it first —
-see [Observability](#observability-admin-only).
+`make bootstrap`, like `admin.keycloak.localhost`). Out of the box every one of these local
+sign-ins shares the same demo password, `angel2026` — the `admin` API key, the Keycloak
+bootstrap admin (`admin`) and realm owner user (`KEYCLOAK_OWNER_EMAIL`), Langfuse's initial user
+(`LANGFUSE_INIT_USER_EMAIL`, same email) and the console Basic Auth (`admin`) — one credential to
+remember locally, all rotated together for a [public deployment](#public-deployment). If you
+bootstrapped `.env` before these existed, copy the `LANGFUSE_*`/`CLICKHOUSE_PASSWORD` block from
+`.env.example` into it first — see [Observability](#observability-admin-only). Langfuse and
+Keycloak only apply their `*_INIT_*`/bootstrap values on a first boot against an empty database,
+so changing them in `.env` afterwards needs a `make reset-all` (or changing the password inside
+that tool's own UI) to take effect.
 
 The dropdown's other option, **demo engineering**, is the same bypass mechanism scoped to a
 narrower demo tenant — entitled to only the three engineering scenarios (Predictive Maintenance,
@@ -429,8 +436,10 @@ production-ready starting point on their own.)
    admin credentials fully control the identity system, so it's gated even locally, just with a
    shipped demo credential you must rotate here):
    ```bash
-   make generate-console-auth   # prints a one-time password — save it, it isn't stored anywhere
+   make generate-console-auth   # prints a one-time random password — save it, it isn't stored anywhere
    ```
+   (Locally, `make generate-console-auth CONSOLE_PASSWORD=angel2026` reproduces the shipped
+   demo credential instead — never do that for a public deployment.)
 3. Set `DEPLOYMENT_TARGET=public` in `.env` — this arms every service's boot-time refusal to
    start if you missed step 1 (see `libs/shared/src/ai_circus_shared/deployment_guard.py`), so
    a mistake here is a startup crash with a clear message, not a silent hole.
@@ -506,7 +515,7 @@ expensive to retrofit once single-tenant assumptions are baked in.
   `realm-export.json` bootstrap), and `infra/seaweedfs/` (the generated S3 gateway credentials
   file) have content; the others' config is inline in `docker-compose.yml`
   (command args/env/labels) until each grows enough to warrant its own files.
-- **Admin credential**: `ADMIN_API_KEY` (default `ai-circus-2026` — rotate before any real
+- **Admin credential**: `ADMIN_API_KEY` (default `angel2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of
   the entitlement check. `ENGINEERING_DEMO_API_KEY` is the same mechanism scoped to a narrower

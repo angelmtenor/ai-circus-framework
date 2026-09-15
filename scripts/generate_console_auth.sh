@@ -12,17 +12,26 @@
 # `$`-delimited segments) before docker compose ever saw it. A file sidesteps that
 # entirely, and keeps the hash out of `docker inspect`/`docker compose config` output.
 #
-# Usage: ./scripts/generate_console_auth.sh [username]
+# Usage: ./scripts/generate_console_auth.sh [username] [password]
 #   - Writes infra/traefik/console.htpasswd (mode 600), overwriting any previous one.
-#   - Prints the generated plaintext password ONCE, to the terminal only — it is not
-#     stored anywhere in recoverable form; save it in a password manager now.
+#   - Without a password argument (the public-deployment path) it generates a random
+#     one and prints it ONCE, to the terminal only — it is not stored anywhere in
+#     recoverable form; save it in a password manager now.
+#   - With a password argument (or CONSOLE_PASSWORD in the environment) it hashes that
+#     instead — for local dev, to keep this console login in step with the shared demo
+#     password in .env (KEYCLOAK_*/LANGFUSE_INIT_USER_*/ADMIN_API_KEY), or to regenerate
+#     the shipped infra/traefik/console.htpasswd.example. Never use it for a public
+#     deployment: the whole point there is a password nobody else knows.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 USERNAME="${1:-admin}"
+PASSWORD="${2:-${CONSOLE_PASSWORD:-}}"
 OUT_FILE="$REPO_ROOT/infra/traefik/console.htpasswd"
 
-PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-24)"
+if [ -z "$PASSWORD" ]; then
+  PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-24)"
+fi
 HASH="$(openssl passwd -apr1 "$PASSWORD")"
 
 mkdir -p "$(dirname "$OUT_FILE")"

@@ -165,6 +165,30 @@ Pipe the output through `grep -v -i "api_key=\|password="` as belt-and-braces �
 print the key, but the habit costs nothing. Screenshots land in `$SCRATCH/out/` owned by root (see
 Cleanup).
 
+## Checking an UNBUILT ui-react change against the running k3s backends (no image rebuild)
+
+The k3s `CORS_ALLOWED_ORIGINS` is `http://aiopen.localhost` only, so a Vite dev server on
+`localhost:5173` gets `Disallowed CORS origin` from every backend — don't bother. Instead run
+`npm run build` in `ui-react/`, copy `dist/` into the scratch dir, keep the browser on the real
+origin and let Playwright serve your build in place of the deployed pod's files:
+
+```js
+await page.route('http://aiopen.localhost/**', (route) => {
+  const u = new URL(route.request().url());
+  let f = path.join('/work/dist', u.pathname === '/' ? 'index.html' : u.pathname);
+  if (!fs.existsSync(f)) f = '/work/dist/index.html';   // SPA fallback
+  route.fulfill({ status: 200, contentType: types[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
+});
+```
+
+Gotcha: Chrome then treats the route-fulfilled page as *not* loopback and its Local Network
+Access check silently denies every `fetch` to `localhost:8010`/`*.localhost` — the console says
+`Permission was denied for this request to access the \`loopback\` address space` and the app
+shows "Failed to fetch". Launch with
+`chromium.launch({ args: ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults'] })`
+for this verification only. Used to verify the Platform (Health / Data platform tabs) + Settings
+split without a `make k3s-build`.
+
 ## Isolating rendering-only bugs — don't fight app auth for those
 
 For a bug that's purely about rendering (chart output, CSS layout, SVG/Canvas content) and doesn't

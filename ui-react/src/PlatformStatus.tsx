@@ -1,21 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
 import { getPlatformStatus, type ComponentGroup, type ComponentStatus, type PlatformStatus } from "./apiClient";
+import { PlatformCapabilitiesTab } from "./PlatformCapabilities";
 import { Icon } from "./Icon";
 
 /**
- * Admin-only "Platform" dashboard: is every microservice / infra piece / monitor up and
- * healthy, with one-click access to the admin consoles (Langfuse for GenAI traces, MLflow
- * for ML training runs, Keycloak, SeaweedFS).
+ * Admin-only "Platform" page — everything operational, in two tabs, so Settings can stay
+ * purely about preferences/configuration (Appearance, LLM provider, Voice):
  *
- * Everything shown comes from data-platform-manager's admin-gated GET /platform/status
- * (see its core/platform_status.py): that service probes each component over the cluster
- * network — the browser can't reach internal-only services like llm-gateway, Postgres or
- * ClickHouse itself — and, on k8s, adds each pod's ready/restart counts. This component
- * just renders and polls; the target list, grouping and console links live server-side so
- * adding a component never needs UI code (same principle as scenario-driven views).
+ * - **Health**: is every microservice / infra piece / monitor up and healthy, with
+ *   one-click access to the admin consoles (Langfuse for GenAI traces, MLflow for ML
+ *   training runs, Keycloak, SeaweedFS). Everything shown comes from data-platform-manager's
+ *   admin-gated GET /platform/status (see its core/platform_status.py): that service probes
+ *   each component over the cluster network — the browser can't reach internal-only
+ *   services like llm-gateway, Postgres or ClickHouse itself — and, on k8s, adds each pod's
+ *   ready/restart counts. This component just renders and polls; the target list, grouping
+ *   and console links live server-side so adding a component never needs UI code (same
+ *   principle as scenario-driven views).
+ * - **Capabilities**: what the platform can do today vs. what's planned (data-platform-manager's
+ *   roadmap) plus the live operational controls behind it (pipeline jobs, Kafka events, CDC,
+ *   Lakehouse, semantic queries, gateway rate limits) — see PlatformCapabilities.tsx.
+ *
+ * Only the visible tab is mounted, so the health poll stops while the Capabilities tab is
+ * open and its many one-shot requests don't fire until it's actually looked at.
  */
 
 const POLL_SECONDS = 15;
+
+type PlatformTab = "health" | "capabilities";
 
 const GROUP_LABELS: Record<ComponentGroup, { title: string; hint: string }> = {
   services: { title: "Microservices", hint: "The platform's own services — every scenario kind is served by these." },
@@ -86,6 +97,36 @@ function ComponentCard({ component }: { component: ComponentStatus }) {
 }
 
 export function PlatformStatusView({ baseUrl, accessToken }: { baseUrl: string; accessToken: string | null }) {
+  const [tab, setTab] = useState<PlatformTab>("health");
+
+  return (
+    <div className="settings-page platform-page">
+      <h2>
+        <Icon name="pulse" size={20} /> Platform
+      </h2>
+      <div className="workspace-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "health"} className={tab === "health" ? "active" : ""} onClick={() => setTab("health")}>
+          <Icon name="pulse" size={14} /> Health
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === "capabilities"}
+          className={tab === "capabilities" ? "active" : ""}
+          onClick={() => setTab("capabilities")}
+        >
+          <Icon name="data" size={14} /> Capabilities
+        </button>
+      </div>
+      {tab === "health" ? (
+        <HealthTab baseUrl={baseUrl} accessToken={accessToken} />
+      ) : (
+        <PlatformCapabilitiesTab baseUrl={baseUrl} accessToken={accessToken} />
+      )}
+    </div>
+  );
+}
+
+function HealthTab({ baseUrl, accessToken }: { baseUrl: string; accessToken: string | null }) {
   const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,20 +154,17 @@ export function PlatformStatusView({ baseUrl, accessToken }: { baseUrl: string; 
   const consoles = status?.components.filter((c) => c.console_url) ?? [];
 
   return (
-    <div className="settings-page platform-page">
+    <>
       <div className="settings-card-header">
-        <h2>
-          <Icon name="pulse" size={20} /> Platform
-        </h2>
+        <p className="panel-hint">
+          Live health of every microservice, store and monitor, re-checked every {POLL_SECONDS}s
+          {status?.in_cluster ? " — with pod readiness/restarts from the Kubernetes API." : "."}
+          {status && ` Last check: ${new Date(status.checked_at).toLocaleTimeString()}.`}
+        </p>
         <button className="btn-secondary" onClick={load} disabled={refreshing}>
           {refreshing ? "Checking…" : "↻ Refresh"}
         </button>
       </div>
-      <p className="panel-hint">
-        Live health of every microservice, store and monitor, re-checked every {POLL_SECONDS}s
-        {status?.in_cluster ? " — with pod readiness/restarts from the Kubernetes API." : "."}
-        {status && ` Last check: ${new Date(status.checked_at).toLocaleTimeString()}.`}
-      </p>
 
       {error && <p className="error">{error}</p>}
       {!status && !error && <div className="app-loading">Checking the platform…</div>}
@@ -181,6 +219,6 @@ export function PlatformStatusView({ baseUrl, accessToken }: { baseUrl: string; 
           })}
         </>
       )}
-    </div>
+    </>
   );
 }
