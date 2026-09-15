@@ -67,29 +67,52 @@ sweeps computed from live API calls, not precomputed synthetic charts.
 <p align="center"><img src="docs/screenshots/ml-predictions.png" alt="ML predictions with SHAP explanation" width="850"></p>
 <p align="center"><img src="docs/screenshots/explainability.png" alt="Global SHAP feature importance" width="850"></p>
 
-### Settings & LLM providers
+### Settings
 
-Every configured LLM provider's live routing status in one place, a per-provider **Test** button
-(a real completion round-trip), and instant switching of the *active* model — the same screen
-that makes step 3 of Getting Started concrete.
+**Settings** is purely about preferences and configuration — three sections, nothing operational
+(that lives on the admin **Platform** page below):
+
+- **Appearance** (every user) — pick a theme; saved in the browser, applied instantly.
+- **LLM Provider Settings** (admin) — every configured provider's live routing status in one
+  place, a per-provider **Test** button (a real completion round-trip, or **Test All** for every
+  provider concurrently), and instant switching of the *active* model — the same screen that makes
+  step 2 of Getting Started concrete. Keys still come from `.env` (see [LLM providers](#llm-providers)).
+- **Voice Mode Settings** (admin) — which speech-to-text / text-to-speech engine powers
+  [voice mode](#voice-mode): the self-hosted defaults (Whisper / Piper, no API key) or a cloud
+  engine (Deepgram, ElevenLabs, Cartesia) once its key is set; applies to the very next voice
+  request, no restart.
 
 <p align="center"><img src="docs/screenshots/settings.png" alt="Settings — LLM provider status" width="850"></p>
 
-### Platform dashboard & monitors (admin)
+### Platform — health dashboard, capabilities & monitors (admin)
 
-Logged in as `admin`, a **Platform** button next to Settings opens a live health dashboard of
-every microservice, store and monitor — up / degraded / down, probe latency, and (on k3s) each
-pod's readiness and restart count, re-checked every 15 s — with one-click links to the admin
-consoles: **Langfuse** (the GenAI monitor: every LLM call, per tenant/scenario/conversation),
-**MLflow** (the MLOps monitor: every training run's candidates, scores and selected model),
-Keycloak and the object store. See [Observability](#observability-admin-only) below.
+Logged in as `admin`, a **Platform** button next to Settings opens the operational side of the
+app, in two tabs:
+
+- **Health** — a live dashboard of every microservice, store and monitor: up / degraded / down /
+  not deployed, probe latency, and (on k3s) each pod's readiness and restart count, re-checked
+  every 15 s — with one-click links to the admin consoles: **Langfuse** (the GenAI monitor: every
+  LLM call, per tenant/scenario/conversation), **MLflow** (the MLOps monitor: every training run's
+  candidates, scores and selected model), Keycloak and the object store. See
+  [Observability](#observability-admin-only) below.
+- **Capabilities** — the live **capability roadmap** (what's built vs. planned, grouped by the
+  Data / AI-BI-ML / Governance pillars of the [Architecture](#architecture)) plus the operational
+  controls behind it: pipeline job status/trigger, recent Kafka events, Change-Data-Capture,
+  the Iceberg lakehouse, semantic/federated queries and the AI Gateway's rate limits. See
+  [Data Platform](#data-platform-optional-profile) below.
+
+Only the visible tab is mounted, so the health poll stops while you're on Capabilities.
+
+<p align="center"><img src="docs/screenshots/platform-health.png" alt="Platform — Health tab: live status of every microservice, store and monitor" width="850"></p>
+<p align="center"><img src="docs/screenshots/platform-capabilities.png" alt="Platform — Capabilities tab: capability roadmap and data-platform controls" width="850"></p>
 
 ### Themes
 
 The whole app is skinned from one `Theme` object (colors + a logo, see `ui-react/src/themes/`) —
-switching themes in **Settings → Appearance** is instant, no rebuild. Two ship today: **Tron**
-(the neon dark default) and **White Tron**, the same blue/cyan branding on flat, light,
-corporate-friendly surfaces.
+switching themes in **Settings → Appearance** is instant, no rebuild. Four ship today: **Tron**
+(the neon dark default), **White Tron** (the same blue/cyan branding on flat, light,
+corporate-friendly surfaces), **White Green**, and **AI Liquid Core by Getronics** — adding one is
+a new entry in that folder, nothing else.
 
 ### Conversational assistant
 
@@ -104,8 +127,19 @@ render the result as an actual chart or sortable table in the chat — not markd
 prose — using the exact same Plotly/table components as the Data tab.
 
 <p align="center">
-  <img src="docs/screenshots/chat-generative-ui.png" alt="Assistant running a live prediction and rendering a SHAP chart and a data table via AG-UI" width="850">
+  <img src="docs/screenshots/chat-generative-ui.png" alt="Assistant running a live prediction and rendering its SHAP chart in the chat via AG-UI" width="850">
 </p>
+
+### Voice mode
+
+Every chat panel has a **mic** button (a live, Grok/ChatGPT-style voice conversation with
+server-side turn-taking and barge-in) and a **speaker** icon on each reply (one-shot
+text-to-speech). Both are served by `agui-voice`, a Pipecat pipeline that uses the *existing*
+`assistant`/`rag-agent`/`form-agent` `/agui/{scenario_slug}` endpoint as its LLM stage — so a
+spoken turn lands in the same transcript, with the same tools and generative UI, as a typed one,
+for every scenario kind. Defaults are fully self-hosted (faster-whisper STT + Piper TTS, no API key,
+model weights pre-warmed at container start); cloud engines are a `.env` key plus a pick in
+**Settings → Voice Mode Settings**.
 
 ### Assisted forms
 
@@ -142,12 +176,13 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression | Daily electricity demand per region (MWh) — with a live Spain regional map tab | Original content (synthetic, real Spain geography) |
 | **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
+| **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 
 Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
 each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
-(`cnc_surface_finish` and the three `luznova_*` utility scenarios) are original content instead: a
+(`cnc_surface_finish` and the four `luznova_*` utility scenarios) are original content instead: a
 physically-grounded synthetic generator (real geography/tariff structure, a designed formula, no
 real customer data) rather than a ported dataset — each one's `scenario.yaml` discloses this, and
 its generator script lives at `scripts/generate_<slug>.py`.
@@ -253,13 +288,14 @@ is actually reachable. Pick **one** of these:
 
 | Option | What to do |
 |---|---|
-| **Cloud provider (recommended)** | Get a free API key from [Google AI Studio](https://aistudio.google.com/) (or OpenAI/Anthropic/DeepSeek/Groq/OpenRouter/Azure), paste it into `.env` as `GOOGLE_API_KEY=...`, and set `LLM_MODEL=gemini-flash`. See the [LLM providers](#llm-providers) table below for every option and its exact env var. |
-| **No API key at all** | Run `make ollama-up` — starts a bundled, local, free Ollama container and pulls a small model automatically. Leave `LLM_MODEL=llama3` (the default). |
+| **Cloud provider (recommended)** | Get a free API key from [GroqCloud](https://console.groq.com/) (the shipped default, `LLM_MODEL=groq-llama`) or [Google AI Studio](https://aistudio.google.com/) (`GOOGLE_API_KEY=...` + `LLM_MODEL=gemini-flash`) — or OpenAI/Anthropic/DeepSeek/OpenRouter/Azure — and paste it into `.env`. See the [LLM providers](#llm-providers) table below for every option and its exact env var. |
+| **No API key at all** | Run `make ollama-up` — starts a bundled, local, free Ollama container and pulls a small model automatically — and set `LLM_MODEL=llama3`. |
 
 You can change your mind later from the app itself: **Settings → LLM Provider Settings** shows
 every provider's live status and lets you switch the *active* model instantly, without a restart
-(see the [Settings screenshot](#settings--llm-providers) above) — new keys still require editing
-`.env` and restarting `llm-gateway`, though.
+(see the [Settings screenshot](#settings) above) — new keys still require editing `.env` and
+restarting `llm-gateway`, though. Voice mode needs no key at all out of the box (see
+[Voice mode](#voice-mode)).
 
 ### 3. Start the platform
 
@@ -336,8 +372,10 @@ dropdown: pick **admin** and enter the key from `.env`'s `ADMIN_API_KEY` (`angel
 default) as the password — it comes pre-granted access to every scenario. For real
 multi-user/multi-tenant login, see "First-time Keycloak setup" further down.
 
-Logged in as `admin`, the topbar's **Platform** button is the health dashboard of every service
-and store, with links to the monitors it also watches — **Langfuse** at
+Logged in as `admin`, the topbar's **Platform** button opens the **Health** dashboard of every
+service and store (and, on its **Capabilities** tab, the roadmap and data-platform controls —
+see the [tour](#platform--health-dashboard-capabilities--monitors-admin)), with links to the
+monitors it also watches — **Langfuse** at
 [http://langfuse.localhost](http://langfuse.localhost) (sign in with `.env`'s
 `LANGFUSE_INIT_USER_EMAIL`/`LANGFUSE_INIT_USER_PASSWORD`) and **MLflow** at
 [http://mlflow.localhost](http://mlflow.localhost) (the console Basic-Auth user from
@@ -382,6 +420,30 @@ set in `services/platform-registry/src/platform_registry/core/seed.py`'s
 Local (non-Docker) development: each generated service under `services/*/` has its own
 `make run` — run it directly with `uv run` from inside that service's directory while the infra
 containers stay up via `make up-infra`.
+
+### Configuration reference (`.env`)
+
+`make bootstrap` copies `.env.example` → `.env`; every variable is commented inline there, this is
+just the map. Each generated service under `services/*/` additionally has its own
+`.env.example` for service-specific `settings.yaml`-derived variables — the root file only covers
+the platform-wide containers and cross-service wiring.
+
+| Section | Variables | Notes |
+|---|---|---|
+| **Stores** | `POSTGRES_*`, `QDRANT_*_PORT`, `CACHE_PORT` (Valkey), `KAFKA_PORT`, `OBJECT_STORE_ACCESS_KEY`/`SECRET_KEY` (SeaweedFS) | Ports for Postgres/Qdrant/llm-gateway/platform-registry bind to host **loopback only** — for non-Docker local dev, never exposed via Traefik. |
+| **Ingress** | `TRAEFIK_HTTP_PORT`, `TRAEFIK_DASHBOARD_PORT`, `CORS_ALLOWED_ORIGINS` | CORS is keyed to `http://aiopen.localhost` exactly — opening the app from another origin is the classic "Failed to fetch". |
+| **Identity** | `KEYCLOAK_SERVER_URL`/`REALM`/`ISSUER`/`JWKS_URL`/`AUDIENCE`, `KEYCLOAK_M2M_CLIENT_ID`/`SECRET`, `KEYCLOAK_OWNER_EMAIL`/`PASSWORD`, `KEYCLOAK_ADMIN_USERNAME`/`PASSWORD`, `VITE_KEYCLOAK_*` | `*_OWNER_*` is the realm user `provision-owner-user` creates; `*_ADMIN_*` is the container's own bootstrap admin (also gates `admin.keycloak.localhost`). Bootstrap values apply on **first boot only**. |
+| **LLM routing** | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `AZURE_OPENAI_API_KEY`/`API_BASE`, `OLLAMA_API_BASE`, `LITELLM_MASTER_KEY`, `LLM_MODEL` | At least one key (or `make ollama-up`). A new/rotated **key** needs an `llm-gateway` restart; the **active model** is switched live from Settings and only needs `LLM_MODEL` as the boot-time default (`groq-llama` if unset). See [LLM providers](#llm-providers). |
+| **Embeddings** | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `VOYAGE_API_KEY` | Must be identical for `etl-vectorize` and `rag-agent`, or vector search silently returns nothing. |
+| **Voice mode** | `VOICE_STT_PROVIDER`, `VOICE_TTS_PROVIDER`, `VOICE_WHISPER_MODEL`, `VOICE_PIPER_VOICE_ID[_ES]`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`/`VOICE_ID`, `CARTESIA_API_KEY`/`VOICE_ID` | Defaults (`whisper`/`piper`) need no key. Cloud engines need their key *and* the matching `pipecat-ai[...]` extra inside `services/agui-voice`; the STT/TTS **choice** itself is switched live from Settings. |
+| **Observability** | `LANGFUSE_INIT_USER_EMAIL`/`PASSWORD`, `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`, `LANGFUSE_NEXTAUTH_SECRET`/`SALT`/`ENCRYPTION_KEY`, `CLICKHOUSE_PASSWORD` | `*_INIT_*` applies on Langfuse's **first boot only**. Tracing is on whenever the `PUBLIC_KEY`/`SECRET_KEY` pair is set (keep the `pk-lf-`/`sk-lf-` prefixes). MLflow needs nothing here — it sits behind the console Basic Auth. |
+| **Credentials & deployment** | `ADMIN_API_KEY`, `ENGINEERING_DEMO_API_KEY`, `DEPLOYMENT_TARGET`, `AUTH_DISABLED`, `DEV_MODE` | Every local sign-in ships as `angel2026` (see step 4). `DEPLOYMENT_TARGET=public` makes every service refuse to boot on shipped demo values — see [Public deployment](#public-deployment). `AUTH_DISABLED`/`DEV_MODE` are a dev-only bypass, never beyond local. |
+
+Rule of thumb for *when* a change applies: anything you can pick in the app (active LLM model,
+theme, voice engine) is live and needs no restart; a key or secret needs that container recreated
+(`docker compose up -d <service>` / `make k3s-secrets && make k3s-up`); a `*_INIT_*`/bootstrap
+value only counts on a first boot against an empty database (`make reset-all`, or change it in
+that tool's own UI).
 
 ### First-time Keycloak setup
 
@@ -469,18 +531,22 @@ silos:
 - **Governance** — transversal, not a third layer: identity/tenancy, ingress, and AI Gateway usage
   controls (rate limits, budgets) apply *across* both of the above.
 
-`data-platform-manager`'s **Settings → Data Platform → Capability roadmap** is the live,
+`data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live,
 machine-readable version of this split (see `core/roadmap.py`) — which capabilities are live,
-partial, or still planned, grouped exactly this way.
+partial, or still planned, grouped exactly this way. The diagrams below are generated by
+`scripts/generate_architecture_diagrams.py` — rerun it whenever a service, store or monitor is
+added, so they never drift from `docker-compose.yml`/`k8s/base`.
 
 <p align="center">
   <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
 </p>
 
-Solid arrows are primary request/data paths; dotted arrows are cross-cutting auth/admin calls or
-traffic leaving the cluster. Every scenario service independently validates the caller's token
-against Keycloak and re-checks the entitlement with `platform-registry` — never just trusting
-what the UI already filtered.
+Solid arrows are primary request/data paths; dotted arrows are cross-cutting auth/admin/monitoring
+calls or traffic leaving the cluster. Every scenario service independently validates the caller's
+token against Keycloak and re-checks the entitlement with `platform-registry` — never just trusting
+what the UI already filtered. The right-hand column is the admin-only side of the platform —
+`data-platform-manager` (the control plane behind the **Platform** page) and the two monitors,
+Langfuse and MLflow, which reuse the existing Postgres/Valkey/SeaweedFS and add only ClickHouse.
 
 <details>
 <summary>Simplified view — grouped data flow</summary>
@@ -554,7 +620,8 @@ make k3s-data-platform-up  # kubectl apply -f k8s/data-platform/kafka.yaml (k3s 
 ```
 
 `data-platform-manager` (gated on `ADMIN_API_KEY`, never a Keycloak end-user token) is reachable
-both as an API and from **Settings → Data Platform** in `ui-react` once logged in as `admin`:
+both as an API and from **Platform → Capabilities** in `ui-react` once logged in as `admin` (its
+`GET /platform/status` also feeds the **Health** tab — see [Observability](#observability-admin-only)):
 
 - **Capability roadmap** — every capability across all three pillars ([Architecture](#architecture)
   above), grouped by Data / AI-BI-ML / Governance, live/partial/planned, read from the running
@@ -564,6 +631,16 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   `make pipeline` directly.
 - **AI Gateway rate limits** — a read-only report of `litellm_config.yaml`'s per-model `rpm`/`tpm`
   ceilings.
+- **AI Gateway per-tenant budgets** — monthly spend caps per tenant (`org_id`), enforced inside
+  `llm-gateway` itself on every completion: `PUT /gateway/budgets/{org_id}` (body
+  `{"monthly_cap_usd": ...}`) stores the cap durably in this service's document store and mirrors
+  it into Valkey, where `llm_gateway.budget_hook` (a stock LiteLLM `CustomLogger`) reads it on the
+  hot path and increments that org's spend after each real call; `GET /gateway/budgets` lists every
+  capped org with its current-month spend, `DELETE` makes it unlimited again. Orgs without a cap
+  are unlimited, and the month rolls over by key naming, so nothing needs resetting. API-only
+  today (no UI yet). LiteLLM's own budgets weren't usable — its DB-backed proxy mode depends on
+  an archived Prisma client that doesn't run on this repo's Python baseline (see the hook's
+  docstring).
 - **Recent events** — every pipeline trigger is published to Kafka as well as recorded durably
   (Postgres); this panel reads the topic directly, proving the stream is real.
 - **Change-Data-Capture** — a genuine Postgres logical-replication read (the built-in
@@ -589,7 +666,7 @@ both as an API and from **Settings → Data Platform** in `ui-react` once logged
   query (see `core/semantic.py`).
 
 **Try it** (k3s; see [Getting started > Kubernetes](#getting-started)): `make k3s-data-platform-up`,
-then trigger the `churn` reference scenario's `etl-tabular` job from **Settings → Data Platform** —
+then trigger the `churn` reference scenario's `etl-tabular` job from **Platform → Capabilities** —
 the run shows up under **Pipeline jobs**, as a real Kafka message under **Recent events**, and
 (once you click **Poll now**) as a captured row-level change under **Change-Data-Capture**. Click
 **Ingest now** under **Lakehouse Table Format** to snapshot that same data into a real Iceberg
@@ -606,7 +683,7 @@ Valkey and SeaweedFS the platform already runs instead of bringing its own:
 
 | Monitor | What it shows | Where | Backed by |
 | --- | --- | --- | --- |
-| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, not deployed; probe latency; on k3s also pod readiness + restarts | `ui-react` → **Platform** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus a read-only pod listing via RBAC |
+| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, not deployed; probe latency; on k3s also pod readiness + restarts | `ui-react` → **Platform → Health** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus a read-only pod listing via RBAC |
 | **GenAI monitor — Langfuse v4** | A trace per LLM call (prompt, completion, tokens, cost, latency), grouped into sessions per conversation, filterable by tenant (`org:<id>`), scenario (`scenario:<slug>`) and service | `http://langfuse.localhost` (Langfuse's own sign-in; user/password from `.env`'s `LANGFUSE_INIT_USER_*`) | `llm-gateway`'s LiteLLM `langfuse_otel` callback — switched on at start-up when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (`app.py`); the agent services attach tenant/scenario/thread as request `metadata` (`ai_circus_shared.observability.langfuse_request_metadata`). Stores: the shared Postgres (`langfuse` db), Valkey (`langfuse:` keys), SeaweedFS (`langfuse` bucket) and one new **ClickHouse** container (`k8s/base/langfuse.yaml`) |
 | **MLOps monitor — MLflow** | One experiment per scenario, one run per tenant × training: every candidate's held-out score, the selected model, dataset size, `metadata.json`, and the SeaweedFS keys + checksums of the served artifacts | `http://mlflow.localhost` (behind the same `admin-basicauth` gate as the Keycloak/SeaweedFS consoles — MLflow has no auth of its own) | `training` mirrors each run when `MLFLOW_TRACKING_URI` is set (`core/mlflow_tracking.py`, never fails the job); the server is `infra/mlflow/Dockerfile` (official MLflow + Postgres driver + boto3), run metadata in the shared Postgres (`mlflow` db), artifacts in SeaweedFS (`mlflow` bucket) |
 
@@ -632,11 +709,12 @@ see [Reserved for later](#reserved-for-later-documented-not-built).
 
 | `model_name` | Provider | Key needed | Notes |
 |---|---|---|---|
-| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | **Default free-tier pick** |
-| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | |
-| `claude-haiku` | Anthropic | `ANTHROPIC_API_KEY` | Fast/cheap Claude tier |
+| `groq-llama` | GroqCloud (`gpt-oss-120b`) | `GROQ_API_KEY` | **Shipped default** (`LLM_MODEL` unset) — free tier, very low latency, accurate |
+| `groq-oss-20b` | GroqCloud (`gpt-oss-20b`) | `GROQ_API_KEY` | Same key — faster, higher free-tier quota |
+| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | Free tier, vision-capable |
+| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | Vision-capable |
+| `claude-haiku` | Anthropic | `ANTHROPIC_API_KEY` | Fast/cheap Claude tier, vision-capable |
 | `deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` | |
-| `groq-llama` | GroqCloud | `GROQ_API_KEY` | Free tier, very low latency |
 | `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors |
 | `azure-gpt4o` | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_API_BASE` | Also edit the `azure/<deployment>` line in `litellm_config.yaml` |
 | `llama3` | Ollama (local) | none | **Optional**, off by default — see below |
@@ -648,7 +726,10 @@ automatically on first run.
 Runtime key *rotation* from the browser isn't possible (this deployment doesn't run LiteLLM's
 DB-backed proxy mode) — a new key always means edit `.env`, then
 `docker compose up -d llm-gateway`. Switching which *already-configured* provider is active,
-though, is instant from **Settings**.
+though, is instant from **Settings → LLM Provider Settings**. Usage controls live in the gateway
+too: static per-model `rpm`/`tpm` ceilings in `litellm_config.yaml`, and per-tenant monthly spend
+budgets enforced by `llm_gateway.budget_hook` (see [Data Platform](#data-platform-optional-profile));
+every call is also traced to Langfuse (see [Observability](#observability-admin-only)).
 
 ---
 
@@ -691,10 +772,9 @@ tracing/OpenTelemetry beyond the LLM calls Langfuse already traces (see
 [Observability](#observability-admin-only)), Keycloak SSO into Langfuse (today it has its own
 seeded admin sign-in), prediction-time data/model drift monitoring (Evidently-style — `prediction`
 doesn't log inference rows yet, so there is nothing to compare against training), evaluation
-tooling (Opik/Giskard),
-voice/multimodal agents (Pipecat), per-tenant billing/metering (AI Gateway *rate* limits are
-built — see [Data Platform](#data-platform-optional-profile) — per-tenant *budgets* still need
-litellm's DB-backed proxy mode), a background CDC loop (today's `POST /cdc/poll` is a real,
+tooling (Opik/Giskard), a UI for the per-tenant AI Gateway budgets (the enforcement and the admin
+API are built — see [Data Platform](#data-platform-optional-profile) — only the Platform page
+panel is missing) and actual billing/invoicing on top of them, a background CDC loop (today's `POST /cdc/poll` is a real,
 on-demand Postgres-to-Kafka change read — see [Data Platform](#data-platform-optional-profile) —
 continuous polling is the natural next step, not a redesign), and (optional) extracting embedded
 images out of uploaded PDFs in the chat attachment flow — today
@@ -702,10 +782,12 @@ images out of uploaded PDFs in the chat attachment flow — today
 diagram embedded in an otherwise text-native page never reaches a vision-capable model. (The
 AG-UI/CopilotKit runtime bridge for `ui-react`'s chat, a custom in-app admin screen, a shared cache
 for multi-replica deployments, a real Postgres-to-Kafka change-data-capture feed, a lakehouse table
-format over the object store, and a semantic-modeling/query-federation layer over both the
-lakehouse and platform-registry's own Postgres tables, previously listed here, are built — see
-`ChatPanel.tsx`/`chatGenerativeUi.tsx`, [Data Platform](#data-platform-optional-profile) (three
-times), and `ai_circus_shared.cache` respectively.)
+format over the object store, a semantic-modeling/query-federation layer over both the lakehouse
+and platform-registry's own Postgres tables, voice/multimodal agents (Pipecat), and per-tenant AI
+Gateway budgets, previously listed here, are built — see `ChatPanel.tsx`/`chatGenerativeUi.tsx`,
+the admin [Platform](#platform--health-dashboard-capabilities--monitors-admin) page,
+`ai_circus_shared.cache`, [Data Platform](#data-platform-optional-profile), [Voice mode](#voice-mode)
+and `llm_gateway.budget_hook` respectively.)
 
 ---
 
