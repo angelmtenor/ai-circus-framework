@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 
-DEMO_ADMIN_API_KEY = "ai-circus-2026"
+DEMO_ADMIN_API_KEY = "angel2026"
 DEMO_ENGINEERING_DEMO_API_KEY = "ai-circus-engineering-2026"
 
 

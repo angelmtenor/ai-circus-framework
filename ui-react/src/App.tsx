@@ -12,11 +12,13 @@ import { PlatformStatusView } from "./PlatformStatus";
 import { Icon } from "./Icon";
 import "./App.css";
 
-// Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider section manages
-// shared LLM-gateway infrastructure, not a per-tenant entitlement, so it's gated to
-// the admin tenant; the Appearance (theme) section is a per-browser preference open
-// to every org. The Platform dashboard (service health + Langfuse/MLflow consoles) is
-// admin-only for the same reason, and its backend feed is admin-bearer-gated regardless.
+// Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider / Voice sections
+// manage shared llm-gateway/agui-voice infrastructure, not a per-tenant entitlement, so
+// they're gated to the admin tenant; the Appearance (theme) section is a per-browser
+// preference open to every org. The Platform page (service health + Langfuse/MLflow
+// consoles, plus the data-platform operations tab) is admin-only for the same reason,
+// and its backend feed is admin-bearer-gated regardless. Split rule: Settings =
+// preferences/configuration, Platform = operations/monitoring.
 const ADMIN_ORG_ID = "admin";
 
 // EU AI Act Art. 50(1): systems that interact directly with natural persons must
