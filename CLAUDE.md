@@ -158,7 +158,13 @@ not injected at container start. The assistant chat (`ChatPanel.tsx`) talks AG-U
 to each service's `/agui/{scenario_slug}` endpoint via `@ag-ui/client`'s `HttpAgent`, not CopilotKit's
 GraphQL runtime — CopilotKit is still used for `useCopilotAction`/`useCopilotReadable` (generative UI:
 the chat can render live charts/tables via the real `prediction` API, and in `assisted_form` scenarios can
-write directly into the form's state).
+write directly into the form's state). Two admin-facing pages, with a deliberate split: **Settings**
+(`Settings.tsx`) holds only preferences/configuration — Appearance, LLM provider, Voice engine —
+while **Platform** (`PlatformStatus.tsx`, admin-only) holds operations/monitoring in two tabs,
+**Health** (the dashboard above) and **Capabilities** (`PlatformCapabilities.tsx`: roadmap, pipeline
+jobs, Kafka events, CDC, lakehouse, semantic queries, gateway rate limits). Put new operational
+panels on Platform, new preferences on Settings. Voice mode (`MicButton`/`SpeakerButton`/
+`useVoiceSession.ts`) talks to `agui-voice` over a plain WebSocket, not `@pipecat-ai/client-js`.
 
 ## Branching & commits
 

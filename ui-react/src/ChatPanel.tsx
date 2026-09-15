@@ -168,9 +168,12 @@ function messageImages(content: unknown): { mimeType: string; value: string }[] 
     .map((s) => ({ mimeType: s.mimeType, value: s.value }));
 }
 
-const SOURCE_TAG = /\[Source:\s*([^\]]+)\]/g;
+// rag-agent's retrieve_docs delimits each chunk as `<retrieved_document source="file">`
+// (see its build_retrieve_tool — the XML form is the indirect-prompt-injection guard);
+// the older `[Source: file]` marker is still accepted for any agent that emits it.
+const SOURCE_TAG = /<retrieved_document\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
 
-/** Best-effort: retrieve_docs' tool result content embeds "[Source: file]" markers
+/** Best-effort: retrieve_docs' tool result content embeds per-chunk source markers
  * (see rag-agent's build_retrieve_tool) — extracted here rather than carried as a
  * separate structured field, since AG-UI's ToolMessage only has a plain `content`
  * string. Returns null if no tool ran at all (message list has no tool results yet),
@@ -181,7 +184,7 @@ function extractSources(messages: AguiMessage[]): string[] | null {
   if (toolResults.length === 0) return null;
   const sources = new Set<string>();
   for (const m of toolResults) {
-    for (const match of m.content.matchAll(SOURCE_TAG)) sources.add(match[1].trim());
+    for (const match of m.content.matchAll(SOURCE_TAG)) sources.add((match[1] ?? match[2]).trim());
   }
   return [...sources];
 }

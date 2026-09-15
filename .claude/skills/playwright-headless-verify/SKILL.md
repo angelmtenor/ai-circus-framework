@@ -186,7 +186,7 @@ Access check silently denies every `fetch` to `localhost:8010`/`*.localhost` —
 `Permission was denied for this request to access the \`loopback\` address space` and the app
 shows "Failed to fetch". Launch with
 `chromium.launch({ args: ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults'] })`
-for this verification only. Used to verify the Platform (Health / Data platform tabs) + Settings
+for this verification only. Used to verify the Platform (Health / Capabilities tabs) + Settings
 split without a `make k3s-build`.
 
 ## Isolating rendering-only bugs — don't fight app auth for those
