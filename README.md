@@ -45,10 +45,11 @@ on the backend, so nothing is a security bypass, just a different way in.
 ### Scenario gallery
 
 Every scenario a tenant is entitled to, rendered generically from `scenarios/*/scenario.yaml` —
-no per-scenario UI code. Tabular ML scenarios show their task type (classification/regression);
-the conversational scenario shows up alongside them.
+no per-scenario UI code — grouped by kind (**Machine Learning**, **Conversational Assistant**,
+**Assisted Forms**) with an industry filter. Tabular ML cards show their task type
+(classification/regression); the full catalog is in the [table below](#scenario-catalog).
 
-<p align="center"><img src="docs/screenshots/scenarios.png" alt="Scenario gallery" width="850"></p>
+<p align="center"><img src="docs/screenshots/scenario-gallery.png" alt="Scenario gallery — every scenario of every kind the admin tenant is entitled to" width="850"></p>
 
 ### Data
 
