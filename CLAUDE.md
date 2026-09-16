@@ -37,6 +37,7 @@ make new-service NAME=foo    # scaffold a new backend service from ai-circus-tem
 
 make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
 make k3s-resume-lite          # resume a paused cluster without mlflow/agui-voice (~1.2 GB less RAM; `make k3s-full` restores)
+make k3s-all-lite             # `make k3s-all` for a fresh cluster, straight into lite mode
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):

@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
+	k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
 	k3s-data-platform-up k3s-data-platform-down
 
 help: ## Show this help message
@@ -315,6 +315,9 @@ k3s-down: k3s-portforward-stop ## Delete every applied k8s/base manifest (Statef
 
 k3s-all: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait ## One-shot: cluster -> build -> import -> secrets -> up -> wait (run `make k3s-pipeline` yourself afterward if you need the churn ETL/training data)
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up — http://aiopen.localhost"
+
+k3s-all-lite: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-lite k3s-wait ## `k3s-all`, but the K3S_LITE_SKIP pods (default mlflow, agui-voice) are scaled to 0 right after `k3s-up` so `k3s-wait` never waits on them — images are still built/imported, so `make k3s-full` works later without a rebuild
+	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up in lite mode — http://aiopen.localhost ('make k3s-full' brings the skipped pods back)"
 
 k3s-data-platform-up: ## Apply the optional Data Platform profile (k8s/data-platform/ — currently: Kafka), NOT part of `k3s-up`/`k3s-down`
 	@kubectl apply -f k8s/data-platform/kafka.yaml
