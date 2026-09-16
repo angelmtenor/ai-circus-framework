@@ -36,6 +36,7 @@ make sync-shared              # after editing libs/shared: `uv sync --reinstall-
 make new-service NAME=foo    # scaffold a new backend service from ai-circus-template
 
 make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
+make k3s-resume-lite          # resume a paused cluster without mlflow/agui-voice (~1.2 GB less RAM; `make k3s-full` restores)
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):

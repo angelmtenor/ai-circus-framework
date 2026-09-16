@@ -76,9 +76,30 @@ Not working the demo but staying in WSL? `k3d cluster stop/start` stops the clus
 and redoing `k3s-all` later:
 
 ```bash
-make k3s-pause     # stop the cluster's containers — state is kept
-make k3s-resume    # start it back up — run `make k3s-wait` after to confirm pods are Ready
+make k3s-pause         # stop the cluster's containers — state is kept
+make k3s-resume        # start it back up — run `make k3s-wait` after to confirm pods are Ready
+make k3s-resume-lite   # same, but without the heavy rarely-used pods (see below) + k3s-wait
 ```
+
+**Lite mode — running on less RAM.** The full `k8s/base` set idles at ~7 GB of pod RSS, which is
+what forces the 12 GB VM. `make k3s-lite` scales the Deployments in `K3S_LITE_SKIP` to 0 replicas
+on the running cluster; `make k3s-resume-lite` is `k3s-resume` + `k3s-lite` + `k3s-wait` in one
+go, and `make k3s-full` scales them back to 1. The default skip list is the heaviest pods the
+day-to-day demo never touches — `mlflow` (~350 Mi, MLOps monitor) and `agui-voice` (~830 Mi,
+only voice mode uses it) — roughly 1.2 GB less. Langfuse and its ClickHouse/Valkey dependencies
+deliberately stay on so GenAI tracing keeps working, and so does `data-platform-manager` (it
+backs the admin **Platform** health dashboard, the natural place to check on a lite cluster);
+drop them too if you need to go lower:
+
+```bash
+make k3s-lite K3S_LITE_SKIP="mlflow agui-voice data-platform-manager langfuse-web langfuse-worker"
+```
+
+While lite, voice mode and `mlflow.localhost` are unavailable and the Platform health dashboard
+shows those two as down (every other view is unaffected — `make k3s-verify` still passes). The scale
+is cluster state, so it survives a plain `k3s-pause`/`k3s-resume`; `make k3s-up` (a fresh
+`kubectl apply -k`) or `make k3s-full` restores every replica. `make k3s-wait` works unchanged in
+either mode — `kubectl rollout status` reports a 0-replica Deployment as rolled out immediately.
 
 Resuming brings pods back with the *exact* images they already had — if you also rebuild
 (`make k3s-build k3s-import`) after resuming, those pods keep running their old container content
