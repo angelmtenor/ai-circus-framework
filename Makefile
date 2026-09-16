@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-pause k3s-resume k3s-portforward k3s-portforward-stop \
+	k3s-all k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
 	k3s-data-platform-up k3s-data-platform-down
 
 help: ## Show this help message
@@ -231,6 +231,11 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 K3S_CLUSTER ?= ai-circus
 K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice data-platform-manager
 K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
+# Deployments `k3s-lite`/`k3s-resume-lite` scale to 0 — the heaviest pods the day-to-day demo never
+# touches (measured RSS on a running cluster: agui-voice ~830Mi, mlflow ~350Mi). Langfuse
+# (+ clickhouse/valkey) and data-platform-manager (the admin Platform health dashboard) deliberately
+# stay on. Override per call to trim further, e.g. K3S_LITE_SKIP="mlflow agui-voice langfuse-web langfuse-worker".
+K3S_LITE_SKIP ?= mlflow agui-voice
 
 K3S_SUBNET   ?=  # optional, e.g. 172.28.0.0/16 — pins static node IPs so a Docker/host restart can't swap them (k3d marks --subnet experimental; see k8s/README.md)
 
@@ -326,6 +331,21 @@ k3s-pause: k3s-portforward-stop ## Stop the k3d cluster's containers to free CPU
 k3s-resume: ## Start a previously paused k3d cluster back up
 	@k3d cluster start "$(K3S_CLUSTER)"
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' started — 'make k3s-wait' to confirm pods are Ready (also restarts the platform-registry port-forward)"
+
+k3s-lite: ## Scale the rarely-used Deployments in K3S_LITE_SKIP (default: mlflow agui-voice) to 0 replicas on the running cluster to save RAM — Langfuse stays on; undo with `make k3s-full`
+	@for svc in $(K3S_LITE_SKIP); do \
+		kubectl -n ai-circus scale deployment/$$svc --replicas=0 || exit 1; \
+	done
+	@echo "✓ lite mode — scaled to 0: $(K3S_LITE_SKIP) (voice mode / MLflow will be unavailable; 'make k3s-full' restores)"
+
+k3s-full: ## Scale every Deployment `k3s-lite` turned off back to 1 replica (the full k8s/base set again)
+	@for svc in $(K3S_LITE_SKIP); do \
+		kubectl -n ai-circus scale deployment/$$svc --replicas=1 || exit 1; \
+	done
+	@echo "✓ full mode — scaled back to 1: $(K3S_LITE_SKIP) — 'make k3s-wait' to confirm they are Ready"
+
+k3s-resume-lite: k3s-resume k3s-lite k3s-wait ## Resume a paused cluster WITHOUT the heavy rarely-used pods (default skips mlflow and agui-voice — ~1.2 GB less RSS), then wait for the rest to be Ready
+	@echo "✓ k3d cluster '$(K3S_CLUSTER)' resumed in lite mode — http://aiopen.localhost ('make k3s-full' brings the skipped pods back)"
 
 k3s-portforward: ## Start (or restart) a standing background port-forward to platform-registry so the browser can reach it directly — auto-run by k3s-wait, safe to re-run any time
 	@if [ -f "$(K3S_PORTFORWARD_PID)" ] && kill -0 "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null; then \
