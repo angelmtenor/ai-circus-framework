@@ -79,6 +79,7 @@ and redoing `k3s-all` later:
 make k3s-pause         # stop the cluster's containers — state is kept
 make k3s-resume        # start it back up — run `make k3s-wait` after to confirm pods are Ready
 make k3s-resume-lite   # same, but without the heavy rarely-used pods (see below) + k3s-wait
+make k3s-all-lite      # fresh cluster in lite mode: k3s-all with the skipped pods scaled to 0 right after k3s-up
 ```
 
 **Lite mode — running on less RAM.** The full `k8s/base` set idles at ~7 GB of pod RSS, which is

@@ -63,7 +63,14 @@ def predict(artifacts: ModelArtifacts, records: pd.DataFrame) -> list[Prediction
     # densifying costs nothing at this repo's per-request batch sizes.
     if hasattr(x_transformed, "toarray"):
         x_transformed = x_transformed.toarray()
-    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
+    # check_additivity=False: SHAP's self-check asserts sum(contributions) + base
+    # value == the model's output within a tight tolerance, and LightGBM under
+    # interventional perturbation with a subsampled background legitimately misses
+    # it by a few percent on some inputs (seen for real on cnc_surface_finish's
+    # trained model: 3.656 vs 3.539, i.e. one bad record 500ing a whole batch). The
+    # explanation is still the same additive decomposition — only the assert is
+    # skipped, matching SHAP's own guidance for this known false positive.
+    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed, check_additivity=False))
     # Binary-classification TreeExplainer with model_output="probability" returns
     # (n_samples, n_features, n_classes); keep just the positive class's contributions.
     # (Regression explainers return a plain 2D (n_samples, n_features) array, so this

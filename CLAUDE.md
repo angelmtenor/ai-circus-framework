@@ -37,6 +37,7 @@ make new-service NAME=foo    # scaffold a new backend service from ai-circus-tem
 
 make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
 make k3s-resume-lite          # resume a paused cluster without mlflow/agui-voice (~1.2 GB less RAM; `make k3s-full` restores)
+make k3s-all-lite             # `make k3s-all` for a fresh cluster, straight into lite mode
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):
@@ -94,6 +95,9 @@ service instance serves every scenario of a given kind**: `prediction` and `assi
 this on the frontend — `ScenarioPicker` renders whatever the entitlements API returns, and
 `TabularView`/`RagView`/`AssistedFormView` are generic renderers driven entirely by each scenario's
 `ScenarioSummary` (feature schema, form config, chat context) — there is no per-scenario UI code.
+An optional 5th tab is likewise opted into per scenario via `ui_extras` (`region_map`,
+`live_plant`, `process_optimizer` — `RegionMapView`/`LivePlantView`/`ProcessOptimizerView` are
+the generic renderers; the optimizer's search/economics live in `ui-react/src/optimizer.ts`).
 `scenario.yaml` is read directly by `etl-tabular`/`training`/`prediction` too (dataset schema, model
 candidates) as build-time config; it is otherwise never read by services other than `platform-registry`.
 

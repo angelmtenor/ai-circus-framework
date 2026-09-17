@@ -121,6 +121,13 @@ def test_seed_scenarios_populates_ui_extras_for_opted_in_scenarios_only(session:
     assert live_plant.ui_extras["wear_feature"] == "Tool wear [min]"
     assert live_plant.ui_extras["sim_minutes_per_tick"] == 5
 
+    optimizer = session.get(Scenario, "cnc_surface_finish")
+    assert optimizer.ui_extras["kind"] == "process_optimizer"
+    assert optimizer.ui_extras["controllable"] == ["feed_rate", "cutting_speed", "depth_of_cut", "tool_nose_radius"]
+    assert optimizer.ui_extras["wear_feature"] == "tool_wear_time"
+    assert optimizer.ui_extras["spec_default"] == pytest.approx(3.2)
+    assert optimizer.ui_extras["economics"]["tool_life"]["feature"] == "cutting_speed"
+
     assert session.get(Scenario, "churn").ui_extras is None
 
 

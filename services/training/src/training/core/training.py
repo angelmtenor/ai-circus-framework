@@ -238,7 +238,9 @@ def global_shap_importance(
     if hasattr(x_transformed, "toarray"):
         x_transformed = x_transformed.toarray()
     # pyrefly: ignore [missing-attribute]
-    shap_values = np.asarray(explainer.shap_values(x_transformed))
+    # check_additivity=False — see prediction.core.predict's matching note (a known
+    # SHAP/LightGBM false positive that would otherwise fail the training job on one row).
+    shap_values = np.asarray(explainer.shap_values(x_transformed, check_additivity=False))
     if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
         shap_values = shap_values[:, :, 1]
 

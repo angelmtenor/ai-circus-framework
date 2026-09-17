@@ -2483,3 +2483,350 @@ select:focus {
 .plant-floor-clock {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Recipe optimizer tab (ProcessOptimizerView.tsx) ─────────────────────────── */
+
+.opt-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.opt-toolbar h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.35rem;
+}
+
+.opt-toolbar code {
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.85em;
+}
+
+.opt-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.opt-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--dim);
+  min-width: 10rem;
+}
+
+.opt-controls--line {
+  align-items: center;
+}
+
+.opt-controls--line label {
+  min-width: 0;
+}
+
+.opt-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.4rem !important;
+  color: var(--text) !important;
+  font-size: 0.82rem !important;
+  cursor: pointer;
+}
+
+.opt-toggle input {
+  accent-color: var(--accent);
+}
+
+.opt-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.opt-kpis .kpi-sub {
+  overflow-wrap: anywhere;
+}
+
+.opt-kpis .kpi-sub {
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-wear {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.opt-wear .feature-input-label strong {
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-wear-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.opt-wear-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease, background 0.6s ease;
+}
+
+.opt-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.opt-progress {
+  margin-top: 0.75rem;
+}
+
+.opt-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.opt-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  box-shadow: var(--glow-accent-soft);
+  transition: width 0.3s ease;
+}
+
+.opt-reco {
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.opt-reco--ready {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.opt-warning {
+  color: var(--amber);
+  font-size: 0.82rem;
+  border: 1px solid var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.opt-hero {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.opt-hero-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+}
+
+.opt-hero-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-hero-arrow {
+  color: var(--dim);
+  font-size: 1.1rem;
+}
+
+.opt-hero-units {
+  color: var(--dim);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.opt-hero-item .badge {
+  align-self: flex-start;
+}
+
+.badge--success {
+  color: var(--green);
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.opt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 0.5rem;
+}
+
+.opt-table th {
+  text-align: left;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.opt-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-table-changed td:nth-child(3) strong {
+  color: var(--accent-2);
+}
+
+.opt-table-metrics td {
+  color: var(--dim);
+  font-size: 0.78rem;
+}
+
+.opt-autopilot-status {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--accent-2);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+
+.opt-lines {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0;
+}
+
+.opt-line-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.opt-line-card--optimized {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.opt-line-card--baseline {
+  opacity: 0.85;
+}
+
+.opt-line-card--savings {
+  border-color: var(--accent);
+  background: linear-gradient(160deg, var(--accent-soft), var(--purple-soft));
+}
+
+.opt-line-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.opt-line-profit {
+  font-size: 1.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.opt-line-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 0.75rem;
+}
+
+.opt-line-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+
+.opt-line-stats strong {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.opt-line-stats small {
+  color: var(--dim);
+  font-weight: 500;
+}
+
+.opt-charts h4 {
+  margin-top: 0.5rem;
+}
+
+.opt-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.opt-log li {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 0 6px 6px 0;
+}
+
+.opt-log--recipe {
+  border-left-color: var(--accent) !important;
+}
+
+.opt-log--tool {
+  border-left-color: var(--amber) !important;
+}
+
+.opt-log-time {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 6.5rem;
+}
