@@ -38,7 +38,7 @@ class FakeExplainer:
     """Stand-in whose shap_values() satisfies predict()'s interface."""
 
     @staticmethod
-    def shap_values(x: object) -> np.ndarray:
+    def shap_values(x: object, *, check_additivity: bool = True) -> np.ndarray:
         """Return fixed per-feature contributions for every record."""
         return np.array([[0.1, -0.2] for _ in range(len(x))])
 
