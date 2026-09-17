@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { ChatModel, ScenarioSummary } from "./apiClient";
+import type { ChatModel, ScenarioSummary, UiExtras } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
@@ -10,12 +10,20 @@ import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
 import { RegionMapView } from "./RegionMapView";
 import { LivePlantView } from "./LivePlantView";
-import { Icon } from "./Icon";
+import { ProcessOptimizerView } from "./ProcessOptimizerView";
+import { Icon, type IconName } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
 type Tab = "scenario" | "data" | "predict" | "explore" | "extra";
+
+// Tab chrome per ui_extras kind — the renderer itself is picked below.
+const EXTRA_TABS: Record<UiExtras["kind"], { icon: IconName; label: string }> = {
+  region_map: { icon: "map", label: "Regional Map" },
+  live_plant: { icon: "factory", label: "Live Plant" },
+  process_optimizer: { icon: "sparkle", label: "Optimizer" },
+};
 
 /**
  * Generic tabular_ml workspace, driven entirely by the scenario's feature_columns/
@@ -33,9 +41,10 @@ type Tab = "scenario" | "data" | "predict" | "explore" | "extra";
  *
  * A 5th tab is opt-in per scenario via `scenario.ui_extras` (see
  * libs/shared/scenario_schema.py's UiExtras) — still no scenario-specific UI code:
- * RegionMapView/LivePlantView are two generic renderers any tabular_ml scenario can
- * reuse by setting the matching YAML block, the same way `form`/`feature_schema`
- * already drive generic renderers instead of per-scenario components.
+ * RegionMapView/LivePlantView/ProcessOptimizerView are three generic renderers any
+ * tabular_ml scenario can reuse by setting the matching YAML block, the same way
+ * `form`/`feature_schema` already drive generic renderers instead of per-scenario
+ * components.
  *
  * The whole workspace (not just the chat dock) is wrapped in one <CopilotKit> so
  * MlPredictionsView/ExploreModelView's useCopilotReadable calls share their current
@@ -93,8 +102,8 @@ function TabularViewContent({
         </button>
         {scenario.ui_extras && (
           <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
-            <Icon name={scenario.ui_extras.kind === "region_map" ? "map" : "factory"} />
-            {scenario.ui_extras.kind === "region_map" ? "Regional Map" : "Live Plant"}
+            <Icon name={EXTRA_TABS[scenario.ui_extras.kind].icon} />
+            {EXTRA_TABS[scenario.ui_extras.kind].label}
           </button>
         )}
       </div>
@@ -109,6 +118,7 @@ function TabularViewContent({
       {tab === "explore" && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "region_map" && <RegionMapView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "live_plant" && <LivePlantView scenario={scenario} accessToken={accessToken} />}
+      {tab === "extra" && scenario.ui_extras?.kind === "process_optimizer" && <ProcessOptimizerView scenario={scenario} accessToken={accessToken} />}
 
       {chatOpen && (
         <div className="chat-dock-overlay" onClick={() => setChatOpen(false)}>

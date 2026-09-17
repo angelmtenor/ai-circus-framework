@@ -62,8 +62,9 @@ export type FormConfig = {
 };
 
 // Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's RegionMapExtra/
-// LivePlantExtra/UiExtras — a scenario's opt-in 5th workspace tab (see
-// RegionMapView.tsx/LivePlantView.tsx, the two generic renderers for these `kind`s).
+// LivePlantExtra/ProcessOptimizerExtra/UiExtras — a scenario's opt-in 5th workspace
+// tab (see RegionMapView.tsx/LivePlantView.tsx/ProcessOptimizerView.tsx, the three
+// generic renderers for these `kind`s).
 export type MapRegion = {
   key: string;
   label: string;
@@ -90,7 +91,45 @@ export type LivePlantExtra = {
   sim_minutes_per_tick: number;
   wear_feature: string | null;
 };
-export type UiExtras = RegionMapExtra | LivePlantExtra;
+export type CycleTimeModel = {
+  fixed_minutes: number;
+  work_per_unit: number;
+  rate_features: string[];
+  rate_scale: number;
+  rate_label: string;
+  rate_units: string;
+};
+export type ToolLifeModel = {
+  feature: string;
+  reference_value: number;
+  reference_life_minutes: number;
+  taylor_n: number;
+  cost_per_edge: number;
+  change_minutes: number;
+};
+export type OptimizerEconomics = {
+  currency: string;
+  unit_value: number;
+  reject_cost: number;
+  machine_rate_per_hour: number;
+  batch_size: number;
+  cycle_time: CycleTimeModel;
+  tool_life: ToolLifeModel | null;
+};
+export type SpecOption = { label: string; value: number };
+export type ProcessOptimizerExtra = {
+  kind: "process_optimizer";
+  controllable: string[];
+  discrete_values: Record<string, number[]>;
+  objective: "minimize" | "maximize";
+  spec_options: SpecOption[];
+  spec_default: number;
+  wear_feature: string | null;
+  tick_seconds: number;
+  sim_minutes_per_tick: number;
+  economics: OptimizerEconomics;
+};
+export type UiExtras = RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra;
 
 export type ScenarioSummary = {
   slug: string;
@@ -125,7 +164,7 @@ export type ScenarioSummary = {
   target_value_labels?: Record<string, string> | null;
   // assisted_form only — drives ui-react's generic form renderer (see FormPanel.tsx).
   form?: FormConfig | null;
-  // tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+  // tabular_ml only — opts this scenario into one of ui-react's three generic 5th
   // workspace tabs (see TabularView.tsx). Absent/null is the common case (the plain
   // 4-tab workspace).
   ui_extras?: UiExtras | null;

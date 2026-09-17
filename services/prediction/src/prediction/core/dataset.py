@@ -133,7 +133,9 @@ def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: in
     # See core/predict.py's matching comment: densify before handing this to SHAP.
     if hasattr(x_transformed, "toarray"):
         x_transformed = x_transformed.toarray()
-    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed))
+    # check_additivity=False — see predict.py's matching note (a known SHAP/LightGBM
+    # false positive that would otherwise 500 the whole sample on one bad row).
+    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed, check_additivity=False))
     if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
         shap_values = shap_values[:, :, 1]
 

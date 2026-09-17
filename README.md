@@ -193,11 +193,18 @@ its generator script lives at `scripts/generate_<slug>.py`.
 `{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
 and `form-agent` does the same for every `assisted_form` scenario.
 
-**Two scenarios carry an opt-in 5th workspace tab** (`ui_extras` in `scenario.yaml`, still no
+**Three scenarios carry an opt-in 5th workspace tab** (`ui_extras` in `scenario.yaml`, still no
 per-scenario UI code — see below): `luznova_regional_demand`'s "Regional Map" tab batch-predicts
 all 17 Comunidades Autónomas at once and plots them on a Spain bubble map; `mpm`'s "Live Plant" tab
 simulates a fictional factory floor of machines ticking every few seconds, each scored by the same
-unmodified `/predict/mpm`, with a client-side-only "Shut down" demo control.
+unmodified `/predict/mpm`, with a client-side-only "Shut down" demo control; `cnc_surface_finish`'s
+"Optimizer" tab is the *take-action* stage after prediction — it searches the controllable cutting
+parameters (~200 candidate recipes scored by the unmodified `/predict/cnc_surface_finish`, two
+rounds), costs each with a fictional per-part economics model declared in the YAML (machine rate,
+rework cost, Taylor tool life), recommends the recipe that maximizes profit rate while the
+predicted Ra stays inside a selectable ISO 1302 grade, and lets you apply it — or run a simulated
+live line where the tool wears with real cutting time and an auto-pilot re-optimizes or changes the
+tool as the model's own predicted roughness drifts, side by side with a static-recipe baseline.
 
 ---
 

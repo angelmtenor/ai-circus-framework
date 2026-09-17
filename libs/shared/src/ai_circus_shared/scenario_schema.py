@@ -218,7 +218,110 @@ class LivePlantExtra(BaseModel):
     wear_feature: str | None = None
 
 
-UiExtras = Annotated[RegionMapExtra | LivePlantExtra, Field(discriminator="kind")]
+class CycleTimeModel(BaseModel):
+    """How long one unit of product takes on a `ProcessOptimizerExtra` line, as a
+    function of the recipe: `minutes_per_unit = fixed_minutes + work_per_unit /
+    (rate_scale * product(rate_features))`. The product-of-features form is the
+    standard machining "material removal rate" (cutting speed x feed x depth of
+    cut), but it's just as valid for any process whose throughput scales with a few
+    multiplied setpoints (line speed x lanes, flow x concentration) — with an empty
+    `rate_features`, cycle time is simply the constant `fixed_minutes`.
+    """
+
+    fixed_minutes: float = Field(ge=0)  # load/unload/approach time the recipe can't change
+    work_per_unit: float = Field(gt=0)  # e.g. mm^3 of stock to remove per part
+    rate_features: list[str] = []  # numeric feature_columns whose product is the processing rate
+    rate_scale: float = 1.0  # unit conversion so work_per_unit / (scale * product) is in minutes
+    rate_label: str = "Processing rate"  # display only, e.g. "Material removal rate"
+    rate_units: str = ""  # display only, e.g. "mm³/min"
+
+
+class ToolLifeModel(BaseModel):
+    """Optional consumable-tool economics for a `ProcessOptimizerExtra`, via Taylor's
+    tool-life equation `V * T^n = C` — i.e. life at setpoint `v` is
+    `reference_life_minutes * (reference_value / v) ** (1 / taylor_n)`. `feature` is
+    the numeric setpoint that drives wear (cutting speed in turning), so the
+    optimizer is charged a per-unit consumable + changeover cost that rises steeply
+    with speed — the classic productivity-vs-tooling trade-off. When the scenario
+    also names a `wear_feature`, the live-line simulation ages that feature by
+    `cutting_minutes * (v / reference_value) ** (1 / taylor_n)` scaled so a tool at
+    the reference setpoint reaches the feature's max after exactly
+    `reference_life_minutes` of cutting — one consistent physical story for both.
+    """
+
+    feature: str
+    reference_value: float = Field(gt=0)
+    reference_life_minutes: float = Field(gt=0)
+    taylor_n: float = Field(default=0.25, gt=0, le=1)
+    cost_per_edge: float = Field(ge=0)  # consumable cost per tool change
+    change_minutes: float = Field(default=0, ge=0)  # line downtime per tool change
+
+
+class OptimizerEconomics(BaseModel):
+    """The (fictional, per-scenario) cost model a `ProcessOptimizerExtra` scores
+    every candidate recipe with — margin per unit = `unit_value` minus machine
+    time (`machine_rate_per_hour` x cycle time), tooling (see `tool_life`), and the
+    expected out-of-spec cost (`reject_cost` x the model's own probability that
+    this recipe misses the chosen spec, from its prediction interval). Every figure
+    is display-labelled with `currency`; none is real pricing data.
+    """
+
+    currency: str = "€"
+    unit_value: float = Field(gt=0)  # revenue attributable to this operation per in-spec unit
+    reject_cost: float = Field(ge=0)  # rework/scrap cost per out-of-spec unit
+    machine_rate_per_hour: float = Field(ge=0)
+    batch_size: int = Field(default=500, gt=0)  # the batch the KPI strip extrapolates to
+    cycle_time: CycleTimeModel
+    tool_life: ToolLifeModel | None = None
+
+
+class SpecOption(BaseModel):
+    """One selectable quality limit for a `ProcessOptimizerExtra` (e.g. an ISO 1302
+    roughness grade): the target must stay <= `value` (objective "minimize") or
+    >= `value` ("maximize") for a unit to count as in-spec.
+    """
+
+    label: str
+    value: float
+
+
+class ProcessOptimizerExtra(BaseModel):
+    """Opt-in 5th workspace tab: a "take action" stage after prediction for a
+    regression scenario whose target is a process-quality outcome — the optimizer
+    searches the `controllable` setpoints (batched candidate recipes scored by this
+    scenario's own, unmodified `/predict/{slug}`, coarse round then a refinement
+    round around the best), scores each with `economics`, and recommends the recipe
+    that maximizes the chosen objective while keeping the predicted target within
+    the selected spec; the user (or an "auto-pilot") can then apply it. A client-side
+    live-line simulation ages `wear_feature` with real cutting time so the model's
+    own predicted drift, re-optimization, and tool changes play out over a short demo
+    session, side by side with a static-recipe baseline. See ui-react's
+    ProcessOptimizerView.tsx — the single generic renderer for this `kind`; the
+    demo's economics/timing are all data here, never scenario-specific UI code.
+    """
+
+    kind: Literal["process_optimizer"] = "process_optimizer"
+    # Numeric feature_columns the optimizer may change — the "recipe". Every other
+    # feature is fixed context (the customer's material, the current tool wear).
+    controllable: list[str] = Field(min_length=1)
+    # A controllable feature only orderable at these values (e.g. standard insert
+    # nose radii) — searched as a discrete choice instead of a continuous range.
+    discrete_values: dict[str, list[float]] = {}
+    # Which direction is "better" for the target — minimize (roughness, energy,
+    # scrap) or maximize (yield, strength).
+    objective: Literal["minimize", "maximize"] = "minimize"
+    spec_options: list[SpecOption] = Field(min_length=1)
+    spec_default: float
+    # A numeric feature that accumulates with cutting time in the live-line
+    # simulation and resets on a tool change — needs `economics.tool_life` to know
+    # how fast. None disables the aging story (recipes still optimize/apply).
+    wear_feature: str | None = None
+    tick_seconds: int = Field(default=3, ge=1)
+    sim_minutes_per_tick: int = Field(default=5, ge=1)
+    economics: OptimizerEconomics
+
+
+UiExtras = Annotated[RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra, Field(discriminator="kind")]
 
 
 class DocumentChunking(BaseModel):
@@ -414,7 +517,7 @@ class ScenarioDefinition(BaseModel):
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
-    # tabular_ml only — opts this scenario into one of ui-react's two generic 5th
+    # tabular_ml only — opts this scenario into one of ui-react's three generic 5th
     # workspace tabs (see UiExtras above). None (the common case) means the plain
     # 4-tab workspace every tabular_ml scenario already gets.
     ui_extras: UiExtras | None = None
@@ -464,6 +567,48 @@ class ScenarioDefinition(BaseModel):
             raise ValueError(
                 f"ui_extras.wear_feature {self.ui_extras.wear_feature!r} must be a numeric feature, got {spec.type!r}."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _process_optimizer_features_are_real_and_numeric(self) -> ScenarioDefinition:
+        """Fail fast if a `process_optimizer` block names a feature that isn't a real
+        numeric feature, offers a default spec that isn't among its options, or is set
+        on a classification scenario — ui-react's ProcessOptimizerView would otherwise
+        search over a categorical value, treat a probability as a physical quantity,
+        or render a spec selector with no selected entry.
+        """
+        extras = self.ui_extras
+        if not isinstance(extras, ProcessOptimizerExtra) or self.dataset is None:
+            return self
+        if self.model is not None and self.model.task_type != "regression":
+            raise ValueError(
+                "ui_extras.process_optimizer requires a regression model (a physical target to keep in spec)."
+            )
+
+        def _numeric(feature: str, where: str) -> None:
+            spec = self.dataset.feature_schema.get(feature) if self.dataset else None
+            if spec is None:
+                raise ValueError(f"ui_extras.{where} {feature!r} is not among dataset.feature_columns.")
+            if spec.type != "numeric":
+                raise ValueError(f"ui_extras.{where} {feature!r} must be a numeric feature, got {spec.type!r}.")
+
+        for feature in extras.controllable:
+            _numeric(feature, "controllable")
+        for feature in extras.discrete_values:
+            if feature not in extras.controllable:
+                raise ValueError(f"ui_extras.discrete_values key {feature!r} is not among controllable.")
+        for feature in extras.economics.cycle_time.rate_features:
+            _numeric(feature, "economics.cycle_time.rate_features")
+        if extras.economics.tool_life is not None:
+            _numeric(extras.economics.tool_life.feature, "economics.tool_life.feature")
+        if extras.wear_feature is not None:
+            _numeric(extras.wear_feature, "wear_feature")
+            if extras.economics.tool_life is None:
+                raise ValueError(
+                    "ui_extras.wear_feature is set but economics.tool_life is missing — nothing defines its aging rate."
+                )
+        if extras.spec_default not in {o.value for o in extras.spec_options}:
+            raise ValueError(f"ui_extras.spec_default {extras.spec_default!r} is not among spec_options values.")
         return self
 
     @model_validator(mode="after")

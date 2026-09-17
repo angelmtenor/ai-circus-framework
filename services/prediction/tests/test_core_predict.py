@@ -125,3 +125,26 @@ def test_predict_returns_raw_value_for_regression(regression_artifacts: ModelArt
     assert len(results) == 1
     assert results[0].prediction > 1.0  # clearly outside the 0-1 probability range
     assert set(results[0].contributions) == set(regression_artifacts.metadata["transformed_feature_names"])
+
+
+def test_predict_skips_shap_additivity_check(
+    regression_artifacts: ModelArtifacts, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SHAP's additivity self-check is a known false positive for LightGBM under
+    interventional perturbation (seen on a real trained model) — predict() must pass
+    check_additivity=False so one such record can't 500 a whole batch.
+    """
+    seen: dict[str, object] = {}
+    real_shap_values = regression_artifacts.explainer.shap_values
+
+    def spy(x: np.ndarray, **kwargs: object) -> np.ndarray:
+        seen.update(kwargs)
+        return real_shap_values(x, **kwargs)
+
+    monkeypatch.setattr(regression_artifacts.explainer, "shap_values", spy)
+    records = pd.DataFrame([{"numeric_feature": 0.5, "category_feature": "B"}])
+
+    results = predict(regression_artifacts, records)
+
+    assert seen.get("check_additivity") is False
+    assert len(results) == 1

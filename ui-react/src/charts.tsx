@@ -449,3 +449,207 @@ export function Gauge({
     </svg>
   );
 }
+
+/**
+ * Several series on one time axis plus dashed horizontal reference lines (a spec
+ * limit) and point markers for discrete events (a recipe applied, a tool changed) —
+ * the live-line strip charts in ProcessOptimizerView.tsx. Each series may carry an
+ * optional lower/upper band (the model's own interval) drawn as a soft fill.
+ */
+export function MultiLineChart({
+  series,
+  refLines = [],
+  markers = [],
+  xLabel,
+  yLabel,
+  width = 480,
+  height = 220,
+  yMin,
+  yFormatter = (v: number) => v.toFixed(1),
+}: {
+  series: { label: string; color: string; points: { x: number; y: number; lower?: number; upper?: number }[]; dashed?: boolean }[];
+  refLines?: { y: number; label: string; color: string }[];
+  markers?: { x: number; y: number; color: string; glyph: string; title?: string }[];
+  xLabel: string;
+  yLabel: string;
+  width?: number;
+  height?: number;
+  yMin?: number;
+  yFormatter?: (v: number) => string;
+}) {
+  const padRight = 16;
+  const padTop = 18;
+  const padBottom = 40;
+  const allPoints = series.flatMap((s) => s.points);
+  if (allPoints.length === 0) return null;
+  const xs = allPoints.map((p) => p.x);
+  const ys = [...allPoints.flatMap((p) => [p.y, p.lower ?? p.y, p.upper ?? p.y]), ...refLines.map((r) => r.y)];
+  const xLo = Math.min(...xs);
+  const xHi = Math.max(...xs);
+  const yLo = yMin ?? Math.min(...ys);
+  const yHi = Math.max(...ys) * 1.05 || 1;
+  const yTickLabels = niceTicks(yLo, yHi).map(yFormatter);
+  const padLeft = leftPadForLabels(yTickLabels);
+  const sx = (v: number) => padLeft + ((v - xLo) / (xHi - xLo || 1)) * (width - padLeft - padRight);
+  const sy = (v: number) => height - padBottom - ((v - yLo) / (yHi - yLo || 1)) * (height - padTop - padBottom);
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label={`${yLabel} vs ${xLabel}`}>
+      {niceTicks(yLo, yHi).map((v, i) => (
+        <g key={i}>
+          <line x1={sx(xLo)} x2={sx(xHi)} y1={sy(v)} y2={sy(v)} stroke={CHART_COLORS.border} strokeWidth={1} />
+          <text x={sx(xLo) - 6} y={sy(v)} fontSize={9} fill={CHART_COLORS.dim} textAnchor="end" dominantBaseline="middle">
+            {yFormatter(v)}
+          </text>
+        </g>
+      ))}
+      {niceTicks(xLo, xHi).map((v, i) => (
+        <text key={i} x={sx(v)} y={height - padBottom + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
+          {formatTick(v)}
+        </text>
+      ))}
+      {series.map((s) => {
+        const sorted = [...s.points].sort((a, b) => a.x - b.x);
+        const hasBand = sorted.length > 1 && sorted.every((p) => p.lower !== undefined && p.upper !== undefined);
+        const band = hasBand
+          ? `M ${sorted.map((p) => `${sx(p.x)},${sy(p.upper!)}`).join(" L ")} L ${sorted
+              .slice()
+              .reverse()
+              .map((p) => `${sx(p.x)},${sy(p.lower!)}`)
+              .join(" L ")} Z`
+          : null;
+        return (
+          <g key={s.label}>
+            {band && <path d={band} fill={s.color} opacity={0.12} stroke="none" />}
+            {sorted.length > 1 && (
+              <path
+                d={`M ${sorted.map((p) => `${sx(p.x)},${sy(p.y)}`).join(" L ")}`}
+                fill="none"
+                stroke={s.color}
+                strokeWidth={2}
+                strokeDasharray={s.dashed ? "5 4" : undefined}
+              />
+            )}
+            {sorted.length > 0 && <circle cx={sx(sorted[sorted.length - 1].x)} cy={sy(sorted[sorted.length - 1].y)} r={3.2} fill={s.color} />}
+          </g>
+        );
+      })}
+      {refLines.map((r) => (
+        <g key={r.label}>
+          <line x1={sx(xLo)} x2={sx(xHi)} y1={sy(r.y)} y2={sy(r.y)} stroke={r.color} strokeDasharray="6 4" strokeWidth={1.4} />
+          <text x={sx(xHi)} y={sy(r.y) - 4} fontSize={9} fill={r.color} textAnchor="end">
+            {r.label}
+          </text>
+        </g>
+      ))}
+      {markers.map((m, i) => (
+        <text key={i} x={sx(m.x)} y={sy(m.y) - 8} fontSize={12} textAnchor="middle" fill={m.color}>
+          <title>{m.title}</title>
+          {m.glyph}
+        </text>
+      ))}
+      <text x={width / 2} y={height - 4} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle">
+        {xLabel}
+      </text>
+      <text x={11} y={height / 2} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle" transform={`rotate(-90 11 ${height / 2})`}>
+        {yLabel}
+      </text>
+      <g>
+        {series.map((s, i) => (
+          <g key={s.label} transform={`translate(${padLeft + 6 + i * 120}, ${padTop - 8})`}>
+            <line x1={0} x2={16} y1={0} y2={0} stroke={s.color} strokeWidth={2} strokeDasharray={s.dashed ? "5 4" : undefined} />
+            <text x={20} y={0} fontSize={9} fill={CHART_COLORS.dim} dominantBaseline="middle">
+              {s.label}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * The optimizer's candidate cloud: every scored recipe as a point (predicted target
+ * on x, throughput on y), in-spec ones bright and out-of-spec ones dimmed, with the
+ * spec limit as a vertical line and the current/recommended recipes called out —
+ * so the recommendation is visibly "the best point on the right side of the line",
+ * not an oracle's verdict. Points are drawn dim-first so the highlights stay on top.
+ */
+export function TradeoffScatter({
+  points,
+  xRef,
+  xLabel,
+  yLabel,
+  width = 480,
+  height = 260,
+}: {
+  points: { x: number; y: number; color: string; r?: number; opacity?: number; ring?: boolean; label?: string; title?: string }[];
+  xRef?: { value: number; label: string; color: string };
+  xLabel: string;
+  yLabel: string;
+  width?: number;
+  height?: number;
+}) {
+  const padRight = 16;
+  const padTop = 14;
+  const padBottom = 38;
+  if (points.length === 0) return null;
+  const xs = [...points.map((p) => p.x), ...(xRef ? [xRef.value] : [])];
+  const ys = points.map((p) => p.y);
+  const xLo = 0;
+  const xHi = Math.max(...xs) * 1.05 || 1;
+  const yLo = Math.min(...ys) * 0.95;
+  const yHi = Math.max(...ys) * 1.05 || 1;
+  const padLeft = leftPadForLabels(niceTicks(yLo, yHi).map(formatTick));
+  const sx = (v: number) => padLeft + ((v - xLo) / (xHi - xLo || 1)) * (width - padLeft - padRight);
+  const sy = (v: number) => height - padBottom - ((v - yLo) / (yHi - yLo || 1)) * (height - padTop - padBottom);
+  const ordered = [...points].sort((a, b) => (a.ring ? 1 : 0) - (b.ring ? 1 : 0) || (a.label ? 1 : 0) - (b.label ? 1 : 0));
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="chart-svg" role="img" aria-label={`${yLabel} vs ${xLabel}`}>
+      {niceTicks(yLo, yHi).map((v, i) => (
+        <g key={i}>
+          <line x1={sx(xLo)} x2={sx(xHi)} y1={sy(v)} y2={sy(v)} stroke={CHART_COLORS.border} strokeWidth={1} />
+          <text x={sx(xLo) - 6} y={sy(v)} fontSize={9} fill={CHART_COLORS.dim} textAnchor="end" dominantBaseline="middle">
+            {formatTick(v)}
+          </text>
+        </g>
+      ))}
+      {niceTicks(xLo, xHi).map((v, i) => (
+        <text key={i} x={sx(v)} y={height - padBottom + 12} fontSize={9} fill={CHART_COLORS.dim} textAnchor="middle">
+          {formatTick(v)}
+        </text>
+      ))}
+      {xRef && (
+        <g>
+          <rect x={sx(xLo)} y={padTop} width={Math.max(0, sx(xRef.value) - sx(xLo))} height={height - padTop - padBottom} fill={xRef.color} opacity={0.05} />
+          <line x1={sx(xRef.value)} x2={sx(xRef.value)} y1={padTop} y2={height - padBottom} stroke={xRef.color} strokeDasharray="6 4" strokeWidth={1.4} />
+          <text x={sx(xRef.value) + 4} y={padTop + 8} fontSize={9} fill={xRef.color}>
+            {xRef.label}
+          </text>
+        </g>
+      )}
+      {ordered.map((p, i) => (
+        <g key={i}>
+          <title>{p.title}</title>
+          {p.ring ? (
+            <circle cx={sx(p.x)} cy={sy(p.y)} r={p.r ?? 6} fill="none" stroke={p.color} strokeWidth={2.2} />
+          ) : (
+            <circle cx={sx(p.x)} cy={sy(p.y)} r={p.r ?? 2.8} fill={p.color} opacity={p.opacity ?? 0.85} />
+          )}
+          {p.label && (
+            <text x={sx(p.x) + (p.r ?? 6) + 3} y={sy(p.y)} fontSize={9} fill={p.color} dominantBaseline="middle" fontWeight={600}>
+              {p.label}
+            </text>
+          )}
+        </g>
+      ))}
+      <text x={width / 2} y={height - 4} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle">
+        {xLabel}
+      </text>
+      <text x={11} y={height / 2} fontSize={10} fill={CHART_COLORS.dim} textAnchor="middle" transform={`rotate(-90 11 ${height / 2})`}>
+        {yLabel}
+      </text>
+    </svg>
+  );
+}
