@@ -95,6 +95,9 @@ service instance serves every scenario of a given kind**: `prediction` and `assi
 this on the frontend — `ScenarioPicker` renders whatever the entitlements API returns, and
 `TabularView`/`RagView`/`AssistedFormView` are generic renderers driven entirely by each scenario's
 `ScenarioSummary` (feature schema, form config, chat context) — there is no per-scenario UI code.
+An optional 5th tab is likewise opted into per scenario via `ui_extras` (`region_map`,
+`live_plant`, `process_optimizer` — `RegionMapView`/`LivePlantView`/`ProcessOptimizerView` are
+the generic renderers; the optimizer's search/economics live in `ui-react/src/optimizer.ts`).
 `scenario.yaml` is read directly by `etl-tabular`/`training`/`prediction` too (dataset schema, model
 candidates) as build-time config; it is otherwise never read by services other than `platform-registry`.
 

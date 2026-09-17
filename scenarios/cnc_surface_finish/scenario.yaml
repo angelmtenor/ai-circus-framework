@@ -65,21 +65,24 @@ dataset:
 
   # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
   # ranges taken from the generator's own sampling bounds (4,000-row synthetic set).
+  # The defaults together are a plausible "process-sheet" recipe for the Optimizer
+  # tab's static baseline: in spec for N8 (Ra ≤ 3.2 μm) on a fresh tool, drifting
+  # to the limit by the end of the tool's 60-minute life per the trained model.
   feature_schema:
     material:
       {type: categorical, label: "Workpiece material", options: ["Aluminum_6061", "Carbon_Steel_1045", "Stainless_304"], default: "Carbon_Steel_1045",
        info: "The material being turned — harder/more work-hardening-prone materials (e.g. stainless) tend to finish rougher than aluminum at the same cutting parameters."}
     feed_rate:
-      {type: numeric, label: "Feed rate", min: 0.05, max: 0.5, default: 0.25, step: 0.01,
+      {type: numeric, label: "Feed rate", min: 0.05, max: 0.5, default: 0.2, step: 0.01,
        info: "How far the tool advances per revolution of the workpiece, in mm/rev — the single biggest driver of theoretical surface roughness."}
     cutting_speed:
-      {type: numeric, label: "Cutting speed", min: 50.0, max: 350.0, default: 200.0, step: 5.0,
+      {type: numeric, label: "Cutting speed", min: 50.0, max: 350.0, default: 220.0, step: 5.0,
        info: "The workpiece's surface speed past the cutting edge, in m/min. Very low speeds tend to roughen the finish (built-up edge on the tool)."}
     depth_of_cut:
       {type: numeric, label: "Depth of cut", min: 0.25, max: 3.0, default: 1.5, step: 0.05,
        info: "How deep the tool cuts into the workpiece per pass, in mm — a secondary effect on surface finish compared to feed rate."}
     tool_nose_radius:
-      {type: numeric, label: "Tool nose radius", min: 0.2, max: 1.2, default: 0.4, step: 0.2,
+      {type: numeric, label: "Tool nose radius", min: 0.2, max: 1.2, default: 0.8, step: 0.2,
        info: "The radius of the cutting insert's tip, in mm (standard insert sizes: 0.2/0.4/0.8/1.2). A larger radius theoretically smooths the finish for the same feed rate."}
     tool_wear_time:
       {type: numeric, label: "Tool wear time", min: 0.0, max: 60.0, default: 20.0, step: 1.0,
@@ -102,6 +105,64 @@ model:
   target_units: "μm (Ra)"
   target_label: "Surface roughness"
   target_description: "The machined part's surface roughness (Ra) — lower values mean a smoother, higher-quality finish."
+
+# Opts this scenario into ui-react's generic "Optimizer" 5th tab (see
+# libs/shared/scenario_schema.py's ProcessOptimizerExtra and ui-react's
+# ProcessOptimizerView.tsx) — the "take action" stage after prediction: search the
+# controllable cutting parameters for the recipe that maximizes margin while the
+# model's predicted Ra stays inside the selected ISO 1302 roughness grade, apply it
+# to a simulated live line, and let an auto-pilot re-optimize (or change the tool)
+# as the model's own predicted roughness drifts with tool wear.
+#
+# Every economic figure below is FICTIONAL demo data for a generic job-shop turning
+# operation on a ~Ø60 x 100 mm steel shaft — realistic in magnitude (EU CNC-lathe
+# shop rates, coated-carbide insert prices, a Taylor tool-life exponent in the
+# carbide range) but not sourced from any real quote or costing sheet.
+ui_extras:
+  kind: process_optimizer
+  # The recipe: what an operator can actually dial in. Material is the customer's
+  # order and tool wear is the tool's current state — both fixed context.
+  controllable: [feed_rate, cutting_speed, depth_of_cut, tool_nose_radius]
+  # Inserts come in standard nose radii — a discrete choice, not a continuous knob.
+  discrete_values: {tool_nose_radius: [0.2, 0.4, 0.8, 1.2]}
+  objective: minimize
+  # ISO 1302 roughness grades — the spec a drawing would actually call out.
+  spec_options:
+    - {label: "N7 — Ra ≤ 1.6 μm (fine, bearing seats)", value: 1.6}
+    - {label: "N8 — Ra ≤ 3.2 μm (good general turning)", value: 3.2}
+    - {label: "N9 — Ra ≤ 6.3 μm (standard turned finish)", value: 6.3}
+    - {label: "N10 — Ra ≤ 12.5 μm (rough, non-mating)", value: 12.5}
+  spec_default: 3.2
+  wear_feature: tool_wear_time
+  tick_seconds: 3
+  sim_minutes_per_tick: 5
+  economics:
+    currency: "€"
+    # Revenue attributable to this finishing pass per in-spec part (not the whole part's price).
+    unit_value: 9.5
+    # Rework (a second finishing pass + re-inspection) per out-of-spec part.
+    reject_cost: 6.0
+    machine_rate_per_hour: 78.0
+    batch_size: 500
+    cycle_time:
+      # Load/unload + tool approach — fixed per part regardless of recipe.
+      fixed_minutes: 0.7
+      # Stock to remove: Ø60 -> Ø56 over 100 mm = π(30² − 28²)·100 ≈ 36,400 mm³.
+      work_per_unit: 36400
+      # Material removal rate = cutting speed (m/min) · feed (mm/rev) · depth of cut (mm) · 1000.
+      rate_features: [cutting_speed, feed_rate, depth_of_cut]
+      rate_scale: 1000
+      rate_label: "Material removal rate"
+      rate_units: "mm³/min"
+    tool_life:
+      # Taylor V·Tⁿ = C with n = 0.3 (coated carbide): 60 min at 200 m/min, so the
+      # dataset's 0–60 min tool_wear_time range IS one tool life at the reference speed.
+      feature: cutting_speed
+      reference_value: 200
+      reference_life_minutes: 60
+      taylor_n: 0.3
+      cost_per_edge: 12.0
+      change_minutes: 2.5
 
 services:
   etl: etl-tabular

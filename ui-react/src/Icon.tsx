@@ -26,9 +26,12 @@ const PATHS: Record<string, string> = {
   book: "M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5ZM4 20.5A2.5 2.5 0 0 1 6.5 18H20",
   map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-14v14",
   factory: "M3 21V10l5 3.5V10l5 3.5V10l5 3.5V21H3Zm3-4h2m4 0h2m4 0h2M7 21v-3M3 10l3-2 3 2M17 6V3h3v5",
+  sparkle: "M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9L12 3Zm7 11l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z",
 };
 
-export function Icon({ name, size = 16, className }: { name: keyof typeof PATHS; size?: number; className?: string }) {
+export type IconName = keyof typeof PATHS;
+
+export function Icon({ name, size = 16, className }: { name: IconName; size?: number; className?: string }) {
   const d = PATHS[name];
   if (!d) return null;
   return (

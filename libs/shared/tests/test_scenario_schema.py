@@ -1,4 +1,5 @@
-"""Tests for ai_circus_shared.scenario_schema's DocumentsConfig seed-source validation."""
+"""Tests for ai_circus_shared.scenario_schema's DocumentsConfig seed-source validation
+and the ui_extras (region_map / live_plant / process_optimizer) cross-field validators."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from ai_circus_shared.scenario_schema import (
     CategoricalFeatureUI,
     ChatConfig,
+    CycleTimeModel,
     DocumentChunking,
     DocumentEmbedding,
     DocumentsConfig,
@@ -15,12 +17,16 @@ from ai_circus_shared.scenario_schema import (
     LivePlantExtra,
     MapRegion,
     NumericFeatureUI,
+    OptimizerEconomics,
+    ProcessOptimizerExtra,
     RegionMapExtra,
     RegionMapLevel,
     ScenarioDefinition,
+    SpecOption,
     TabularDataset,
     TabularModel,
     TabularServices,
+    ToolLifeModel,
     VectorStoreConfig,
     qdrant_collection_name,
 )
@@ -31,10 +37,13 @@ EMBEDDING = DocumentEmbedding(model="sentence-transformers/all-MiniLM-L6-v2")
 SERVICES = TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant")
 
 
-def _ui_extras_scenario(ui_extras: RegionMapExtra | LivePlantExtra) -> ScenarioDefinition:
+def _ui_extras_scenario(
+    ui_extras: RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra, task_type: str = "regression"
+) -> ScenarioDefinition:
     """A minimal, otherwise-valid tabular_ml ScenarioDefinition (one categorical
-    feature "region", one numeric feature "wear"), varying only ui_extras — for
-    testing the region-map/live-plant cross-field validators in isolation.
+    feature "region", two numeric features "wear" and "speed"), varying only
+    ui_extras — for testing the region-map/live-plant/process-optimizer cross-field
+    validators in isolation.
     """
     return ScenarioDefinition(
         slug="test_ui_extras",
@@ -51,14 +60,15 @@ def _ui_extras_scenario(ui_extras: RegionMapExtra | LivePlantExtra) -> ScenarioD
             seed_file="sample_data/x.csv",
             index_col="row_id",
             target="y",
-            feature_columns=["region", "wear"],
+            feature_columns=["region", "wear", "speed"],
             feature_schema={
                 "region": CategoricalFeatureUI(label="Region", options=["a", "b"], default="a"),
                 "wear": NumericFeatureUI(label="Wear", min=0, max=100, default=0),
+                "speed": NumericFeatureUI(label="Speed", min=1, max=10, default=5),
             },
         ),
         model=TabularModel(
-            task_type="regression",
+            task_type=task_type,  # type: ignore[arg-type]
             candidates=["lightgbm"],
             accuracy_gain_threshold_for_complexity=0.02,
             target_label="Y",
@@ -261,3 +271,117 @@ def test_live_plant_extra_rejects_a_categorical_wear_feature() -> None:
     """wear_feature must be numeric — a categorical column can't be incremented."""
     with pytest.raises(ValidationError, match="numeric"):
         _ui_extras_scenario(LivePlantExtra(wear_feature="region"))
+
+
+def _optimizer(**overrides: object) -> ProcessOptimizerExtra:
+    """A valid process_optimizer block for the `_ui_extras_scenario` fixture (recipe
+    knob "speed", aging feature "wear"), with keyword overrides for the negative cases.
+    """
+    base: dict[str, object] = {
+        "controllable": ["speed"],
+        "spec_options": [SpecOption(label="fine", value=2.0), SpecOption(label="coarse", value=5.0)],
+        "spec_default": 2.0,
+        "wear_feature": "wear",
+        "economics": OptimizerEconomics(
+            unit_value=10,
+            reject_cost=4,
+            machine_rate_per_hour=60,
+            cycle_time=CycleTimeModel(fixed_minutes=0.5, work_per_unit=100, rate_features=["speed"]),
+            tool_life=ToolLifeModel(feature="speed", reference_value=5, reference_life_minutes=100, cost_per_edge=8),
+        ),
+    }
+    base.update(overrides)
+    return ProcessOptimizerExtra(**base)  # type: ignore[arg-type]
+
+
+def test_process_optimizer_extra_accepts_a_valid_block() -> None:
+    """A process_optimizer whose controllable/rate/tool-life/wear features are all
+    real numeric features and whose default spec is offered is valid, with the
+    documented defaults for the optional fields.
+    """
+    scenario = _ui_extras_scenario(_optimizer())
+
+    extras = scenario.ui_extras
+    assert isinstance(extras, ProcessOptimizerExtra)
+    assert extras.objective == "minimize"
+    assert extras.discrete_values == {}
+    assert extras.tick_seconds == 3
+    assert extras.economics.batch_size == 500
+    assert extras.economics.tool_life is not None
+    assert extras.economics.tool_life.taylor_n == 0.25
+
+
+def test_process_optimizer_extra_accepts_no_wear_feature_and_no_tool_life() -> None:
+    """The live-line aging story is optional — a scenario with no consumable tool just
+    optimizes/applies recipes with a constant-per-unit cost model.
+    """
+    economics = OptimizerEconomics(
+        unit_value=10,
+        reject_cost=4,
+        machine_rate_per_hour=60,
+        cycle_time=CycleTimeModel(fixed_minutes=1, work_per_unit=1),
+    )
+    scenario = _ui_extras_scenario(_optimizer(wear_feature=None, economics=economics))
+
+    assert isinstance(scenario.ui_extras, ProcessOptimizerExtra)
+    assert scenario.ui_extras.wear_feature is None
+    assert scenario.ui_extras.economics.tool_life is None
+
+
+def test_process_optimizer_extra_rejects_a_categorical_controllable() -> None:
+    """Recipe knobs must be numeric — the optimizer samples a continuous/discrete numeric range."""
+    with pytest.raises(ValidationError, match=r"controllable.*numeric"):
+        _ui_extras_scenario(_optimizer(controllable=["region"]))
+
+
+def test_process_optimizer_extra_rejects_an_unknown_controllable() -> None:
+    with pytest.raises(ValidationError, match="controllable 'not_a_feature'"):
+        _ui_extras_scenario(_optimizer(controllable=["not_a_feature"]))
+
+
+def test_process_optimizer_extra_rejects_discrete_values_for_a_non_controllable() -> None:
+    """discrete_values only makes sense for a knob the optimizer actually searches."""
+    with pytest.raises(ValidationError, match="discrete_values"):
+        _ui_extras_scenario(_optimizer(discrete_values={"wear": [0.0, 50.0]}))
+
+
+def test_process_optimizer_extra_rejects_a_spec_default_not_offered() -> None:
+    with pytest.raises(ValidationError, match="spec_default"):
+        _ui_extras_scenario(_optimizer(spec_default=3.0))
+
+
+def test_process_optimizer_extra_rejects_a_wear_feature_without_tool_life() -> None:
+    """wear_feature needs economics.tool_life — that's what defines its aging rate."""
+    economics = OptimizerEconomics(
+        unit_value=10,
+        reject_cost=4,
+        machine_rate_per_hour=60,
+        cycle_time=CycleTimeModel(fixed_minutes=1, work_per_unit=1),
+    )
+    with pytest.raises(ValidationError, match="tool_life is missing"):
+        _ui_extras_scenario(_optimizer(economics=economics))
+
+
+def test_process_optimizer_extra_rejects_an_unknown_rate_feature() -> None:
+    economics = OptimizerEconomics(
+        unit_value=10,
+        reject_cost=4,
+        machine_rate_per_hour=60,
+        cycle_time=CycleTimeModel(fixed_minutes=1, work_per_unit=1, rate_features=["not_a_feature"]),
+        tool_life=ToolLifeModel(feature="speed", reference_value=5, reference_life_minutes=100, cost_per_edge=8),
+    )
+    with pytest.raises(ValidationError, match="rate_features"):
+        _ui_extras_scenario(_optimizer(economics=economics))
+
+
+def test_process_optimizer_extra_rejects_a_classification_scenario() -> None:
+    """A probability isn't a physical quantity to keep within a spec limit."""
+    with pytest.raises(ValidationError, match="regression"):
+        _ui_extras_scenario(_optimizer(), task_type="classification")
+
+
+def test_process_optimizer_extra_requires_at_least_one_controllable_and_spec() -> None:
+    with pytest.raises(ValidationError):
+        _optimizer(controllable=[])
+    with pytest.raises(ValidationError):
+        _optimizer(spec_options=[])
