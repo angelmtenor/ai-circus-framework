@@ -17,7 +17,9 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
-	k3s-data-platform-up k3s-data-platform-down
+	k3s-data-platform-up k3s-data-platform-down \
+	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv \
+	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-all-dl k3s-gpu-smoke
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -238,11 +240,22 @@ K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
 K3S_LITE_SKIP ?= mlflow agui-voice
 
 K3S_SUBNET   ?=  # optional, e.g. 172.28.0.0/16 — pins static node IPs so a Docker/host restart can't swap them (k3d marks --subnet experimental; see k8s/README.md)
+K3S_VERSION  ?= v1.35.5-k3s1
+# auto: a GPU-enabled cluster whenever Docker can pass the host GPU through (NVIDIA
+# Container Toolkit — `sudo ./scripts/setup_gpu_containers.sh`); 1 forces it, 0 never.
+K3S_GPU      ?= auto
 
-k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for the k8s manifests' hostPath volumes; K3S_SUBNET=… pins node IPs
-	@k3d cluster list "$(K3S_CLUSTER)" >/dev/null 2>&1 || \
-		k3d cluster create "$(K3S_CLUSTER)" -p "80:80@loadbalancer" -v "$$(pwd)/scenarios:/scenarios@all" $(if $(strip $(K3S_SUBNET)),--subnet "$(strip $(K3S_SUBNET))")
-	@echo "✓ k3d cluster '$(K3S_CLUSTER)' ready"
+k3s-cluster: ## Create the local k3d cluster (idempotent) — port 80 for Traefik, ./scenarios bind-mounted for hostPath volumes; K3S_SUBNET=… pins node IPs; K3S_GPU=auto|1|0 adds the host GPU (infra/k3s-gpu/)
+	@./scripts/k3s_cluster_create.sh "$(K3S_CLUSTER)" "$(strip $(K3S_GPU))" "$(strip $(K3S_VERSION))" "$(strip $(K3S_SUBNET))"
+
+k3s-gpu-smoke: ## Prove a pod can use the cluster GPU (nvidia RuntimeClass + device plugin): runs nvidia-smi once — needs a K3S_GPU cluster
+	@kubectl -n ai-circus delete pod gpu-smoke --ignore-not-found >/dev/null
+	@kubectl apply -f k8s/jobs/gpu-smoke-pod.yaml >/dev/null
+	@kubectl -n ai-circus wait --for=jsonpath='{.status.phase}'=Succeeded pod/gpu-smoke --timeout=180s \
+		|| { kubectl -n ai-circus describe pod gpu-smoke | tail -15; exit 1; }
+	@kubectl -n ai-circus logs gpu-smoke
+	@kubectl -n ai-circus delete pod gpu-smoke --ignore-not-found >/dev/null
+	@echo "✓ the cluster GPU works — in-cluster deep-learning training will request it"
 
 k3s-build: ## Build every service image locally (same Dockerfiles docker-compose uses), tagged ai-circus/<service>:local
 	@mkdir -p demo/themes
@@ -366,6 +379,67 @@ k3s-portforward-stop: ## Stop the standing platform-registry port-forward starte
 		rm -f "$(K3S_PORTFORWARD_PID)"; \
 		echo "✓ platform-registry port-forward stopped"; \
 	fi
+
+# ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
+# `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia)
+# fine-tune Hugging Face models: minutes on a GPU, far longer on a CPU — so training only
+# ever runs from these explicit targets (or the admin console's Platform → Deep Learning
+# tab). `dl-train-*` trains on THIS machine (its GPU, if any) and publishes to the running
+# stack's SeaweedFS; the k3s-dl-* targets below deploy the separate dl-inference service.
+
+DL_SCENARIO_NLP ?= symptom_triage
+DL_SCENARIO_CV  ?= chest_xray_pneumonia
+
+dl-gpu-check: ## Report whether this machine has an NVIDIA GPU dl-train-* can use (and what the k3s cluster exposes)
+	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then \
+		echo "⚡ host GPU: $$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | head -1) — dl-train-* will fine-tune on it"; \
+	else echo "ℹ️  no host NVIDIA GPU — dl-train-* would use each scenario's reduced CPU budget (asks first)"; fi
+	@gpus=$$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null | awk '{s+=$$1} END {print s+0}'); \
+	echo "   k3s cluster GPUs (nvidia.com/gpu allocatable): $${gpus:-0} — in-cluster training (k3s-dl-train-*, admin console) uses CPU unless > 0"
+
+dl-data: ## Download + checksum-verify every deep_learning scenario's public data into SeaweedFS (no training; SCENARIOS=… to narrow)
+	@./scripts/dl_train_host.sh --download-only "$(SCENARIOS)"
+
+dl-train: ## Fine-tune every deep_learning scenario on this machine (GPU if present; CPU asks first) and publish to SeaweedFS — SCENARIOS=… to narrow
+	@./scripts/dl_train_host.sh "$(SCENARIOS)"
+
+dl-train-nlp: ## Fine-tune the NLP scenario (BioClinical ModernBERT, symptom triage) on this machine's GPU
+	@./scripts/dl_train_host.sh "$(DL_SCENARIO_NLP)"
+
+dl-train-cv: ## Fine-tune the computer-vision scenario (ConvNeXt V2, chest X-ray) on this machine's GPU
+	@./scripts/dl_train_host.sh "$(DL_SCENARIO_CV)"
+
+# dl-training image's torch build: auto = the CUDA build when the cluster advertises
+# nvidia.com/gpu (it still runs on CPU), else the ~1 GB smaller CPU build; or force cpu|gpu.
+DL_TRAINING_TORCH ?= auto
+DL_TRAINING_TORCH_RESOLVED = $(if $(filter auto,$(strip $(DL_TRAINING_TORCH))),$(shell kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null | awk '{s+=$$1} END {print (s>0) ? "gpu" : "cpu"}'),$(strip $(DL_TRAINING_TORCH)))
+
+k3s-dl-build: ## Build + import the Deep Learning images (dl-inference, dl-training) into k3d — separate from k3s-build so the ~2 GB torch image is opt-in
+	@docker build -f services/dl-inference/Dockerfile -t ai-circus/dl-inference:local . || exit 1
+	@docker build -f services/dl-training/Dockerfile --build-arg DL_TRAINING_TORCH=$(DL_TRAINING_TORCH_RESOLVED) -t ai-circus/dl-training:local . || exit 1
+	@for img in dl-inference dl-training; do k3d image import "ai-circus/$$img:local" -c "$(K3S_CLUSTER)" || exit 1; done
+	@echo "✓ Deep Learning images built + imported (dl-training torch=$(DL_TRAINING_TORCH_RESOLVED))"
+
+k3s-dl-up: ## Deploy the optional Deep Learning overlay (k8s/deep-learning/: dl-inference) and wait for it — models come from `make dl-train*` / k3s-dl-train-*
+	@kubectl apply -k k8s/deep-learning
+	@kubectl -n ai-circus rollout status deployment/dl-inference --timeout=180s
+	@echo "✓ dl-inference up — http://dl-inference.localhost (healthz); the healthcare scenarios appear in http://aiopen.localhost"
+
+k3s-dl-down: ## Remove the Deep Learning overlay (trained models stay in SeaweedFS)
+	@kubectl delete -k k8s/deep-learning --ignore-not-found
+
+k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
+	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }
+	@./scripts/k3s_dl_train.sh "$(SCENARIO)"
+
+k3s-dl-train-nlp: ## In-cluster Job for the NLP scenario (see k3s-dl-train)
+	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_NLP)
+
+k3s-dl-train-cv: ## In-cluster Job for the computer-vision scenario (see k3s-dl-train)
+	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_CV)
+
+k3s-all-dl: k3s-all k3s-dl-build k3s-dl-up ## `k3s-all` + the Deep Learning overlay (no training — run `make dl-train` on a GPU host, or the admin console's Train button)
+	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up with the Deep Learning overlay — train models with 'make dl-train' (GPU) if not done yet"
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 

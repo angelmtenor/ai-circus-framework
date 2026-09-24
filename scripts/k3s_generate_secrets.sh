@@ -48,6 +48,10 @@ SECRET_SPECS=(
   "etl-tabular-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
   "etl-vectorize-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,GOOGLE_API_KEY,VOYAGE_API_KEY,LITELLM_MASTER_KEY"
   "training-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
+  # Optional Deep Learning overlay (k8s/deep-learning/ + k8s/jobs/dl-training-job.yaml) —
+  # generated unconditionally, harmless when that overlay isn't applied.
+  "dl-inference-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,AUTH_DISABLED,ADMIN_API_KEY,ENGINEERING_DEMO_API_KEY,KEYCLOAK_ISSUER,KEYCLOAK_AUDIENCE"
+  "dl-training-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
   "data-platform-manager-secrets|POSTGRES_USER,POSTGRES_PASSWORD,ADMIN_API_KEY,LITELLM_MASTER_KEY,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
   # Observability (k8s/base/langfuse.yaml + mlflow.yaml): Langfuse web + worker share
   # one Secret (identical env by design — see the manifest); ClickHouse only needs its

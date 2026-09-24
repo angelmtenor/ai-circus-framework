@@ -28,7 +28,11 @@ k8s/
   base/            # namespace, shared config, infra (postgres/keycloak/qdrant/seaweedfs),
                     # every backend Deployment + Service + IngressRoute, kustomization.yaml
   jobs/             # etl-tabular / training / etl-vectorize — one-shot batch.Job manifests,
-                    # applied manually via `make k3s-pipeline`, not part of `make k3s-up`
+                    # applied manually via `make k3s-pipeline`, not part of `make k3s-up`;
+                    # plus dl-training-job.yaml (per-scenario template) and gpu-smoke-pod.yaml
+  deep-learning/    # optional overlay: dl-inference (make k3s-dl-up), never part of k3s-up
+  data-platform/    # optional overlay: Kafka (make k3s-data-platform-up)
+infra/k3s-gpu/      # k3s node image with the NVIDIA runtime + device plugin (GPU clusters)
 ```
 
 Plain YAML + a single Kustomize base — no overlays, no Helm chart. This is deliberately as flat
@@ -68,6 +72,48 @@ kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
 kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
 kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=300s
 ```
+
+### Deep learning (optional) and GPUs
+
+The two `kind: deep_learning` healthcare scenarios (`symptom_triage` — NLP, `chest_xray_pneumonia`
+— computer vision) are served by a separate, opt-in `dl-inference` pod (onnxruntime only, no
+torch, ~0.6 GB with both models loaded) and trained by `dl-training`. **Training is never part of
+`make all`/`k3s-all`** — minutes on a GPU, far longer on a CPU:
+
+```bash
+make k3s-all-dl        # k3s-all + build/import the DL images + deploy dl-inference (no training)
+make dl-gpu-check      # does this host have a GPU? does the cluster expose one?
+make dl-train-nlp      # fine-tune on THIS host's GPU (CPU asks first), publish to SeaweedFS
+make dl-train-cv       #   "  — dl-inference serves the new model within a minute, no restart
+make k3s-dl-train-nlp  # the same as an in-cluster Job (CPU budget unless the cluster has a GPU)
+```
+
+Admins get the same in-cluster training button, GPU status and each model's card (trained on
+which device, held-out metrics) under **Platform → Deep Learning** in the UI.
+
+**Giving the cluster the GPU.** k3d attaches GPUs only when a cluster is *created*, and only if
+Docker can pass one through:
+
+1. Once, as root: `sudo ./scripts/setup_gpu_containers.sh` — installs the NVIDIA Container
+   Toolkit into Docker (native Linux with a working driver, or WSL2 with the Windows driver).
+2. `make k3s-cluster` (`K3S_GPU=auto`, the default) now detects Docker's `nvidia` runtime and
+   creates the node from `ai-circus/k3s-gpu` (infra/k3s-gpu/: k3s on Ubuntu + NVIDIA Container
+   Toolkit + the NVIDIA device plugin v0.20.1, which supports WSL2) with `--gpus all`. An existing
+   CPU-only cluster must be recreated: `k3d cluster delete ai-circus && make k3s-all-dl`.
+3. `make k3s-gpu-smoke` runs `nvidia-smi` in a pod (`runtimeClassName: nvidia`, one
+   `nvidia.com/gpu`) to prove it end to end.
+
+Verified on WSL2 (RTX 4070 Laptop, driver 610.62, k3s v1.35.5): the device plugin logs
+`Detected platform: wsl` and the node advertises `nvidia.com/gpu: 1`. Two things this needed:
+GPU clusters are created with `--disable-cloud-controller` — on the Ubuntu-based GPU node the
+embedded cloud-controller-manager otherwise loses a startup race for its RoleBinding and
+restart-loops the whole server (k3s-io/k3s#7328; a single-node k3d cluster doesn't need it) —
+and `setup_gpu_containers.sh` looks for `nvidia-smi` in `/usr/lib/wsl/lib` itself, since
+`sudo`'s `secure_path` drops it from `PATH` on WSL.
+
+With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
+(`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
+RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.
 
 ### Pausing vs. tearing down
 

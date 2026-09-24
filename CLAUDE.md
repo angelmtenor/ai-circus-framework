@@ -38,6 +38,11 @@ make new-service NAME=foo    # scaffold a new backend service from ai-circus-tem
 make k3s-cluster              # create the local k3d cluster (see k8s/README.md for the full k3s-* workflow)
 make k3s-resume-lite          # resume a paused cluster without mlflow/agui-voice (~1.2 GB less RAM; `make k3s-full` restores)
 make k3s-all-lite             # `make k3s-all` for a fresh cluster, straight into lite mode
+
+# Deep learning (optional, never part of `make all`) — see k8s/README.md "Deep learning"
+make k3s-all-dl               # k3s-all + dl-inference overlay (no training)
+make dl-train-nlp / dl-train-cv   # fine-tune on this host's GPU (CPU asks first), publish to SeaweedFS
+make k3s-dl-train-nlp / -cv   # same as an in-cluster Job;  make dl-gpu-check / k3s-gpu-smoke for GPUs
 ```
 
 Per-service (`cd services/<name>/`, or `cd ui-react/`):
@@ -85,13 +90,16 @@ and the `make k3s-*` targets (dev-parity only, not a production/multi-node setup
 
 ### Scenario-driven, not per-feature code
 
-A **scenario** (`scenarios/<slug>/scenario.yaml`) is the unit of product content — three `kind`s exist
-(`tabular_ml`, `conversational_rag`, `assisted_form`; schema in
+A **scenario** (`scenarios/<slug>/scenario.yaml`) is the unit of product content — four `kind`s exist
+(`tabular_ml`, `conversational_rag`, `assisted_form`, `deep_learning`; schema in
 `libs/shared/src/ai_circus_shared/scenario_schema.py`). Adding a new scenario is a YAML file plus
 restarting `platform-registry` (which seeds it) — never new UI or container code. **One consolidated
 service instance serves every scenario of a given kind**: `prediction` and `assistant` load every
 `tabular_ml` scenario from the same running container, routed by a `{scenario_slug}` path segment;
-`rag-agent` does the same for `conversational_rag`, `form-agent` for `assisted_form`. `ui-react` mirrors
+`rag-agent` does the same for `conversational_rag`, `form-agent` for `assisted_form`, and the optional
+`dl-inference` (onnxruntime-only, k8s/deep-learning/ overlay) for `deep_learning` — whose models come from
+the one-shot `dl-training` (GPU when available; ONNX export + calibration; artifact contract in
+`libs/shared/src/ai_circus_shared/deep_learning.py`), rendered by the generic `DeepLearningView`. `ui-react` mirrors
 this on the frontend — `ScenarioPicker` renders whatever the entitlements API returns, and
 `TabularView`/`RagView`/`AssistedFormView` are generic renderers driven entirely by each scenario's
 `ScenarioSummary` (feature schema, form config, chat context) — there is no per-scenario UI code.

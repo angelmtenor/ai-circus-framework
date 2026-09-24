@@ -10,6 +10,7 @@ infra/seaweedfs/s3.json
 __pycache__/
 *.py[cod]
 .venv/
+.venv-gpu/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/

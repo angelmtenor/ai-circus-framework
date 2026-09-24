@@ -1,0 +1,176 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# dl-inference is a long-running FastAPI service serving every `deep_learning` scenario
+# in SCENARIOS (empty/unset = all) with onnxruntime only — no torch — so it stays a small
+# pod: predictions, explanations (word/patch occlusion), similar-case retrieval, and the
+# published held-out samples/images, all per tenant (models are loaded per (org,
+# scenario) from SeaweedFS, checksum-verified, LRU-cached). Validates the caller's
+# Keycloak token (or ADMIN_API_KEY) and the entitlement via platform-registry first.
+# Deployed separately from k8s/base (k8s/deep-learning/, `make k3s-dl-up`).
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS
+    description: "Comma-separated deep_learning scenario slugs this instance serves; empty/unset = every scenario"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: AUTH_DISABLED
+    description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ADMIN_API_KEY
+    description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: DEV_ORG_ID
+    description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SHARED_MODEL_ORG_ID
+    description: "Org id every tenant's model falls back to until it has its own (matches dl-training's ORG_ID)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_ISSUER
+    description: "Keycloak realm issuer (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: KEYCLOAK_JWKS_URL
+    description: "Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: KEYCLOAK_AUDIENCE
+    description: "Expected token audience, registered via an Audience client-scope mapper in Keycloak"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: ORT_THREADS
+    description: "onnxruntime intra-op threads per inference session (keeps the pod's CPU use bounded)"
+    type: string
+    mandatory: true
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
+    DEV_ORG_ID: "demo"
+    # Must match dl-training's ORG_ID default — see SHARED_MODEL_ORG_ID's description
+    # above. Same "safe to default here" reasoning as SCENARIOS below.
+    SHARED_MODEL_ORG_ID: "demo"
+    ORT_THREADS: "4"
+    # Empty = every deep_learning scenario under SCENARIOS_DIR. Safe to default here
+    # (unlike AUTH_DISABLED/ADMIN_API_KEY below): there's only one instance of this
+    # service, so there's no risk of two instances silently sharing a default they
+    # shouldn't — see the root plan's "Consolidation mechanism" decision. A profile
+    # default here WOULD still beat a real env var override of the same name, though
+    # (pydantic-settings gives these profile overrides, once merged, priority over the
+    # actual process env) — so restricting one specific deployment to fewer scenarios
+    # means editing this profile, not just setting an env var.
+    SCENARIOS: ""
+    # AUTH_DISABLED/ADMIN_API_KEY/CORS_ALLOWED_ORIGINS deliberately have NO default
+    # here: putting one in this profile block would always win over a real
+    # environment variable at runtime (pydantic-settings gives explicit constructor
+    # kwargs, which is what these profile overrides become, priority over the actual
+    # process env) — a hardcoded local-dev origin list must never silently beat a
+    # real deployment's env var. Set them in your own .env for local (non-docker) dev;
+    # docker-compose.yml supplies a `${VAR:-default}` fallback for the docker profile.
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

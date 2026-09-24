@@ -23,6 +23,8 @@ export const config = {
   devOrgId: import.meta.env.VITE_DEV_ORG_ID ?? "demo",
   platformRegistryUrl: import.meta.env.VITE_PLATFORM_REGISTRY_URL ?? "http://localhost:8010",
   predictionUrl: import.meta.env.VITE_PREDICTION_URL ?? "http://prediction.localhost",
+  // Optional Deep Learning overlay (k8s/deep-learning/) — deep_learning scenarios only.
+  dlInferenceUrl: import.meta.env.VITE_DL_INFERENCE_URL ?? "http://dl-inference.localhost",
   assistantUrl: import.meta.env.VITE_ASSISTANT_URL ?? "http://assistant.localhost",
   ragAgentUrl: import.meta.env.VITE_RAG_AGENT_URL ?? "http://rag-agent.localhost",
   formAgentUrl: import.meta.env.VITE_FORM_AGENT_URL ?? "http://form-agent.localhost",

@@ -1,0 +1,51 @@
+# One-shot, ONE deep_learning scenario per Job: `make k3s-dl-train-nlp` / `-cv` render
+# the two placeholders (__JOB_NAME__ = dl-training-<slug with dashes>, __SCENARIOS__ =
+# the slug) and apply it — the admin console's "Train in cluster" button creates the
+# identical Job through data-platform-manager (core/k8s_jobs.py's dl_training_job(),
+# kept in sync by tests/test_k8s_jobs.py). Never part of any *-all target: CPU training
+# here uses each scenario's reduced `training.cpu` budget. When a node advertises
+# nvidia.com/gpu, data-platform-manager additionally requests one (see k8s/README.md,
+# "Deep learning" — needs a CUDA build of the image, DL_TRAINING_TORCH=gpu).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: ai-circus
+  labels: {app: dl-training, scenario: __SCENARIOS__}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: {app: dl-training, scenario: __SCENARIOS__}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: dl-training
+          image: ai-circus/dl-training:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          env:
+            - {name: SCENARIOS, value: __SCENARIOS__}
+            - {name: DL_DEVICE, value: auto}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: dl-training-secrets}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "4", memory: 4Gi}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+            - {name: cache, mountPath: /tmp/dl-cache}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+        # Raw data + Hugging Face base-model weights (~1 GB for the NLP scenario).
+        - name: cache
+          emptyDir: {sizeLimit: 4Gi}

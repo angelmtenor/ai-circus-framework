@@ -129,7 +129,60 @@ export type ProcessOptimizerExtra = {
   sim_minutes_per_tick: number;
   economics: OptimizerEconomics;
 };
-export type UiExtras = RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra;
+// deep_learning only (see scenario_schema.py's TriageBoardExtra/ReadingRoomExtra) —
+// rendered by TriageBoardView.tsx / ReadingRoomView.tsx.
+export type TriageLane = {
+  key: string;
+  label: string;
+  description?: string | null;
+  labels: string[];
+  tone: "critical" | "warning" | "info" | "ok";
+};
+export type TriageBoardExtra = {
+  kind: "triage_board";
+  lanes: TriageLane[];
+  review_lane_label: string;
+  confidence_threshold: number;
+  tick_seconds: number;
+};
+export type ReadingRoomExtra = {
+  kind: "reading_room";
+  positive_label: string;
+  priority_threshold: number;
+  minutes_per_read: number;
+  arrival_minutes: number;
+  worklist_size: number;
+};
+export type UiExtras = RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | TriageBoardExtra | ReadingRoomExtra;
+
+// Mirrors scenario_schema.py's DeepLearningConfig (the scenario.yaml `deep_learning`
+// block, as seeded by platform-registry) — drives DeepLearningView.tsx.
+export type DlLabel = { key: string; label: string; description?: string | null };
+export type DlTrainBudget = {
+  epochs: number;
+  batch_size: number;
+  learning_rate: number;
+  max_train_samples?: number | null;
+  trainable_layers?: number | null;
+};
+export type DeepLearningConfig = {
+  modality: "text" | "image";
+  labels: DlLabel[];
+  base_model: string;
+  base_model_revision: string;
+  base_model_params: string;
+  input_label: string;
+  target_label: string;
+  target_description?: string | null;
+  max_length: number;
+  input_examples: string[];
+  image_size: number;
+  occlusion_grid: number;
+  quantize: boolean;
+  training: { gpu: DlTrainBudget; cpu: DlTrainBudget; val_fraction: number; seed: number; class_weighted_loss: boolean };
+  gallery_size: number;
+  reference_size: number;
+};
 
 export type ScenarioSummary = {
   slug: string;
@@ -168,6 +221,8 @@ export type ScenarioSummary = {
   // workspace tabs (see TabularView.tsx). Absent/null is the common case (the plain
   // 4-tab workspace).
   ui_extras?: UiExtras | null;
+  // deep_learning only — see DeepLearningConfig above.
+  deep_learning?: DeepLearningConfig | null;
 };
 
 export type PredictionResult = {
@@ -785,4 +840,157 @@ export async function runSemanticQuery(
     headers: headers(accessToken),
   });
   return asJson<SemanticQueryResult>(response);
+}
+
+// ── deep_learning (dl-inference + data-platform-manager's admin DL endpoints) ──
+
+export type DlEpoch = {
+  epoch: number;
+  train_loss: number;
+  val_loss: number;
+  val_accuracy: number;
+  val_macro_f1: number;
+  seconds: number;
+};
+export type DlEvaluation = {
+  n: number;
+  metrics: Record<string, number>;
+  per_class: { key: string; precision: number; recall: number; f1: number; support: number }[];
+  confusion_matrix: number[][];
+  reliability: { confidence: number; accuracy: number; count: number }[];
+  coverage_curve: { threshold: number; coverage: number; accuracy: number }[];
+  roc_curve?: { fpr: number; tpr: number; threshold: number }[];
+};
+/** The deployed model's manifest (dl-training's metadata.json, minus checksums). */
+export type DlModelInfo = {
+  scenario_slug: string;
+  modality: "text" | "image";
+  base_model: string;
+  base_model_revision: string;
+  base_model_params: string;
+  labels: { key: string; label: string }[];
+  device: { kind: "cuda" | "cpu"; name: string; torch_version: string; cuda_version: string | null; memory_gb: number | null };
+  budget_kind: "gpu" | "cpu";
+  budget: DlTrainBudget;
+  trainable_params: number;
+  total_params: number;
+  train_size: number;
+  train_size_available: number;
+  val_size: number;
+  test_size: number;
+  history: DlEpoch[];
+  evaluation: DlEvaluation;
+  quantized: boolean;
+  // Post-hoc calibration (dl-training's core/calibration.py): logits are divided by this
+  // before every softmax; absent on models trained before calibration existed.
+  temperature?: number;
+  label_smoothing?: number;
+  latency_ms: number;
+  model_size_mb: number;
+  training_seconds: number;
+  total_seconds: number;
+  trained_at: string;
+  served_from_org: string;
+  runtime: string;
+};
+export type DlSample = { id: string; label: string; probs: number[]; text?: string };
+export type DlTokenWeight = { text: string; start: number; end: number; weight: number | null };
+export type DlExplanation =
+  | { type: "tokens"; method: string; tokens: DlTokenWeight[] }
+  | { type: "heatmap"; method: string; grid: number[][] };
+export type DlSimilarCase = { id: string; label: string; similarity: number; text?: string };
+export type DlPrediction = {
+  predicted: string;
+  confidence: number;
+  probabilities: { key: string; label: string; probability: number }[];
+  explained_class: string | null;
+  explanation: DlExplanation | null;
+  similar: DlSimilarCase[];
+  input_image_png: string | null;
+  latency_ms: number;
+};
+export type DlPredictBody = {
+  text?: string;
+  image_base64?: string;
+  sample_id?: string;
+  explain?: boolean;
+  target?: string;
+  similar?: number;
+};
+
+export async function dlModelInfo(baseUrl: string, slug: string, accessToken: string | null): Promise<DlModelInfo> {
+  return asJson(await fetch(`${baseUrl}/models/${slug}`, { headers: headers(accessToken) }));
+}
+
+export async function dlSamples(
+  baseUrl: string,
+  slug: string,
+  accessToken: string | null,
+): Promise<{ samples: DlSample[]; total: number }> {
+  return asJson(await fetch(`${baseUrl}/dataset/${slug}/samples?limit=2000`, { headers: headers(accessToken) }));
+}
+
+/** A published sample's PNG as a Blob — fetched with the bearer token (an <img src>
+ * can't send one), then shown through an object URL (see dlShared.tsx's useDlImage). */
+export async function dlImageBlob(baseUrl: string, slug: string, sampleId: string, accessToken: string | null): Promise<Blob> {
+  const response = await fetch(`${baseUrl}/dataset/${slug}/images/${sampleId}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  if (!response.ok) throw new Error(`Image ${sampleId} failed: ${response.status}`);
+  return response.blob();
+}
+
+export async function dlPredict(
+  baseUrl: string,
+  slug: string,
+  body: DlPredictBody,
+  accessToken: string | null,
+): Promise<DlPrediction> {
+  return asJson(
+    await fetch(`${baseUrl}/predict/${slug}`, { method: "POST", headers: headers(accessToken), body: JSON.stringify(body) }),
+  );
+}
+
+export type DlRuntime = {
+  onnxruntime_version: string;
+  execution_providers: string[];
+  available_providers: string[];
+  cpu_count: number;
+  threads_per_session: number;
+  rss_mb: number;
+  scenarios: string[];
+  cached_models: { org_id: string; scenario_slug: string }[];
+};
+
+export async function dlRuntime(baseUrl: string, accessToken: string | null): Promise<DlRuntime> {
+  return asJson(await fetch(`${baseUrl}/admin/runtime`, { headers: headers(accessToken) }));
+}
+
+export type DlTrainingJob = {
+  scenario_slug: string;
+  title: string;
+  modality: string;
+  job_name: string;
+  state: "not_run" | "running" | "succeeded" | "failed";
+  started_at: string | null;
+  completed_at: string | null;
+};
+export type DlClusterStatus = {
+  available: boolean;
+  reason: string | null;
+  cluster_gpus: number;
+  gpu_nodes: { name: string; gpus: number }[];
+  jobs: DlTrainingJob[];
+};
+
+export async function getDeepLearningStatus(baseUrl: string, accessToken: string | null): Promise<DlClusterStatus> {
+  return asJson(await fetch(`${baseUrl}/deep-learning/status`, { headers: headers(accessToken) }));
+}
+
+export async function trainDeepLearningScenario(
+  baseUrl: string,
+  slug: string,
+  accessToken: string | null,
+): Promise<{ job: string; scenario_slug: string; gpu: boolean; triggered_at: string }> {
+  return asJson(await fetch(`${baseUrl}/deep-learning/${slug}/train`, { method: "POST", headers: headers(accessToken) }));
 }

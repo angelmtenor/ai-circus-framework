@@ -19,6 +19,7 @@ is available there.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -167,3 +168,114 @@ def trigger_job(name: str) -> None:
         if exc.status != 404:
             raise
     batch.create_namespaced_job(NAMESPACE, PIPELINE_JOBS[name])
+
+
+# ── Deep learning (optional overlay) ─────────────────────────────────────────
+# One Job per deep_learning scenario, mirroring k8s/jobs/dl-training-job.yaml with its
+# __JOB_NAME__/__SCENARIOS__ placeholders filled in (tests/test_k8s_jobs.py renders
+# the YAML the same way `make k3s-dl-train` does and compares). Unlike PIPELINE_JOBS
+# these are built per request: the scenario is a parameter, and whether to request a
+# GPU depends on what the cluster's nodes advertise at trigger time.
+
+DL_TRAINING_IMAGE = "ai-circus/dl-training:local"
+GPU_RESOURCE = "nvidia.com/gpu"
+# k3s creates this RuntimeClass automatically once the NVIDIA container runtime is
+# installed on the node — see k8s/README.md "Deep learning".
+GPU_RUNTIME_CLASS = "nvidia"
+_DL_CACHE_VOLUME = "cache"
+
+
+def dl_job_name(scenario_slug: str) -> str:
+    """Kubernetes-safe Job name for one deep_learning scenario (underscores aren't allowed)."""
+    return f"dl-training-{scenario_slug.replace('_', '-')}"
+
+
+def dl_training_job(scenario_slug: str, *, gpu: bool) -> client.V1Job:
+    """The per-scenario dl-training Job — requests one GPU only when `gpu` is set."""
+    container = _container("dl-training", DL_TRAINING_IMAGE, "dl-training-secrets")
+    container.env = [
+        client.V1EnvVar(name="SCENARIOS", value=scenario_slug),
+        client.V1EnvVar(name="DL_DEVICE", value="auto"),
+    ]
+    limits = {"cpu": "4", "memory": "4Gi"}
+    if gpu:
+        # CUDA torch keeps ~1.5-2 GB of runtime in host RAM during the ONNX export.
+        limits |= {"memory": "6Gi", GPU_RESOURCE: "1"}
+    container.resources = client.V1ResourceRequirements(requests={"cpu": "500m", "memory": "1Gi"}, limits=limits)
+    container.volume_mounts = [
+        *(container.volume_mounts or []),
+        client.V1VolumeMount(name=_DL_CACHE_VOLUME, mount_path="/tmp/dl-cache"),  # ruff: ignore[hardcoded-temp-file]
+    ]
+    job = _job(dl_job_name(scenario_slug), container)
+    labels = {"app": "dl-training", "scenario": scenario_slug}
+    metadata = cast("client.V1ObjectMeta", job.metadata)
+    metadata.labels = labels
+    spec = cast("client.V1JobSpec", job.spec)
+    template = cast("client.V1PodTemplateSpec", spec.template)
+    template.metadata = client.V1ObjectMeta(labels=labels)
+    pod = cast("client.V1PodSpec", template.spec)
+    pod.volumes = [
+        *(pod.volumes or []),
+        client.V1Volume(name=_DL_CACHE_VOLUME, empty_dir=client.V1EmptyDirVolumeSource(size_limit="4Gi")),
+    ]
+    if gpu:
+        pod.runtime_class_name = GPU_RUNTIME_CLASS
+    return job
+
+
+@dataclass(frozen=True)
+class NodeGpus:
+    """How many NVIDIA GPUs one node advertises as allocatable."""
+
+    name: str
+    gpus: int
+
+
+def cluster_gpus() -> list[NodeGpus]:
+    """Every node with its allocatable `nvidia.com/gpu` count (0 without the NVIDIA
+    device plugin — the default on k3d).
+    """
+    _load_config()
+    nodes = cast("client.V1NodeList", client.CoreV1Api().list_node())
+    result = []
+    for node in nodes.items or []:
+        allocatable = (node.status.allocatable if node.status else None) or {}
+        try:
+            count = int(allocatable.get(GPU_RESOURCE, "0"))
+        except ValueError:
+            count = 0
+        result.append(NodeGpus(name=str(node.metadata.name if node.metadata else "?"), gpus=count))
+    return result
+
+
+def trigger_dl_training(scenario_slug: str) -> bool:
+    """Delete any previous run of this scenario's Job and start a fresh one.
+
+    Returns:
+        Whether the new Job requested a GPU.
+    """
+    gpu = sum(n.gpus for n in cluster_gpus()) > 0
+    _load_config()
+    batch = client.BatchV1Api()
+    name = dl_job_name(scenario_slug)
+    try:
+        batch.delete_namespaced_job(name, NAMESPACE, propagation_policy="Background")
+        _wait_until_gone(batch, name)
+    except ApiException as exc:
+        if exc.status != 404:
+            raise
+    batch.create_namespaced_job(NAMESPACE, dl_training_job(scenario_slug, gpu=gpu))
+    return gpu
+
+
+def _wait_until_gone(batch: client.BatchV1Api, name: str, timeout_seconds: float = 15.0) -> None:
+    """Deletion is asynchronous — recreating the same Job name too early is a 409."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            batch.read_namespaced_job(name, NAMESPACE)
+        except ApiException as exc:
+            if exc.status == 404:
+                return
+            raise
+        time.sleep(0.5)

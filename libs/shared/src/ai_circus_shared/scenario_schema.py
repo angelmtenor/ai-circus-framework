@@ -53,6 +53,7 @@ Industry = Literal[
     "retail",
     "logistics",
     "public_sector",
+    "healthcare",
     "general",
 ]
 
@@ -321,7 +322,195 @@ class ProcessOptimizerExtra(BaseModel):
     economics: OptimizerEconomics
 
 
-UiExtras = Annotated[RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra, Field(discriminator="kind")]
+class TriageLane(BaseModel):
+    """One care-pathway lane on a `TriageBoardExtra` board: every predicted class in
+    `labels` (keys from `deep_learning.labels`) is routed here when the model is
+    confident enough (see `TriageBoardExtra.confidence_threshold`).
+    """
+
+    key: str
+    label: str  # display name, e.g. "Urgent — same-day clinician"
+    description: str | None = None
+    labels: list[str] = Field(min_length=1)
+    # Visual severity only — ui-react maps it to a color, never to routing logic.
+    tone: Literal["critical", "warning", "info", "ok"] = "info"
+
+
+class TriageBoardExtra(BaseModel):
+    """Opt-in 5th workspace tab for a text `deep_learning` scenario: a live board where
+    incoming messages (the held-out test split, replayed client-side every
+    `tick_seconds`) are routed by the model's top prediction into `lanes`; anything
+    below `confidence_threshold` goes to a human-review lane instead (selective
+    prediction). See ui-react's TriageBoardView.tsx — the single generic renderer.
+    """
+
+    kind: Literal["triage_board"] = "triage_board"
+    lanes: list[TriageLane] = Field(min_length=1)
+    review_lane_label: str = "Human review"
+    confidence_threshold: float = Field(default=0.6, ge=0, le=1)
+    tick_seconds: int = Field(default=4, ge=1)
+
+
+class ReadingRoomExtra(BaseModel):
+    """Opt-in 5th workspace tab for an image `deep_learning` scenario: a simulated
+    reading-room worklist of held-out studies, prioritized by the model's probability
+    of `positive_label` (vs. first-in-first-out), with a viewer (window/level, zoom,
+    explanation overlay) and reader confirm/override actions. The time-to-read KPI
+    replays the same worklist through both orderings with `minutes_per_read` per study
+    and one arrival every `arrival_minutes`. See ui-react's ReadingRoomView.tsx.
+    """
+
+    kind: Literal["reading_room"] = "reading_room"
+    positive_label: str  # a key from deep_learning.labels, e.g. "1" (pneumonia)
+    priority_threshold: float = Field(default=0.5, ge=0, le=1)
+    minutes_per_read: float = Field(default=4.0, gt=0)
+    arrival_minutes: float = Field(default=2.0, gt=0)
+    worklist_size: int = Field(default=40, ge=5, le=200)
+
+
+UiExtras = Annotated[
+    RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | TriageBoardExtra | ReadingRoomExtra,
+    Field(discriminator="kind"),
+]
+
+# ui_extras kinds meant for each scenario kind — a tabular renderer given a
+# deep_learning scenario (or vice versa) would have none of the data it needs.
+_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra)
+_DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
+
+
+class HuggingFaceFilesSource(BaseModel):
+    """Raw text data fetched from a public Hugging Face Hub *dataset* repo at a pinned
+    commit, file by file (JSON Lines), each checked against its SHA-256 — so a
+    re-download can never silently train on different data than the one reviewed.
+    """
+
+    type: Literal["huggingface_files"] = "huggingface_files"
+    repo: str  # e.g. "gretelai/symptom_to_diagnosis"
+    revision: str  # full commit sha
+    # split name ("train"/"validation"/"test") -> file name within the repo. A
+    # missing "validation" split is carved out of "train" (DlTraining.val_fraction).
+    files: dict[str, str]
+    sha256: dict[str, str]  # file name -> expected hex digest
+    text_field: str
+    label_field: str
+
+    @model_validator(mode="after")
+    def _splits_and_checksums(self) -> HuggingFaceFilesSource:
+        if not {"train", "test"} <= set(self.files):
+            raise ValueError("huggingface_files source needs at least 'train' and 'test' files.")
+        missing = set(self.files.values()) - set(self.sha256)
+        if missing:
+            raise ValueError(f"huggingface_files source has no sha256 for {sorted(missing)}.")
+        return self
+
+
+class NpzImagesSource(BaseModel):
+    """Raw image data as one public `.npz` archive in the MedMNIST layout
+    (`{split}_images` uint8 arrays + `{split}_labels` integer arrays for
+    train/val/test), checked against its MD5 (the digest MedMNIST itself publishes).
+    """
+
+    type: Literal["npz_images"] = "npz_images"
+    url: str
+    md5: str
+
+
+DlDataSource = Annotated[HuggingFaceFilesSource | NpzImagesSource, Field(discriminator="type")]
+
+
+class DlLabel(BaseModel):
+    """One output class, in model output order. `key` is the raw value in the source
+    data (a diagnosis string, or a stringified integer class id)."""
+
+    key: str
+    label: str
+    description: str | None = None
+
+
+class DlTrainBudget(BaseModel):
+    """Fine-tuning hyper-parameters for one device class. `max_train_samples` (None =
+    all) and `trainable_layers` (None = full fine-tune, N = only the top N encoder
+    blocks plus the classification head) are the knobs that keep a CPU run tractable.
+    """
+
+    epochs: int = Field(ge=1)
+    batch_size: int = Field(ge=1)
+    learning_rate: float = Field(gt=0)
+    max_train_samples: int | None = Field(default=None, ge=1)
+    trainable_layers: int | None = Field(default=None, ge=0)
+
+
+class DlTraining(BaseModel):
+    """`gpu` is used when dl-training finds CUDA, `cpu` otherwise — both explicit here
+    so an admin sees what a CPU run will actually do before triggering it."""
+
+    gpu: DlTrainBudget
+    cpu: DlTrainBudget
+    val_fraction: float = Field(default=0.1, gt=0, lt=0.5)
+    seed: int = 42
+    # Inverse-frequency class weights in the loss — for imbalanced sources.
+    class_weighted_loss: bool = False
+    # Soft targets (1 - eps on the true class): stops a fine-tune from driving logits to
+    # +/-infinity on an easy dataset, i.e. from answering "100%" for everything.
+    # dl-training additionally fits a temperature on the validation split after
+    # training (post-hoc calibration) — see its core/calibration.py.
+    label_smoothing: float = Field(default=0.1, ge=0, lt=0.5)
+    # 0 = fit the calibration temperature on the validation split. > 0 = hold out this
+    # stratified fraction of the *test* pool instead ("local calibration" on data from the
+    # deployment distribution) and evaluate/publish only the untouched rest — for sources
+    # whose test set is shifted from the train/val pool (e.g. MedMNIST's PneumoniaMNIST).
+    calibration_holdout_fraction: float = Field(default=0.0, ge=0, lt=0.9)
+
+
+class DeepLearningConfig(BaseModel):
+    """Everything dl-training/dl-inference need for a `deep_learning` scenario: where
+    the public data comes from, the Hugging Face base model it is fine-tuned from
+    (pinned revision), its output classes, and the training budgets.
+    """
+
+    modality: Literal["text", "image"]
+    bucket: str
+    source: DlDataSource
+    labels: list[DlLabel] = Field(min_length=2)
+    base_model: str  # Hugging Face model repo id
+    base_model_revision: str  # full commit sha
+    base_model_params: str  # display only, e.g. "150M"
+    input_label: str  # display only, e.g. "Patient's own description of symptoms"
+    target_label: str
+    target_description: str | None = None
+    # text only
+    max_length: int = Field(default=128, ge=8, le=1024)
+    input_examples: list[str] = []
+    # image only — square input side in pixels, and the occlusion grid (N x N patches)
+    # dl-inference uses for its explanation heatmap.
+    image_size: int = Field(default=224, ge=32, le=512)
+    occlusion_grid: int = Field(default=8, ge=2, le=16)
+    # int8 dynamic quantization of the exported ONNX model — mainly for the large text
+    # encoders; metrics are always measured on the artifact actually deployed.
+    quantize: bool = False
+    training: DlTraining
+    # How many held-out test samples are published for the UI (gallery / worklist /
+    # triage stream) and how many training samples are indexed for similar-case search.
+    gallery_size: int = Field(default=200, ge=1, le=2000)
+    reference_size: int = Field(default=600, ge=1, le=5000)
+
+    @model_validator(mode="after")
+    def _modality_matches_source(self) -> DeepLearningConfig:
+        expected = "huggingface_files" if self.modality == "text" else "npz_images"
+        if self.source.type != expected:
+            raise ValueError(f"modality={self.modality!r} needs a {expected!r} source, got {self.source.type!r}.")
+        keys = [label.key for label in self.labels]
+        if len(set(keys)) != len(keys):
+            raise ValueError("deep_learning.labels keys must be unique.")
+        return self
+
+
+class DeepLearningServices(BaseModel):
+    """Names of the services that implement a `deep_learning` scenario."""
+
+    training: str
+    inference: str
 
 
 class DocumentChunking(BaseModel):
@@ -503,7 +692,7 @@ class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
     slug: str
-    kind: Literal["tabular_ml", "conversational_rag", "assisted_form"]
+    kind: Literal["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"]
     title: str
     description: str
     role_required: str
@@ -517,11 +706,60 @@ class ScenarioDefinition(BaseModel):
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
-    # tabular_ml only — opts this scenario into one of ui-react's three generic 5th
-    # workspace tabs (see UiExtras above). None (the common case) means the plain
-    # 4-tab workspace every tabular_ml scenario already gets.
+    deep_learning: DeepLearningConfig | None = None
+    # tabular_ml / deep_learning only — opts this scenario into one of ui-react's
+    # generic 5th workspace tabs (see UiExtras above). None (the common case) means the
+    # plain 4-tab workspace every scenario of that kind already gets.
     ui_extras: UiExtras | None = None
-    services: TabularServices | RagServices | FormServices
+    services: TabularServices | RagServices | FormServices | DeepLearningServices
+
+    @model_validator(mode="after")
+    def _deep_learning_block_matches_kind(self) -> ScenarioDefinition:
+        """`deep_learning` is required for (and only for) kind=deep_learning, and each
+        ui_extras renderer only ever receives the kind of scenario it was written for.
+        """
+        is_dl = self.kind == "deep_learning"
+        if is_dl != (self.deep_learning is not None):
+            raise ValueError("kind='deep_learning' requires a `deep_learning` block (and only that kind may set one).")
+        if is_dl and not isinstance(self.services, DeepLearningServices):
+            raise ValueError("kind='deep_learning' requires services: {training, inference}.")
+        if self.ui_extras is None:
+            return self
+        allowed = _DEEP_LEARNING_UI_EXTRAS if is_dl else _TABULAR_UI_EXTRAS
+        if not isinstance(self.ui_extras, allowed):
+            raise ValueError(f"ui_extras kind {self.ui_extras.kind!r} is not available for kind={self.kind!r}.")
+        return self
+
+    @model_validator(mode="after")
+    def _deep_learning_ui_extras_reference_real_labels(self) -> ScenarioDefinition:
+        """Fail fast if a triage lane / reading-room positive label names a class the
+        model doesn't have, or a class is routed to no lane (or to two) — the board
+        would silently drop those messages.
+        """
+        dl, extras = self.deep_learning, self.ui_extras
+        if dl is None or extras is None:
+            return self
+        keys = [label.key for label in dl.labels]
+        if isinstance(extras, TriageBoardExtra):
+            if dl.modality != "text":
+                raise ValueError("ui_extras.triage_board requires modality='text'.")
+            routed = [key for lane in extras.lanes for key in lane.labels]
+            unknown = set(routed) - set(keys)
+            if unknown:
+                raise ValueError(f"ui_extras.triage_board lanes name unknown labels {sorted(unknown)}.")
+            duplicated = sorted({key for key in routed if routed.count(key) > 1})
+            unrouted = sorted(set(keys) - set(routed))
+            if duplicated or unrouted:
+                raise ValueError(
+                    f"ui_extras.triage_board must route every label to exactly one lane "
+                    f"(duplicated={duplicated}, unrouted={unrouted})."
+                )
+        if isinstance(extras, ReadingRoomExtra):
+            if dl.modality != "image":
+                raise ValueError("ui_extras.reading_room requires modality='image'.")
+            if extras.positive_label not in keys:
+                raise ValueError(f"ui_extras.reading_room positive_label {extras.positive_label!r} is not a label key.")
+        return self
 
     @model_validator(mode="after")
     def _region_map_columns_are_real_features(self) -> ScenarioDefinition:
@@ -643,6 +881,19 @@ def resolve_scenarios(scenarios_dir: Path, raw_scenarios_env: str, kind: str) ->
     One consolidated `prediction`/`assistant`/`rag-agent`/`etl-tabular`/`training`/
     `etl-vectorize` instance loads/processes every scenario this resolves to — see
     the root plan's "Consolidation mechanism" decision for why.
+
+    Only files whose raw `kind` matches are validated at all: `scenarios/` is mounted
+    live into every service, so a service must never fail to start because *another*
+    kind's scenario uses schema it doesn't know yet (e.g. a newly added `kind`, deployed
+    before this service's image is rebuilt). platform-registry's `load_all` stays strict.
     """
     wanted = {slug.strip() for slug in raw_scenarios_env.split(",") if slug.strip()}
-    return {d.slug: d for d in load_all(scenarios_dir) if d.kind == kind and (not wanted or d.slug in wanted)}
+    definitions = {}
+    for path in sorted(scenarios_dir.glob("*/scenario.yaml")):
+        raw = yaml.safe_load(path.read_text())
+        if not isinstance(raw, dict) or raw.get("kind") != kind:
+            continue
+        definition = ScenarioDefinition.model_validate(raw)
+        if not wanted or definition.slug in wanted:
+            definitions[definition.slug] = definition
+    return definitions

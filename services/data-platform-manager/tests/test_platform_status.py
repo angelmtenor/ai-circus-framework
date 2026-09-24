@@ -159,6 +159,7 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "ui-react",
         "platform-registry",
         "prediction",
+        "dl-inference",
         "assistant",
         "rag-agent",
         "form-agent",
@@ -176,5 +177,5 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "clickhouse",
         "mlflow",
     }
-    assert {t.name for t in platform_status.TARGETS if t.optional} == {"kafka"}
+    assert {t.name for t in platform_status.TARGETS if t.optional} == {"kafka", "dl-inference"}
     assert {t.name for t in platform_status.TARGETS if t.console_url} == {"keycloak", "seaweedfs", "langfuse", "mlflow"}

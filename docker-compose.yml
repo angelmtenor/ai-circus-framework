@@ -627,6 +627,42 @@ services:
       - "traefik.http.routers.prediction.entrypoints=web"
       - "traefik.http.services.prediction.loadbalancer.server.port=8000"
 
+  # Optional Deep Learning profile (`docker compose --profile deep-learning up -d
+  # dl-inference`) — serves every `kind: deep_learning` scenario on onnxruntime only
+  # (no torch). Mirrors k8s/deep-learning/dl-inference.yaml; off by default like Kafka.
+  dl-inference:
+    build:
+      context: .
+      dockerfile: services/dl-inference/Dockerfile
+    profiles: ["deep-learning"]
+    environment:
+      APP_ENVIRONMENT: docker
+      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+      platform-registry:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dl-inference.rule=Host(`dl-inference.localhost`)"
+      - "traefik.http.routers.dl-inference.entrypoints=web"
+      - "traefik.http.services.dl-inference.loadbalancer.server.port=8000"
+
   # Long-running: OpenAI-compatible LiteLLM proxy — model routing + master-key auth
   # (persistent spend-tracking not enabled yet, see llm-gateway/litellm_config.yaml).
   llm-gateway:
@@ -783,6 +819,29 @@ services:
         condition: service_healthy
     networks: [ai-circus]
     mem_limit: 2g
+
+  # One-shot job: `docker compose --profile deep-learning run --rm -e SCENARIOS=<slug>
+  # dl-training` — fine-tunes deep_learning scenarios on CPU (compose passes no GPU; the
+  # GPU paths are `make dl-train-*` on the host or a GPU k3d cluster). Never part of
+  # `make all`. Mirrors k8s/jobs/dl-training-job.yaml.
+  dl-training:
+    build:
+      context: .
+      dockerfile: services/dl-training/Dockerfile
+    profiles: ["deep-learning"]
+    environment:
+      APP_ENVIRONMENT: docker
+      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+      DL_DEVICE: auto
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      seaweedfs:
+        condition: service_healthy
+    networks: [ai-circus]
+    mem_limit: 4g
 
   # One-shot job: `docker compose --profile pipeline up --build etl-vectorize`.
   # Processes every conversational_rag scenario in SCENARIOS (empty/unset = all).
@@ -1026,6 +1085,9 @@ services:
       # comment near the top.
       OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
       OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+    # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
+    volumes:
+      - ./scenarios:/app/scenarios:ro
     depends_on:
       postgres:
         condition: service_healthy

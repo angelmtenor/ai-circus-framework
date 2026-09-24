@@ -6,6 +6,7 @@ import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
 import { TabularView } from "./TabularView";
 import { RagView } from "./RagView";
 import { AssistedFormView } from "./AssistedFormView";
+import { DeepLearningView } from "./DeepLearningView";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { Settings } from "./Settings";
 import { PlatformStatusView } from "./PlatformStatus";
@@ -256,7 +257,7 @@ export default function App() {
       </div>
       <main className="app-main">
         {showPlatform && isAdmin ? (
-          <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} />
+          <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} scenarios={scenarios} />
         ) : showSettings ? (
           <Settings
             accessToken={identity.accessToken}
@@ -290,9 +291,12 @@ export default function App() {
             {!scenariosLoading && selected?.kind === "assisted_form" && (
               <AssistedFormView scenario={selected} accessToken={identity.accessToken} />
             )}
+            {!scenariosLoading && selected?.kind === "deep_learning" && (
+              <DeepLearningView scenario={selected} accessToken={identity.accessToken} />
+            )}
             {!scenariosLoading &&
               selected &&
-              !["tabular_ml", "conversational_rag", "assisted_form"].includes(selected.kind) && (
+              !["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"].includes(selected.kind) && (
                 <div className="app-loading">
                   {selected.title} ({selected.kind}) doesn't have a workspace view yet.
                 </div>

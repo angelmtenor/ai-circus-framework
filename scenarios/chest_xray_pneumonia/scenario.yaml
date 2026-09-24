@@ -1,0 +1,86 @@
+# Seed definition for the "chest_xray_pneumonia" scenario — a `deep_learning` (computer
+# vision) scenario. Loaded into the registry by services/platform-registry at bootstrap;
+# dl-training and dl-inference also read the `deep_learning` block directly.
+#
+# No image lives in this repo: dl-training downloads the pinned public archive (MD5
+# checked) into the scenario's SeaweedFS bucket on first run (`make dl-data`).
+
+slug: chest_xray_pneumonia
+kind: deep_learning
+title: "Chest X-ray Pneumonia Screening (CV)"
+description: >
+  Screens paediatric chest X-rays for signs of pneumonia with a modern convolutional
+  network (ConvNeXt V2) fine-tuned on a public, expert-labelled dataset. Each read shows
+  a heatmap of the lung regions that drove the decision plus the most similar prior
+  studies, and a simulated reading room shows how AI worklist prioritization gets the
+  sickest patients read first. A demonstration of medical computer vision, not a
+  medical device.
+role_required: "scenario:chest_xray_pneumonia"
+industry: healthcare
+icon: "🫁"
+
+credits:
+  source: "MedMNIST v2 — PneumoniaMNIST (224×224, MedMNIST+) (CC BY 4.0)"
+  url: "https://medmnist.com/"
+  note: >
+    5,856 paediatric chest X-rays (Kermany et al., Cell 2018), resized to 224×224 and
+    split 4,708 / 524 / 624 by MedMNIST (Yang et al., Scientific Data 2023). Base model:
+    facebook/convnextv2-nano-22k-224 (Apache-2.0, ImageNet-22k pre-trained). Not
+    clinically validated — outputs are illustrative only.
+
+chat:
+  context: >
+    A chest X-ray screening model that flags likely pneumonia, with occlusion heatmaps
+    and similar prior studies to explain each read.
+  sample_questions: []
+
+deep_learning:
+  modality: image
+  bucket: "scenario-chest-xray-pneumonia"
+  source:
+    type: npz_images
+    url: "https://zenodo.org/records/10519652/files/pneumoniamnist_224.npz?download=1"
+    md5: "d6a3c71de1b945ea11211b03746c1fe1"
+  # Modern CNN at 15.6M params — small enough for a CPU pod, and convolutional
+  # features make occlusion heatmaps crisp. Swap for e.g. facebook/dinov2-small (ViT).
+  base_model: "facebook/convnextv2-nano-22k-224"
+  base_model_revision: "755dacbc560ac81ac8eb39249eab691dab85506c"
+  base_model_params: "15.6M"
+  input_label: "Frontal chest X-ray"
+  target_label: "Screening finding"
+  target_description: "Whether the X-ray shows radiographic signs of pneumonia — a prioritization aid for a radiologist, never a diagnosis."
+  image_size: 224
+  occlusion_grid: 8
+  quantize: false
+  training:
+    gpu: {epochs: 8, batch_size: 32, learning_rate: 1.0e-4}
+    # CPU: a 1,200-image subset for 2 epochs — a working model in a few minutes.
+    cpu: {epochs: 2, batch_size: 16, learning_rate: 2.0e-4, max_train_samples: 1200}
+    seed: 42
+    # 74% of training images are pneumonia — weight the loss so "normal" isn't ignored.
+    class_weighted_loss: true
+    # MedMNIST's val split comes from the training pool (~99% accuracy) but its test set
+    # is a shifted pool (~95%): calibrate on a 30% slice of the test pool instead, and
+    # evaluate/publish only the other 70% — otherwise every probability reads ~100%.
+    calibration_holdout_fraction: 0.3
+    # No label smoothing here: on an easy binary task it caps the logit gap, so every
+    # clear case saturates at the same score (a flat worklist ranking). The local
+    # calibration above handles overconfidence without that side effect.
+    label_smoothing: 0.0
+  gallery_size: 624
+  reference_size: 600
+  labels:
+    - {key: "0", label: "Normal", description: "No radiographic sign of pneumonia."}
+    - {key: "1", label: "Pneumonia", description: "Opacities/consolidation consistent with bacterial or viral pneumonia."}
+
+ui_extras:
+  kind: reading_room
+  positive_label: "1"
+  priority_threshold: 0.5
+  minutes_per_read: 4
+  arrival_minutes: 2
+  worklist_size: 40
+
+services:
+  training: dl-training
+  inference: dl-inference

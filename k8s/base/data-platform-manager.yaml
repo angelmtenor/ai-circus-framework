@@ -5,7 +5,8 @@
 # Kubernetes API client (to read/trigger the pipeline Jobs in k8s/jobs/) — hence
 # its own ServiceAccount/Role/RoleBinding below, scoped to exactly `batch/v1`
 # Jobs in this one namespace plus read-only pod listing (the admin platform-status
-# dashboard's ready/restart counts, core/platform_status.py), nothing else. In
+# dashboard's ready/restart counts, core/platform_status.py) and read-only node listing
+# (the Deep Learning tab's cluster-GPU check), nothing else. In
 # docker-compose there's no such API to call at all, so job control reports itself
 # unavailable there (see core/k8s_jobs.py's in_cluster_config_available) and the
 # status dashboard falls back to health probes alone.
@@ -48,6 +49,31 @@ roleRef:
   name: data-platform-manager-jobs
   apiGroup: rbac.authorization.k8s.io
 ---
+# Cluster-scoped (Nodes are not namespaced), read-only: the admin console's Deep Learning
+# tab reports whether any node advertises `nvidia.com/gpu` — and data-platform-manager
+# only requests a GPU for a dl-training Job when one does. Get/list on nodes, nothing else.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: data-platform-manager-node-reader
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: data-platform-manager-node-reader
+subjects:
+  - kind: ServiceAccount
+    name: data-platform-manager
+    namespace: ai-circus
+roleRef:
+  kind: ClusterRole
+  name: data-platform-manager-node-reader
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -82,6 +108,9 @@ spec:
           env:
             # Renamed from .env's LITELLM_MASTER_KEY.
             - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: data-platform-manager-secrets, key: LITELLM_MASTER_KEY}}}
+          volumeMounts:
+            # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           readinessProbe:
             httpGet: {path: /healthz, port: 8000}
             initialDelaySeconds: 5
@@ -90,6 +119,9 @@ spec:
             httpGet: {path: /healthz, port: 8000}
             initialDelaySeconds: 15
             periodSeconds: 10
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
 ---
 apiVersion: v1
 kind: Service

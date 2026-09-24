@@ -25,7 +25,7 @@ from pydantic import ValidationError
 
 from platform_registry import get_env_config
 from platform_registry.api import router
-from platform_registry.core.db import init_engine
+from platform_registry.core.db import ensure_added_columns, init_engine
 from platform_registry.core.logger import configure_logger, get_logger
 from platform_registry.core.models import Base
 from platform_registry.core.seed import seed_default_llm_setting, seed_default_voice_setting, seed_scenarios
@@ -39,6 +39,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     config = get_env_config()
     engine = init_engine(config)
     Base.metadata.create_all(engine)
+    for column in ensure_added_columns(engine, Base.metadata):
+        logger.info("Added missing column {} to an existing database", column)
 
     from sqlalchemy.orm import Session
 

@@ -86,6 +86,15 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
 
         existing.form = definition.form.model_dump() if definition.form is not None else None
         existing.ui_extras = definition.ui_extras.model_dump() if definition.ui_extras is not None else None
+        existing.deep_learning = definition.deep_learning.model_dump() if definition.deep_learning is not None else None
+        if definition.deep_learning is not None:
+            # Reuse the generic target columns so the picker/ScenarioView need no
+            # deep_learning special case to show what the model predicts.
+            modality = definition.deep_learning.modality
+            existing.task_type = "text_classification" if modality == "text" else "image_classification"
+            existing.target_label = definition.deep_learning.target_label
+            existing.target_description = definition.deep_learning.target_description
+            existing.target_value_labels = {label.key: label.label for label in definition.deep_learning.labels}
 
         admin_stmt = select(Entitlement).where(
             Entitlement.org_id == ADMIN_ORG_ID, Entitlement.scenario_slug == definition.slug
