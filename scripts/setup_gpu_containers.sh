@@ -16,7 +16,11 @@ set -euo pipefail
 
 [[ $EUID -ne 0 ]] && { echo "❌ run with sudo"; exit 1; }
 command -v docker >/dev/null || { echo "❌ Docker Engine is not installed"; exit 1; }
-command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null || { echo "❌ no working NVIDIA driver (nvidia-smi failed)"; exit 1; }
+# On WSL nvidia-smi lives in /usr/lib/wsl/lib, which sudo's secure_path drops from PATH.
+NVIDIA_SMI="$(command -v nvidia-smi || true)"
+[ -z "$NVIDIA_SMI" ] && [ -x /usr/lib/wsl/lib/nvidia-smi ] && NVIDIA_SMI=/usr/lib/wsl/lib/nvidia-smi
+[ -n "$NVIDIA_SMI" ] && "$NVIDIA_SMI" -L >/dev/null \
+    || { echo "❌ no working NVIDIA driver (nvidia-smi not found or failing)"; exit 1; }
 
 export DEBIAN_FRONTEND=noninteractive
 apt_get() { apt-get -o DPkg::Lock::Timeout=600 "$@"; }

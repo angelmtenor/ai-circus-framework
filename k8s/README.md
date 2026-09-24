@@ -103,6 +103,14 @@ Docker can pass one through:
 3. `make k3s-gpu-smoke` runs `nvidia-smi` in a pod (`runtimeClassName: nvidia`, one
    `nvidia.com/gpu`) to prove it end to end.
 
+Verified on WSL2 (RTX 4070 Laptop, driver 610.62, k3s v1.35.5): the device plugin logs
+`Detected platform: wsl` and the node advertises `nvidia.com/gpu: 1`. Two things this needed:
+GPU clusters are created with `--disable-cloud-controller` — on the Ubuntu-based GPU node the
+embedded cloud-controller-manager otherwise loses a startup race for its RoleBinding and
+restart-loops the whole server (k3s-io/k3s#7328; a single-node k3d cluster doesn't need it) —
+and `setup_gpu_containers.sh` looks for `nvidia-smi` in `/usr/lib/wsl/lib` itself, since
+`sudo`'s `secure_path` drops it from `PATH` on WSL.
+
 With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
 (`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
 RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.

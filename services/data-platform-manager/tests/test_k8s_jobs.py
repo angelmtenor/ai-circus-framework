@@ -103,6 +103,7 @@ def test_dl_training_job_requests_a_gpu_only_when_asked() -> None:
     job = k8s_jobs.dl_training_job("symptom_triage", gpu=True)
     container = job.spec.template.spec.containers[0]
     assert container.resources.limits[k8s_jobs.GPU_RESOURCE] == "1"
+    assert container.resources.limits["memory"] == "6Gi"
     assert job.spec.template.spec.runtime_class_name == "nvidia"
     assert (
         k8s_jobs.GPU_RESOURCE

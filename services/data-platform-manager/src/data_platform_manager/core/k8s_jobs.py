@@ -199,7 +199,8 @@ def dl_training_job(scenario_slug: str, *, gpu: bool) -> client.V1Job:
     ]
     limits = {"cpu": "4", "memory": "4Gi"}
     if gpu:
-        limits[GPU_RESOURCE] = "1"
+        # CUDA torch keeps ~1.5-2 GB of runtime in host RAM during the ONNX export.
+        limits |= {"memory": "6Gi", GPU_RESOURCE: "1"}
     container.resources = client.V1ResourceRequirements(requests={"cpu": "500m", "memory": "1Gi"}, limits=limits)
     container.volume_mounts = [
         *(container.volume_mounts or []),

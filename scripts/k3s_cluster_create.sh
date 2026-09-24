@@ -51,7 +51,11 @@ if $gpu; then
     fi
     echo "⚡ creating a GPU-enabled cluster (node image $GPU_IMAGE, --gpus all)"
     docker build -t "$GPU_IMAGE" --build-arg "K3S_VERSION=$K3S_VERSION" "$REPO_ROOT/infra/k3s-gpu"
-    args+=(--image "$GPU_IMAGE" --gpus all)
+    # --disable-cloud-controller: on the (slower-starting) Ubuntu-based GPU node, k3s'
+    # embedded cloud-controller-manager loses a startup race for its RoleBinding and
+    # takes the whole server down in a restart loop (k3s-io/k3s#7328). A single-node
+    # k3d cluster doesn't need it — Docker networking already provides node addresses.
+    args+=(--image "$GPU_IMAGE" --gpus all --k3s-arg "--disable-cloud-controller@server:*")
 else
     args+=(--image "rancher/k3s:$K3S_VERSION")
 fi

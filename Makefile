@@ -430,11 +430,7 @@ k3s-dl-down: ## Remove the Deep Learning overlay (trained models stay in Seaweed
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }
-	@job="dl-training-$$(echo '$(SCENARIO)' | tr '_' '-')"; \
-	kubectl -n ai-circus delete job "$$job" --ignore-not-found; \
-	sed -e "s/__JOB_NAME__/$$job/" -e "s/__SCENARIOS__/$(SCENARIO)/g" k8s/jobs/dl-training-job.yaml | kubectl apply -f -; \
-	echo "⏳ $$job running (logs: kubectl -n ai-circus logs -f job/$$job)"; \
-	kubectl -n ai-circus wait --for=condition=complete "job/$$job" --timeout=3600s
+	@./scripts/k3s_dl_train.sh "$(SCENARIO)"
 
 k3s-dl-train-nlp: ## In-cluster Job for the NLP scenario (see k3s-dl-train)
 	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_NLP)

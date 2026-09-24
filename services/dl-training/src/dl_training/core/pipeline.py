@@ -10,6 +10,7 @@ reference set for similar-case retrieval -> upload artifacts + manifest -> MLflo
 
 from __future__ import annotations
 
+import gc
 import tempfile
 import time
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 from ai_circus_shared.scenario_schema import DeepLearningConfig, ScenarioDefinition
 from ai_circus_shared.storage import ObjectStore
 
@@ -102,6 +104,11 @@ def train_scenario(
         label_smoothing=dl.training.label_smoothing,
     )
     training_seconds = time.monotonic() - train_started
+    # The model is back on CPU: release cached CUDA blocks and the optimizer's garbage
+    # before the memory-hungry ONNX export/quantization.
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     with tempfile.TemporaryDirectory(prefix="dl-export-") as tmp:
         out_dir = Path(tmp)
