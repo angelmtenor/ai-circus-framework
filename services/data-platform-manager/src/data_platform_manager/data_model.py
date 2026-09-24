@@ -60,9 +60,10 @@ class EnvConfig(BaseSettings):
     OBJECT_STORE_SECRET_KEY: SecretStr = Field(
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
+    SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
 
 
-_SOURCE_YAML_HASH = "23cbdfce7bff61600677704a7ff4d4080ad6285462d6c07279ba262f9bf2fc26"
+_SOURCE_YAML_HASH = "3d7db10b2e8d4f32443b153c917501e2b451ec108696bbbad53f8a0f3e23f628"
 
 
 EnvConfig.model_rebuild()

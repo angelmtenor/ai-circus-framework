@@ -1,0 +1,135 @@
+# Seed definition for the "symptom_triage" scenario — a `deep_learning` (NLP) scenario.
+# Loaded into the registry by services/platform-registry at bootstrap; dl-training and
+# dl-inference also read the `deep_learning` block directly as build-time config (data
+# source, base model, labels, budgets) — same split as tabular_ml's dataset/model blocks.
+#
+# No data file lives in this repo: dl-training downloads the pinned public dataset
+# files (SHA-256 checked) into the scenario's SeaweedFS bucket on first run
+# (`make dl-data` does just that step).
+
+slug: symptom_triage
+kind: deep_learning
+title: "Patient Symptom Triage (NLP)"
+description: >
+  Reads a patient's own free-text description of their symptoms and suggests the most
+  likely of 22 common conditions, using a clinical language model (BioClinical
+  ModernBERT) fine-tuned on public data. Every suggestion is explained word by word and
+  backed by the most similar training cases, and a live triage board shows how such a
+  model could route incoming messages to the right care pathway — sending anything it
+  isn't confident about to a nurse. A demonstration of clinical NLP, not a medical device.
+role_required: "scenario:symptom_triage"
+industry: healthcare
+icon: "🩺"
+
+credits:
+  source: "Hugging Face Hub — gretelai/symptom_to_diagnosis (Apache-2.0)"
+  url: "https://huggingface.co/datasets/gretelai/symptom_to_diagnosis"
+  note: >
+    1,065 English symptom descriptions written in patient language, each labelled with
+    one of 22 diagnoses (853 train / 212 test, as published). Base model:
+    thomas-sounack/BioClinical-ModernBERT-base (MIT), a 2025 ModernBERT encoder
+    pre-trained on biomedical literature and clinical notes. Neither the data nor the
+    model is clinically validated — outputs are illustrative only.
+
+chat:
+  context: >
+    A clinical NLP triage model that maps a patient's free-text symptom description to
+    one of 22 common conditions, with word-level explanations and similar past cases.
+  sample_questions: []
+
+deep_learning:
+  modality: text
+  bucket: "scenario-symptom-triage"
+  source:
+    type: huggingface_files
+    repo: "gretelai/symptom_to_diagnosis"
+    revision: "722cfb0e11f8ae37339c7f573b5e10429b94df49"
+    files: {train: "train.jsonl", test: "test.jsonl"}
+    sha256:
+      train.jsonl: "9b8ff27dab30cdeb194d6581dcebffe0d91e21921f974f091736c1f25cad283c"
+      test.jsonl: "7581c68031d7433fcce22c9aac08f35595b67402ceef92a7dd7336207f3b6195"
+    text_field: input_text
+    label_field: output_text
+  # State of the art clinical encoder at a laptop-friendly size (150M params). The
+  # exported ONNX is int8-quantized (`quantize`) so dl-inference serves it in ~200 MB.
+  # Lighter alternative with the same architecture: jhu-clsp/ettin-encoder-32m.
+  base_model: "thomas-sounack/BioClinical-ModernBERT-base"
+  base_model_revision: "c3648aa87af95837c809e6f0c5f85d08160db437"
+  base_model_params: "150M"
+  input_label: "Patient's own description of their symptoms"
+  target_label: "Suggested condition"
+  target_description: "The most likely of 22 common conditions given the described symptoms — a triage hint for a clinician, never a diagnosis."
+  max_length: 128
+  quantize: true
+  input_examples:
+    - "I've had a high fever for three days, a pounding headache behind my eyes and my joints ache so much I can barely move. There's a rash spreading on my arms."
+    - "My nose has been running constantly, I keep sneezing and my throat is a bit scratchy, but otherwise I feel fine."
+    - "It burns when I pee and I need to go all the time, even at night. My lower belly feels heavy."
+    - "I get a burning feeling in my chest after meals, especially when I lie down, and sometimes a sour taste comes up."
+    - "There are thick red patches with silvery scales on my elbows and knees, and they itch."
+  training:
+    # Full fine-tune on a GPU (about a minute on a laptop RTX card).
+    gpu: {epochs: 12, batch_size: 16, learning_rate: 5.0e-5}
+    # CPU: only the top 4 encoder blocks + head are trained, so memory stays ~2 GB
+    # and a run takes minutes rather than an hour. Expect lower accuracy than the GPU run.
+    cpu: {epochs: 6, batch_size: 16, learning_rate: 1.0e-4, trainable_layers: 4}
+    val_fraction: 0.1
+    seed: 42
+  gallery_size: 212
+  reference_size: 800
+  labels:
+    - {key: "allergy", label: "Allergy", description: "Immune over-reaction to a harmless substance — sneezing, itchy eyes, hives."}
+    - {key: "arthritis", label: "Arthritis", description: "Joint inflammation causing pain, stiffness and swelling."}
+    - {key: "bronchial asthma", label: "Bronchial asthma", description: "Chronic airway inflammation with wheezing, breathlessness and chest tightness."}
+    - {key: "cervical spondylosis", label: "Cervical spondylosis", description: "Age-related wear of the neck's spinal discs and joints — neck pain, stiffness, sometimes arm symptoms."}
+    - {key: "chicken pox", label: "Chickenpox", description: "Varicella virus infection with an itchy blistering rash and fever."}
+    - {key: "common cold", label: "Common cold", description: "Mild viral upper-respiratory infection — runny nose, sore throat, sneezing."}
+    - {key: "dengue", label: "Dengue", description: "Mosquito-borne viral fever with severe headache, joint/muscle pain and rash."}
+    - {key: "diabetes", label: "Diabetes", description: "Chronically high blood sugar — thirst, frequent urination, fatigue, blurred vision."}
+    - {key: "drug reaction", label: "Drug reaction", description: "Adverse reaction to a medication — rash, itching, fever, sometimes swelling."}
+    - {key: "fungal infection", label: "Fungal infection", description: "Superficial skin/nail fungal infection — itchy, scaly, discoloured patches."}
+    - {key: "gastroesophageal reflux disease", label: "Acid reflux (GERD)", description: "Stomach acid flowing back into the oesophagus — heartburn, regurgitation."}
+    - {key: "hypertension", label: "Hypertension", description: "Persistently high blood pressure — often silent, sometimes headache, dizziness."}
+    - {key: "impetigo", label: "Impetigo", description: "Contagious bacterial skin infection with red sores that burst and crust."}
+    - {key: "jaundice", label: "Jaundice", description: "Yellowing of skin/eyes from raised bilirubin — dark urine, itching, fatigue."}
+    - {key: "malaria", label: "Malaria", description: "Mosquito-borne parasitic infection with cyclic fever, chills and sweating."}
+    - {key: "migraine", label: "Migraine", description: "Recurrent intense headaches, often with nausea and light sensitivity."}
+    - {key: "peptic ulcer disease", label: "Peptic ulcer", description: "Sores in the stomach/duodenal lining — burning abdominal pain, bloating, nausea."}
+    - {key: "pneumonia", label: "Pneumonia", description: "Lung infection with cough, fever, chest pain and breathlessness."}
+    - {key: "psoriasis", label: "Psoriasis", description: "Autoimmune skin disease with thick red, scaly, itchy plaques."}
+    - {key: "typhoid", label: "Typhoid fever", description: "Salmonella Typhi infection — prolonged fever, abdominal pain, weakness."}
+    - {key: "urinary tract infection", label: "Urinary tract infection", description: "Bladder/urethra infection — burning urination, urgency, lower-abdominal pain."}
+    - {key: "varicose veins", label: "Varicose veins", description: "Enlarged twisted leg veins — aching, heaviness, swelling."}
+
+# Care-pathway routing for the Triage Board tab — illustrative only, not clinical
+# guidance. Every label above must appear in exactly one lane (validated at seed time).
+ui_extras:
+  kind: triage_board
+  confidence_threshold: 0.6
+  review_lane_label: "Nurse review"
+  tick_seconds: 4
+  lanes:
+    - key: urgent
+      label: "Urgent — same-day clinician"
+      description: "Possible infection or reaction that should be seen today."
+      tone: critical
+      labels: ["pneumonia", "dengue", "malaria", "typhoid", "jaundice", "drug reaction", "bronchial asthma"]
+    - key: primary_care
+      label: "Primary care appointment"
+      description: "Needs a GP assessment within days — chronic or non-emergency conditions."
+      tone: warning
+      labels: ["diabetes", "hypertension", "urinary tract infection", "peptic ulcer disease", "gastroesophageal reflux disease", "migraine", "arthritis", "cervical spondylosis", "varicose veins"]
+    - key: dermatology
+      label: "Dermatology"
+      description: "Skin conditions routed to a dermatology service or teledermatology."
+      tone: info
+      labels: ["psoriasis", "impetigo", "fungal infection"]
+    - key: self_care
+      label: "Self-care & pharmacy"
+      description: "Usually self-limiting — pharmacist advice and safety-netting."
+      tone: ok
+      labels: ["common cold", "allergy", "chicken pox"]
+
+services:
+  training: dl-training
+  inference: dl-inference

@@ -1,0 +1,17 @@
+# `make k3s-gpu-smoke`: proves a pod can actually use the GPU through the `nvidia`
+# RuntimeClass + device plugin (infra/k3s-gpu/) — prints nvidia-smi, then exits.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gpu-smoke
+  namespace: ai-circus
+spec:
+  restartPolicy: Never
+  runtimeClassName: nvidia
+  automountServiceAccountToken: false
+  containers:
+    - name: nvidia-smi
+      image: ubuntu:24.04
+      command: ["nvidia-smi"]
+      resources:
+        limits: {nvidia.com/gpu: 1, cpu: 200m, memory: 128Mi}

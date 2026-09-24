@@ -16,6 +16,7 @@ const INDUSTRY_LABELS: Record<string, string> = {
   retail: "Retail",
   logistics: "Logistics",
   public_sector: "Public Sector",
+  healthcare: "Healthcare",
   general: "General",
 };
 
@@ -24,6 +25,11 @@ const CATEGORIES: Category[] = [
     key: "machine_learning",
     label: "Machine Learning",
     match: (s) => s.kind === "tabular_ml" || s.kind === "tabular_ml_timeseries",
+  },
+  {
+    key: "deep_learning",
+    label: "Deep Learning",
+    match: (s) => s.kind === "deep_learning",
   },
   {
     key: "conversational_assistant",
@@ -55,6 +61,7 @@ function categoryFor(scenario: ScenarioSummary): Category {
 function mlSubtype(scenario: ScenarioSummary): string | null {
   if (scenario.kind === "tabular_ml_timeseries") return "Time Series";
   if (scenario.kind === "tabular_ml") return scenario.task_type === "regression" ? "Regression" : "Classification";
+  if (scenario.kind === "deep_learning") return scenario.deep_learning?.modality === "image" ? "Computer Vision" : "NLP";
   return null;
 }
 

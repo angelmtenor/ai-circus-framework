@@ -66,3 +66,65 @@ def test_in_cluster_config_available_is_false_outside_a_pod() -> None:
     # token path this checks for genuinely doesn't exist — exercising the real
     # filesystem check, not a mock of it.
     assert k8s_jobs.in_cluster_config_available() is False
+
+
+def _rendered_dl_job(slug: str) -> dict:
+    """k8s/jobs/dl-training-job.yaml with its placeholders filled exactly like `make k3s-dl-train`."""
+    text = (_K8S_JOBS_DIR / "dl-training-job.yaml").read_text(encoding="utf-8")
+    text = text.replace("__JOB_NAME__", k8s_jobs.dl_job_name(slug)).replace("__SCENARIOS__", slug)
+    return yaml.safe_load(text)
+
+
+def test_dl_training_job_matches_the_rendered_yaml_template() -> None:
+    yaml_job = _rendered_dl_job("chest_xray_pneumonia")
+    py_job = k8s_jobs.dl_training_job("chest_xray_pneumonia", gpu=False)
+    yaml_pod = yaml_job["spec"]["template"]["spec"]
+    yaml_container = yaml_pod["containers"][0]
+    py_container = py_job.spec.template.spec.containers[0]
+
+    assert py_job.metadata.name == yaml_job["metadata"]["name"] == "dl-training-chest-xray-pneumonia"
+    assert py_job.metadata.labels == yaml_job["metadata"]["labels"]
+    assert py_job.spec.template.metadata.labels == yaml_job["spec"]["template"]["metadata"]["labels"]
+    assert py_job.spec.backoff_limit == yaml_job["spec"]["backoffLimit"]
+    assert py_container.image == yaml_container["image"]
+    assert {e.name: e.value for e in py_container.env} == {e["name"]: e["value"] for e in yaml_container["env"]}
+    assert py_container.resources.limits == yaml_container["resources"]["limits"]
+    assert py_container.resources.requests == yaml_container["resources"]["requests"]
+    assert {(m.name, m.mount_path) for m in py_container.volume_mounts} == {
+        (m["name"], m["mountPath"]) for m in yaml_container["volumeMounts"]
+    }
+    assert {v.name for v in py_job.spec.template.spec.volumes} == {v["name"] for v in yaml_pod["volumes"]}
+    yaml_secret_refs = {ef["secretRef"]["name"] for ef in yaml_container["envFrom"] if "secretRef" in ef}
+    assert {ef.secret_ref.name for ef in py_container.env_from if ef.secret_ref is not None} == yaml_secret_refs
+    assert py_job.spec.template.spec.runtime_class_name is None
+
+
+def test_dl_training_job_requests_a_gpu_only_when_asked() -> None:
+    job = k8s_jobs.dl_training_job("symptom_triage", gpu=True)
+    container = job.spec.template.spec.containers[0]
+    assert container.resources.limits[k8s_jobs.GPU_RESOURCE] == "1"
+    assert job.spec.template.spec.runtime_class_name == "nvidia"
+    assert (
+        k8s_jobs.GPU_RESOURCE
+        not in k8s_jobs.dl_training_job("symptom_triage", gpu=False).spec.template.spec.containers[0].resources.limits
+    )
+
+
+def test_cluster_gpus_reads_node_allocatable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from kubernetes import client
+
+    nodes = client.V1NodeList(
+        items=[
+            client.V1Node(
+                metadata=client.V1ObjectMeta(name="cpu-node"), status=client.V1NodeStatus(allocatable={"cpu": "8"})
+            ),
+            client.V1Node(
+                metadata=client.V1ObjectMeta(name="gpu-node"),
+                status=client.V1NodeStatus(allocatable={"cpu": "8", "nvidia.com/gpu": "2"}),
+            ),
+        ]
+    )
+    monkeypatch.setattr(k8s_jobs, "_load_config", lambda: None)
+    monkeypatch.setattr(client.CoreV1Api, "list_node", lambda self: nodes)
+
+    assert k8s_jobs.cluster_gpus() == [k8s_jobs.NodeGpus("cpu-node", 0), k8s_jobs.NodeGpus("gpu-node", 2)]

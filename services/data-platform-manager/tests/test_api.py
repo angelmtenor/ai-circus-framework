@@ -617,3 +617,76 @@ def test_platform_status_endpoint_requires_admin_and_returns_the_feed(
         "console_url": None,
         "pod": None,
     }
+
+
+# ── Deep learning admin endpoints ─────────────────────────────────────────────
+
+_REPO_SCENARIOS = __import__("pathlib").Path(__file__).parents[3] / "scenarios"
+
+
+@pytest.fixture
+def dl_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the endpoints at the repo's real scenarios/ (no full EnvConfig needed)."""
+    from ai_circus_shared.scenario_schema import resolve_scenarios
+
+    monkeypatch.setattr(
+        "data_platform_manager.api._dl_scenarios",
+        lambda: resolve_scenarios(_REPO_SCENARIOS, "", kind="deep_learning"),
+    )
+
+
+def test_deep_learning_status_reports_unavailable_outside_a_cluster(client: TestClient) -> None:
+    body = client.get("/deep-learning/status").json()
+    assert body["available"] is False
+    assert "make dl-train" in body["reason"]
+
+
+def test_deep_learning_train_returns_501_outside_a_cluster(client: TestClient) -> None:
+    assert client.post("/deep-learning/symptom_triage/train").status_code == 501
+
+
+def test_deep_learning_status_lists_every_dl_scenario_with_cluster_gpus(
+    client: TestClient, dl_scenarios: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(k8s_jobs, "cluster_gpus", lambda: [k8s_jobs.NodeGpus("node-a", 0), k8s_jobs.NodeGpus("b", 1)])
+    monkeypatch.setattr(
+        k8s_jobs,
+        "get_job_status",
+        lambda name: k8s_jobs.JobStatus(name=name, state="succeeded", started_at="t0", completed_at="t1"),
+    )
+
+    body = client.get("/deep-learning/status").json()
+
+    assert body["available"] is True
+    assert body["cluster_gpus"] == 1
+    by_slug = {job["scenario_slug"]: job for job in body["jobs"]}
+    assert set(by_slug) == {"symptom_triage", "chest_xray_pneumonia"}
+    assert by_slug["chest_xray_pneumonia"]["job_name"] == "dl-training-chest-xray-pneumonia"
+    assert by_slug["chest_xray_pneumonia"]["modality"] == "image"
+    assert by_slug["symptom_triage"]["state"] == "succeeded"
+
+
+def test_deep_learning_train_triggers_audits_and_publishes(
+    client: TestClient, dl_scenarios: None, fake_producer: _FakeKafkaProducer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    triggered: list[str] = []
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(k8s_jobs, "trigger_dl_training", lambda slug: triggered.append(slug) or False)
+
+    response = client.post("/deep-learning/symptom_triage/train")
+
+    assert response.status_code == 202
+    assert triggered == ["symptom_triage"]
+    assert response.json()["job"] == "dl-training-symptom-triage"
+    assert response.json()["gpu"] is False
+    assert client.get("/pipeline/triggers/history").json() == [response.json()]
+    assert len(fake_producer.produced) == 1
+
+
+def test_deep_learning_train_rejects_a_non_dl_scenario(
+    client: TestClient, dl_scenarios: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(k8s_jobs, "trigger_dl_training", lambda slug: pytest.fail("must not create a Job"))
+    assert client.post("/deep-learning/churn/train").status_code == 404

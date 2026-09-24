@@ -74,6 +74,10 @@ class Scenario(Base):
     # workspace tabs (see ai_circus_shared.scenario_schema.UiExtras). None is the
     # common case (the plain 4-tab workspace every tabular_ml scenario already gets).
     ui_extras: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # deep_learning only — see ai_circus_shared.scenario_schema.DeepLearningConfig.
+    # Added after the table first shipped: core/db.py's ensure_added_columns() adds it
+    # to an existing database (create_all() never alters a table that already exists).
+    deep_learning: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

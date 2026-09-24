@@ -18,8 +18,10 @@ import { useScenarioAgent } from "./useScenarioAgent";
 
 type Tab = "scenario" | "data" | "predict" | "explore" | "extra";
 
-// Tab chrome per ui_extras kind — the renderer itself is picked below.
-const EXTRA_TABS: Record<UiExtras["kind"], { icon: IconName; label: string }> = {
+// Tab chrome per ui_extras kind — the renderer itself is picked below. Partial: the
+// deep_learning-only kinds (triage_board, reading_room) never reach a tabular scenario
+// (scenario_schema.py rejects them there) and are rendered by DeepLearningView instead.
+const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: string }>> = {
   region_map: { icon: "map", label: "Regional Map" },
   live_plant: { icon: "factory", label: "Live Plant" },
   process_optimizer: { icon: "sparkle", label: "Optimizer" },
@@ -80,6 +82,7 @@ function TabularViewContent({
 }) {
   useChatGenerativeUiActions();
   const [tab, setTab] = useState<Tab>("scenario");
+  const extraTab = scenario.ui_extras ? EXTRA_TABS[scenario.ui_extras.kind] : undefined;
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
@@ -100,10 +103,10 @@ function TabularViewContent({
         <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
           <Icon name="scan" /> ML Insights
         </button>
-        {scenario.ui_extras && (
+        {extraTab && (
           <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
-            <Icon name={EXTRA_TABS[scenario.ui_extras.kind].icon} />
-            {EXTRA_TABS[scenario.ui_extras.kind].label}
+            <Icon name={extraTab.icon} />
+            {extraTab.label}
           </button>
         )}
       </div>

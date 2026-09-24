@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import redis
 from ai_circus_shared.auth import ADMIN_ORG_ID, is_admin_bearer_token
@@ -31,6 +32,7 @@ from ai_circus_shared.cdc import ensure_slot, poll_changes, slot_status
 from ai_circus_shared.document_store import DbSession, DocumentStore
 from ai_circus_shared.document_store import get_session as get_document_session
 from ai_circus_shared.events import EventConsumer, EventProducer, connect_consumer
+from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from confluent_kafka import Producer
 from fastapi import APIRouter, Depends, Header, HTTPException
 from kubernetes.client.exceptions import ApiException
@@ -305,6 +307,113 @@ def trigger_pipeline_job(
         # already succeeded and is durably recorded in the document store.
         logger.warning("Failed to publish pipeline-trigger event for job %r", name, exc_info=True)
 
+    return event
+
+
+class GpuNodeOut(BaseModel):
+    """One cluster node's allocatable NVIDIA GPU count."""
+
+    name: str
+    gpus: int
+
+
+class DlJobOut(BaseModel):
+    """One deep_learning scenario's in-cluster training Job."""
+
+    scenario_slug: str
+    title: str
+    modality: str
+    job_name: str
+    state: str
+    started_at: str | None
+    completed_at: str | None
+
+
+class DlStatusOut(BaseModel):
+    """GET /deep-learning/status — cluster GPU capacity + per-scenario training Jobs."""
+
+    available: bool
+    reason: str | None = None
+    cluster_gpus: int = 0
+    gpu_nodes: list[GpuNodeOut] = []
+    jobs: list[DlJobOut] = []
+
+
+def _dl_scenarios() -> dict[str, ScenarioDefinition]:
+    return resolve_scenarios(Path(get_env_config().SCENARIOS_DIR), "", kind="deep_learning")
+
+
+@router.get("/deep-learning/status", response_model=DlStatusOut, dependencies=[Depends(require_admin)])
+def deep_learning_status() -> DlStatusOut:
+    """Whether the cluster exposes any GPU, and each deep_learning scenario's training
+    Job state. The deployed *model* (trained where, how accurate) is dl-inference's
+    GET /models/{slug} — this endpoint only knows about Kubernetes.
+    """
+    if not k8s_jobs.in_cluster_config_available():
+        return DlStatusOut(
+            available=False,
+            reason="In-cluster training requires the k3s deployment. Train on a host with `make dl-train` instead.",
+        )
+    try:
+        nodes = k8s_jobs.cluster_gpus()
+        jobs = []
+        for slug, definition in _dl_scenarios().items():
+            assert definition.deep_learning is not None
+            status = k8s_jobs.get_job_status(k8s_jobs.dl_job_name(slug))
+            jobs.append(
+                DlJobOut(
+                    scenario_slug=slug,
+                    title=definition.title,
+                    modality=definition.deep_learning.modality,
+                    job_name=status.name,
+                    state=status.state,
+                    started_at=status.started_at,
+                    completed_at=status.completed_at,
+                )
+            )
+    except ApiException as exc:
+        raise HTTPException(status_code=502, detail=f"Kubernetes API error: {exc.reason}") from exc
+    return DlStatusOut(
+        available=True,
+        cluster_gpus=sum(n.gpus for n in nodes),
+        gpu_nodes=[GpuNodeOut(name=n.name, gpus=n.gpus) for n in nodes],
+        jobs=jobs,
+    )
+
+
+@router.post("/deep-learning/{scenario_slug}/train", status_code=202, dependencies=[Depends(require_admin)])
+def train_deep_learning_scenario(
+    scenario_slug: str,
+    session: DbSession = Depends(get_document_session),
+    events: EventProducer = Depends(get_event_producer),
+) -> dict[str, object]:
+    """Start (or restart) one deep_learning scenario's training Job. Requests a GPU only
+    when a node advertises one; otherwise the Job trains with the scenario's reduced CPU
+    budget. Audited + published exactly like the tabular pipeline triggers above.
+    """
+    if not k8s_jobs.in_cluster_config_available():
+        raise HTTPException(
+            status_code=501,
+            detail="In-cluster training requires the k3s deployment. Train on a host with `make dl-train` instead.",
+        )
+    if scenario_slug not in _dl_scenarios():
+        raise HTTPException(status_code=404, detail=f"Unknown deep_learning scenario {scenario_slug!r}.")
+    try:
+        gpu = k8s_jobs.trigger_dl_training(scenario_slug)
+    except ApiException as exc:
+        raise HTTPException(status_code=502, detail=f"Kubernetes API error: {exc.reason}") from exc
+
+    event: dict[str, object] = {
+        "job": k8s_jobs.dl_job_name(scenario_slug),
+        "scenario_slug": scenario_slug,
+        "gpu": gpu,
+        "triggered_at": datetime.now(UTC).isoformat(),
+    }
+    DocumentStore(session).put(ADMIN_ORG_ID, _TRIGGER_HISTORY_COLLECTION, str(uuid.uuid4()), event)
+    try:
+        events.publish(ADMIN_ORG_ID, _TRIGGER_EVENTS_TOPIC, event)
+    except Exception:
+        logger.warning("Failed to publish deep-learning trigger event for %r", scenario_slug, exc_info=True)
     return event
 
 

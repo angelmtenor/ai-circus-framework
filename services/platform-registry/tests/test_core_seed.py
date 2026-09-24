@@ -44,6 +44,8 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "luznova_gas_prospects",
         "ai_circus_reference",
         "service_request",
+        "symptom_triage",
+        "chest_xray_pneumonia",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -131,6 +133,32 @@ def test_seed_scenarios_populates_ui_extras_for_opted_in_scenarios_only(session:
     assert session.get(Scenario, "churn").ui_extras is None
 
 
+def test_seed_scenarios_populates_deep_learning_scenarios(session: Session) -> None:
+    """deep_learning scenarios get their `deep_learning` block, plus the generic target
+    columns (task type, target label, class labels) the picker/ScenarioView reuse.
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    triage = session.get(Scenario, "symptom_triage")
+    assert triage.kind == "deep_learning"
+    assert triage.industry == "healthcare"
+    assert triage.deep_learning["modality"] == "text"
+    assert triage.deep_learning["base_model"] == "thomas-sounack/BioClinical-ModernBERT-base"
+    assert triage.task_type == "text_classification"
+    assert len(triage.target_value_labels) == 22
+    assert triage.target_value_labels["gastroesophageal reflux disease"] == "Acid reflux (GERD)"
+    assert triage.ui_extras["kind"] == "triage_board"
+    assert triage.feature_columns is None
+
+    xray = session.get(Scenario, "chest_xray_pneumonia")
+    assert xray.deep_learning["modality"] == "image"
+    assert xray.task_type == "image_classification"
+    assert xray.target_value_labels == {"0": "Normal", "1": "Pneumonia"}
+    assert xray.ui_extras["positive_label"] == "1"
+
+    assert session.get(Scenario, "churn").deep_learning is None
+
+
 def test_seed_scenarios_populates_target(session: Session) -> None:
     """tabular_ml scenarios get the predicted column's name; conversational_rag ones don't."""
     seed_scenarios(session, SCENARIOS_DIR)
@@ -173,6 +201,8 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "luznova_gas_prospects",
         "ai_circus_reference",
         "service_request",
+        "symptom_triage",
+        "chest_xray_pneumonia",
     }
 
 
@@ -189,8 +219,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 15
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 15
+    assert session.query(Scenario).count() == 17
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 17
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

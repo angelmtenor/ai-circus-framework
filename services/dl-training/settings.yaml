@@ -1,0 +1,113 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: ai-circus-framework contributors
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# dl-training is a one-shot job: for every `deep_learning` scenario in SCENARIOS it
+# downloads the scenario's pinned public data (once, into SeaweedFS), fine-tunes the
+# Hugging Face base model (CUDA when available, else the scenario's reduced CPU
+# budget), exports + evaluates the ONNX artifact dl-inference will serve, and uploads
+# everything under ORG_ID's prefix of the scenario bucket. Never part of `make all` —
+# see the root Makefile's dl-* / k3s-dl-* targets.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  # SCENARIOS/DL_DEVICE are optional with NO profile default on purpose: a profile value
+  # is passed as a constructor kwarg and would beat the real env var, but these two are
+  # exactly what each run sets (make dl-train-nlp, the admin console's per-scenario Job).
+  - name: SCENARIOS
+    description: "Comma-separated deep_learning scenario slugs this run trains; empty/unset = every scenario"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: ORG_ID
+    description: "Tenant (Keycloak Organization id) whose prefix the data/model artifacts are written under"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (docker service name in-container, *.localhost via Traefik locally)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: DL_DEVICE
+    description: "auto (CUDA if present, else CPU), cuda or cpu — also picks the gpu/cpu training budget"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: DL_CACHE_DIR
+    description: "Writable local cache for downloaded raw data and Hugging Face base-model weights"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MLFLOW_TRACKING_URI
+    description: "MLflow tracking server runs are mirrored to (e.g. http://mlflow:5000); unset = off"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    # Must match dl-inference's SHARED_MODEL_ORG_ID (every other tenant falls back to it).
+    ORG_ID: "demo"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
+
+  # Running with `uv run` on the host (`make dl-train-*`, the GPU path). No
+  # OBJECT_STORE_ENDPOINT default here on purpose: scripts/dl_train_host.sh exports it
+  # (objectstore.localhost when this host's resolver knows *.localhost, else a temporary
+  # kubectl port-forward to SeaweedFS) — a profile value would beat that env var.
+  local:
+    SCENARIOS_DIR: "../../scenarios"
+    DL_CACHE_DIR: "~/.cache/ai-circus/dl-data"
+
+  # Running as a container (k8s Job / compose profile) — /tmp is the only writable path
+  # under the pod's non-root user.
+  docker:
+    SCENARIOS_DIR: "/app/scenarios"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
+    DL_CACHE_DIR: "/tmp/dl-cache"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

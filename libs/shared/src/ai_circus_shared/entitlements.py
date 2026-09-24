@@ -88,6 +88,10 @@ class ScenarioSummary(BaseModel):
     # workspace tabs (see scenario_schema.UiExtras); a plain dict here, same reasoning
     # as `form` above. None is the common case (the plain 4-tab workspace).
     ui_extras: dict[str, Any] | None = None
+    # deep_learning only — modality, labels, base model and input hints that drive
+    # ui-react's generic DeepLearningView (see scenario_schema.DeepLearningConfig);
+    # a plain dict for the same reason as `form` above.
+    deep_learning: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

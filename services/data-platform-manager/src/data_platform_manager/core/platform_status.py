@@ -83,6 +83,14 @@ TARGETS: tuple[Target, ...] = (
         app_label="prediction",
     ),
     Target(
+        "dl-inference",
+        "services",
+        "http://dl-inference:8000/healthz",
+        "deep_learning inference (ONNX) + occlusion explanations — optional overlay (make k3s-dl-up)",
+        app_label="dl-inference",
+        optional=True,
+    ),
+    Target(
         "assistant", "services", "http://assistant:8000/healthz", "tabular_ml chat agent (AG-UI)", app_label="assistant"
     ),
     Target(

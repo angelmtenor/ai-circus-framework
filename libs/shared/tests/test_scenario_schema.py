@@ -385,3 +385,168 @@ def test_process_optimizer_extra_requires_at_least_one_controllable_and_spec() -
         _optimizer(controllable=[])
     with pytest.raises(ValidationError):
         _optimizer(spec_options=[])
+
+
+# ── deep_learning kind ─────────────────────────────────────────────────────────
+
+from ai_circus_shared.deep_learning import gallery_sample_id, image_key, reference_sample_id  # noqa: E402
+from ai_circus_shared.scenario_schema import (  # noqa: E402
+    DeepLearningConfig,
+    DeepLearningServices,
+    DlLabel,
+    DlTrainBudget,
+    DlTraining,
+    HuggingFaceFilesSource,
+    NpzImagesSource,
+    ReadingRoomExtra,
+    TriageBoardExtra,
+    TriageLane,
+)
+
+DL_SERVICES = DeepLearningServices(training="dl-training", inference="dl-inference")
+BUDGET = DlTrainBudget(epochs=1, batch_size=2, learning_rate=1e-4)
+
+
+def _text_source() -> HuggingFaceFilesSource:
+    return HuggingFaceFilesSource(
+        repo="o/d",
+        revision="abc",
+        files={"train": "train.jsonl", "test": "test.jsonl"},
+        sha256={"train.jsonl": "1", "test.jsonl": "2"},
+        text_field="t",
+        label_field="l",
+    )
+
+
+def _dl_config(modality: str = "text") -> DeepLearningConfig:
+    source = _text_source() if modality == "text" else NpzImagesSource(url="https://x/y.npz", md5="0")
+    return DeepLearningConfig(
+        modality=modality,  # type: ignore[arg-type]
+        bucket="b",
+        source=source,
+        labels=[DlLabel(key="a", label="A"), DlLabel(key="b", label="B")],
+        base_model="org/model",
+        base_model_revision="rev",
+        base_model_params="1M",
+        input_label="Input",
+        target_label="Target",
+        training=DlTraining(gpu=BUDGET, cpu=BUDGET),
+    )
+
+
+def _dl_scenario(**overrides: object) -> ScenarioDefinition:
+    fields: dict[str, object] = {
+        "slug": "dl",
+        "kind": "deep_learning",
+        "title": "DL",
+        "description": "d",
+        "role_required": "scenario:dl",
+        "icon": "🧪",
+        "industry": "healthcare",
+        "chat": ChatConfig(context="c"),
+        "deep_learning": _dl_config(),
+        "services": DL_SERVICES,
+    }
+    fields.update(overrides)
+    return ScenarioDefinition(**fields)  # type: ignore[arg-type]
+
+
+def test_deep_learning_scenario_is_valid() -> None:
+    scenario = _dl_scenario()
+    assert scenario.deep_learning is not None
+    assert isinstance(scenario.services, DeepLearningServices)
+
+
+def test_deep_learning_kind_requires_the_block_and_vice_versa() -> None:
+    with pytest.raises(ValidationError, match="requires a `deep_learning` block"):
+        _dl_scenario(deep_learning=None)
+    with pytest.raises(ValidationError, match="requires a `deep_learning` block"):
+        _dl_scenario(kind="tabular_ml")
+
+
+def test_deep_learning_kind_requires_deep_learning_services() -> None:
+    with pytest.raises(ValidationError, match="services"):
+        _dl_scenario(services=SERVICES)
+
+
+def test_modality_must_match_the_source_type() -> None:
+    with pytest.raises(ValidationError, match="needs a 'npz_images' source"):
+        DeepLearningConfig(**{**_dl_config().model_dump(), "modality": "image"})
+
+
+def test_labels_must_be_unique() -> None:
+    with pytest.raises(ValidationError, match="unique"):
+        DeepLearningConfig(**{**_dl_config().model_dump(), "labels": [{"key": "a", "label": "A"}] * 2})
+
+
+def test_huggingface_source_needs_train_test_and_checksums() -> None:
+    with pytest.raises(ValidationError, match="'train' and 'test'"):
+        HuggingFaceFilesSource(**{**_text_source().model_dump(), "files": {"train": "train.jsonl"}})
+    with pytest.raises(ValidationError, match="no sha256"):
+        HuggingFaceFilesSource(**{**_text_source().model_dump(), "sha256": {"train.jsonl": "1"}})
+
+
+def test_triage_board_must_route_every_label_exactly_once() -> None:
+    ok = TriageBoardExtra(
+        lanes=[TriageLane(key="x", label="X", labels=["a"]), TriageLane(key="y", label="Y", labels=["b"])]
+    )
+    assert _dl_scenario(ui_extras=ok).ui_extras == ok
+    with pytest.raises(ValidationError, match="unrouted=\\['b'\\]"):
+        _dl_scenario(ui_extras=TriageBoardExtra(lanes=[TriageLane(key="x", label="X", labels=["a"])]))
+    with pytest.raises(ValidationError, match="duplicated=\\['a'\\]"):
+        _dl_scenario(
+            ui_extras=TriageBoardExtra(
+                lanes=[TriageLane(key="x", label="X", labels=["a", "b"]), TriageLane(key="y", label="Y", labels=["a"])]
+            )
+        )
+    with pytest.raises(ValidationError, match="unknown labels"):
+        _dl_scenario(ui_extras=TriageBoardExtra(lanes=[TriageLane(key="x", label="X", labels=["a", "b", "z"])]))
+
+
+def test_reading_room_needs_an_image_scenario_and_a_real_positive_label() -> None:
+    image = _dl_config("image")
+    assert _dl_scenario(deep_learning=image, ui_extras=ReadingRoomExtra(positive_label="b")).ui_extras is not None
+    with pytest.raises(ValidationError, match="not a label key"):
+        _dl_scenario(deep_learning=image, ui_extras=ReadingRoomExtra(positive_label="z"))
+    with pytest.raises(ValidationError, match="requires modality='image'"):
+        _dl_scenario(ui_extras=ReadingRoomExtra(positive_label="b"))
+
+
+def test_ui_extras_kinds_are_scoped_to_their_scenario_kind() -> None:
+    with pytest.raises(ValidationError, match="not available for kind='deep_learning'"):
+        _dl_scenario(ui_extras=LivePlantExtra())
+    with pytest.raises(ValidationError, match="not available for kind='tabular_ml'"):
+        _ui_extras_scenario(ReadingRoomExtra(positive_label="a"))  # type: ignore[arg-type]
+
+
+def test_sample_ids_and_image_keys() -> None:
+    assert image_key(gallery_sample_id(3)) == "images/s-3.png"
+    assert image_key(reference_sample_id(12)) == "images/r-12.png"
+    for bad in ["../x", "s-", "x-1", "s-1/../../y", "s-1234567"]:
+        with pytest.raises(ValueError, match="Invalid sample id"):
+            image_key(bad)
+
+
+def test_repo_deep_learning_scenarios_load() -> None:
+    from pathlib import Path
+
+    from ai_circus_shared.scenario_schema import resolve_scenarios
+
+    scenarios = resolve_scenarios(Path(__file__).parents[3] / "scenarios", "", kind="deep_learning")
+    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia"}
+
+
+def test_resolve_scenarios_ignores_other_kinds_it_cannot_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A scenario of an unknown/future kind must not break services of other kinds."""
+    from ai_circus_shared.scenario_schema import resolve_scenarios
+
+    (tmp_path / "future").mkdir()
+    (tmp_path / "future" / "scenario.yaml").write_text("slug: future\nkind: quantum_ml\nwhatever: {}\n")
+    (tmp_path / "broken_other").mkdir()
+    (tmp_path / "broken_other" / "scenario.yaml").write_text("kind: conversational_rag\n")  # invalid, other kind
+    repo = __import__("pathlib").Path(__file__).parents[3] / "scenarios"
+    (tmp_path / "triage").mkdir()
+    (tmp_path / "triage" / "scenario.yaml").write_text((repo / "symptom_triage" / "scenario.yaml").read_text())
+
+    assert set(resolve_scenarios(tmp_path, "", kind="deep_learning")) == {"symptom_triage"}
+    assert resolve_scenarios(tmp_path, "", kind="tabular_ml") == {}

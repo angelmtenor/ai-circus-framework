@@ -1,0 +1,73 @@
+# Mirrors docker-compose.yml's dl-inference service (profile: deep-learning).
+# onnxruntime only (no torch): the int8 BioClinical ModernBERT (~150 MB) + ConvNeXt V2
+# nano (~60 MB) sessions plus runtime settle around 550-700 MB RSS, loaded lazily on
+# the first request per scenario — hence the 1Gi limit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dl-inference
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: dl-inference}
+  template:
+    metadata:
+      labels: {app: dl-inference}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: dl-inference
+          image: ai-circus/dl-inference:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: dl-inference-secrets}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "4", memory: 1Gi}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dl-inference
+  namespace: ai-circus
+spec:
+  selector: {app: dl-inference}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dl-inference
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`dl-inference.localhost`)
+      kind: Rule
+      services:
+        - {name: dl-inference, port: 8000}

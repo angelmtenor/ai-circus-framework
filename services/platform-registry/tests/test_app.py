@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from ai_circus_shared.deployment_guard import DEMO_ADMIN_API_KEY
 from pydantic import BaseModel, ValidationError
 
 import platform_registry.app as app
@@ -98,7 +99,7 @@ def test_main_exits_when_demo_admin_key_used_outside_dev_profiles(monkeypatch: p
     monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
-    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig(admin_api_key="ai-circus-2026"))
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig(admin_api_key=DEMO_ADMIN_API_KEY))
 
     with pytest.raises(SystemExit) as exc_info:
         app.main()
@@ -116,7 +117,7 @@ def test_main_allows_demo_admin_key_under_dev_profiles(monkeypatch: pytest.Monke
     monkeypatch.setenv("APP_ENVIRONMENT", profile)
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
-    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig(admin_api_key="ai-circus-2026"))
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig(admin_api_key=DEMO_ADMIN_API_KEY))
     monkeypatch.setattr(app.uvicorn, "run", lambda *_args, **kwargs: uvicorn_calls.append(kwargs))
 
     app.main()

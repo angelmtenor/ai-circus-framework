@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPlatformStatus, type ComponentGroup, type ComponentStatus, type PlatformStatus } from "./apiClient";
+import {
+  getPlatformStatus,
+  type ComponentGroup,
+  type ComponentStatus,
+  type PlatformStatus,
+  type ScenarioSummary,
+} from "./apiClient";
 import { PlatformCapabilitiesTab } from "./PlatformCapabilities";
+import { DeepLearningAdmin } from "./DeepLearningAdmin";
 import { Icon } from "./Icon";
 
 /**
@@ -20,13 +27,16 @@ import { Icon } from "./Icon";
  *   roadmap) plus the live operational controls behind it (pipeline jobs, Kafka events, CDC,
  *   Lakehouse, semantic queries, gateway rate limits) — see PlatformCapabilities.tsx.
  *
+ * - **Deep Learning**: GPU availability, the deployed deep_learning models (trained where,
+ *   how accurate) and admin-only in-cluster training — see DeepLearningAdmin.tsx.
+ *
  * Only the visible tab is mounted, so the health poll stops while the Capabilities tab is
  * open and its many one-shot requests don't fire until it's actually looked at.
  */
 
 const POLL_SECONDS = 15;
 
-type PlatformTab = "health" | "capabilities";
+type PlatformTab = "health" | "capabilities" | "deep-learning";
 
 const GROUP_LABELS: Record<ComponentGroup, { title: string; hint: string }> = {
   services: { title: "Microservices", hint: "The platform's own services — every scenario kind is served by these." },
@@ -96,7 +106,15 @@ function ComponentCard({ component }: { component: ComponentStatus }) {
   );
 }
 
-export function PlatformStatusView({ baseUrl, accessToken }: { baseUrl: string; accessToken: string | null }) {
+export function PlatformStatusView({
+  baseUrl,
+  accessToken,
+  scenarios,
+}: {
+  baseUrl: string;
+  accessToken: string | null;
+  scenarios: ScenarioSummary[];
+}) {
   const [tab, setTab] = useState<PlatformTab>("health");
 
   return (
@@ -116,12 +134,18 @@ export function PlatformStatusView({ baseUrl, accessToken }: { baseUrl: string; 
         >
           <Icon name="data" size={14} /> Capabilities
         </button>
+        <button
+          role="tab"
+          aria-selected={tab === "deep-learning"}
+          className={tab === "deep-learning" ? "active" : ""}
+          onClick={() => setTab("deep-learning")}
+        >
+          <Icon name="sparkle" size={14} /> Deep Learning
+        </button>
       </div>
-      {tab === "health" ? (
-        <HealthTab baseUrl={baseUrl} accessToken={accessToken} />
-      ) : (
-        <PlatformCapabilitiesTab baseUrl={baseUrl} accessToken={accessToken} />
-      )}
+      {tab === "health" && <HealthTab baseUrl={baseUrl} accessToken={accessToken} />}
+      {tab === "capabilities" && <PlatformCapabilitiesTab baseUrl={baseUrl} accessToken={accessToken} />}
+      {tab === "deep-learning" && <DeepLearningAdmin baseUrl={baseUrl} accessToken={accessToken} scenarios={scenarios} />}
     </div>
   );
 }

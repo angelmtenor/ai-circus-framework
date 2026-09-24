@@ -117,6 +117,14 @@ env_variables:
     mandatory: true
     secret: true
 
+  # Admin Deep Learning tab: which `deep_learning` scenarios exist (a train request for
+  # anything else is rejected before a Kubernetes Job is ever created).
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file
@@ -144,6 +152,7 @@ environments:
     LLM_GATEWAY_URL: "http://localhost:4000"
     KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
     OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
+    SCENARIOS_DIR: "../../scenarios"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
@@ -152,6 +161,7 @@ environments:
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
     OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
+    SCENARIOS_DIR: "/app/scenarios"
 
   staging: {}
     # Staging environment profile — overrides go here

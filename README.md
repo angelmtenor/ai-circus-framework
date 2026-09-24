@@ -160,7 +160,7 @@ fill itself in as you type.
 
 ## Scenario catalog
 
-Three kinds of scenario exist today — adding a new one is a YAML file, never new UI or container
+Four kinds of scenario exist today — adding a new one is a YAML file, never new UI or container
 code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 
 | Scenario | Kind / task | What it predicts | Source |
@@ -180,6 +180,8 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
+| **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
+| **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
 
 Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
 each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
@@ -607,6 +609,33 @@ Python best-practices reference repo. Common code (Keycloak token validation, Se
 entitlement-check client, scenario schema, cache/document-store/event-streaming helpers) lives in
 `libs/shared` (`ai-circus-shared`), added to each service as a local **non-editable** `uv` path
 dependency.
+
+### Deep learning — healthcare NLP & computer vision (optional)
+
+The `healthcare` industry's two scenarios are `kind: deep_learning`: Hugging Face models
+fine-tuned on public data — `thomas-sounack/BioClinical-ModernBERT-base` (150M, 2025 clinical
+encoder) on patient symptom texts and `facebook/convnextv2-nano-22k-224` (15.6M) on PneumoniaMNIST
+chest X-rays. No data file is committed: each `scenario.yaml` pins its public source (Hugging Face
+commit + SHA-256, Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS
+on first run (`make dl-data` does only that).
+
+- **`dl-training`** (one-shot job): device auto-detect — the host/cluster GPU gets each scenario's
+  full `training.gpu` budget, a CPU its reduced `training.cpu` one (subset / fewer epochs / only
+  the top encoder blocks). Label smoothing + post-hoc temperature scaling keep the probabilities
+  calibrated; the model is exported to ONNX (the text model int8-quantized) and every reported
+  metric is measured on that exported artifact. Never part of `make all` — `make dl-train-nlp` /
+  `make dl-train-cv` (this host's GPU), `make k3s-dl-train-*` or the admin console.
+- **`dl-inference`** (optional overlay, `make k3s-dl-up`): onnxruntime only, no torch — both models
+  in ~0.6 GB. Predictions, explanations (Banzhaf word attributions / occlusion heatmaps),
+  similar training cases, published held-out samples/images; tenant-scoped and entitlement-checked
+  like every other service.
+- **UI**: a generic `DeepLearningView` (Scenario, Texts/Images with click-to-enlarge, Try the
+  model, Model insights with learning curves/confusion matrix/calibration/ROC) plus two opt-in
+  `ui_extras` tabs — `triage_board` and `reading_room`. Admins see GPU availability, each model's
+  card and an in-cluster **Train** button under **Platform → Deep Learning**. For a GPU inside
+  the k3d cluster see [k8s/README.md](k8s/README.md#deep-learning-optional-and-gpus).
+
+Both scenarios are demonstrations — not medical devices and not clinically validated.
 
 ### Data Platform (optional profile)
 
