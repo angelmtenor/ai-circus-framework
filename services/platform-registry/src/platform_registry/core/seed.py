@@ -90,8 +90,12 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.
-            modality = definition.deep_learning.modality
-            existing.task_type = "text_classification" if modality == "text" else "image_classification"
+            dl = definition.deep_learning
+            existing.task_type = (
+                "image_anomaly_detection"
+                if dl.task == "anomaly_detection"
+                else f"{'text' if dl.modality == 'text' else 'image'}_classification"
+            )
             existing.target_label = definition.deep_learning.target_label
             existing.target_description = definition.deep_learning.target_description
             existing.target_value_labels = {label.key: label.label for label in definition.deep_learning.labels}

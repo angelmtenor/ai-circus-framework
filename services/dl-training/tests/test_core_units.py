@@ -330,3 +330,66 @@ def test_calibration_holdout_carves_a_disjoint_stratified_slice_of_the_test_pool
     assert (len(calib), len(test)) == (2, 6)
     assert sorted(calib.labels.tolist()) == [0, 1]
     assert len(calib) + len(test) == len(dataset.test)
+
+
+# ── task: anomaly_detection ───────────────────────────────────────────────────
+
+
+def test_load_parquet_image_dataset_decodes_resizes_and_keeps_masks(tmp_path: Path) -> None:
+    from tests.fixtures import anomaly_config, anomaly_parquet_files
+
+    seed_cache(tmp_path, anomaly_parquet_files())
+    dl = anomaly_config()
+    dataset = data.load_dataset(dl, data.ensure_raw(MemoryStore(), "demo", dl, tmp_path))  # type: ignore[arg-type]
+    assert isinstance(dataset.test.inputs, np.ndarray)
+    assert dataset.test.inputs.shape == (16, 32, 32, 3) and dataset.test.inputs.dtype == np.uint8
+    assert (len(dataset.train), len(dataset.val)) == (12, 4)  # validation carved out of train
+    assert dataset.test.masks is not None and dataset.test.masks.dtype == bool
+    defective = dataset.test.labels == 1
+    assert dataset.test.masks[defective].any(axis=(1, 2)).all()
+    assert not dataset.test.masks[~defective].any()
+    # take() keeps images, labels and masks aligned.
+    subset = dataset.test.take(np.array([15, 0]))
+    assert subset.masks is not None and subset.masks[0].any() and not subset.masks[1].any()
+
+
+def test_greedy_coreset_covers_every_cluster() -> None:
+    from dl_training.core.anomaly import greedy_coreset
+
+    rng = np.random.default_rng(0)
+    centers = rng.normal(size=(4, 32)) * 10
+    points = np.concatenate([c + rng.normal(size=(200, 32)) * 0.1 for c in centers])
+    chosen = greedy_coreset(torch.from_numpy(points).half(), 4, torch.device("cpu"), seed=3).numpy()
+    assert sorted(set(chosen // 200)) == [0, 1, 2, 3]  # one point per cluster, none duplicated
+    assert len(greedy_coreset(torch.zeros(5, 8), 10, torch.device("cpu"), seed=0)) == 5
+
+
+def test_pixel_auroc_scores_localization_against_the_masks() -> None:
+    from dl_training.core.anomaly import pixel_auroc
+
+    masks = np.zeros((2, 64, 64), dtype=bool)
+    masks[0, :16, :16] = True
+    good_maps = np.zeros((2, 4, 4), dtype=np.float32)
+    good_maps[0, 0, 0] = 1.0
+    assert pixel_auroc(good_maps, masks) > 0.95
+    assert pixel_auroc(good_maps[:, ::-1, ::-1].copy(), masks) < 0.6  # heat in the wrong corner
+    assert pixel_auroc(good_maps, None) is None
+    assert pixel_auroc(good_maps, np.zeros_like(masks)) is None
+
+
+def test_baked_position_grid_matches_the_resampled_one() -> None:
+    from dl_training.core.anomaly import bake_position_embeddings
+    from tests.fixtures import anomaly_config, tiny_anomaly_task
+
+    task = tiny_anomaly_task(anomaly_config())  # already baked for 32 px
+    pixels = torch.randn(1, 3, 32, 32)
+    with torch.no_grad():
+        baked = task.model.backbone(pixel_values=pixels).last_hidden_state
+    assert bake_position_embeddings(torch.nn.Linear(2, 2), 32) == 0  # nothing to bake
+    from transformers import Dinov2WithRegistersModel
+
+    fresh = Dinov2WithRegistersModel(task.model.backbone.config).eval()
+    fresh.load_state_dict(task.model.backbone.state_dict(), strict=False)
+    with torch.no_grad():
+        resampled = fresh(pixel_values=pixels).last_hidden_state
+    assert torch.allclose(baked, resampled, atol=1e-5)

@@ -182,6 +182,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
 | **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
+| **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |
 
 Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
 each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
@@ -610,32 +611,41 @@ entitlement-check client, scenario schema, cache/document-store/event-streaming 
 `libs/shared` (`ai-circus-shared`), added to each service as a local **non-editable** `uv` path
 dependency.
 
-### Deep learning — healthcare NLP & computer vision (optional)
+### Deep learning — NLP & computer vision (optional)
 
-The `healthcare` industry's two scenarios are `kind: deep_learning`: Hugging Face models
-fine-tuned on public data — `thomas-sounack/BioClinical-ModernBERT-base` (150M, 2025 clinical
+Three scenarios are `kind: deep_learning`, all on public data and Hugging Face models. In
+`healthcare`, two fine-tunes: `thomas-sounack/BioClinical-ModernBERT-base` (150M, 2025 clinical
 encoder) on patient symptom texts and `facebook/convnextv2-nano-22k-224` (15.6M) on PneumoniaMNIST
-chest X-rays. No data file is committed: each `scenario.yaml` pins its public source (Hugging Face
-commit + SHA-256, Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS
-on first run (`make dl-data` does only that).
+chest X-rays. In `manufacturing_industry`, `pcb_visual_inspection` uses the other `deep_learning`
+task, **`task: anomaly_detection`**: it learns from *good* printed circuit boards only (Amazon
+VisA, PCB1) — a frozen `facebook/dinov2-with-registers-small` (22M) describes every 14×14-px patch,
+a greedy coreset keeps a memory bank of normal patches (PatchCore), and a board's patches are scored
+by their distance to the nearest normal one (AnomalyDINO); backbone, bank and kNN export as one
+ONNX graph whose `anomaly_map` output is the explanation. No data file is committed: each
+`scenario.yaml` pins its public source (Hugging Face commit + SHA-256 — JSON Lines text or Parquet
+images — or Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS on first
+run (`make dl-data` does only that).
 
 - **`dl-training`** (one-shot job): device auto-detect — the host/cluster GPU gets each scenario's
   full `training.gpu` budget, a CPU its reduced `training.cpu` one (subset / fewer epochs / only
   the top encoder blocks). Label smoothing + post-hoc temperature scaling keep the probabilities
   calibrated; the model is exported to ONNX (the text model int8-quantized) and every reported
   metric is measured on that exported artifact. Never part of `make all` — `make dl-train-nlp` /
-  `make dl-train-cv` (this host's GPU), `make k3s-dl-train-*` or the admin console.
-- **`dl-inference`** (optional overlay, `make k3s-dl-up`): onnxruntime only, no torch — both models
-  in ~0.6 GB. Predictions, explanations (Banzhaf word attributions / occlusion heatmaps),
-  similar training cases, published held-out samples/images; tenant-scoped and entitlement-checked
-  like every other service.
+  `make dl-train-cv` / `make dl-train-anomaly` (this host's GPU), `make k3s-dl-train-*` or the
+  admin console.
+- **`dl-inference`** (optional overlay, `make k3s-dl-up`): onnxruntime only, no torch.
+  Predictions, explanations (Banzhaf word attributions / occlusion heatmaps / anomaly maps),
+  similar training cases, published held-out samples/images and ground-truth defect masks;
+  tenant-scoped and entitlement-checked like every other service.
 - **UI**: a generic `DeepLearningView` (Scenario, Texts/Images with click-to-enlarge, Try the
   model, Model insights with learning curves/confusion matrix/calibration/ROC) plus two opt-in
-  `ui_extras` tabs — `triage_board` and `reading_room`. Admins see GPU availability, each model's
+  `ui_extras` tabs — `triage_board` (text or images: a patient-message board, or the PCB
+  scenario's pass / reject / manual-inspection line) and `reading_room`. Admins see GPU availability, each model's
   card and an in-cluster **Train** button under **Platform → Deep Learning**. For a GPU inside
   the k3d cluster see [k8s/README.md](k8s/README.md#deep-learning-optional-and-gpus).
 
-Both scenarios are demonstrations — not medical devices and not clinically validated.
+All three are demonstrations — the healthcare ones are not medical devices and not clinically
+validated; the inspection model is not validated for production use.
 
 ### Data Platform (optional profile)
 

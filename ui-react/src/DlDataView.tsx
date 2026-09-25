@@ -41,11 +41,11 @@ export function DlDataView({ scenario, accessToken }: { scenario: ScenarioSummar
   return (
     <div className="tab-panel">
       <div className="panel-card">
-        <h3>{isImage ? "Held-out X-ray gallery" : "Held-out patient messages"}</h3>
+        <h3>{isImage ? "Held-out image gallery" : "Held-out patient messages"}</h3>
         <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
           {samples.data.length} samples from the test split the model never trained on — each with its expert label and the
           deployed model's prediction ({pct(correct / samples.data.length)} correct here).
-          {isImage && " Click any X-ray to enlarge it (with the model's heatmap on demand)."}
+          {isImage && " Click any image to enlarge it (with the model's heatmap on demand)."}
         </p>
         <div className="dl-toolbar">
           <label>

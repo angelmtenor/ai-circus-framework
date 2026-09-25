@@ -862,3 +862,12 @@
   opacity: 0.3;
   cursor: default;
 }
+
+/* Ground-truth defect outline legend (HeatmapImage's maskSrc). */
+.dl-mask-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgb(34 211 238);
+  border-radius: 2px;
+}

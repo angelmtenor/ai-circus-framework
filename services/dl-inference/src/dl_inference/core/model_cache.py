@@ -31,6 +31,7 @@ from ai_circus_shared.deep_learning import (
     DL_TEXT_ONLY_ARTIFACTS,
     ONNX_IMAGE_INPUT,
     image_key,
+    mask_key,
 )
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import artifact_checksum
@@ -129,7 +130,8 @@ def _warm_up(session: ort.InferenceSession, metadata: dict[str, Any]) -> None:
         session.run(None, {"input_ids": ids, "attention_mask": np.ones_like(ids)})
     else:
         size = int(metadata["preprocessing"]["size"])
-        session.run(None, {ONNX_IMAGE_INPUT: np.zeros((4, 3, size, size), dtype=np.float32)})
+        batch = 1 if metadata.get("task") == "anomaly_detection" else 4  # served one image at a time
+        session.run(None, {ONNX_IMAGE_INPUT: np.zeros((batch, 3, size, size), dtype=np.float32)})
 
 
 class DlModelCache:
@@ -231,15 +233,18 @@ class DlModelCache:
                     del self._images[image]
             return loaded
 
-    def image(self, org_id: str, scenario_slug: str, sample_id: str) -> bytes:
-        """One published sample's PNG (from the org the model was loaded from)."""
+    def image(self, org_id: str, scenario_slug: str, sample_id: str, *, mask: bool = False) -> bytes:
+        """One published sample's PNG — or, with `mask`, its ground-truth defect mask —
+        from the org the model was loaded from.
+        """
         model = self.get(org_id, scenario_slug)
-        cache_key = (org_id, scenario_slug, sample_id)
+        cache_key = (org_id, scenario_slug, f"mask:{sample_id}" if mask else sample_id)
         with self._guard:
             if cache_key in self._images:
                 self._images.move_to_end(cache_key)
                 return self._images[cache_key]
-        data = self._stores[scenario_slug].get(model.org_id, image_key(sample_id))
+        key = mask_key(sample_id) if mask else image_key(sample_id)
+        data = self._stores[scenario_slug].get(model.org_id, key)
         with self._guard:
             self._images[cache_key] = data
             while len(self._images) > MAX_CACHED_IMAGES:

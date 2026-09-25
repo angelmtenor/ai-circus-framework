@@ -5,8 +5,10 @@ import {
   fileToBase64,
   HeatmapImage,
   HeatmapLegend,
+  isAnomaly,
   labelName,
   labelsOf,
+  MaskLegend,
   ProbabilityBars,
   SimilarCases,
   Thumbnail,
@@ -28,6 +30,8 @@ type Input = { kind: "text"; text: string } | { kind: "sample"; id: string; text
 export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const dl = scenario.deep_learning!;
   const isImage = dl.modality === "image";
+  const anomaly = isAnomaly(scenario);
+  const [showMask, setShowMask] = useState(true);
   const samples = useDlSamples(scenario.slug, accessToken);
   const [input, setInput] = useState<Input | null>(null);
   const [draft, setDraft] = useState(dl.input_examples[0] ?? "");
@@ -71,6 +75,7 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
 
   const sample = input?.kind === "sample" ? samples.data?.find((s) => s.id === input.id) : undefined;
   const sampleImage = useDlImage(scenario.slug, isImage && input?.kind === "sample" ? input.id : null, accessToken);
+  const maskImage = useDlImage(scenario.slug, sample?.has_mask ? sample.id : null, accessToken, "masks");
   const shownImage =
     input?.kind === "upload" ? (result?.input_image_png ? `data:image/png;base64,${result.input_image_png}` : input.dataUrl) : sampleImage;
   const explainedLabel = result?.explained_class ? labelName(scenario, result.explained_class) : "";
@@ -78,11 +83,11 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
   return (
     <div className="tab-panel dl-predict">
       <div className="panel-card">
-        <h3>{isImage ? "Read a chest X-ray" : "Describe the symptoms"}</h3>
+        <h3>{isImage ? dl.input_label : "Describe the symptoms"}</h3>
         {isImage ? (
           <>
             <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
-              Pick a held-out study (expert label shown after the read) or upload your own frontal chest X-ray (PNG/JPEG —
+              Pick a held-out sample (its expert label is shown after the model's read) or upload your own image (PNG/JPEG —
               processed in memory, never stored).
             </p>
             <div className="dl-strip">
@@ -182,8 +187,8 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
 
           <div className="panel-card">
             <div className="dl-explain-head">
-              <h3>Why {explainedLabel}?</h3>
-              <label>
+              <h3>{anomaly ? "Where does it deviate from normal?" : `Why ${explainedLabel}?`}</h3>
+              <label style={anomaly ? { display: "none" } : undefined}>
                 Explain{" "}
                 <select
                   value={target ?? result.predicted}
@@ -217,24 +222,41 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
             )}
             {result.explanation?.type === "heatmap" && (
               <>
-                <HeatmapImage src={shownImage} grid={result.explanation.grid} opacity={opacity} />
+                <HeatmapImage
+                  src={shownImage}
+                  grid={result.explanation.grid}
+                  vmax={result.explanation.vmax}
+                  maskSrc={showMask ? maskImage : null}
+                  opacity={opacity}
+                />
                 <div className="dl-toolbar">
                   <label>
                     Heatmap{" "}
                     <input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} />
                   </label>
-                  <HeatmapLegend />
+                  <HeatmapLegend {...(anomaly ? { low: "normal", high: "anomalous" } : {})} />
+                  {sample?.has_mask && (
+                    <label className="dl-check">
+                      <input type="checkbox" checked={showMask} onChange={(e) => setShowMask(e.target.checked)} /> <MaskLegend />
+                    </label>
+                  )}
                 </div>
-                <p className="panel-hint">{result.explanation.method}: regions whose removal most lowers the model's case for {explainedLabel}.</p>
+                <p className="panel-hint">
+                  {anomaly
+                    ? `${result.explanation.method}. Fixed scale: no heat means every patch looks like a normal one; bright means unlike anything in the normal memory bank.`
+                    : `${result.explanation.method}: regions whose removal most lowers the model's case for ${explainedLabel}.`}
+                </p>
               </>
             )}
             {busy && <p className="panel-hint">Recomputing…</p>}
           </div>
 
           <div className="panel-card dl-similar-panel">
-            <h3>{isImage ? "Most similar prior studies" : "Most similar training cases"}</h3>
+            <h3>{anomaly ? "Closest known-normal references" : isImage ? "Most similar training images" : "Most similar training cases"}</h3>
             <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
-              Nearest neighbours in the model's own embedding space — example-based evidence a clinician can sanity-check.
+              {anomaly
+                ? "The good training images that look most alike, by the backbone's own embedding — compare them side by side with the flagged region."
+                : "Nearest neighbours in the model's own embedding space — example-based evidence a domain expert can sanity-check."}
             </p>
             <SimilarCases scenario={scenario} cases={result.similar} accessToken={accessToken} />
           </div>

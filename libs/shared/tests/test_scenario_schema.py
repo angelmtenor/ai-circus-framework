@@ -389,10 +389,11 @@ def test_process_optimizer_extra_requires_at_least_one_controllable_and_spec() -
 
 # ── deep_learning kind ─────────────────────────────────────────────────────────
 
-from ai_circus_shared.deep_learning import gallery_sample_id, image_key, reference_sample_id  # noqa: E402
+from ai_circus_shared.deep_learning import gallery_sample_id, image_key, mask_key, reference_sample_id  # noqa: E402
 from ai_circus_shared.scenario_schema import (  # noqa: E402
     DeepLearningConfig,
     DeepLearningServices,
+    DlAnomalyDetection,
     DlLabel,
     DlTrainBudget,
     DlTraining,
@@ -470,8 +471,81 @@ def test_deep_learning_kind_requires_deep_learning_services() -> None:
 
 
 def test_modality_must_match_the_source_type() -> None:
-    with pytest.raises(ValidationError, match="needs a 'npz_images' source"):
+    with pytest.raises(ValidationError, match="needs an npz_images source, or huggingface_files with image_field"):
         DeepLearningConfig(**{**_dl_config().model_dump(), "modality": "image"})
+    with pytest.raises(ValidationError, match="needs a huggingface_files source with text_field"):
+        DeepLearningConfig(**{**_dl_config("image").model_dump(), "modality": "text"})
+
+
+def _parquet_image_source(**overrides: object) -> HuggingFaceFilesSource:
+    fields: dict[str, object] = {
+        "repo": "o/d",
+        "revision": "abc",
+        "files": {"train": "train.parquet", "test": "test.parquet"},
+        "sha256": {"train.parquet": "1", "test.parquet": "2"},
+        "format": "parquet",
+        "image_field": "image",
+        "mask_field": "mask",
+        "label_field": "label",
+    }
+    return HuggingFaceFilesSource(**{**fields, **overrides})  # type: ignore[arg-type]
+
+
+def test_huggingface_parquet_image_source() -> None:
+    config = DeepLearningConfig(**{**_dl_config("image").model_dump(), "source": _parquet_image_source().model_dump()})
+    assert isinstance(config.source, HuggingFaceFilesSource)
+    assert config.source.image_field == "image"
+    with pytest.raises(ValidationError, match="exactly one of text_field / image_field"):
+        _parquet_image_source(text_field="t")
+    with pytest.raises(ValidationError, match="must be format='parquet'"):
+        _parquet_image_source(format="jsonl")
+    with pytest.raises(ValidationError, match="mask_field needs an image_field"):
+        HuggingFaceFilesSource(**{**_text_source().model_dump(), "mask_field": "m"})
+
+
+def _anomaly_config(**overrides: object) -> DeepLearningConfig:
+    bank = DlTrainBudget(batch_size=4, memory_bank_size=64)
+    fields = {
+        **_dl_config("image").model_dump(),
+        "task": "anomaly_detection",
+        "anomaly": DlAnomalyDetection(normal_label="a").model_dump(),
+        "training": DlTraining(gpu=bank, cpu=bank, calibration_holdout_fraction=0.3).model_dump(),
+    }
+    return DeepLearningConfig(**{**fields, **overrides})  # type: ignore[arg-type]
+
+
+def test_anomaly_detection_task_is_valid_without_epochs() -> None:
+    config = _anomaly_config()
+    assert config.task == "anomaly_detection"
+    assert config.training.gpu.epochs is None
+
+
+def test_anomaly_detection_task_validation() -> None:
+    with pytest.raises(ValidationError, match="modality='image' and an `anomaly` block"):
+        _anomaly_config(anomaly=None)
+    with pytest.raises(ValidationError, match="normal_label 'z' is not a label key"):
+        _anomaly_config(anomaly={"normal_label": "z"})
+    with pytest.raises(ValidationError, match="exactly two labels"):
+        _anomaly_config(labels=[{"key": k, "label": k} for k in "abc"])
+    with pytest.raises(ValidationError, match="calibration_holdout_fraction > 0"):
+        _anomaly_config(training={"gpu": {"batch_size": 1, "memory_bank_size": 64}, "cpu": {"batch_size": 1, "memory_bank_size": 64}})
+    with pytest.raises(ValidationError, match="training.cpu needs memory_bank_size"):
+        _anomaly_config(
+            training={
+                "gpu": {"batch_size": 1, "memory_bank_size": 64},
+                "cpu": {"batch_size": 1},
+                "calibration_holdout_fraction": 0.3,
+            }
+        )
+
+
+def test_classification_task_needs_epochs_and_no_anomaly_block() -> None:
+    with pytest.raises(ValidationError, match="training.gpu needs epochs and learning_rate"):
+        DeepLearningConfig(
+            **{**_dl_config().model_dump(), "training": {"gpu": {"batch_size": 1}, "cpu": BUDGET.model_dump()}}
+        )
+    with pytest.raises(ValidationError, match="only for task='anomaly_detection'"):
+        DeepLearningConfig(**{**_dl_config("image").model_dump(), "anomaly": {"normal_label": "a"}})
 
 
 def test_labels_must_be_unique() -> None:
@@ -503,6 +577,16 @@ def test_triage_board_must_route_every_label_exactly_once() -> None:
         _dl_scenario(ui_extras=TriageBoardExtra(lanes=[TriageLane(key="x", label="X", labels=["a", "b", "z"])]))
 
 
+def test_triage_board_also_serves_image_scenarios() -> None:
+    """An inspection line is a triage board of images: pass / reject / manual review."""
+    board = TriageBoardExtra(
+        lanes=[TriageLane(key="pass", label="Pass", labels=["a"]), TriageLane(key="reject", label="Reject", labels=["b"])],
+        item_noun="part",
+        reviewer_noun="inspector",
+    )
+    assert _dl_scenario(deep_learning=_anomaly_config(), ui_extras=board).ui_extras == board
+
+
 def test_reading_room_needs_an_image_scenario_and_a_real_positive_label() -> None:
     image = _dl_config("image")
     assert _dl_scenario(deep_learning=image, ui_extras=ReadingRoomExtra(positive_label="b")).ui_extras is not None
@@ -522,6 +606,9 @@ def test_ui_extras_kinds_are_scoped_to_their_scenario_kind() -> None:
 def test_sample_ids_and_image_keys() -> None:
     assert image_key(gallery_sample_id(3)) == "images/s-3.png"
     assert image_key(reference_sample_id(12)) == "images/r-12.png"
+    assert mask_key(gallery_sample_id(3)) == "masks/s-3.png"
+    with pytest.raises(ValueError, match="Invalid sample id"):
+        mask_key("../s-1")
     for bad in ["../x", "s-", "x-1", "s-1/../../y", "s-1234567"]:
         with pytest.raises(ValueError, match="Invalid sample id"):
             image_key(bad)
@@ -533,7 +620,7 @@ def test_repo_deep_learning_scenarios_load() -> None:
     from ai_circus_shared.scenario_schema import resolve_scenarios
 
     scenarios = resolve_scenarios(Path(__file__).parents[3] / "scenarios", "", kind="deep_learning")
-    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia"}
+    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia", "pcb_visual_inspection"}
 
 
 def test_resolve_scenarios_ignores_other_kinds_it_cannot_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]

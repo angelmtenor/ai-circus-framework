@@ -13,6 +13,7 @@ evaluates the file this returns.
 
 from __future__ import annotations
 
+import os
 import warnings
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def export_onnx(task: Task, example: Split, out_dir: Path, *, quantize: bool) ->
     Returns:
         Path of the model file to deploy.
     """
-    wrapper, inputs, input_names, dynamic_axes = task.export_spec(example)
+    wrapper, inputs, input_names, output_names, dynamic_axes = task.export_spec(example)
     wrapper.eval()
     fp32_path = out_dir / "model_fp32.onnx"
     with torch.no_grad(), warnings.catch_warnings():
@@ -44,7 +45,7 @@ def export_onnx(task: Task, example: Split, out_dir: Path, *, quantize: bool) ->
             inputs,
             str(fp32_path),
             input_names=input_names,
-            output_names=["logits", "embedding"],
+            output_names=output_names,
             dynamic_axes=dynamic_axes,
             opset_version=ONNX_OPSET,
             dynamo=False,
@@ -62,7 +63,13 @@ def export_onnx(task: Task, example: Split, out_dir: Path, *, quantize: bool) ->
 
 
 def open_session(path: Path) -> ort.InferenceSession:
-    """A CPU session configured like dl-inference's (same numerics as production)."""
+    """A CPU session configured like dl-inference's (same numerics as production).
+
+    At most half the cores: onnxruntime otherwise spins a thread per core, and a host run
+    evaluating a large graph (the anomaly detector's kNN over its memory bank) starved
+    the co-located k3d node until it went NotReady and restarted every pod.
+    """
     options = ort.SessionOptions()
     options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    options.intra_op_num_threads = max(1, (os.cpu_count() or 2) // 2)
     return ort.InferenceSession(str(path), sess_options=options, providers=["CPUExecutionProvider"])

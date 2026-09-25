@@ -99,7 +99,10 @@ service instance serves every scenario of a given kind**: `prediction` and `assi
 `rag-agent` does the same for `conversational_rag`, `form-agent` for `assisted_form`, and the optional
 `dl-inference` (onnxruntime-only, k8s/deep-learning/ overlay) for `deep_learning` — whose models come from
 the one-shot `dl-training` (GPU when available; ONNX export + calibration; artifact contract in
-`libs/shared/src/ai_circus_shared/deep_learning.py`), rendered by the generic `DeepLearningView`. `ui-react` mirrors
+`libs/shared/src/ai_circus_shared/deep_learning.py`), rendered by the generic `DeepLearningView`.
+A `deep_learning` scenario is either `task: classification` (fine-tune) or `task: anomaly_detection`
+(image only: frozen DINOv2 + normal-patch memory bank, `dl-training`'s `core/anomaly.py` — one ONNX
+graph with a third `anomaly_map` output, so `dl-inference` needs no per-task code). `ui-react` mirrors
 this on the frontend — `ScenarioPicker` renders whatever the entitlements API returns, and
 `TabularView`/`RagView`/`AssistedFormView` are generic renderers driven entirely by each scenario's
 `ScenarioSummary` (feature schema, form config, chat context) — there is no per-scenario UI code.

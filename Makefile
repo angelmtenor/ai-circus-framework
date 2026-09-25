@@ -18,8 +18,8 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
 	k3s-data-platform-up k3s-data-platform-down \
-	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv \
-	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-all-dl k3s-gpu-smoke
+	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly \
+	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -381,14 +381,17 @@ k3s-portforward-stop: ## Stop the standing platform-registry port-forward starte
 	fi
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
-# `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia)
-# fine-tune Hugging Face models: minutes on a GPU, far longer on a CPU — so training only
+# `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,
+# scenarios/pcb_visual_inspection) fine-tune Hugging Face models — or, for
+# `task: anomaly_detection`, build a memory bank from a frozen one: minutes on a GPU,
+# far longer on a CPU — so training only
 # ever runs from these explicit targets (or the admin console's Platform → Deep Learning
 # tab). `dl-train-*` trains on THIS machine (its GPU, if any) and publishes to the running
 # stack's SeaweedFS; the k3s-dl-* targets below deploy the separate dl-inference service.
 
 DL_SCENARIO_NLP ?= symptom_triage
 DL_SCENARIO_CV  ?= chest_xray_pneumonia
+DL_SCENARIO_ANOMALY ?= pcb_visual_inspection
 
 dl-gpu-check: ## Report whether this machine has an NVIDIA GPU dl-train-* can use (and what the k3s cluster exposes)
 	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then \
@@ -409,6 +412,9 @@ dl-train-nlp: ## Fine-tune the NLP scenario (BioClinical ModernBERT, symptom tri
 dl-train-cv: ## Fine-tune the computer-vision scenario (ConvNeXt V2, chest X-ray) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_CV)"
 
+dl-train-anomaly: ## Build the CV anomaly detector (frozen DINOv2 + memory bank, PCB inspection) on this machine's GPU
+	@./scripts/dl_train_host.sh "$(DL_SCENARIO_ANOMALY)"
+
 # dl-training image's torch build: auto = the CUDA build when the cluster advertises
 # nvidia.com/gpu (it still runs on CPU), else the ~1 GB smaller CPU build; or force cpu|gpu.
 DL_TRAINING_TORCH ?= auto
@@ -423,7 +429,7 @@ k3s-dl-build: ## Build + import the Deep Learning images (dl-inference, dl-train
 k3s-dl-up: ## Deploy the optional Deep Learning overlay (k8s/deep-learning/: dl-inference) and wait for it — models come from `make dl-train*` / k3s-dl-train-*
 	@kubectl apply -k k8s/deep-learning
 	@kubectl -n ai-circus rollout status deployment/dl-inference --timeout=180s
-	@echo "✓ dl-inference up — http://dl-inference.localhost (healthz); the healthcare scenarios appear in http://aiopen.localhost"
+	@echo "✓ dl-inference up — http://dl-inference.localhost (healthz); the deep-learning scenarios appear in http://aiopen.localhost"
 
 k3s-dl-down: ## Remove the Deep Learning overlay (trained models stay in SeaweedFS)
 	@kubectl delete -k k8s/deep-learning --ignore-not-found
@@ -437,6 +443,9 @@ k3s-dl-train-nlp: ## In-cluster Job for the NLP scenario (see k3s-dl-train)
 
 k3s-dl-train-cv: ## In-cluster Job for the computer-vision scenario (see k3s-dl-train)
 	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_CV)
+
+k3s-dl-train-anomaly: ## In-cluster Job for the CV anomaly-detection scenario (see k3s-dl-train)
+	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_ANOMALY)
 
 k3s-all-dl: k3s-all k3s-dl-build k3s-dl-up ## `k3s-all` + the Deep Learning overlay (no training — run `make dl-train` on a GPU host, or the admin console's Train button)
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up with the Deep Learning overlay — train models with 'make dl-train' (GPU) if not done yet"

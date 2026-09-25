@@ -661,7 +661,7 @@ def test_deep_learning_status_lists_every_dl_scenario_with_cluster_gpus(
     assert body["available"] is True
     assert body["cluster_gpus"] == 1
     by_slug = {job["scenario_slug"]: job for job in body["jobs"]}
-    assert set(by_slug) == {"symptom_triage", "chest_xray_pneumonia"}
+    assert set(by_slug) == {"symptom_triage", "chest_xray_pneumonia", "pcb_visual_inspection"}
     assert by_slug["chest_xray_pneumonia"]["job_name"] == "dl-training-chest-xray-pneumonia"
     assert by_slug["chest_xray_pneumonia"]["modality"] == "image"
     assert by_slug["symptom_triage"]["state"] == "succeeded"

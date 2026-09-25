@@ -1,10 +1,10 @@
 """Real-but-tiny deep-learning artifacts for dl-inference's tests — no network, no torch.
 
 Builds genuine ONNX graphs with onnx.helper (same I/O contract dl-training exports:
-`logits` + `embedding`), a genuine `tokenizers` WordLevel tokenizer with [MASK], and
-the manifest/checksum layout of ai_circus_shared.deep_learning, stored in an in-memory
-ObjectStore stand-in — so onnxruntime, checksum verification and the explanations run
-for real in tests.
+`logits` + `embedding`, plus `anomaly_map` for an anomaly detector), a genuine
+`tokenizers` WordLevel tokenizer with [MASK], and the manifest/checksum layout of
+ai_circus_shared.deep_learning, stored in an in-memory ObjectStore stand-in — so
+onnxruntime, checksum verification and the explanations run for real in tests.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from ai_circus_shared.deep_learning import (
     DL_SAMPLES_KEY,
     DL_TOKENIZER_KEY,
     image_key,
+    mask_key,
 )
 from ai_circus_shared.tabular_ml import artifact_checksum
 from onnx import TensorProto, helper, numpy_helper
@@ -151,6 +152,40 @@ def _image_onnx() -> bytes:
     return onnx.helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)], ir_version=10).SerializeToString()
 
 
+def _anomaly_onnx() -> bytes:
+    """A stand-in anomaly detector: the 4x4 map is each 4x4-pixel cell's mean intensity
+    (normalized, so a black cell is -1 and a white one +1); the image's anomaly logit is
+    the map's peak — the bright top-left quadrant is "the defect".
+    """
+    nodes = [
+        helper.make_node("ReduceMean", ["pixel_values", "c"], ["gray"], keepdims=1),  # (b, 1, 16, 16)
+        helper.make_node("AveragePool", ["gray"], ["pooled_map"], kernel_shape=[4, 4], strides=[4, 4]),
+        helper.make_node("Squeeze", ["pooled_map", "c"], ["anomaly_map"]),  # (b, 4, 4)
+        helper.make_node("ReduceMax", ["anomaly_map", "hw_map"], ["peak"], keepdims=0),  # (b,)
+        helper.make_node("Unsqueeze", ["peak", "c"], ["pos"]),  # (b, 1)
+        helper.make_node("Neg", ["pos"], ["neg"]),
+        helper.make_node("Concat", ["neg", "pos"], ["logits"], axis=1),
+        helper.make_node("ReduceMean", ["pixel_values", "hw"], ["pooled"], keepdims=0),
+        helper.make_node("LpNormalization", ["pooled"], ["embedding"], axis=1, p=2),
+    ]
+    graph = helper.make_graph(
+        nodes,
+        "tiny-anomaly",
+        [helper.make_tensor_value_info("pixel_values", TensorProto.FLOAT, ["batch", 3, IMAGE_SIZE, IMAGE_SIZE])],
+        [
+            helper.make_tensor_value_info("logits", TensorProto.FLOAT, ["batch", 2]),
+            helper.make_tensor_value_info("embedding", TensorProto.FLOAT, ["batch", 3]),
+            helper.make_tensor_value_info("anomaly_map", TensorProto.FLOAT, ["batch", 4, 4]),
+        ],
+        initializer=[
+            numpy_helper.from_array(np.array([1], dtype=np.int64), "c"),
+            numpy_helper.from_array(np.array([2, 3], dtype=np.int64), "hw"),
+            numpy_helper.from_array(np.array([1, 2], dtype=np.int64), "hw_map"),
+        ],
+    )
+    return onnx.helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)], ir_version=10).SerializeToString()
+
+
 def png(image: np.ndarray) -> bytes:
     """uint8 array -> PNG bytes."""
     buffer = io.BytesIO()
@@ -172,7 +207,18 @@ def _embeddings(rows: np.ndarray) -> bytes:
 
 
 def publish(store: MemoryStore, org_id: str, modality: str, **metadata_overrides: Any) -> dict[str, Any]:
-    """Write a complete, checksummed artifact set (manifest last) for one tiny model."""
+    """Write a complete, checksummed artifact set (manifest last) for one tiny model.
+    `modality="anomaly"` = an image anomaly detector (task=anomaly_detection) with a
+    ground-truth mask for its defective sample.
+    """
+    anomaly = modality == "anomaly"
+    if anomaly:
+        modality = "image"
+        metadata_overrides = {
+            "task": "anomaly_detection",
+            "anomaly": {"map_floor": 0.0, "map_ceiling": 1.0},
+            **metadata_overrides,
+        }
     if modality == "text":
         blobs = {
             "model": (DL_MODEL_KEY, _text_onnx()),
@@ -199,12 +245,14 @@ def publish(store: MemoryStore, org_id: str, modality: str, **metadata_overrides
         preprocessing = {"max_length": 32, "pad_token_id": 0, "mask_token_id": 4}
         labels = TEXT_LABELS
     else:
+        samples = [{"id": "s-0", "label": "1", "probs": [0.1, 0.9]}]
+        if anomaly:
+            samples = [{**samples[0], "has_mask": True}, {"id": "s-1", "label": "0", "probs": [0.8, 0.2]}]
+            store.put(org_id, mask_key("s-0"), png(bright_quadrant_image()))
+            store.put(org_id, image_key("s-1"), png(np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.uint8)))
         blobs = {
-            "model": (DL_MODEL_KEY, _image_onnx()),
-            "samples": (
-                DL_SAMPLES_KEY,
-                json.dumps({"samples": [{"id": "s-0", "label": "1", "probs": [0.1, 0.9]}]}).encode(),
-            ),
+            "model": (DL_MODEL_KEY, _anomaly_onnx() if anomaly else _image_onnx()),
+            "samples": (DL_SAMPLES_KEY, json.dumps({"samples": samples}).encode()),
             "reference": (DL_REFERENCE_KEY, json.dumps({"ids": ["r-0"], "labels": ["1"], "texts": None}).encode()),
             "reference_embeddings": (
                 DL_REFERENCE_EMBEDDINGS_KEY,

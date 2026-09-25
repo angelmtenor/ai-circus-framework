@@ -49,6 +49,7 @@ deep_learning:
   input_label: "Frontal chest X-ray"
   target_label: "Screening finding"
   target_description: "Whether the X-ray shows radiographic signs of pneumonia — a prioritization aid for a radiologist, never a diagnosis."
+  disclaimer: "Demonstration only — not a medical device and not clinically validated. Never use it for a real diagnosis."
   image_size: 224
   occlusion_grid: 8
   quantize: false

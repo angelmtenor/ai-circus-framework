@@ -12,6 +12,7 @@ import numpy as np
 import onnxruntime as ort
 import pytest
 from ai_circus_shared.deep_learning import (
+    DL_MASKS_PREFIX,
     DL_METADATA_KEY,
     DL_MODEL_KEY,
     DL_REFERENCE_EMBEDDINGS_KEY,
@@ -26,6 +27,8 @@ from dl_training.core import pipeline
 from dl_training.core.device import resolve_device
 from tests.fixtures import (
     MemoryStore,
+    anomaly_config,
+    anomaly_parquet_files,
     image_config,
     image_npz_bytes,
     scenario,
@@ -113,6 +116,52 @@ def test_image_scenario_end_to_end(tmp_path: Path) -> None:
     assert len(pngs) == 4 + 6  # gallery + reference
     assert all(store.objects[k].startswith(b"\x89PNG") for k in pngs)
     assert "tokenizer" not in manifest["checksums"]
+
+
+def test_anomaly_detection_scenario_end_to_end(tmp_path: Path) -> None:
+    """Parquet images -> normal-only memory bank -> Platt on the calibration hold-out ->
+    one ONNX graph with an anomaly map -> image + pixel metrics -> masks published.
+    """
+    store = MemoryStore()
+    seed_cache(tmp_path, anomaly_parquet_files())
+    manifest = pipeline.train_scenario(
+        scenario(anomaly_config()),
+        store,  # type: ignore[arg-type]
+        org_id="demo",
+        device=resolve_device("cpu"),
+        cache_dir=tmp_path,
+        task_builder=tiny_task,
+    )
+
+    assert store.objects[_key("raw/data/train.parquet")] == anomaly_parquet_files()["data/train.parquet"]
+    assert manifest["task"] == "anomaly_detection"
+    assert manifest["task_type"] == "image_anomaly_detection"
+    assert manifest["history"] == [] and manifest["trainable_params"] == 0
+    # 16 good training parts: 4 carved out for validation, the rest fill the bank.
+    assert manifest["train_size"] == 12 and manifest["val_size"] == 4
+    # The labelled test pool: half calibrates P(defect), the other half is evaluated.
+    assert manifest["test_size"] == 8
+    anomaly = manifest["anomaly"]
+    assert anomaly["patch_grid"] == 4 and anomaly["top_k"] == 2
+    assert anomaly["patches_seen"] == 12 * 16 and anomaly["memory_bank_size"] == 48
+    assert anomaly["map_ceiling"] > anomaly["map_floor"]
+    assert anomaly["score_scale"] > 0  # higher distance to normal -> more likely defective
+    metrics = manifest["evaluation"]["metrics"]
+    assert {"auroc", "pixel_auroc", "accuracy"} <= set(metrics)
+    assert metrics["auroc"] >= 0.75  # a bright square is trivially "not normal"
+
+    samples = json.loads(store.objects[_key(DL_SAMPLES_KEY)])["samples"]
+    with_mask = [s["id"] for s in samples if s.get("has_mask")]
+    assert with_mask and all(s["label"] == "1" for s in samples if s.get("has_mask"))
+    masks = sorted(k for k in store.objects if k.startswith(_key(DL_MASKS_PREFIX)))
+    assert masks == sorted(_key(f"masks/{sid}.png") for sid in with_mask)
+    reference = json.loads(store.objects[_key(DL_REFERENCE_KEY)])
+    assert set(reference["labels"]) == {"0"}  # "closest known-good parts"
+
+    session = ort.InferenceSession(store.objects[_key(DL_MODEL_KEY)], providers=["CPUExecutionProvider"])
+    assert [o.name for o in session.get_outputs()] == ["logits", "embedding", "anomaly_map"]
+    logits, embedding, anomaly_map = session.run(None, {"pixel_values": np.zeros((2, 3, 32, 32), np.float32)})
+    assert logits.shape == (2, 2) and embedding.shape == (2, 16) and anomaly_map.shape == (2, 4, 4)
 
 
 def test_a_failing_digest_stops_the_pipeline_before_training(tmp_path: Path) -> None:

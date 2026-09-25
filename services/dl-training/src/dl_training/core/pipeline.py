@@ -6,6 +6,11 @@ download/verify data -> pick device + budget -> fine-tune (label-smoothed) -> ex
 ONNX (+quantize) -> calibrate a temperature on the exported model's validation logits
 -> evaluate the calibrated, *exported* model on the held-out test split -> embed a
 reference set for similar-case retrieval -> upload artifacts + manifest -> MLflow.
+
+task: anomaly_detection swaps only the "fine-tune" step: a memory bank of normal patch
+features is built instead (core/anomaly.py), P(anomalous) is fitted on the calibration
+hold-out before export, and pixel-level localization is scored against the masks.
+Everything after the export is the same code path as for a classifier.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from ai_circus_shared.scenario_schema import DeepLearningConfig, ScenarioDefinit
 from ai_circus_shared.storage import ObjectStore
 
 from dl_training.core import artifacts, calibration, data, export, metrics, mlflow_tracking
+from dl_training.core.anomaly import AnomalyTask, pixel_auroc
 from dl_training.core.device import DeviceInfo, budget_for
 from dl_training.core.logger import get_logger
 from dl_training.core.tasks import Task, TextTask, build_task, freeze_lower_layers
@@ -75,8 +81,10 @@ def train_scenario(
     raw_paths = data.ensure_raw(store, org_id, dl, cache_dir)
     dataset = data.load_dataset(dl, raw_paths)
     budget = budget_for(dl.training, device)
-    train_rows = data.stratified_indices(dataset.train.labels, budget.max_train_samples, dl.training.seed)
-    train = dataset.train.take(train_rows)
+    pool = dataset.train
+    if dl.anomaly is not None:  # one-class: the memory bank must only ever see normal samples
+        pool = pool.take(np.flatnonzero(pool.labels == label_keys.index(dl.anomaly.normal_label)))
+    train = pool.take(data.stratified_indices(pool.labels, budget.max_train_samples, dl.training.seed))
     logger.info(
         "{}: train={} (of {}) val={} test={} on {} ({})",
         definition.slug,
@@ -89,20 +97,28 @@ def train_scenario(
     )
 
     task = task_builder(dl, cache_dir / "hf", dataset.train.inputs)
-    trainable, total = freeze_lower_layers(task.model, budget.trainable_layers)
-    logger.info("{}: training {:,} of {:,} parameters", definition.slug, trainable, total)
+    calibration_set, test = _calibration_and_test_splits(dl, dataset)
     train_started = time.monotonic()
-    history = fine_tune(
-        task,
-        train,
-        dataset.val,
-        budget,
-        device,
-        n_classes=len(label_keys),
-        weighted_loss=dl.training.class_weighted_loss,
-        seed=dl.training.seed,
-        label_smoothing=dl.training.label_smoothing,
-    )
+    history: list[Any] = []
+    anomaly_summary: dict[str, Any] | None = None
+    if isinstance(task, AnomalyTask):
+        trainable, total = 0, sum(p.numel() for p in task.model.parameters())
+        fit = task.fit_memory_bank(train, dataset.val, calibration_set, budget, device, seed=dl.training.seed)
+        anomaly_summary = task.summary(fit)
+    else:
+        trainable, total = freeze_lower_layers(task.model, budget.trainable_layers)
+        logger.info("{}: training {:,} of {:,} parameters", definition.slug, trainable, total)
+        history = fine_tune(
+            task,
+            train,
+            dataset.val,
+            budget,
+            device,
+            n_classes=len(label_keys),
+            weighted_loss=dl.training.class_weighted_loss,
+            seed=dl.training.seed,
+            label_smoothing=dl.training.label_smoothing,
+        )
     training_seconds = time.monotonic() - train_started
     # The model is back on CPU: release cached CUDA blocks and the optimizer's garbage
     # before the memory-hungry ONNX export/quantization.
@@ -119,21 +135,26 @@ def train_scenario(
         # Calibrate on the deployed artifact's own logits — on the validation split, or on
         # a held-out slice of the test pool when that pool is distribution-shifted — then
         # evaluate the calibrated probabilities on test data never used for either.
-        calibration_set, test = _calibration_and_test_splits(dl, dataset)
         calib_logits, _ = task.onnx_predict(session, calibration_set)
         temperature = calibration.fit_temperature(calib_logits, calibration_set.labels)
-        test_logits, _ = task.onnx_predict(session, test)
+        test_maps = None
+        if isinstance(task, AnomalyTask):
+            test_logits, _, test_maps = task.onnx_predict_with_maps(session, test)
+        else:
+            test_logits, _ = task.onnx_predict(session, test)
         test_probs = calibration.calibrated_probs(test_logits, temperature)
         uncalibrated_ece = metrics.calibration(calibration.calibrated_probs(test_logits, 1.0), test.labels)[0]
         logger.info("{}: temperature {} (test ECE uncalibrated {})", definition.slug, temperature, uncalibrated_ece)
         evaluation = metrics.evaluate_predictions(test_probs, test.labels, label_keys)
         evaluation["metrics"]["ece_uncalibrated"] = uncalibrated_ece
+        if test_maps is not None and (localization := pixel_auroc(test_maps, test.masks)) is not None:
+            evaluation["metrics"]["pixel_auroc"] = localization
         logger.info("{}: deployed-model test metrics {}", definition.slug, evaluation["metrics"])
 
         gallery_rows = data.stratified_indices(test.labels, dl.gallery_size, dl.training.seed)
-        reference = dataset.train.take(
-            data.stratified_indices(dataset.train.labels, dl.reference_size, dl.training.seed)
-        )
+        # Similar-case search: for an anomaly detector the reference set is the (normal)
+        # training pool — "the closest known-good parts".
+        reference = pool.take(data.stratified_indices(pool.labels, dl.reference_size, dl.training.seed))
         _, reference_embeddings = task.onnx_predict(session, reference)
         published = artifacts.Published(
             gallery=test.take(gallery_rows),
@@ -145,7 +166,12 @@ def train_scenario(
             "scenario_slug": definition.slug,
             "org_id": org_id,
             "modality": dl.modality,
-            "task_type": "text_classification" if dl.modality == "text" else "image_classification",
+            "task": dl.task,
+            "task_type": (
+                "image_anomaly_detection"
+                if dl.task == "anomaly_detection"
+                else f"{'text' if dl.modality == 'text' else 'image'}_classification"
+            ),
             "base_model": dl.base_model,
             "base_model_revision": dl.base_model_revision,
             "base_model_params": dl.base_model_params,
@@ -156,7 +182,7 @@ def train_scenario(
             "trainable_params": trainable,
             "total_params": total,
             "train_size": len(train),
-            "train_size_available": len(dataset.train),
+            "train_size_available": len(pool),
             "val_size": len(dataset.val),
             "test_size": len(test),
             "calibration_set": (
@@ -165,6 +191,7 @@ def train_scenario(
                 else f"validation split ({len(calibration_set)})"
             ),
             "history": [record.__dict__ for record in history],
+            "anomaly": anomaly_summary,
             "evaluation": evaluation,
             "quantized": dl.quantize,
             # dl-inference divides every logit by this before softmax (see core/calibration.py).

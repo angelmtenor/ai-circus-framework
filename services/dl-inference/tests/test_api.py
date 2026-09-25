@@ -128,6 +128,18 @@ def test_predict_image_sample_and_modality_mismatch(image_client: TestClient) ->
     assert image_client.post("/predict/scn", json={"sample_id": "s-9"}).status_code == 404
 
 
+def test_anomaly_scenario_serves_masks_and_its_own_map() -> None:
+    client = _client("anomaly")
+    mask = client.get("/dataset/scn/masks/s-0")
+    assert mask.status_code == 200 and mask.content.startswith(b"\x89PNG")
+    assert client.get("/dataset/scn/masks/s-1").status_code == 404  # a good part: no mask
+    assert client.get("/dataset/scn/masks/../s-0").status_code == 404
+    body = client.post("/predict/scn", json={"sample_id": "s-0", "similar": 0}).json()
+    assert body["predicted"] == "1"
+    assert body["explanation"]["method"].startswith("patch anomaly map")
+    assert body["explanation"]["vmax"] == pytest.approx(1.0)
+
+
 def test_admin_runtime_requires_the_admin_token(text_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     config = SimpleNamespace(ADMIN_API_KEY=FakeSecret("adm"), ORT_THREADS="2")
     monkeypatch.setattr(api, "get_env_config", lambda: config)

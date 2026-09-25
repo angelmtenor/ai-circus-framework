@@ -656,7 +656,7 @@ services:
         condition: service_started
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 1536m  # ~0.9 GB with all three deep_learning models loaded
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dl-inference.rule=Host(`dl-inference.localhost`)"

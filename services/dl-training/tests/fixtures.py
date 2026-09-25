@@ -1,6 +1,7 @@
 """Offline, tiny stand-ins for dl-training's tests: scenario configs pointing at local
 raw files, a memory ObjectStore, and genuinely tiny Hugging Face models (ModernBERT /
-ConvNeXt V2 built from configs, a real `tokenizers` vocabulary) — so the whole
+ConvNeXt V2 / DINOv2-with-registers built from configs, a real `tokenizers`
+vocabulary) — so the whole
 download -> fine-tune -> ONNX export -> evaluate -> publish pipeline runs for real,
 in seconds, with no network.
 """
@@ -16,6 +17,7 @@ from ai_circus_shared.scenario_schema import (
     ChatConfig,
     DeepLearningConfig,
     DeepLearningServices,
+    DlAnomalyDetection,
     DlLabel,
     DlTrainBudget,
     DlTraining,
@@ -25,6 +27,7 @@ from ai_circus_shared.scenario_schema import (
 )
 from tokenizers import Tokenizer, models, pre_tokenizers, processors
 
+from dl_training.core.anomaly import AnomalyTask, anomaly_task_for
 from dl_training.core.tasks import ImagePreprocessing, ImageTask, TextTask
 
 VOCAB = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]", "fever", "rash", "sneezing", "nose", "i", "have", "a", "and"]
@@ -164,6 +167,7 @@ def seed_cache(cache_dir: Path, files: dict[str, bytes]) -> None:
     """Pre-populate the local raw-data cache (so no download is attempted)."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     for name, data in files.items():
+        (cache_dir / name).parent.mkdir(parents=True, exist_ok=True)
         (cache_dir / name).write_bytes(data)
 
 
@@ -217,6 +221,112 @@ def tiny_image_task(dl: DeepLearningConfig, *_: object) -> ImageTask:
     )
 
 
-def tiny_task(dl: DeepLearningConfig, cache_dir: Path, sample_inputs: object) -> TextTask | ImageTask:
+def png(array: np.ndarray) -> bytes:
+    """uint8 array -> PNG bytes."""
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.fromarray(array).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def anomaly_parquet_files(size: int = 48) -> dict[str, bytes]:
+    """A VisA-like Hub Parquet pair: train = 16 good parts (dark noise), test = 8 good +
+    8 defective (a bright square somewhere), with defect masks; `{bytes, path}` image
+    structs exactly like the Hub's Image feature. Stored at a different resolution than
+    the model's input, so the loader's resize is exercised too.
+    """
+    import io
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    rng = np.random.default_rng(1)
+
+    def rows(n_good: int, n_bad: int) -> bytes:
+        images, masks, labels = [], [], []
+        for i in range(n_good + n_bad):
+            image = rng.integers(0, 40, size=(size, size, 3), dtype=np.uint8)
+            mask = None
+            if i >= n_good:
+                mask_array = np.zeros((size, size), dtype=np.uint8)
+                top, left = rng.integers(0, size - 12, size=2)
+                image[top : top + 12, left : left + 12] = 230
+                mask_array[top : top + 12, left : left + 12] = 255
+                mask = {"bytes": png(mask_array), "path": f"{i}.png"}
+            images.append({"bytes": png(image), "path": f"{i}.png"})
+            masks.append(mask)
+            labels.append(int(i >= n_good))
+        buffer = io.BytesIO()
+        pq.write_table(pa.table({"image": images, "mask": masks, "label": labels}), buffer)
+        return buffer.getvalue()
+
+    return {"data/train.parquet": rows(16, 0), "data/test.parquet": rows(8, 8)}
+
+
+def anomaly_config() -> DeepLearningConfig:
+    """A task=anomaly_detection config whose pinned digests match anomaly_parquet_files()."""
+    files = anomaly_parquet_files()
+    bank = DlTrainBudget(batch_size=4, memory_bank_size=48)
+    return DeepLearningConfig(
+        modality="image",
+        task="anomaly_detection",
+        anomaly=DlAnomalyDetection(normal_label="0", top_k_fraction=0.1),
+        bucket="b",
+        source=HuggingFaceFilesSource(
+            repo="org/visa",
+            revision="abc",
+            format="parquet",
+            files={"train": "data/train.parquet", "test": "data/test.parquet"},
+            sha256={name: sha256(data) for name, data in files.items()},
+            image_field="image",
+            mask_field="mask",
+            label_field="label",
+        ),
+        labels=[DlLabel(key="0", label="Good"), DlLabel(key="1", label="Defective")],
+        base_model="tiny/vit",
+        base_model_revision="r1",
+        base_model_params="8K",
+        input_label="Part photo",
+        target_label="Inspection result",
+        image_size=32,
+        training=DlTraining(gpu=bank, cpu=bank, val_fraction=0.25, calibration_holdout_fraction=0.5),
+        gallery_size=8,
+        reference_size=6,
+    )
+
+
+def tiny_anomaly_task(dl: DeepLearningConfig, *_: object) -> AnomalyTask:
+    """A 2-layer, 16-dim DINOv2-with-registers (8-px patches -> a 4x4 grid at 32 px)."""
+    from transformers import Dinov2WithRegistersConfig, Dinov2WithRegistersModel
+
+    config = Dinov2WithRegistersConfig(
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        intermediate_size=32,
+        patch_size=8,
+        image_size=24,  # != the input's 32 px: the position grid must be resampled (and baked)
+        num_register_tokens=2,
+    )
+    import torch
+
+    torch.manual_seed(0)
+    return anomaly_task_for(
+        dl,
+        Dinov2WithRegistersModel(config).eval(),
+        patch_size=8,
+        prefix_tokens=3,
+        dim=16,
+        anomaly_index=1,
+        normalization=((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    )
+
+
+def tiny_task(dl: DeepLearningConfig, cache_dir: Path, sample_inputs: object) -> TextTask | ImageTask | AnomalyTask:
     """task_builder for pipeline.train_scenario that never touches the Hub."""
+    if dl.task == "anomaly_detection":
+        return tiny_anomaly_task(dl)
     return tiny_text_task(dl) if dl.modality == "text" else tiny_image_task(dl)
