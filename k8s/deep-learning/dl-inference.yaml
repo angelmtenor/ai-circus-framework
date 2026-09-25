@@ -34,7 +34,9 @@ spec:
             - secretRef: {name: dl-inference-secrets}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
-            limits: {cpu: "4", memory: 1Gi}
+            # ~0.9 GB RSS with all three models loaded (the anomaly detector's kNN over its
+            # 16k-patch memory bank alone needs ~300 MB of onnxruntime arena).
+            limits: {cpu: "4", memory: 1536Mi}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           readinessProbe:

@@ -150,6 +150,24 @@ def sample_image(
     return Response(content=data, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/dataset/{scenario_slug}/masks/{sample_id}")
+def sample_mask(
+    sample_id: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_definition),
+    cache: DlModelCache = Depends(_cache),
+) -> Response:
+    """One published gallery sample's ground-truth defect mask (white = defect) — only
+    samples flagged `has_mask` in samples.json have one.
+    """
+    model = _model(identity, definition, cache)
+    if not model.samples_by_id.get(sample_id, {}).get("has_mask"):
+        raise HTTPException(status_code=404, detail=f"No ground-truth mask for sample {sample_id!r}.")
+    assert identity.org_id is not None
+    data = cache.image(identity.org_id, definition.slug, sample_id, mask=True)
+    return Response(content=data, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
+
 def _text_input(body: PredictRequest, model: LoadedModel) -> str:
     """The text to score: a published sample's, or the request's own (validated)."""
     if body.image_base64 is not None:
@@ -201,6 +219,8 @@ def predict(
             scored = inference.score_image(model, image)
 
             def explain(target: int) -> dict[str, Any]:
+                if scored.anomaly_map is not None:  # the detector's own map, whatever the target
+                    return inference.explain_anomaly(model, scored.anomaly_map)
                 return inference.explain_image(model, image, target, scored.logits)
 
         predicted = int(scored.probs.argmax())

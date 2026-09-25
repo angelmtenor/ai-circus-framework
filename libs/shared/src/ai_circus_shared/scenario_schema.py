@@ -337,11 +337,13 @@ class TriageLane(BaseModel):
 
 
 class TriageBoardExtra(BaseModel):
-    """Opt-in 5th workspace tab for a text `deep_learning` scenario: a live board where
-    incoming messages (the held-out test split, replayed client-side every
+    """Opt-in 5th workspace tab for a `deep_learning` scenario (text or image): a live
+    board where incoming items (the held-out test split, replayed client-side every
     `tick_seconds`) are routed by the model's top prediction into `lanes`; anything
     below `confidence_threshold` goes to a human-review lane instead (selective
-    prediction). See ui-react's TriageBoardView.tsx — the single generic renderer.
+    prediction) — a patient-message triage board, or a visual-inspection line's
+    pass / reject / manual-inspection split. See ui-react's TriageBoardView.tsx — the
+    single generic renderer; the wording fields below are its only domain vocabulary.
     """
 
     kind: Literal["triage_board"] = "triage_board"
@@ -349,6 +351,12 @@ class TriageBoardExtra(BaseModel):
     review_lane_label: str = "Human review"
     confidence_threshold: float = Field(default=0.6, ge=0, le=1)
     tick_seconds: int = Field(default=4, ge=1)
+    tab_label: str = "Triage Board"
+    title: str = "Live triage board"
+    item_noun: str = "item"  # singular, e.g. "patient message" / "part" ("s" appended for plurals)
+    reviewer_noun: str = "human reviewer"  # who decides the review lane, e.g. "clinician" / "inspector"
+    critical_kpi_label: str = "Critical caught"  # KPI for the `tone: critical` lane, if any
+    note: str | None = None  # shown under the title, e.g. "Illustrative routing only — not clinical guidance."
 
 
 class ReadingRoomExtra(BaseModel):
@@ -380,9 +388,12 @@ _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
 
 class HuggingFaceFilesSource(BaseModel):
-    """Raw text data fetched from a public Hugging Face Hub *dataset* repo at a pinned
-    commit, file by file (JSON Lines), each checked against its SHA-256 — so a
-    re-download can never silently train on different data than the one reviewed.
+    """Raw data fetched from a public Hugging Face Hub *dataset* repo at a pinned
+    commit, file by file, each checked against its SHA-256 — so a re-download can never
+    silently train on different data than the one reviewed. Text: JSON Lines rows with
+    `text_field`. Images: Parquet rows whose `image_field` is the Hub's standard Image
+    feature (`{bytes, path}`), optionally with a ground-truth defect `mask_field` of the
+    same shape — the layout almost every image dataset on the Hub already uses.
     """
 
     type: Literal["huggingface_files"] = "huggingface_files"
@@ -392,7 +403,10 @@ class HuggingFaceFilesSource(BaseModel):
     # missing "validation" split is carved out of "train" (DlTraining.val_fraction).
     files: dict[str, str]
     sha256: dict[str, str]  # file name -> expected hex digest
-    text_field: str
+    format: Literal["jsonl", "parquet"] = "jsonl"
+    text_field: str | None = None
+    image_field: str | None = None
+    mask_field: str | None = None  # image only: per-pixel ground truth (anomaly localization)
     label_field: str
 
     @model_validator(mode="after")
@@ -402,6 +416,12 @@ class HuggingFaceFilesSource(BaseModel):
         missing = set(self.files.values()) - set(self.sha256)
         if missing:
             raise ValueError(f"huggingface_files source has no sha256 for {sorted(missing)}.")
+        if (self.text_field is None) == (self.image_field is None):
+            raise ValueError("huggingface_files source needs exactly one of text_field / image_field.")
+        if self.image_field is not None and self.format != "parquet":
+            raise ValueError("huggingface_files image sources must be format='parquet'.")
+        if self.mask_field is not None and self.image_field is None:
+            raise ValueError("huggingface_files mask_field needs an image_field.")
         return self
 
 
@@ -429,16 +449,21 @@ class DlLabel(BaseModel):
 
 
 class DlTrainBudget(BaseModel):
-    """Fine-tuning hyper-parameters for one device class. `max_train_samples` (None =
+    """Training hyper-parameters for one device class. `max_train_samples` (None =
     all) and `trainable_layers` (None = full fine-tune, N = only the top N encoder
     blocks plus the classification head) are the knobs that keep a CPU run tractable.
+
+    `task: classification` needs `epochs` + `learning_rate` (gradient fine-tuning);
+    `task: anomaly_detection` trains nothing — it needs `memory_bank_size` instead (how
+    many normal patch features the greedy coreset keeps; see DlAnomalyDetection).
     """
 
-    epochs: int = Field(ge=1)
+    epochs: int | None = Field(default=None, ge=1)
     batch_size: int = Field(ge=1)
-    learning_rate: float = Field(gt=0)
+    learning_rate: float | None = Field(default=None, gt=0)
     max_train_samples: int | None = Field(default=None, ge=1)
     trainable_layers: int | None = Field(default=None, ge=0)
+    memory_bank_size: int | None = Field(default=None, ge=16)
 
 
 class DlTraining(BaseModel):
@@ -463,6 +488,24 @@ class DlTraining(BaseModel):
     calibration_holdout_fraction: float = Field(default=0.0, ge=0, lt=0.9)
 
 
+class DlAnomalyDetection(BaseModel):
+    """`task: anomaly_detection` (image only): one-class visual anomaly detection that
+    learns from *normal* samples only — how industrial inspection is set up, since
+    defects are rare, varied and mostly unseen at training time. dl-training runs no
+    gradient step: a frozen self-supervised backbone (e.g. DINOv2) embeds every
+    14x14-pixel patch of the normal training images, a greedy k-center coreset keeps
+    `memory_bank_size` of them (PatchCore, Roth et al. CVPR 2022), and a patch's anomaly
+    score is its cosine distance to the nearest normal patch (AnomalyDINO, Damm et al.
+    WACV 2025). The image score is the mean of the top `top_k_fraction` patch scores,
+    mapped to P(anomaly) by a logistic fit on the calibration hold-out. The whole thing
+    — backbone, memory bank, kNN, map — is one ONNX graph, so dl-inference serves it
+    with no extra code, and its anomaly map *is* the explanation (no occlusion passes).
+    """
+
+    normal_label: str  # key of the defect-free class in `labels`; the other one is "anomalous"
+    top_k_fraction: float = Field(default=0.01, gt=0, le=1)
+
+
 class DeepLearningConfig(BaseModel):
     """Everything dl-training/dl-inference need for a `deep_learning` scenario: where
     the public data comes from, the Hugging Face base model it is fine-tuned from
@@ -470,6 +513,12 @@ class DeepLearningConfig(BaseModel):
     """
 
     modality: Literal["text", "image"]
+    # classification = supervised fine-tune (every class has labelled training data);
+    # anomaly_detection = learn "normal" only, flag anything else (DlAnomalyDetection).
+    task: Literal["classification", "anomaly_detection"] = "classification"
+    anomaly: DlAnomalyDetection | None = None
+    # Shown on the scenario tab, e.g. "Not a medical device …" — None = no disclaimer.
+    disclaimer: str | None = None
     bucket: str
     source: DlDataSource
     labels: list[DlLabel] = Field(min_length=2)
@@ -497,12 +546,47 @@ class DeepLearningConfig(BaseModel):
 
     @model_validator(mode="after")
     def _modality_matches_source(self) -> DeepLearningConfig:
-        expected = "huggingface_files" if self.modality == "text" else "npz_images"
-        if self.source.type != expected:
-            raise ValueError(f"modality={self.modality!r} needs a {expected!r} source, got {self.source.type!r}.")
+        source = self.source
+        if self.modality == "text":
+            ok = isinstance(source, HuggingFaceFilesSource) and source.text_field is not None
+            expected = "a huggingface_files source with text_field"
+        else:
+            ok = isinstance(source, NpzImagesSource) or source.image_field is not None
+            expected = "an npz_images source, or huggingface_files with image_field"
+        if not ok:
+            raise ValueError(f"modality={self.modality!r} needs {expected}.")
         keys = [label.key for label in self.labels]
         if len(set(keys)) != len(keys):
             raise ValueError("deep_learning.labels keys must be unique.")
+        return self
+
+    @model_validator(mode="after")
+    def _task_settings(self) -> DeepLearningConfig:
+        """Each task gets exactly the knobs it uses — an anomaly detector has no epochs,
+        a fine-tune has no memory bank — so a typo'd scenario fails at seed time, not
+        halfway through a GPU run.
+        """
+        budgets = {"gpu": self.training.gpu, "cpu": self.training.cpu}
+        if self.task == "classification":
+            if self.anomaly is not None:
+                raise ValueError("deep_learning.anomaly is only for task='anomaly_detection'.")
+            for name, budget in budgets.items():
+                if budget.epochs is None or budget.learning_rate is None:
+                    raise ValueError(f"training.{name} needs epochs and learning_rate for task='classification'.")
+            return self
+        if self.modality != "image" or self.anomaly is None:
+            raise ValueError("task='anomaly_detection' needs modality='image' and an `anomaly` block.")
+        if len(self.labels) != 2:
+            raise ValueError("task='anomaly_detection' needs exactly two labels (normal, anomalous).")
+        if self.anomaly.normal_label not in {label.key for label in self.labels}:
+            raise ValueError(f"anomaly.normal_label {self.anomaly.normal_label!r} is not a label key.")
+        if not self.training.calibration_holdout_fraction:
+            # The training (and validation) data are normal-only: P(anomaly) can only be
+            # fitted on a slice of the labelled test pool.
+            raise ValueError("task='anomaly_detection' needs training.calibration_holdout_fraction > 0.")
+        for name, budget in budgets.items():
+            if budget.memory_bank_size is None:
+                raise ValueError(f"training.{name} needs memory_bank_size for task='anomaly_detection'.")
         return self
 
 
@@ -741,8 +825,6 @@ class ScenarioDefinition(BaseModel):
             return self
         keys = [label.key for label in dl.labels]
         if isinstance(extras, TriageBoardExtra):
-            if dl.modality != "text":
-                raise ValueError("ui_extras.triage_board requires modality='text'.")
             routed = [key for lane in extras.lanes for key in lane.labels]
             unknown = set(routed) - set(keys)
             if unknown:

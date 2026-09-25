@@ -59,6 +59,7 @@ deep_learning:
   input_label: "Patient's own description of their symptoms"
   target_label: "Suggested condition"
   target_description: "The most likely of 22 common conditions given the described symptoms — a triage hint for a clinician, never a diagnosis."
+  disclaimer: "Demonstration only — not a medical device and not clinically validated. Never use it for a real diagnosis."
   max_length: 128
   quantize: true
   input_examples:
@@ -108,6 +109,11 @@ ui_extras:
   confidence_threshold: 0.6
   review_lane_label: "Nurse review"
   tick_seconds: 4
+  title: "Live triage board"
+  item_noun: "patient message"
+  reviewer_noun: "clinician"
+  critical_kpi_label: "Urgent caught"
+  note: "Illustrative routing only — not clinical guidance."
   lanes:
     - key: urgent
       label: "Urgent — same-day clinician"

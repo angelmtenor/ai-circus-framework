@@ -9,7 +9,7 @@ type Category = {
 
 // Mirrors scenario_schema.Industry (libs/shared) — order here is the dropdown's
 // display order, not just a lookup table.
-const INDUSTRY_LABELS: Record<string, string> = {
+export const INDUSTRY_LABELS: Record<string, string> = {
   banking_finance: "Banking & Finance",
   manufacturing_industry: "Manufacturing & Industry",
   energy_utilities: "Energy & Utilities",

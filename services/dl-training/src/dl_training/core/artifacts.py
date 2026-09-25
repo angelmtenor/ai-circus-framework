@@ -27,6 +27,7 @@ from ai_circus_shared.deep_learning import (
     DL_TOKENIZER_KEY,
     gallery_sample_id,
     image_key,
+    mask_key,
     reference_sample_id,
 )
 from ai_circus_shared.storage import ObjectStore
@@ -85,6 +86,8 @@ def samples_document(published: Published, label_keys: list[str]) -> dict[str, A
         }
         if isinstance(published.gallery.inputs, list):
             sample["text"] = published.gallery.inputs[i]
+        if published.gallery.masks is not None and published.gallery.masks[i].any():
+            sample["has_mask"] = True
         samples.append(sample)
     return {"samples": samples}
 
@@ -116,6 +119,11 @@ def upload(
                 put_with_retry(store, org_id, image_key(make_id(i)), png_bytes(image))
     if isinstance(published.gallery.inputs, np.ndarray):
         logger.info("Uploaded {} gallery + {} reference images", len(published.gallery), len(published.reference))
+    if published.gallery.masks is not None:
+        # Ground-truth defect masks, for the UI to overlay next to the model's own map.
+        for i, mask in enumerate(published.gallery.masks):
+            if mask.any():
+                put_with_retry(store, org_id, mask_key(gallery_sample_id(i)), png_bytes(mask.astype(np.uint8) * 255))
 
     embeddings = io.BytesIO()
     np.save(embeddings, published.reference_embeddings.astype(np.float16), allow_pickle=False)

@@ -4,7 +4,8 @@
 
 The training loop (core/trainer.py), export (core/export.py) and artifact code are
 modality-agnostic; everything that differs between "BioClinical ModernBERT on symptom
-text" and "ConvNeXt V2 on chest X-rays" lives here behind one small interface:
+text" and "ConvNeXt V2 on chest X-rays" lives here (and, for task: anomaly_detection,
+in core/anomaly.py) behind one small interface:
 build the Hugging Face model, turn a Split into batches, wrap the model for ONNX export
 (logits + L2-normalized embedding), and run the exported ONNX graph with *exactly* the
 preprocessing dl-inference uses — so every metric in metadata.json is a metric of the
@@ -116,14 +117,19 @@ class ImageExportWrapper(nn.Module):
 class Task(Protocol):
     """What the modality-agnostic pipeline needs from a modality."""
 
-    model: nn.Module
+    @property
+    def model(self) -> nn.Module:
+        """The PyTorch model (read-only here, so a Task may hold a more specific Module)."""
+        ...
 
     def batches(self, split: Split, batch_size: int, *, shuffle: bool, augment: bool, seed: int) -> Iterator[Batch]:
         """Yield (model kwargs, labels) batches of `split`."""
         ...
 
-    def export_spec(self, example: Split) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], dict[str, Any]]:
-        """(wrapper, example inputs, input names, dynamic axes) for torch.onnx.export."""
+    def export_spec(
+        self, example: Split
+    ) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], list[str], dict[str, Any]]:
+        """(wrapper, example inputs, input names, output names, dynamic axes) for torch.onnx.export."""
         ...
 
     def onnx_predict(self, session: ort.InferenceSession, split: Split) -> tuple[np.ndarray, np.ndarray]:
@@ -161,7 +167,9 @@ class TextTask:
             rows = order[start : start + batch_size]
             yield self._encode([split.inputs[i] for i in rows]), torch.as_tensor(split.labels[rows])
 
-    def export_spec(self, example: Split) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], dict[str, Any]]:
+    def export_spec(
+        self, example: Split
+    ) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], list[str], dict[str, Any]]:
         """Dynamic batch and sequence axes, so dl-inference can pad per request."""
         assert isinstance(example.inputs, list)
         encoded = self._encode(example.inputs[:2])
@@ -171,6 +179,7 @@ class TextTask:
             TextExportWrapper(self.model),
             (encoded["input_ids"], encoded["attention_mask"]),
             list(ONNX_TEXT_INPUTS),
+            [ONNX_LOGITS_OUTPUT, ONNX_EMBEDDING_OUTPUT],
             dynamic,
         )
 
@@ -277,16 +286,15 @@ class ImageTask:
                 pixels = augment_images(pixels, rng)
             yield {"pixel_values": pixels}, torch.as_tensor(split.labels[rows])
 
-    def export_spec(self, example: Split) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], dict[str, Any]]:
+    def export_spec(
+        self, example: Split
+    ) -> tuple[nn.Module, tuple[torch.Tensor, ...], list[str], list[str], dict[str, Any]]:
         """Dynamic batch axis only — dl-inference always resizes to `size`."""
         assert isinstance(example.inputs, np.ndarray)
         pixels = torch.from_numpy(self.preprocessing.to_pixels(example.inputs[:2]))
-        dynamic = {
-            ONNX_IMAGE_INPUT: {0: "batch"},
-            ONNX_LOGITS_OUTPUT: {0: "batch"},
-            ONNX_EMBEDDING_OUTPUT: {0: "batch"},
-        }
-        return ImageExportWrapper(self.model), (pixels,), [ONNX_IMAGE_INPUT], dynamic
+        outputs = [ONNX_LOGITS_OUTPUT, ONNX_EMBEDDING_OUTPUT]
+        dynamic = {name: {0: "batch"} for name in [ONNX_IMAGE_INPUT, *outputs]}
+        return ImageExportWrapper(self.model), (pixels,), [ONNX_IMAGE_INPUT], outputs, dynamic
 
     def onnx_predict(self, session: ort.InferenceSession, split: Split) -> tuple[np.ndarray, np.ndarray]:
         """Raw logits + embeddings, with the same preprocessing dl-inference applies."""
@@ -344,18 +352,30 @@ def build_text_task(dl: DeepLearningConfig, cache_dir: Path) -> TextTask:
     return TextTask(model=model, tokenizer=tokenizer, max_length=dl.max_length)
 
 
-def build_image_task(dl: DeepLearningConfig, cache_dir: Path, source_mode: str) -> ImageTask:
-    """Download (once, cached) the pinned base model and replace its ImageNet head."""
+def read_normalization(
+    dl: DeepLearningConfig, cache_dir: Path
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """(mean, std) the pinned base model was pre-trained with. Only these constants are
+    needed — read from its preprocessor_config.json rather than AutoImageProcessor
+    (which pulls torchvision).
+    """
     from huggingface_hub import hf_hub_download
-    from transformers import AutoModelForImageClassification
 
-    id2label, label2id = _labels_maps(dl)
-    # Only the normalization constants are needed — read them from the pinned
-    # preprocessor_config.json rather than AutoImageProcessor (which pulls torchvision).
     processor_path = hf_hub_download(
         dl.base_model, "preprocessor_config.json", revision=dl.base_model_revision, cache_dir=cache_dir
     )
     processor = json.loads(Path(processor_path).read_text())
+    mean = processor.get("image_mean", (0.485, 0.456, 0.406))
+    std = processor.get("image_std", (0.229, 0.224, 0.225))
+    return (float(mean[0]), float(mean[1]), float(mean[2])), (float(std[0]), float(std[1]), float(std[2]))
+
+
+def build_image_task(dl: DeepLearningConfig, cache_dir: Path, source_mode: str) -> ImageTask:
+    """Download (once, cached) the pinned base model and replace its ImageNet head."""
+    from transformers import AutoModelForImageClassification
+
+    id2label, label2id = _labels_maps(dl)
+    mean, std = read_normalization(dl, cache_dir)
     model = AutoModelForImageClassification.from_pretrained(
         dl.base_model,
         revision=dl.base_model_revision,
@@ -365,14 +385,16 @@ def build_image_task(dl: DeepLearningConfig, cache_dir: Path, source_mode: str) 
         label2id=label2id,
         ignore_mismatched_sizes=True,
     )
-    mean = tuple(float(v) for v in processor.get("image_mean", (0.485, 0.456, 0.406)))
-    std = tuple(float(v) for v in processor.get("image_std", (0.229, 0.224, 0.225)))
-    preprocessing = ImagePreprocessing(size=dl.image_size, mean=mean, std=std, source_mode=source_mode)  # type: ignore[arg-type]
+    preprocessing = ImagePreprocessing(size=dl.image_size, mean=mean, std=std, source_mode=source_mode)
     return ImageTask(model=model, preprocessing=preprocessing)
 
 
 def build_task(dl: DeepLearningConfig, cache_dir: Path, sample_inputs: np.ndarray | list[str]) -> Task:
-    """The Task for this scenario's modality (grayscale sources keep "L" mode)."""
+    """The Task for this scenario's task/modality (grayscale sources keep "L" mode)."""
+    if dl.task == "anomaly_detection":
+        from dl_training.core.anomaly import build_anomaly_task  # anomaly.py imports this module
+
+        return build_anomaly_task(dl, cache_dir)
     if dl.modality == "text":
         return build_text_task(dl, cache_dir)
     assert isinstance(sample_inputs, np.ndarray)

@@ -83,6 +83,24 @@ def test_image_prediction_and_occlusion_heatmap_finds_the_hotspot() -> None:
     assert np.abs(grid[2:, :]).max() < 1e-6 and np.abs(grid[:, 2:]).max() < 1e-6
 
 
+def test_anomaly_detector_explains_with_its_own_map_on_a_fixed_scale() -> None:
+    model = _model("anomaly")
+    assert inference.has_anomaly_map(model) and not inference.has_anomaly_map(_model("image"))
+    scored = inference.score_image(model, bright_quadrant_image())
+    assert scored.anomaly_map is not None and scored.anomaly_map.shape == (4, 4)
+    assert int(scored.probs.argmax()) == 1
+    explanation = inference.explain_anomaly(model, scored.anomaly_map)
+    grid = np.array(explanation["grid"])
+    assert explanation["vmax"] == pytest.approx(1.0) and explanation["peak_distance"] == pytest.approx(1.0)
+    assert np.allclose(grid[:2, :2], 1.0)  # the defect: at/above the ceiling
+    assert np.allclose(grid[2:, :], 0.0) and np.allclose(grid[:, 2:], 0.0)  # normal: below the floor
+    # A defect-free part shows no heat at all (not its least-typical patch rescaled to max).
+    clean = inference.score_image(model, np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.uint8))
+    assert clean.anomaly_map is not None
+    assert not np.array(inference.explain_anomaly(model, clean.anomaly_map)["grid"]).any()
+    assert int(clean.probs.argmax()) == 0
+
+
 def test_decode_image_resizes_converts_and_rejects_garbage() -> None:
     preprocessing = {"size": IMAGE_SIZE, "source_mode": "L"}
     rgb = np.zeros((40, 30, 3), dtype=np.uint8)

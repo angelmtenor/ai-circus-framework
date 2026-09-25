@@ -96,6 +96,7 @@ def fine_tune(
     Returns:
         One EpochRecord per epoch.
     """
+    assert budget.epochs is not None and budget.learning_rate is not None  # classification budgets
     torch.manual_seed(seed)
     model = task.model.to(device.torch_device)
     weights = class_weights(train.labels, n_classes).to(device.torch_device) if weighted_loss else None

@@ -23,6 +23,12 @@ import { config } from "./config";
 
 export type LabelInfo = { key: string; label: string; description?: string | null };
 
+/** task=anomaly_detection: learned from normal samples only; the explanation is the
+ * detector's own anomaly map on a fixed scale (no heat = normal). */
+export function isAnomaly(scenario: ScenarioSummary): boolean {
+  return scenario.deep_learning?.task === "anomaly_detection";
+}
+
 export function labelsOf(scenario: ScenarioSummary): LabelInfo[] {
   return scenario.deep_learning?.labels ?? [];
 }
@@ -84,19 +90,26 @@ export function useDlSamples(slug: string, accessToken: string | null): Loadable
   return useLoad(async () => (await dlSamples(config.dlInferenceUrl, slug, accessToken)).samples, [slug, accessToken]);
 }
 
-// Module-level: an X-ray is fetched once per session, however many tabs show it.
+// Module-level: an image is fetched once per session, however many tabs show it.
 const imageUrls = new Map<string, Promise<string>>();
 
-export function useDlImage(slug: string, sampleId: string | null, accessToken: string | null): string | null {
+/** A published sample's image — or, with kind="masks", its ground-truth defect mask
+ * (only for samples flagged `has_mask`) — as an object URL. */
+export function useDlImage(
+  slug: string,
+  sampleId: string | null,
+  accessToken: string | null,
+  kind: "images" | "masks" = "images",
+): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!sampleId) {
       setUrl(null);
       return;
     }
-    const key = `${slug}/${sampleId}`;
+    const key = `${slug}/${kind}/${sampleId}`;
     if (!imageUrls.has(key)) {
-      const pending = dlImageBlob(config.dlInferenceUrl, slug, sampleId, accessToken).then((b) => URL.createObjectURL(b));
+      const pending = dlImageBlob(config.dlInferenceUrl, slug, sampleId, accessToken, kind).then((b) => URL.createObjectURL(b));
       pending.catch(() => imageUrls.delete(key));
       imageUrls.set(key, pending);
     }
@@ -108,7 +121,7 @@ export function useDlImage(slug: string, sampleId: string | null, accessToken: s
     return () => {
       cancelled = true;
     };
-  }, [slug, sampleId, accessToken]);
+  }, [slug, sampleId, accessToken, kind]);
   return url;
 }
 
@@ -231,15 +244,19 @@ function heatColor(v: number): [number, number, number, number] {
 }
 
 /**
- * The X-ray (or any image) with its occlusion heatmap over it, upsampled smoothly
- * from the N x N grid. Only positive evidence (regions whose removal lowers the
- * explained class's log-odds) is painted. `windowLevel` = CSS brightness/contrast, the
- * radiology "window/level" a reader adjusts; `zoom` scales from the center.
+ * An image (X-ray, part photo…) with its explanation heatmap over it, upsampled
+ * smoothly from the N x N grid. Only positive evidence (regions whose removal lowers the
+ * explained class's log-odds, or an anomaly map's abnormal patches) is painted —
+ * relative to the grid's own peak, or to a fixed `vmax` (anomaly maps: no heat means
+ * normal). `maskSrc` outlines a ground-truth defect mask on top. brightness/contrast =
+ * the "window/level" a radiograph reader adjusts; `zoom` scales from the center.
  */
 export function HeatmapImage({
   src,
   grid,
   opacity,
+  vmax,
+  maskSrc = null,
   brightness = 1,
   contrast = 1,
   zoom = 1,
@@ -249,6 +266,8 @@ export function HeatmapImage({
   src: string | null;
   grid: number[][] | null;
   opacity: number;
+  vmax?: number;
+  maskSrc?: string | null;
   brightness?: number;
   contrast?: number;
   zoom?: number;
@@ -256,6 +275,7 @@ export function HeatmapImage({
   size?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const maskRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -264,7 +284,10 @@ export function HeatmapImage({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!grid || grid.length === 0) return;
     const n = grid.length;
-    const max = Math.max(1e-9, ...grid.flat());
+    const max = vmax ?? Math.max(1e-9, ...grid.flat());
+    // Fixed-scale (anomaly) maps: a square-root display gamma, so a subtle defect a few
+    // patches wide (peaking at ~half the scale) is still clearly visible; 0 stays 0.
+    const gamma = vmax !== undefined ? 0.5 : 1;
     const small = document.createElement("canvas");
     small.width = n;
     small.height = n;
@@ -272,7 +295,7 @@ export function HeatmapImage({
     const img = sctx.createImageData(n, n);
     grid.forEach((row, r) =>
       row.forEach((v, c) => {
-        const [R, G, B, A] = heatColor(Math.max(0, v) / max);
+        const [R, G, B, A] = heatColor(Math.min(1, Math.max(0, v) / max) ** gamma);
         const o = (r * n + c) * 4;
         img.data.set([R, G, B, A], o);
       }),
@@ -281,7 +304,25 @@ export function HeatmapImage({
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(small, 0, 0, canvas.width, canvas.height);
-  }, [grid]);
+  }, [grid, vmax]);
+
+  useEffect(() => {
+    const canvas = maskRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!maskSrc) return;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      drawMaskOutline(ctx, img, canvas.width);
+    };
+    img.src = maskSrc;
+    return () => {
+      cancelled = true;
+    };
+  }, [maskSrc]);
 
   const filter = `brightness(${brightness}) contrast(${contrast})${invert ? " invert(1)" : ""}`;
   return (
@@ -289,18 +330,49 @@ export function HeatmapImage({
       <div className="dl-heatmap-inner" style={{ transform: `scale(${zoom})` }}>
         {src ? <img src={src} alt="Model input" style={{ filter }} draggable={false} /> : <div className="dl-image-placeholder" />}
         <canvas ref={canvasRef} width={size} height={size} style={{ opacity }} />
+        <canvas ref={maskRef} width={size} height={size} />
       </div>
     </div>
   );
 }
 
-export function HeatmapLegend() {
+/** Paint a 2-px outline of the white region of a binary mask image — the ground truth
+ * stays readable on top of the heatmap instead of hiding it. */
+function drawMaskOutline(ctx: CanvasRenderingContext2D, mask: HTMLImageElement, size: number) {
+  const scratch = document.createElement("canvas");
+  scratch.width = size;
+  scratch.height = size;
+  const sctx = scratch.getContext("2d")!;
+  sctx.drawImage(mask, 0, 0, size, size);
+  const src = sctx.getImageData(0, 0, size, size).data;
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < size && y < size && src[(y * size + x) * 4] > 127;
+  const out = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!inside(x, y)) continue;
+      const edge = [-2, -1, 1, 2].some((d) => !inside(x + d, y) || !inside(x, y + d));
+      if (edge) out.data.set([34, 211, 238, 255], (y * size + x) * 4);
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+export function HeatmapLegend({ low = "less", high = "more evidence" }: { low?: string; high?: string }) {
   return (
     <div className="dl-heat-legend">
-      <span>less</span>
+      <span>{low}</span>
       <span className="dl-heat-legend-ramp" />
-      <span>more evidence</span>
+      <span>{high}</span>
     </div>
+  );
+}
+
+/** Legend for the ground-truth outline drawn by HeatmapImage's `maskSrc`. */
+export function MaskLegend() {
+  return (
+    <span className="dl-heat-legend">
+      <span className="dl-mask-swatch" /> ground-truth defect
+    </span>
   );
 }
 
@@ -441,7 +513,7 @@ export function fileToBase64(file: File): Promise<string> {
 
 // ── lightbox ──────────────────────────────────────────────────────────────────
 
-export type LightboxItem = { id: string; label: string; probs?: number[] };
+export type LightboxItem = { id: string; label: string; probs?: number[]; has_mask?: boolean };
 
 /**
  * Full-screen viewer for published images (gallery / similar cases): large image,
@@ -467,7 +539,9 @@ export function ImageLightbox({
   const item = items[index];
   const src = useDlImage(scenario.slug, item?.id ?? null, accessToken);
   const [showHeat, setShowHeat] = useState(false);
-  const [grid, setGrid] = useState<number[][] | null>(null);
+  const [showMask, setShowMask] = useState(false);
+  const maskSrc = useDlImage(scenario.slug, showMask && item?.has_mask ? item.id : null, accessToken, "masks");
+  const [grid, setGrid] = useState<{ grid: number[][]; vmax?: number } | null>(null);
   const [explaining, setExplaining] = useState(false);
   const explainable = item?.id.startsWith("s-") ?? false;
 
@@ -487,7 +561,7 @@ export function ImageLightbox({
     let cancelled = false;
     setExplaining(true);
     dlPredict(config.dlInferenceUrl, scenario.slug, { sample_id: item.id, similar: 0 }, accessToken)
-      .then((r) => !cancelled && r.explanation?.type === "heatmap" && setGrid(r.explanation.grid))
+      .then((r) => !cancelled && r.explanation?.type === "heatmap" && setGrid({ grid: r.explanation.grid, vmax: r.explanation.vmax }))
       .catch(() => undefined)
       .finally(() => !cancelled && setExplaining(false));
     return () => {
@@ -522,7 +596,14 @@ export function ImageLightbox({
           <button className="dl-lightbox-nav" disabled={index === 0} onClick={() => onIndex(index - 1)} aria-label="Previous">
             ‹
           </button>
-          <HeatmapImage src={src} grid={showHeat ? grid : null} opacity={0.5} size={size} />
+          <HeatmapImage
+            src={src}
+            grid={showHeat ? (grid?.grid ?? null) : null}
+            vmax={grid?.vmax}
+            maskSrc={item.has_mask ? maskSrc : null}
+            opacity={0.5}
+            size={size}
+          />
           <button className="dl-lightbox-nav" disabled={index >= items.length - 1} onClick={() => onIndex(index + 1)} aria-label="Next">
             ›
           </button>
@@ -534,7 +615,12 @@ export function ImageLightbox({
               {explaining && <span className="panel-hint"> computing…</span>}
             </label>
           )}
-          {showHeat && <HeatmapLegend />}
+          {showHeat && <HeatmapLegend {...(isAnomaly(scenario) ? { low: "normal", high: "anomalous" } : {})} />}
+          {item.has_mask && (
+            <label className="dl-check">
+              <input type="checkbox" checked={showMask} onChange={(e) => setShowMask(e.target.checked)} /> Ground-truth defect
+            </label>
+          )}
           <span className="panel-hint">← → to browse · Esc to close</span>
         </div>
       </div>

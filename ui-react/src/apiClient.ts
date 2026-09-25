@@ -144,6 +144,13 @@ export type TriageBoardExtra = {
   review_lane_label: string;
   confidence_threshold: number;
   tick_seconds: number;
+  // Domain vocabulary — a patient-message triage board or a visual-inspection line.
+  tab_label: string;
+  title: string;
+  item_noun: string;
+  reviewer_noun: string;
+  critical_kpi_label: string;
+  note?: string | null;
 };
 export type ReadingRoomExtra = {
   kind: "reading_room";
@@ -159,14 +166,20 @@ export type UiExtras = RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra |
 // block, as seeded by platform-registry) — drives DeepLearningView.tsx.
 export type DlLabel = { key: string; label: string; description?: string | null };
 export type DlTrainBudget = {
-  epochs: number;
+  // classification only (anomaly_detection trains nothing — it has memory_bank_size)
+  epochs?: number | null;
   batch_size: number;
-  learning_rate: number;
+  learning_rate?: number | null;
   max_train_samples?: number | null;
   trainable_layers?: number | null;
+  memory_bank_size?: number | null;
 };
 export type DeepLearningConfig = {
   modality: "text" | "image";
+  // classification = supervised fine-tune; anomaly_detection = learns "normal" only.
+  task: "classification" | "anomaly_detection";
+  anomaly?: { normal_label: string; top_k_fraction: number } | null;
+  disclaimer?: string | null;
   labels: DlLabel[];
   base_model: string;
   base_model_revision: string;
@@ -880,6 +893,9 @@ export type DlModelInfo = {
   test_size: number;
   history: DlEpoch[];
   evaluation: DlEvaluation;
+  // task=anomaly_detection only (dl-training's core/anomaly.py summary).
+  task?: "classification" | "anomaly_detection";
+  anomaly?: DlAnomalySummary | null;
   quantized: boolean;
   // Post-hoc calibration (dl-training's core/calibration.py): logits are divided by this
   // before every softmax; absent on models trained before calibration existed.
@@ -893,11 +909,27 @@ export type DlModelInfo = {
   served_from_org: string;
   runtime: string;
 };
-export type DlSample = { id: string; label: string; probs: number[]; text?: string };
+export type DlAnomalySummary = {
+  method: string;
+  patch_grid: number;
+  patch_size_px: number;
+  top_k: number;
+  feature_dim: number;
+  normal_images: number;
+  patches_seen: number;
+  memory_bank_size: number;
+  map_floor: number;
+  map_ceiling: number;
+  fit_seconds: number;
+  decision_score: number | null;
+};
+// has_mask: a ground-truth defect mask is published for it (dlMaskBlob).
+export type DlSample = { id: string; label: string; probs: number[]; text?: string; has_mask?: boolean };
 export type DlTokenWeight = { text: string; start: number; end: number; weight: number | null };
 export type DlExplanation =
   | { type: "tokens"; method: string; tokens: DlTokenWeight[] }
-  | { type: "heatmap"; method: string; grid: number[][] };
+  // vmax: a fixed scale (anomaly maps: 1 = a typical defect) instead of the grid's own max.
+  | { type: "heatmap"; method: string; grid: number[][]; vmax?: number };
 export type DlSimilarCase = { id: string; label: string; similarity: number; text?: string };
 export type DlPrediction = {
   predicted: string;
@@ -932,8 +964,14 @@ export async function dlSamples(
 
 /** A published sample's PNG as a Blob — fetched with the bearer token (an <img src>
  * can't send one), then shown through an object URL (see dlShared.tsx's useDlImage). */
-export async function dlImageBlob(baseUrl: string, slug: string, sampleId: string, accessToken: string | null): Promise<Blob> {
-  const response = await fetch(`${baseUrl}/dataset/${slug}/images/${sampleId}`, {
+export async function dlImageBlob(
+  baseUrl: string,
+  slug: string,
+  sampleId: string,
+  accessToken: string | null,
+  kind: "images" | "masks" = "images",
+): Promise<Blob> {
+  const response = await fetch(`${baseUrl}/dataset/${slug}/${kind}/${sampleId}`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
   if (!response.ok) throw new Error(`Image ${sampleId} failed: ${response.status}`);

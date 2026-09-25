@@ -20,6 +20,9 @@ torch/autograd:
   supports the class, negative = it argues against it.
 - image: an N x N grid of patches, each blanked to the image's mean intensity in turn;
   the heatmap cell is the drop in the target's log-odds.
+- image, task=anomaly_detection: no perturbation at all — the graph's own `anomaly_map`
+  output (each patch's distance to the nearest normal patch) *is* the explanation,
+  rescaled so that what unseen normal parts reach shows no heat (see explain_anomaly).
 
 Every logit is first divided by the manifest's `temperature` (dl-training's post-hoc
 calibration), so probabilities here are the calibrated ones the model card reports.
@@ -44,7 +47,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from ai_circus_shared.deep_learning import ONNX_IMAGE_INPUT
+from ai_circus_shared.deep_learning import (
+    ONNX_ANOMALY_MAP_OUTPUT,
+    ONNX_EMBEDDING_OUTPUT,
+    ONNX_IMAGE_INPUT,
+    ONNX_LOGITS_OUTPUT,
+)
 from PIL import Image, UnidentifiedImageError
 
 from dl_inference.core.model_cache import LoadedModel
@@ -81,10 +89,11 @@ def log_odds(logits: np.ndarray, target: int) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Scored:
-    """One input's class probabilities and embedding."""
+    """One input's class probabilities and embedding (+ anomaly map, anomaly detectors only)."""
 
     logits: np.ndarray  # (n_classes,)
     embedding: np.ndarray  # (dim,)
+    anomaly_map: np.ndarray | None = None  # (grid, grid)
 
     @property
     def probs(self) -> np.ndarray:
@@ -235,20 +244,32 @@ def to_pixels(images: np.ndarray, preprocessing: dict[str, Any]) -> np.ndarray:
     return (x - mean) / std
 
 
-def _run_images(model: LoadedModel, images: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    all_logits, embeddings = [], []
-    for start in range(0, len(images), OCCLUSION_BATCH):
-        pixels = to_pixels(images[start : start + OCCLUSION_BATCH], model.metadata["preprocessing"])
-        logits, embedding = model.session.run(None, {ONNX_IMAGE_INPUT: pixels})
-        all_logits.append(np.asarray(logits))
-        embeddings.append(np.asarray(embedding))
-    return np.concatenate(all_logits) / _temperature(model), np.concatenate(embeddings)
+def has_anomaly_map(model: LoadedModel) -> bool:
+    """Whether the deployed graph is an anomaly detector (third `anomaly_map` output)."""
+    return any(output.name == ONNX_ANOMALY_MAP_OUTPUT for output in model.session.get_outputs())
+
+
+def _run_images(model: LoadedModel, images: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    with_map = has_anomaly_map(model)
+    names = [ONNX_LOGITS_OUTPUT, ONNX_EMBEDDING_OUTPUT] + ([ONNX_ANOMALY_MAP_OUTPUT] if with_map else [])
+    # An anomaly detector's kNN matrix (patches x memory bank) is large per image: one at a time.
+    batch = 1 if with_map else OCCLUSION_BATCH
+    all_logits, embeddings, maps = [], [], []
+    for start in range(0, len(images), batch):
+        pixels = to_pixels(images[start : start + batch], model.metadata["preprocessing"])
+        outputs = model.session.run(names, {ONNX_IMAGE_INPUT: pixels})
+        all_logits.append(np.asarray(outputs[0]))
+        embeddings.append(np.asarray(outputs[1]))
+        if with_map:
+            maps.append(np.asarray(outputs[2]))
+    anomaly_maps = np.concatenate(maps) if with_map else None
+    return np.concatenate(all_logits) / _temperature(model), np.concatenate(embeddings), anomaly_maps
 
 
 def score_image(model: LoadedModel, image: np.ndarray) -> Scored:
-    """Class probabilities + embedding of one preprocessed uint8 image."""
-    logits, embedding = _run_images(model, image[None])
-    return Scored(logits=logits[0], embedding=embedding[0])
+    """Class probabilities + embedding (+ anomaly map) of one preprocessed uint8 image."""
+    logits, embedding, maps = _run_images(model, image[None])
+    return Scored(logits=logits[0], embedding=embedding[0], anomaly_map=None if maps is None else maps[0])
 
 
 def explain_image(model: LoadedModel, image: np.ndarray, target: int, base_logits: np.ndarray) -> dict[str, Any]:
@@ -261,13 +282,32 @@ def explain_image(model: LoadedModel, image: np.ndarray, target: int, base_logit
     for r in range(grid):
         for c in range(grid):
             variants[r * grid + c, r * ph : (r + 1) * ph, c * pw : (c + 1) * pw] = fill
-    logits, _ = _run_images(model, variants)
+    logits, _, _ = _run_images(model, variants)
     base = float(log_odds(base_logits[None], target)[0])
     drops = (base - log_odds(logits, target)).reshape(grid, grid)
     return {
         "type": "heatmap",
         "method": f"occlusion sensitivity ({grid}x{grid} patches), log-odds drop",
         "grid": [[round(float(v), 5) for v in row] for row in drops],
+    }
+
+
+def explain_anomaly(model: LoadedModel, anomaly_map: np.ndarray) -> dict[str, Any]:
+    """The detector's own patch map, on a fixed scale: 0 up to `map_floor` (what 99% of
+    patches of unseen *normal* parts reach), 1 at `map_ceiling` (a typical defect's
+    peak) — so a good part shows no heat at all, instead of its least-typical patch
+    being painted as hot as a real defect would be.
+    """
+    info = model.metadata.get("anomaly") or {}
+    floor = float(info.get("map_floor", 0.0))
+    ceiling = max(float(info.get("map_ceiling", float(anomaly_map.max()) or 1.0)), floor + 1e-6)
+    grid = np.clip((anomaly_map - floor) / (ceiling - floor), 0.0, 1.0)
+    return {
+        "type": "heatmap",
+        "method": "patch anomaly map — distance of each patch to its nearest normal patch",
+        "grid": [[round(float(v), 4) for v in row] for row in grid],
+        "vmax": 1.0,
+        "peak_distance": round(float(anomaly_map.max()), 5),
     }
 
 

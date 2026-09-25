@@ -3,8 +3,8 @@ import { BarList, CHART_COLORS, MultiLineChart, StatTile } from "./charts";
 import { ConfusionMatrix, labelName, pct } from "./dlShared";
 
 /**
- * Understanding the deployed model: how training went (learning curves, where/how it
- * was trained), how well the *exported* model does on the held-out test split
+ * Understanding the deployed model: how training went (learning curves — or, for an
+ * anomaly detector, what went into its memory bank — and where/how it was trained), how well the *exported* model does on the held-out test split
  * (headline metrics, per-class F1, confusion matrix), whether its confidence can be
  * trusted (reliability diagram / ECE), and what abstaining on low-confidence cases buys
  * (accuracy-vs-coverage) — plus the ROC curve for binary tasks. Everything comes from
@@ -15,6 +15,8 @@ export function DlInsightsView({ scenario, model }: { scenario: ScenarioSummary;
   const binary = model.labels.length === 2;
   const epochs = model.history;
   const trainable = model.trainable_params === model.total_params ? "full fine-tune" : `top layers only (${pct(model.trainable_params / model.total_params, 0)} of weights)`;
+  const bank = model.anomaly;
+  const device = model.device.kind === "cuda" ? `GPU (${model.device.name})` : `CPU (${model.device.name})`;
 
   return (
     <div className="tab-panel">
@@ -29,9 +31,16 @@ export function DlInsightsView({ scenario, model }: { scenario: ScenarioSummary;
           <StatTile label="Macro F1" value={ev.metrics.macro_f1.toFixed(3)} info="Mean of per-class F1 — every class counts equally, however rare." />
           {ev.metrics.auroc !== undefined && (
             <StatTile
-              label="AUROC"
+              label={bank ? "Image AUROC" : "AUROC"}
               value={ev.metrics.auroc.toFixed(3)}
-              info={binary ? "Probability a random positive study is ranked above a random negative one." : "One-vs-rest, averaged over classes."}
+              info={binary ? "Probability a random positive case is ranked above a random negative one." : "One-vs-rest, averaged over classes."}
+            />
+          )}
+          {ev.metrics.pixel_auroc !== undefined && (
+            <StatTile
+              label="Pixel AUROC"
+              value={ev.metrics.pixel_auroc.toFixed(3)}
+              info="Localization quality: how well the anomaly map ranks the ground-truth defect pixels above everything else, over all held-out images."
             />
           )}
           <StatTile
@@ -42,12 +51,38 @@ export function DlInsightsView({ scenario, model }: { scenario: ScenarioSummary;
                 ? `${ev.metrics.ece_uncalibrated.toFixed(3)} before temperature scaling (T=${model.temperature.toFixed(2)})`
                 : undefined
             }
-            info="Expected calibration error: average gap between the model's confidence and its actual accuracy (0 = perfectly calibrated). Probabilities are calibrated with label smoothing during training plus a temperature fitted on the validation split, so '80% sure' means right about 80% of the time."
+            info={
+              bank
+                ? "Expected calibration error: average gap between the model's confidence and its actual accuracy (0 = perfectly calibrated). The defect probability is a logistic fit of the anomaly score on a labelled calibration slice, so '80% sure' means right about 80% of the time."
+                : "Expected calibration error: average gap between the model's confidence and its actual accuracy (0 = perfectly calibrated). Probabilities are calibrated with label smoothing during training plus a temperature fitted on held-out data, so '80% sure' means right about 80% of the time."
+            }
           />
         </div>
       </div>
 
       <div className="dl-insights-grid">
+        {bank && (
+          <div className="panel-card">
+            <h3>What the model learned from</h3>
+            <div className="kpi-row">
+              <StatTile label="Normal images" value={bank.normal_images.toLocaleString()} sub="no defect image used" />
+              <StatTile
+                label="Memory bank"
+                value={bank.memory_bank_size.toLocaleString()}
+                sub={`of ${bank.patches_seen.toLocaleString()} patch features`}
+                info="A greedy k-center coreset: the fewest patches that still cover every kind of normal patch seen in training (PatchCore)."
+              />
+              <StatTile label="Patch grid" value={`${bank.patch_grid}×${bank.patch_grid}`} sub={`${bank.patch_size_px} px patches · ${bank.feature_dim}-d features`} />
+            </div>
+            <p className="panel-hint">
+              No gradient step: the backbone stays frozen and only the memory bank is built — {Math.round(bank.fit_seconds)} s on{" "}
+              <strong>{device}</strong> with the {model.budget_kind} budget. The image score is the mean distance of its {bank.top_k} most
+              anomalous patches to their nearest normal patch; {bank.decision_score !== null && `P(defect) crosses 50% at a score of ${bank.decision_score.toFixed(3)}.`}
+            </p>
+          </div>
+        )}
+
+        {!bank && (
         <div className="panel-card">
           <h3>Learning curves</h3>
           <MultiLineChart
@@ -70,12 +105,13 @@ export function DlInsightsView({ scenario, model }: { scenario: ScenarioSummary;
             yFormatter={(v) => v.toFixed(2)}
           />
           <p className="panel-hint">
-            Trained on <strong>{model.device.kind === "cuda" ? `GPU (${model.device.name})` : `CPU (${model.device.name})`}</strong> with the{" "}
+            Trained on <strong>{device}</strong> with the{" "}
             {model.budget_kind} budget: {model.budget.epochs} epochs, batch {model.budget.batch_size}, learning rate {model.budget.learning_rate},{" "}
             {trainable}, {model.train_size.toLocaleString()} of {model.train_size_available.toLocaleString()} training examples — best
             validation epoch kept. {Math.round(model.training_seconds)} s of training.
           </p>
         </div>
+        )}
 
         <div className="panel-card">
           <h3>Per-class F1</h3>

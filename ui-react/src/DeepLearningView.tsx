@@ -7,15 +7,19 @@ import { DlPredictView } from "./DlPredictView";
 import { DlInsightsView } from "./DlInsightsView";
 import { TriageBoardView } from "./TriageBoardView";
 import { ReadingRoomView } from "./ReadingRoomView";
-import { DlModelUnavailable, labelsOf, pct, useDlModel } from "./dlShared";
+import { INDUSTRY_LABELS } from "./ScenarioPicker";
+import { DlModelUnavailable, isAnomaly, labelsOf, pct, useDlModel } from "./dlShared";
 import "./deepLearning.css";
 
 type Tab = "scenario" | "data" | "predict" | "insights" | "extra";
 
-const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: string }>> = {
-  triage_board: { icon: "chat", label: "Triage Board" },
-  reading_room: { icon: "scan", label: "Reading Room" },
-};
+// Tab chrome per ui_extras kind (a triage board names its own tab: it may be a
+// patient-message board or a visual-inspection line).
+function extraTab(extra: UiExtras | null | undefined, isImage: boolean): { icon: IconName; label: string } | undefined {
+  if (extra?.kind === "triage_board") return { icon: isImage ? "factory" : "chat", label: extra.tab_label };
+  if (extra?.kind === "reading_room") return { icon: "scan", label: "Reading Room" };
+  return undefined;
+}
 
 /**
  * Generic `deep_learning` workspace (NLP or computer vision), driven entirely by the
@@ -30,8 +34,8 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
 export function DeepLearningView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [tab, setTab] = useState<Tab>("scenario");
   const model = useDlModel(scenario.slug, accessToken);
-  const extra = scenario.ui_extras ? EXTRA_TABS[scenario.ui_extras.kind] : undefined;
   const isImage = scenario.deep_learning?.modality === "image";
+  const extra = extraTab(scenario.ui_extras, isImage);
 
   const needsModel = tab !== "scenario";
   return (
@@ -84,11 +88,15 @@ function formatDuration(seconds: number): string {
 function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model: DlModelInfo | null }) {
   const dl = scenario.deep_learning;
   const labels = labelsOf(scenario);
+  const anomaly = isAnomaly(scenario);
   const trainedOn = useMemo(() => {
     if (!model) return null;
     return model.device.kind === "cuda" ? `GPU · ${model.device.name}` : `CPU (reduced budget) · ${model.device.name}`;
   }, [model]);
   if (!dl) return null;
+  const taskPill =
+    dl.modality === "text" ? "NLP · text classification" : `Computer vision · ${anomaly ? "anomaly detection" : "image classification"}`;
+  const bank = model?.anomaly;
   return (
     <div className="tab-panel">
       <div className="panel-card">
@@ -97,9 +105,9 @@ function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model:
         </h3>
         <p style={{ marginTop: "-0.2rem" }}>{scenario.description}</p>
         <div className="scenario-meta-row">
-          <span className="scenario-meta-pill">Industry: Healthcare</span>
-          <span className="scenario-meta-pill">{dl.modality === "text" ? "NLP · text classification" : "Computer vision · image classification"}</span>
-          <span className="scenario-meta-pill">{labels.length} classes</span>
+          <span className="scenario-meta-pill">Industry: {INDUSTRY_LABELS[scenario.industry] ?? scenario.industry}</span>
+          <span className="scenario-meta-pill">{taskPill}</span>
+          <span className="scenario-meta-pill">{anomaly ? "learns from normal samples only" : `${labels.length} classes`}</span>
           <span className="scenario-meta-pill">Deep learning · Hugging Face</span>
         </div>
         {scenario.credits && (
@@ -111,9 +119,7 @@ function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model:
             {scenario.credits.note ? ` (${scenario.credits.note})` : ""}
           </p>
         )}
-        <p className="dl-disclaimer">
-          Demonstration only — not a medical device and not clinically validated. Never use it for a real diagnosis.
-        </p>
+        {dl.disclaimer && <p className="dl-disclaimer">{dl.disclaimer}</p>}
       </div>
 
       <div className="panel-card">
@@ -123,26 +129,44 @@ function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model:
           <StatTile label="Input" value={dl.modality === "text" ? `≤ ${dl.max_length} tokens` : `${dl.image_size}×${dl.image_size} px`} sub={dl.input_label} />
           {model ? (
             <>
-              <StatTile
-                label="Held-out accuracy"
-                value={pct(model.evaluation.metrics.accuracy)}
-                sub={`macro-F1 ${model.evaluation.metrics.macro_f1.toFixed(3)} · n=${model.evaluation.n}`}
-                highlight
-              />
+              {anomaly && model.evaluation.metrics.auroc !== undefined ? (
+                <StatTile
+                  label="Held-out AUROC"
+                  value={model.evaluation.metrics.auroc.toFixed(3)}
+                  sub={`accuracy ${pct(model.evaluation.metrics.accuracy)} · n=${model.evaluation.n}`}
+                  highlight
+                  info="Probability that a random defective sample scores as more anomalous than a random good one — the standard anomaly-detection metric, independent of any threshold."
+                />
+              ) : (
+                <StatTile
+                  label="Held-out accuracy"
+                  value={pct(model.evaluation.metrics.accuracy)}
+                  sub={`macro-F1 ${model.evaluation.metrics.macro_f1.toFixed(3)} · n=${model.evaluation.n}`}
+                  highlight
+                />
+              )}
               <StatTile label="Trained on" value={model.device.kind === "cuda" ? "GPU" : "CPU"} sub={trainedOn ?? ""} color={model.device.kind === "cuda" ? "var(--green)" : "var(--amber)"} />
               <StatTile
                 label="Served as"
                 value={`ONNX${model.quantized ? " int8" : ""}`}
                 sub={`${model.model_size_mb} MB · ~${model.latency_ms} ms/request on CPU`}
               />
-              <StatTile label="Training time" value={formatDuration(model.training_seconds)} sub={`${model.history.length} epochs · ${model.train_size} examples`} />
+              <StatTile
+                label={bank ? "Fit time" : "Training time"}
+                value={formatDuration(model.training_seconds)}
+                sub={
+                  bank
+                    ? `${bank.memory_bank_size.toLocaleString()} normal patches from ${bank.normal_images} images`
+                    : `${model.history.length} epochs · ${model.train_size} examples`
+                }
+              />
             </>
           ) : (
             <StatTile label="Deployed model" value="—" sub="not trained / not deployed yet" />
           )}
         </div>
         <p className="panel-hint">
-          Fine-tuned from{" "}
+          {anomaly ? "Frozen features of" : "Fine-tuned from"}{" "}
           <a href={`https://huggingface.co/${dl.base_model}`} target="_blank" rel="noreferrer">
             {dl.base_model}
           </a>{" "}
@@ -186,11 +210,29 @@ function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model:
             the predicted condition's log-odds. Red words argue for the condition, blue words against it. Plus the most
             similar training messages, by the model's own embedding.
           </p>
+        ) : anomaly ? (
+          <>
+            <p>
+              <strong>Learns what normal looks like — nothing else.</strong> Real lines rarely have a labelled example of
+              every defect, so no defect image is used for training. The frozen self-supervised backbone describes every{" "}
+              {bank ? `${bank.patch_size_px}×${bank.patch_size_px}-pixel` : "small"} patch of the good training images; a
+              greedy coreset keeps{" "}
+              {bank ? `${bank.memory_bank_size.toLocaleString()} of those ${bank.patches_seen.toLocaleString()}` : "a representative set of"}{" "}
+              patch descriptions as a memory bank of "normal" (PatchCore). A new image is scored patch by patch by its
+              distance to the nearest normal patch (AnomalyDINO), so it also flags defect types it has never seen.
+            </p>
+            <p>
+              <strong>Anomaly map.</strong> That per-patch distance <em>is</em> the explanation — on a fixed scale, so a
+              good part shows no heat and a defect lights up where it is. The defect probability is a logistic fit of the
+              image score on a labelled calibration slice of the test pool. Plus the closest known-good references, by the
+              backbone's own embedding.
+            </p>
+          </>
         ) : (
           <p>
-            <strong>Occlusion heatmap.</strong> The X-ray is re-scored with each of {dl.occlusion_grid}×{dl.occlusion_grid}{" "}
+            <strong>Occlusion heatmap.</strong> The image is re-scored with each of {dl.occlusion_grid}×{dl.occlusion_grid}{" "}
             patches blanked out in turn; the brighter a region, the more the finding's log-odds drop without it — i.e.
-            where the model is actually looking. Plus the most similar prior studies, by the model's own embedding.
+            where the model is actually looking. Plus the most similar training images, by the model's own embedding.
           </p>
         )}
       </div>

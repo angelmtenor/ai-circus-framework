@@ -1,0 +1,115 @@
+# Seed definition for the "pcb_visual_inspection" scenario — a `deep_learning` computer
+# vision scenario with `task: anomaly_detection`. Loaded into the registry by
+# services/platform-registry at bootstrap; dl-training and dl-inference also read the
+# `deep_learning` block directly.
+#
+# No image lives in this repo: dl-training downloads the pinned Parquet files (SHA-256
+# checked) into the scenario's SeaweedFS bucket on first run (`make dl-data`).
+
+slug: pcb_visual_inspection
+kind: deep_learning
+title: "PCB Visual Inspection (CV Anomaly Detection)"
+description: >
+  Automated optical inspection for an electronics assembly line: flags printed circuit
+  boards with any visual defect — scratches, bent or missing pins, melted components —
+  after learning only from photos of good boards, the way a real line is set up when
+  defects are rare and never the same twice. Each board gets a defect heatmap and its
+  closest known-good boards, and a live inspection line shows how many boards the model
+  can pass or reject on its own and how many still need a human inspector.
+role_required: "scenario:pcb_visual_inspection"
+industry: manufacturing_industry
+icon: "🔬"
+
+credits:
+  source: "VisA — Visual Anomaly dataset, PCB1 subset (Amazon Science, CC BY 4.0)"
+  url: "https://github.com/amazon-science/spot-diff"
+  note: >
+    Zou et al., "SPot-the-Difference Self-Supervised Pre-training for Anomaly Detection
+    and Segmentation", ECCV 2022. PCB1 = HC-SR04 ultrasonic sensor boards, 1,004 good and
+    100 defective photos with pixel-level defect masks, in the official one-class split
+    (904 good for training; 100 good + 100 defective for testing), read from the
+    BrachioLab/visa Parquet mirror at a pinned commit. Backbone:
+    facebook/dinov2-with-registers-small (Apache-2.0). Not validated for production use.
+
+chat:
+  context: >
+    A visual anomaly detector for printed circuit boards that learns from good boards
+    only, with patch-level defect heatmaps and the closest known-good boards as evidence.
+  sample_questions: []
+
+deep_learning:
+  modality: image
+  task: anomaly_detection
+  bucket: "scenario-pcb-visual-inspection"
+  source:
+    type: huggingface_files
+    repo: "BrachioLab/visa"
+    revision: "d185c42584b49f1df81fe12bde627559ed88d483"
+    format: parquet
+    files:
+      train: "data/pcb1.train-00000-of-00001.parquet"
+      test: "data/pcb1.test-00000-of-00001.parquet"
+    sha256:
+      data/pcb1.train-00000-of-00001.parquet: "4f3af98822c8bfef992c57be1f9e8c83aab3a49e7cfcbbe0926a58c202bb078f"
+      data/pcb1.test-00000-of-00001.parquet: "7c1ed5906cdad55bfbbe9d76989fe44f7d99f89d1503fb645f43209a0f3f672f"
+    image_field: image
+    mask_field: mask
+    label_field: label
+  # Self-supervised ViT-S/14 (22M params) with register tokens — clean patch features
+  # without the high-norm artifact tokens of plain DINOv2, which matters when every
+  # patch is scored. Frozen: nothing is fine-tuned (see `anomaly` below).
+  base_model: "facebook/dinov2-with-registers-small"
+  base_model_revision: "0d9846e56b43a21fa46d7f3f5070f0506a5795a9"
+  base_model_params: "22M"
+  input_label: "Top-down photo of an assembled PCB"
+  target_label: "Inspection result"
+  target_description: "Whether the board deviates from every good board seen in training — any unexpected scratch, bend, burn or missing part, even a defect type never seen before."
+  # 448 px = a 32x32 grid of 14-px patches: fine enough for hair-thin scratches.
+  image_size: 448
+  anomaly:
+    normal_label: "0"
+    top_k_fraction: 0.01
+  training:
+    # GPU: every good training board (~810) -> ~830k patch features -> 16k-patch coreset.
+    gpu: {batch_size: 16, memory_bank_size: 16384}
+    # CPU: 160 boards and a 4k-patch coreset — a few minutes, slightly weaker detection.
+    cpu: {batch_size: 4, max_train_samples: 160, memory_bank_size: 4096}
+    val_fraction: 0.1
+    seed: 42
+    # Training data are good boards only: P(defect) is fitted on a stratified 30% of
+    # the labelled test pool; metrics are reported on the untouched 70%.
+    calibration_holdout_fraction: 0.3
+  gallery_size: 140
+  reference_size: 120
+  labels:
+    - {key: "0", label: "Good", description: "Matches the good boards the model learned from — ship it."}
+    - {key: "1", label: "Defective", description: "Deviates from every known-good board — scratch, bent/missing pin, melted or missing component."}
+
+# The Inspection Line tab: boards come off the line one by one and are passed,
+# rejected, or sent to a human inspector when the model is not confident enough.
+ui_extras:
+  kind: triage_board
+  tab_label: "Inspection Line"
+  title: "Live inspection line"
+  item_noun: "board"
+  reviewer_noun: "inspector"
+  critical_kpi_label: "Defects caught"
+  review_lane_label: "Manual inspection"
+  note: "Held-out VisA test boards, replayed. Escapes (defective boards auto-passed) are the costly error."
+  confidence_threshold: 0.8
+  tick_seconds: 3
+  lanes:
+    - key: pass
+      label: "Pass — ship"
+      description: "Confidently good: goes straight to packing."
+      tone: ok
+      labels: ["0"]
+    - key: reject
+      label: "Reject — rework / scrap"
+      description: "Confidently defective: pulled off the line."
+      tone: critical
+      labels: ["1"]
+
+services:
+  training: dl-training
+  inference: dl-inference

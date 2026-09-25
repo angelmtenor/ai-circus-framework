@@ -33,6 +33,9 @@ DL_REFERENCE_KEY = "model/reference.json"
 DL_REFERENCE_EMBEDDINGS_KEY = "model/reference_embeddings.npy"
 # Image only: one PNG per published sample (gallery "s-…" and reference "r-…" ids).
 DL_IMAGES_PREFIX = "images/"
+# Image sources with ground-truth defect masks only: one binary PNG per *gallery* sample
+# that has a non-empty mask (samples.json flags them with `has_mask`).
+DL_MASKS_PREFIX = "masks/"
 
 # Artifacts whose SHA-256 must match the manifest before dl-inference loads them.
 DL_CHECKSUMMED_ARTIFACTS = {
@@ -48,6 +51,9 @@ ONNX_TEXT_INPUTS = ("input_ids", "attention_mask")
 ONNX_IMAGE_INPUT = "pixel_values"
 ONNX_LOGITS_OUTPUT = "logits"
 ONNX_EMBEDDING_OUTPUT = "embedding"
+# task=anomaly_detection only — a third output, (batch, grid, grid): each patch's
+# distance to its nearest normal patch. dl-inference serves it as the explanation.
+ONNX_ANOMALY_MAP_OUTPUT = "anomaly_map"
 
 _SAFE_SAMPLE_ID = re.compile(r"^[sr]-[0-9]{1,6}$")
 
@@ -69,3 +75,8 @@ def image_key(sample_id: str) -> str:
     if not _SAFE_SAMPLE_ID.match(sample_id):
         raise ValueError(f"Invalid sample id {sample_id!r}.")
     return f"{DL_IMAGES_PREFIX}{sample_id}.png"
+
+
+def mask_key(sample_id: str) -> str:
+    """Object key of one gallery sample's ground-truth mask PNG (same id validation)."""
+    return f"{DL_MASKS_PREFIX}{image_key(sample_id).removeprefix(DL_IMAGES_PREFIX)}"
