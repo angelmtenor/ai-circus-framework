@@ -72,3 +72,25 @@ def test_aembedding_delegates_to_embedding() -> None:
     response = asyncio.run(custom_handler.local_embedding_llm.aembedding(**_call_kwargs("fake-model", ["a"])))
 
     assert response.data == [{"object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3, 0.4]}]
+
+
+def test_aembedding_runs_the_cpu_bound_encode_off_the_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LiteLLM serves every chat completion from one event loop — a multi-second local
+    encode must run on a worker thread, not block that loop.
+    """
+    ran_on_loop: list[bool] = []
+
+    def encode(
+        self: _FakeSentenceTransformer, texts: list[str], normalize_embeddings: bool = True
+    ) -> list[list[float]]:
+        try:
+            asyncio.get_running_loop()
+            ran_on_loop.append(True)
+        except RuntimeError:
+            ran_on_loop.append(False)
+        return [[0.0] for _ in texts]
+
+    monkeypatch.setattr(_FakeSentenceTransformer, "encode", encode)
+    asyncio.run(custom_handler.local_embedding_llm.aembedding(**_call_kwargs("fake-model", ["a"])))
+
+    assert ran_on_loop == [False]

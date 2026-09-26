@@ -120,12 +120,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

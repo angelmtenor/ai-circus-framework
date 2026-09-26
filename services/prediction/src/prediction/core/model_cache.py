@@ -14,11 +14,13 @@ from __future__ import annotations
 import io
 import json
 import threading
+import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
 import joblib
+import pandas as pd
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
     MODEL_CHECKSUMS_METADATA_FIELD,
@@ -91,6 +93,13 @@ class ModelArtifacts:
 #: the cache so an ever-growing set of distinct (org, scenario) tenants can't grow this
 #: service's memory without limit. Evicts the least-recently-used entry once full.
 MAX_CACHED_TENANTS = 64
+#: Requester -> source-org memo entries kept before the memo is simply reset.
+_MAX_REMEMBERED_SOURCES = 4096
+#: Normalized datasets are the largest objects here (up to MAX_DATASET_ROWS rows each).
+MAX_CACHED_DATASETS = 8
+#: Long enough to cover one Data-tab visit's burst of calls; short enough that a re-run
+#: of etl-tabular shows up without restarting this service.
+DATASET_TTL_SECONDS = 300.0
 
 
 class ModelCache:
@@ -120,6 +129,9 @@ class ModelCache:
         self._cache_guard = threading.Lock()
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
+        # (requesting org, scenario) -> org whose artifacts it is served; see _source_org.
+        self._sources: dict[tuple[str, str], str] = {}
+        self._datasets: dict[tuple[str, str], tuple[pd.DataFrame, float]] = {}
 
     def _lock_for(self, key: tuple[str, str]) -> threading.Lock:
         """Return the same Lock instance for a given key across concurrent callers."""
@@ -132,9 +144,46 @@ class ModelCache:
         """Return the raw/normalized-dataset ObjectStore bound to this scenario's bucket."""
         return self._stores[scenario_slug]
 
+    def _source_org(self, org_id: str, scenario_slug: str) -> str:
+        """The org whose artifacts `org_id` is served: its own once trained, else the
+        shared fallback (see __init__). Remembered per requester, so the cache-hit path
+        costs no SeaweedFS round-trip.
+        """
+        requester = (org_id, scenario_slug)
+        with self._cache_guard:
+            source = self._sources.get(requester)
+        if source is not None:
+            return source
+        store = self._stores[scenario_slug]
+        if store.exists(org_id, MODEL_METADATA_KEY):
+            source = org_id
+        else:
+            logger.info(
+                "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
+                org_id,
+                scenario_slug,
+                self.fallback_org_id,
+            )
+            if not store.exists(self.fallback_org_id, MODEL_METADATA_KEY):
+                raise ModelNotTrainedError(
+                    f"No trained model artifacts for scenario={scenario_slug!r} (org={org_id!r}, "
+                    f"fallback org={self.fallback_org_id!r} also has none — has `training` run for it?)."
+                )
+            source = self.fallback_org_id
+        with self._cache_guard:
+            if len(self._sources) >= _MAX_REMEMBERED_SOURCES:
+                self._sources.clear()
+            self._sources[requester] = source
+        return source
+
     def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
-        """Return the tenant's model artifacts for this scenario, loading+caching on first call."""
-        key = (org_id, scenario_slug)
+        """The tenant's model artifacts for this scenario, loading+caching on first call.
+
+        Cached by the org the artifacts actually come from, not the requester: every
+        tenant still on the shared fallback model (admin, engineering-demo, each new
+        Keycloak org) shares one in-memory copy instead of loading its own.
+        """
+        key = (self._source_org(org_id, scenario_slug), scenario_slug)
         with self._cache_guard:
             if key in self._cache:
                 self._cache.move_to_end(key)
@@ -145,51 +194,7 @@ class ModelCache:
                 if key in self._cache:
                     self._cache.move_to_end(key)
                     return self._cache[key]
-
-            store = self._stores[scenario_slug]
-            # Tenants without their own trained artifacts yet (any org besides the
-            # one training actually ran for) share the baseline org's model —
-            # see __init__'s fallback_org_id docstring.
-            own_exists = store.exists(org_id, MODEL_METADATA_KEY)
-            load_org_id = org_id if own_exists else self.fallback_org_id
-            if not own_exists:
-                logger.info(
-                    "No model artifacts for org={} scenario={} yet — falling back to shared baseline org={}",
-                    org_id,
-                    scenario_slug,
-                    load_org_id,
-                )
-                if not store.exists(load_org_id, MODEL_METADATA_KEY):
-                    raise ModelNotTrainedError(
-                        f"No trained model artifacts for scenario={scenario_slug!r} "
-                        f"(org={org_id!r}, fallback org={load_org_id!r} also has none — has `training` run for it?)."
-                    )
-            logger.info(
-                "Loading model artifacts for org={} scenario={} from SeaweedFS (cache miss)", load_org_id, scenario_slug
-            )
-            # Read metadata first — it's the manifest training writes last, once
-            # every artifact below it has been confirmed uploaded — so an
-            # interrupted retrain shows up here as a checksum mismatch rather than
-            # a silent mix of old/new artifacts.
-            metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
-            checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
-            pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
-            explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
-            pipeline_lower = pipeline_upper = None
-            if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
-                pipeline_lower = _load_checked(
-                    store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower"
-                )
-                pipeline_upper = _load_checked(
-                    store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper"
-                )
-            artifacts = ModelArtifacts(
-                pipeline=pipeline,
-                explainer=explainer,
-                metadata=metadata,
-                pipeline_lower=pipeline_lower,
-                pipeline_upper=pipeline_upper,
-            )
+            artifacts = self._load(*key)
             with self._cache_guard:
                 if key not in self._cache:
                     if len(self._cache) >= MAX_CACHED_TENANTS:
@@ -199,3 +204,49 @@ class ModelCache:
                             self._locks.pop(evicted_key, None)
                     self._cache[key] = artifacts
                 return self._cache[key]
+
+    def _load(self, load_org_id: str, scenario_slug: str) -> ModelArtifacts:
+        store = self._stores[scenario_slug]
+        logger.info(
+            "Loading model artifacts for org={} scenario={} from SeaweedFS (cache miss)", load_org_id, scenario_slug
+        )
+        # Read metadata first — it's the manifest training writes last, once every
+        # artifact below it has been confirmed uploaded — so an interrupted retrain
+        # shows up here as a checksum mismatch rather than a silent mix of old/new.
+        metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
+        checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
+        pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
+        explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
+        pipeline_lower = pipeline_upper = None
+        if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
+            pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
+            pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+        return ModelArtifacts(
+            pipeline=pipeline,
+            explainer=explainer,
+            metadata=metadata,
+            pipeline_lower=pipeline_lower,
+            pipeline_upper=pipeline_upper,
+        )
+
+    def dataset(self, org_id: str, scenario_slug: str) -> pd.DataFrame:
+        """The tenant's normalized dataset (own copy, else the fallback org's — see
+        `dataset.load_normalized`), cached for `DATASET_TTL_SECONDS`: the Data tab calls
+        sample, evaluation and explainability back to back, each of which previously
+        re-downloaded and re-parsed the same parquet from SeaweedFS. Treat the returned
+        frame as read-only — it is shared between requests.
+        """
+        requester = (org_id, scenario_slug)
+        now = time.monotonic()
+        with self._cache_guard:
+            cached = self._datasets.get(requester)
+            if cached is not None and cached[1] > now:
+                return cached[0]
+        from prediction.core.dataset import load_normalized  # dataset.py imports this module
+
+        df = load_normalized(self._stores[scenario_slug], org_id, self.fallback_org_id)
+        with self._cache_guard:
+            if len(self._datasets) >= MAX_CACHED_DATASETS:
+                self._datasets.pop(min(self._datasets, key=lambda k: self._datasets[k][1]))
+            self._datasets[requester] = (df, now + DATASET_TTL_SECONDS)
+        return df

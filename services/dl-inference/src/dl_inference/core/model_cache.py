@@ -46,6 +46,8 @@ MAX_CACHED_MODELS = 4
 REVALIDATE_SECONDS = 60.0
 MAX_CACHED_IMAGES = 256
 MAX_CACHED_EXPLANATIONS = 256
+# Requester -> source-org memo entries kept before the memo is simply reset.
+_MAX_REMEMBERED_SOURCES = 4096
 
 
 class ModelUnavailableError(RuntimeError):
@@ -135,7 +137,7 @@ def _warm_up(session: ort.InferenceSession, metadata: dict[str, Any]) -> None:
 
 
 class DlModelCache:
-    """Lazily loads and caches `LoadedModel`s per (org_id, scenario_slug)."""
+    """Lazily loads and caches `LoadedModel`s per (source org, scenario_slug) — see `get`."""
 
     def __init__(self, stores: dict[str, ObjectStore], fallback_org_id: str, threads: int = 2) -> None:
         """One ObjectStore per served scenario (own bucket each)."""
@@ -147,6 +149,8 @@ class DlModelCache:
         self._guard = threading.Lock()
         self._locks_guard = threading.Lock()
         self._locks: dict[tuple[str, str], threading.Lock] = {}
+        # (requesting org, scenario) -> org whose artifacts serve it (own, or the fallback).
+        self._sources: dict[tuple[str, str], str] = {}
 
     def _lock_for(self, key: tuple[str, str]) -> threading.Lock:
         with self._locks_guard:
@@ -199,20 +203,31 @@ class DlModelCache:
         )
 
     def get(self, org_id: str, scenario_slug: str) -> LoadedModel:
-        """The tenant's model for this scenario, loading/reloading as needed."""
-        key = (org_id, scenario_slug)
+        """The tenant's model for this scenario, loading/reloading as needed.
+
+        Cached by the org the artifacts come from, not the requester: every tenant still
+        on the shared fallback model (admin, engineering-demo, each new Keycloak org)
+        shares one ONNX session — per-requester entries both multiplied memory and, with
+        MAX_CACHED_MODELS slots, evicted each other into constant reloads.
+        """
+        requester = (org_id, scenario_slug)
         with self._guard:
-            cached = self._cache.get(key)
-            if cached is not None:
-                self._cache.move_to_end(key)
+            source = self._sources.get(requester)
+            cached = self._cache.get((source, scenario_slug)) if source is not None else None
+            if source is not None and cached is not None:
+                self._cache.move_to_end((source, scenario_slug))
                 if time.monotonic() - cached.checked_at < REVALIDATE_SECONDS:
                     return cached
 
+        store = self._stores[scenario_slug]
+        source_org = self._source_org(store, org_id, scenario_slug)
+        key = (source_org, scenario_slug)
         with self._lock_for(key):
-            store = self._stores[scenario_slug]
-            source_org = self._source_org(store, org_id, scenario_slug)
             manifest = store.get(source_org, DL_METADATA_KEY)
             with self._guard:
+                if len(self._sources) >= _MAX_REMEMBERED_SOURCES:
+                    self._sources.clear()
+                self._sources[requester] = source_org
                 cached = self._cache.get(key)
                 if cached is not None and cached.manifest_checksum == artifact_checksum(manifest):
                     cached.checked_at = time.monotonic()
@@ -238,7 +253,7 @@ class DlModelCache:
         from the org the model was loaded from.
         """
         model = self.get(org_id, scenario_slug)
-        cache_key = (org_id, scenario_slug, f"mask:{sample_id}" if mask else sample_id)
+        cache_key = (model.org_id, scenario_slug, f"mask:{sample_id}" if mask else sample_id)
         with self._guard:
             if cache_key in self._images:
                 self._images.move_to_end(cache_key)

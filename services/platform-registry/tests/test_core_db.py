@@ -22,7 +22,8 @@ class FakeConfig:
 
 def test_database_url_builds_expected_dsn() -> None:
     """database_url() assembles a psycopg3 DSN from the config fields."""
-    assert db.database_url(FakeConfig()) == "postgresql+psycopg://ai_circus:s3cret@postgres:5432/platform"
+    url = db.database_url(FakeConfig()).render_as_string(hide_password=False)
+    assert url == "postgresql+psycopg://ai_circus:s3cret@postgres:5432/platform"
 
 
 @pytest.fixture(autouse=True)

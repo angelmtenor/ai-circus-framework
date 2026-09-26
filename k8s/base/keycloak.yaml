@@ -23,16 +23,19 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # the upstream Keycloak image's own non-root user
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:26.0
-          # No runAsNonRoot/dropped capabilities: same posture as logto.yaml previously
-          # had — this image's entrypoint isn't documented as safe running fully
-          # non-root/capability-less either.
+          # infra/keycloak/Dockerfile: pre-built (`kc.sh build`) with the realm baked in —
+          # `start --optimized` skips the per-boot Quarkus augmentation.
+          image: ai-circus/keycloak:local
+          imagePullPolicy: Never
           securityContext:
             allowPrivilegeEscalation: false
-          args: ["start", "--import-realm"]
+            capabilities: {drop: ["ALL"]}
+          args: ["start", "--optimized", "--import-realm"]
           ports:
             - {containerPort: 8080}
             - {containerPort: 9000}
@@ -72,140 +75,27 @@ spec:
             # crash the `strategy: Recreate` comment above describes. Bound it explicitly
             # instead of trusting JVM auto-sizing here.
             - {name: JAVA_OPTS_APPEND, value: "-Xms256m -Xmx512m"}
+          # Keycloak 26.7 idles at ~690Mi (heap capped at 512m + metaspace/threads/off-heap).
           resources:
             requests: {memory: "512Mi", cpu: "250m"}
-            limits: {memory: "768Mi"}
-          volumeMounts:
-            # `start --import-realm` scans this directory for realm JSON/YAML files on
-            # boot — mirrors infra/keycloak/realm-export.json exactly (see the
-            # ConfigMap below); keep the two in sync by hand if either changes, same
-            # convention as postgres.yaml's postgres-init-scripts ConfigMap.
-            - {name: realm-import, mountPath: /opt/keycloak/data/import, readOnly: true}
-          # Keycloak 26 serves health/metrics on a separate management port (9000) by
-          # default, not the main 8080 port Logto used for /api/status.
-          # initialDelaySeconds/timeoutSeconds/failureThreshold are looser than a plain
-          # healthz would need, same class of issue as rag-agent/form-agent's own probe
-          # comments: Keycloak's cold start is genuinely slow (Quarkus re-augmentation
-          # alone measured ~56s on a real k3s deploy, before DB schema migration and the
-          # realm import even start) — the original tighter values here liveness-killed
-          # the container mid-startup (exit 143) well before /health/live could ever
-          # respond, which looked like a crash but wasn't one.
+            limits: {memory: "1Gi"}
+          # Keycloak 26 serves health on its management port (9000). startupProbe gates the
+          # other two: polled every 3s with a 240s budget — first boot runs DB migrations
+          # and the realm import (subsequent boots of this pre-built image: ~10-15s).
+          startupProbe:
+            httpGet: {path: /health/ready, port: 9000}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 80
           readinessProbe:
             httpGet: {path: /health/ready, port: 9000}
-            initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30
           livenessProbe:
             httpGet: {path: /health/live, port: 9000}
-            initialDelaySeconds: 90
-            periodSeconds: 15
+            periodSeconds: 20
             timeoutSeconds: 5
-            failureThreshold: 8
-      volumes:
-        - name: realm-import
-          configMap: {name: keycloak-realm-import}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: keycloak-realm-import
-  namespace: ai-circus
-data:
-  # Content mirrors infra/keycloak/realm-export.json exactly — keep the two in sync by
-  # hand if that file ever changes (same "no configMapGenerator indirection" convention
-  # as postgres.yaml's postgres-init-scripts ConfigMap). UNVERIFIED against a live
-  # Keycloak instance — see infra/keycloak/README.md.
-  realm-export.json: |
-    {
-      "realm": "ai-circus",
-      "enabled": true,
-      "organizationsEnabled": true,
-      "sslRequired": "none",
-      "clientScopes": [
-        {
-          "name": "organization",
-          "description": "Adds the caller's Organization membership to the token — built into Keycloak 26 by default; declared explicitly here so `--import-realm` doesn't depend on that default surviving future versions.",
-          "protocol": "openid-connect",
-          "attributes": {
-            "include.in.token.scope": "true",
-            "display.on.consent.screen": "false"
-          },
-          "protocolMappers": [
-            {
-              "name": "organization",
-              "protocol": "openid-connect",
-              "protocolMapper": "oidc-organization-membership-mapper",
-              "consentRequired": false,
-              "config": {
-                "claim.name": "organization",
-                "access.token.claim": "true",
-                "id.token.claim": "true",
-                "userinfo.token.claim": "true"
-              }
-            }
-          ]
-        },
-        {
-          "name": "platform-backend",
-          "description": "Carries the `aud` claim ai_circus_shared.auth validates (KEYCLOAK_AUDIENCE) — Keycloak omits `aud` by default, unlike Logto's API resource indicator.",
-          "protocol": "openid-connect",
-          "attributes": {
-            "include.in.token.scope": "true",
-            "display.on.consent.screen": "false"
-          },
-          "protocolMappers": [
-            {
-              "name": "platform-backend-audience",
-              "protocol": "openid-connect",
-              "protocolMapper": "oidc-audience-mapper",
-              "consentRequired": false,
-              "config": {
-                "included.custom.audience": "https://api.ai-circus-framework.local",
-                "id.token.claim": "false",
-                "access.token.claim": "true"
-              }
-            }
-          ]
-        }
-      ],
-      "clients": [
-        {
-          "clientId": "ui-react",
-          "name": "ui-react",
-          "enabled": true,
-          "publicClient": true,
-          "protocol": "openid-connect",
-          "standardFlowEnabled": true,
-          "implicitFlowEnabled": false,
-          "directAccessGrantsEnabled": false,
-          "serviceAccountsEnabled": false,
-          "attributes": {
-            "pkce.code.challenge.method": "S256"
-          },
-          "redirectUris": [
-            "http://aiopen.localhost/*",
-            "http://aiopen.localhost/callback",
-            "http://localhost:5173/*",
-            "http://localhost:5173/callback"
-          ],
-          "webOrigins": [
-            "http://aiopen.localhost",
-            "http://localhost:5173"
-          ],
-          "defaultClientScopes": [
-            "organization",
-            "platform-backend",
-            "profile",
-            "email",
-            "roles"
-          ],
-          "optionalClientScopes": [
-            "offline_access"
-          ]
-        }
-      ]
-    }
+            failureThreshold: 4
 ---
 apiVersion: v1
 kind: Service

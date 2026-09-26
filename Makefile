@@ -265,6 +265,8 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 	done
 	@echo "── ai-circus/mlflow:local (infra/mlflow/Dockerfile — MLOps monitor) ──"
 	@docker build -f infra/mlflow/Dockerfile -t ai-circus/mlflow:local infra/mlflow || exit 1
+	@echo "── ai-circus/keycloak:local (infra/keycloak/Dockerfile — pre-built, realm baked in) ──"
+	@docker build -t ai-circus/keycloak:local infra/keycloak || exit 1
 	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local \
 		--build-arg VITE_KEYCLOAK_ISSUER="$(VITE_KEYCLOAK_ISSUER)" \
 		--build-arg VITE_KEYCLOAK_CLIENT_ID="$(if $(VITE_KEYCLOAK_CLIENT_ID),$(VITE_KEYCLOAK_CLIENT_ID),ui-react)" \
@@ -274,10 +276,8 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 		.
 	@echo "✓ all images built"
 
-k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd
-	@for svc in $(K3S_IMAGES) ui-react mlflow; do \
-		k3d image import "ai-circus/$$svc:local" -c "$(K3S_CLUSTER)" || exit 1; \
-	done
+k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd (one batched import)
+	@k3d image import $(foreach svc,$(K3S_IMAGES) ui-react mlflow keycloak,ai-circus/$(svc):local) -c "$(K3S_CLUSTER)"
 	@echo "✓ all images imported into k3d cluster '$(K3S_CLUSTER)'"
 
 k3s-secrets: ## Generate the app-env/traefik-basicauth/seaweedfs-s3-config k8s Secrets from .env/infra — never committed, re-run any time those change
@@ -424,7 +424,7 @@ DL_TRAINING_TORCH_RESOLVED = $(if $(filter auto,$(strip $(DL_TRAINING_TORCH))),$
 k3s-dl-build: ## Build + import the Deep Learning images (dl-inference, dl-training) into k3d — separate from k3s-build so the ~2 GB torch image is opt-in
 	@docker build -f services/dl-inference/Dockerfile -t ai-circus/dl-inference:local . || exit 1
 	@docker build -f services/dl-training/Dockerfile --build-arg DL_TRAINING_TORCH=$(DL_TRAINING_TORCH_RESOLVED) -t ai-circus/dl-training:local . || exit 1
-	@for img in dl-inference dl-training; do k3d image import "ai-circus/$$img:local" -c "$(K3S_CLUSTER)" || exit 1; done
+	@k3d image import ai-circus/dl-inference:local ai-circus/dl-training:local -c "$(K3S_CLUSTER)"
 	@echo "✓ Deep Learning images built + imported (dl-training torch=$(DL_TRAINING_TORCH_RESOLVED))"
 
 k3s-dl-up: ## Deploy the optional Deep Learning overlay (k8s/deep-learning/: dl-inference) and wait for it — models come from `make dl-train*` / k3s-dl-train-*
@@ -468,7 +468,9 @@ sync-shared: ## Rebuild+reinstall libs/shared in every service (run after editin
 
 # ── QA across services ────────────────────────────────────────────────────────
 
-check-all: ## Run `make check` inside every generated service
+check-all: ## Lint+test libs/shared, then run `make check` inside every generated service
+	@echo "── libs/shared ──"
+	@cd libs/shared && uv run ruff check -q src tests && uv run ruff format -q --check src tests && uv run pytest -q
 	@for dir in services/*/; do \
 		if [ -f "$$dir/Makefile" ]; then \
 			echo "── $$dir ──"; \

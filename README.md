@@ -460,7 +460,8 @@ that tool's own UI).
 ### First-time Keycloak setup
 
 Both deployment paths bring up Keycloak already bootstrapped: `infra/keycloak/realm-export.json`
-is loaded declaratively via `start --import-realm` on first boot, so the `ai-circus` realm,
+is baked into the pre-built Keycloak image (`infra/keycloak/Dockerfile`, `start --optimized`) and
+loaded declaratively via `--import-realm` on first boot, so the `ai-circus` realm,
 the `organization`/`platform-backend` client scopes (Organization membership + Audience
 mappers), and the `ui-react` SPA client all exist the moment the container is healthy — no
 manual Admin Console click-through. `http://keycloak.localhost` is the sign-in page,
@@ -588,11 +589,11 @@ expensive to retrofit once single-tenant assumptions are baked in.
   (`platform-registry`, `qdrant`, `llm-gateway`) purely so services running outside Docker (local,
   non-container dev) can still reach them directly; none of those three has auth strong enough to
   be safe on Traefik's public entrypoint, so they must never gain a `traefik.enable=true` label.
-- **`infra/{postgres,keycloak,qdrant,seaweedfs,traefik}/`**: reserved per-service config directories —
-  `infra/postgres/` (a multi-database init script), `infra/keycloak/` (the declarative
-  `realm-export.json` bootstrap), and `infra/seaweedfs/` (the generated S3 gateway credentials
-  file) have content; the others' config is inline in `docker-compose.yml`
-  (command args/env/labels) until each grows enough to warrant its own files.
+- **`infra/`**: per-component config — `postgres/` (multi-database init script), `keycloak/`
+  (pre-built image + the declarative `realm-export.json` bootstrap), `seaweedfs/` (generated S3
+  gateway credentials), `clickhouse/` (low-memory config), `mlflow/` (image), `traefik/`
+  (Basic Auth file), `k3s-gpu/` (GPU node image). Qdrant/Valkey config stays inline in
+  `docker-compose.yml`/`k8s/base`.
 - **Admin credential**: `ADMIN_API_KEY` (default `angel2026` — rotate before any real
   deployment) is a shared bearer token resolving to a fixed `admin` tenant, auto-granted access to
   *every* scenario `platform-registry` seeds — a real, auditable entitlement row, not a bypass of

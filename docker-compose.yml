@@ -1,16 +1,63 @@
-# ai-circus-framework — full platform.
+# ai-circus-framework — full platform on docker compose. Equivalent to k8s/ (the default,
+# k3s-first deployment path — see k8s/README.md); keep the two in sync by hand.
 #
-# Layout: infra (identity, storage, ingress) first, then backend services
-# (services/*), then the UI. Every HTTP service other than Traefik itself
-# publishes no host port — Traefik is the single entrypoint, which maps 1:1 onto a
-# Kubernetes Ingress when this platform moves there (see README "Kubernetes path").
-#
-# App services (platform-registry, etl-*, training, prediction, llm-gateway,
-# assistant, rag-agent, form-agent, ui-react) are appended here as they're built
-# (see the build order in the project plan) — this file currently wires the infra
-# layer: postgres, keycloak, qdrant, seaweedfs, traefik.
+# Layout: shared env anchors, infra (ingress, identity, storage, cache, observability),
+# backend services (services/*), then the UI. Traefik is the single entrypoint; a few
+# stateful/internal services publish a loopback-only port for non-container local dev.
+# Optional profiles: `pipeline` (one-shot ETL/training jobs), `deep-learning`,
+# `data-platform` (Kafka), `ollama` (free local LLM).
 
 name: ai-circus-framework
+
+# ── Shared environment blocks (YAML anchors, merged into each service with `<<:`) ──
+# One definition each instead of a copy per service: the values below were previously
+# repeated verbatim in up to seven services' `environment:` blocks.
+x-service-auth-env: &service-auth-env
+  APP_ENVIRONMENT: docker
+  # local (default) vs public — arms every service's boot-time refusal to start with a
+  # demo ADMIN_API_KEY/ENGINEERING_DEMO_API_KEY or AUTH_DISABLED=true once set to
+  # "public" (ai_circus_shared.deployment_guard, README "Public deployment"). Unrelated to
+  # APP_ENVIRONMENT, which only picks each service's settings.yaml profile.
+  DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+  # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false").
+  AUTH_DISABLED: ${AUTH_DISABLED:-false}
+  ADMIN_API_KEY: ${ADMIN_API_KEY}
+  ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
+  KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
+  KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+  # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname embedded in
+  # real tokens (must match for jwt.decode's issuer check), but `*.localhost` resolves to
+  # loopback inside every container — JWKS must be fetched over the internal network.
+  KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+  # ui-react calls these APIs directly from the browser — aiopen.localhost is the
+  # Traefik-served build, localhost:5173 the Vite dev server.
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+
+x-object-store-env: &object-store-env
+  OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
+  OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
+
+# Each service owns its own database on the shared cluster (host/port/db name default
+# from its settings.yaml docker profile); only the cluster credentials come from .env.
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+# etl-vectorize (ingestion) and rag-agent/form-agent (query) MUST embed into the same
+# vector space — one shared block makes a mismatch impossible (see .env.example).
+x-embedding-env: &embedding-env
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+  # Only reached when EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model).
+  LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+
+# Chat agents: llm-gateway credential + the default model_name (a litellm_config.yaml
+# alias). The admin Settings page switches the active model live; this is the fallback.
+x-agent-llm-env: &agent-llm-env
+  LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+  LLM_MODEL: ${LLM_MODEL:-groq-llama}
 
 networks:
   ai-circus:
@@ -23,7 +70,10 @@ volumes:
   ollama-data:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
-  voice-model-cache:
+  # (Renamed from `voice-model-cache` when agui-voice stopped running as root: the old
+  # volume's root-owned files aren't writable by UID 1000. The first `up` re-downloads the
+  # weights once; `docker volume rm ai-circus-framework_voice-model-cache` reclaims the old one.)
+  voice-model-cache-app:
   # Optional Data Platform profile (off by default) — Kafka's own log segments.
   kafka-data:
   # Langfuse's trace store (see the clickhouse service below).
@@ -91,8 +141,12 @@ services:
       retries: 10
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
-    command: ["start", "--import-realm"]
+    # infra/keycloak/Dockerfile: pre-built (`kc.sh build`) so `start --optimized` skips the
+    # per-boot Quarkus augmentation, with realm-export.json baked in (imported on first boot).
+    build:
+      context: infra/keycloak
+    image: ai-circus/keycloak:local
+    command: ["start", "--optimized", "--import-realm"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -113,11 +167,6 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-    volumes:
-      # `start --import-realm` scans this directory for realm JSON/YAML files on boot —
-      # see infra/keycloak/README.md for what this bootstrap does and its unverified
-      # status (no live Keycloak instance was available to test it against).
-      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -509,42 +558,13 @@ services:
       context: .
       dockerfile: services/platform-registry/Dockerfile
     environment:
-      APP_ENVIRONMENT: docker
-      # local (default) vs public — arms the boot-time refusal to start with a
-      # demo ADMIN_API_KEY/ENGINEERING_DEMO_API_KEY/AUTH_DISABLED=true once set to
-      # "public" (see ai_circus_shared.deployment_guard and README's "Public
-      # deployment"). A different axis than APP_ENVIRONMENT above, which only picks
-      # this service's own settings.yaml profile.
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+      <<: [*service-auth-env, *postgres-env]
       LOG_LEVEL: INFO
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # Back the admin-only /llm-settings/* endpoints (view/test/configure
-      # llm-gateway's provider models) — see platform_registry/core/llm_settings.py.
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # Back require_org_match (see platform_registry/api.py) — GET /entitlements/*
-      # is called directly from ui-react's browser code (see below), so it needs the
-      # same identity resolution every other service uses, not just a "trust the
-      # caller" assumption. DEV ONLY passthrough — leave AUTH_DISABLED unset
-      # (defaults to "false") once Keycloak is configured; see settings.yaml.
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
-      # embedded in real tokens (must match for jwt.decode's issuer check), but
-      # `*.localhost` resolves to loopback inside every container's own network
-      # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Keycloak over the internal docker network instead.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
       # Service-account client used by this service's sync tooling (see naming
       # contract) — no Logto analog.
       KEYCLOAK_M2M_CLIENT_ID: ${KEYCLOAK_M2M_CLIENT_ID}
       KEYCLOAK_M2M_CLIENT_SECRET: ${KEYCLOAK_M2M_CLIENT_SECRET}
-      # ui-react calls this API directly from the browser — aiopen.localhost is the
-      # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
       # scenarios/*.yaml is human-edited config, not a data artifact — a read-only
       # bind mount here (unlike SeaweedFS for datasets/models) keeps edits live without
@@ -573,9 +593,8 @@ services:
       dockerfile: services/etl-tabular/Dockerfile
     profiles: ["pipeline"]
     environment:
+      <<: *object-store-env
       APP_ENVIRONMENT: docker
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -591,26 +610,7 @@ services:
       context: .
       dockerfile: services/prediction/Dockerfile
     environment:
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
-      # DEV ONLY passthrough — leave AUTH_DISABLED unset (defaults to "false") once
-      # Keycloak is configured; see prediction/settings.yaml.
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
-      # embedded in real tokens (must match for jwt.decode's issuer check), but
-      # `*.localhost` resolves to loopback inside every container's own network
-      # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Keycloak over the internal docker network instead.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      # ui-react calls this API directly from the browser — aiopen.localhost is the
-      # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      <<: [*service-auth-env, *object-store-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -636,17 +636,7 @@ services:
       dockerfile: services/dl-inference/Dockerfile
     profiles: ["deep-learning"]
     environment:
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      <<: [*service-auth-env, *object-store-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -745,38 +735,7 @@ services:
       context: .
       dockerfile: services/assistant/Dockerfile
     environment:
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
-      # This instance's own conversation-history database (see
-      # ai_circus_shared.conversations) — a dedicated `assistant` database, not
-      # platform-registry's `platform` schema. Host/port/db name default from
-      # settings.yaml's docker profile; only the shared cluster credentials come
-      # from the root .env, same as platform-registry's own block above.
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # Defaults to "llama3", which only answers once you've run `make ollama-up`
-      # (see docker-compose.yml's `ollama` service — off by default). Set at least
-      # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
-      # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
-      # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-groq-llama}
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
-      # embedded in real tokens (must match for jwt.decode's issuer check), but
-      # `*.localhost` resolves to loopback inside every container's own network
-      # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Keycloak over the internal docker network instead.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      # ui-react calls this API directly from the browser — aiopen.localhost is the
-      # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -807,9 +766,8 @@ services:
       dockerfile: services/training/Dockerfile
     profiles: ["pipeline"]
     environment:
+      <<: *object-store-env
       APP_ENVIRONMENT: docker
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       # MLOps monitor: each run is mirrored to the mlflow service below (unset = off).
       MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
@@ -830,9 +788,8 @@ services:
       dockerfile: services/dl-training/Dockerfile
     profiles: ["deep-learning"]
     environment:
+      <<: *object-store-env
       APP_ENVIRONMENT: docker
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
       DL_DEVICE: auto
       MLFLOW_TRACKING_URI: http://mlflow:5000
     volumes:
@@ -851,17 +808,8 @@ services:
       dockerfile: services/etl-vectorize/Dockerfile
     profiles: ["pipeline"]
     environment:
+      <<: [*object-store-env, *embedding-env]
       APP_ENVIRONMENT: docker
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
-      # MUST match rag-agent's below — see .env.example's Embeddings section.
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
-      # Only reached when EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model
-      # — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
-      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -883,41 +831,7 @@ services:
       context: .
       dockerfile: services/rag-agent/Dockerfile
     environment:
-      # MUST match etl-vectorize's above — see .env.example's Embeddings section.
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      # This instance's own conversation-history database (see
-      # ai_circus_shared.conversations) — a dedicated `rag_agent` database, not
-      # platform-registry's `platform` schema. Host/port/db name default from
-      # settings.yaml's docker profile; only the shared cluster credentials come
-      # from the root .env, same as platform-registry's own block above.
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # Defaults to "llama3", which only answers once you've run `make ollama-up`
-      # (see docker-compose.yml's `ollama` service — off by default). Set at least
-      # one provider API key in .env and override this to gpt-4o-mini/gemini-flash/
-      # deepseek-chat/groq-llama/openrouter/azure-gpt4o instead — check what's
-      # actually working via the Settings page's Test/Test All buttons.
-      LLM_MODEL: ${LLM_MODEL:-groq-llama}
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
-      # embedded in real tokens (must match for jwt.decode's issuer check), but
-      # `*.localhost` resolves to loopback inside every container's own network
-      # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Keycloak over the internal docker network instead.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      # ui-react calls this API directly from the browser — aiopen.localhost is the
-      # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      <<: [*service-auth-env, *postgres-env, *agent-llm-env, *embedding-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -931,7 +845,8 @@ services:
         condition: service_started
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1g
+    # Embeddings run in llm-gateway, not here — the old 1g dated from in-process torch.
+    mem_limit: 512m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.rag-agent.rule=Host(`rag-agent.localhost`)"
@@ -948,40 +863,7 @@ services:
       context: .
       dockerfile: services/form-agent/Dockerfile
     environment:
-      # MUST match etl-vectorize's above — see .env.example's Embeddings section.
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
-      # This instance's own conversation-history database (see
-      # ai_circus_shared.conversations) — a dedicated `form_agent` database, not
-      # platform-registry's `platform` schema. Host/port/db name default from
-      # settings.yaml's docker profile; only the shared cluster credentials come
-      # from the root .env, same as platform-registry's own block above.
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
-      # See rag-agent's own comment above for why this default only answers once
-      # you've run `make ollama-up`, and what to set it to instead.
-      LLM_MODEL: ${LLM_MODEL:-groq-llama}
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # NOT derived from KEYCLOAK_ISSUER: that's the public `*.localhost` hostname
-      # embedded in real tokens (must match for jwt.decode's issuer check), but
-      # `*.localhost` resolves to loopback inside every container's own network
-      # namespace — nothing listens there, so JWKS fetches would get connection
-      # refused. This must reach Keycloak over the internal docker network instead.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      # ui-react calls this API directly from the browser — aiopen.localhost is the
-      # Traefik-served build, localhost:5173 the Vite dev server.
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env, *embedding-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -997,7 +879,8 @@ services:
         condition: service_started
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1g
+    # Embeddings run in llm-gateway, not here — the old 1g dated from in-process torch.
+    mem_limit: 512m
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.form-agent.rule=Host(`form-agent.localhost`)"
@@ -1014,8 +897,7 @@ services:
       context: .
       dockerfile: services/agui-voice/Dockerfile
     environment:
-      APP_ENVIRONMENT: docker
-      DEPLOYMENT_TARGET: ${DEPLOYMENT_TARGET:-local}
+      <<: *service-auth-env
       # Local, self-hosted defaults (faster-whisper/Piper — no API key). Override to
       # deepgram/elevenlabs/cartesia once the matching pipecat-ai extra + API key are
       # configured (see services/agui-voice/settings.yaml).
@@ -1029,18 +911,9 @@ services:
       ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
       CARTESIA_API_KEY: ${CARTESIA_API_KEY:-}
       CARTESIA_VOICE_ID: ${CARTESIA_VOICE_ID:-}
-      AUTH_DISABLED: ${AUTH_DISABLED:-false}
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-      ENGINEERING_DEMO_API_KEY: ${ENGINEERING_DEMO_API_KEY}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER}
-      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
-      # See assistant's own block above for why this can't be derived from KEYCLOAK_ISSUER.
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
     volumes:
-      # faster-whisper caches under ~/.cache/huggingface, Piper under ~/.cache/pipecat —
-      # this container has no dedicated user, so $HOME is /root.
-      - voice-model-cache:/root/.cache
+      # faster-whisper caches under ~/.cache/huggingface, Piper under ~/.cache/pipecat.
+      - voice-model-cache-app:/home/app/.cache
     depends_on:
       platform-registry:
         condition: service_started
@@ -1070,21 +943,11 @@ services:
       context: .
       dockerfile: services/data-platform-manager/Dockerfile
     environment:
+      <<: [*object-store-env, *postgres-env]
       APP_ENVIRONMENT: docker
-      # This instance's own document-store database (see
-      # ai_circus_shared.document_store) — a dedicated `data_platform_manager`
-      # database, same "own schema, shared cluster credentials" pattern as
-      # assistant's conversation history above.
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
-      # Lakehouse Table Format (PyIceberg's S3FileIO) — same SeaweedFS credentials
-      # every other service already uses, see docker-compose.yml's OBJECT_STORE_*
-      # comment near the top.
-      OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
-      OBJECT_STORE_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY}
     # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
     volumes:
       - ./scenarios:/app/scenarios:ro
@@ -1126,4 +989,4 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.ui-react.rule=Host(`aiopen.localhost`)"
       - "traefik.http.routers.ui-react.entrypoints=web"
-      - "traefik.http.services.ui-react.loadbalancer.server.port=80"
+      - "traefik.http.services.ui-react.loadbalancer.server.port=8080"

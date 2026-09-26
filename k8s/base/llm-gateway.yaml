@@ -32,25 +32,29 @@ spec:
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: llm-gateway-secrets}
-          # LiteLLM's proxy doesn't expose the same /healthz FastAPI wrapper the other
-          # services do (root Makefile's wait-services/verify don't probe it either,
-          # since it's internal-only) — a TCP check is the only thing safe to assume.
-          # LiteLLM's own startup (registering every model in litellm_config.yaml) takes
-          # ~30-40s and queues behind every other scenario service doing the same kind of
-          # cold-start work on a single-node k3d cluster — loosened the same way
-          # rag-agent/form-agent's probes are, see their manifests' comments.
+          # Idle ~870Mi: LiteLLM proxy + the local-embed torch model once first used.
+          resources:
+            requests: {cpu: 50m, memory: 768Mi}
+            limits: {memory: 1536Mi}
+          # startupProbe gates the other two until the app first answers, polled every 2s
+          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
+          # with a 180s budget — above the 120s the app itself waits for Postgres/
+          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
+          # liveness-killed mid-start.
+          startupProbe:
+            httpGet: {path: /health/liveliness, port: 4000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
           readinessProbe:
-            tcpSocket: {port: 4000}
-            initialDelaySeconds: 20
+            httpGet: {path: /health/liveliness, port: 4000}
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            timeoutSeconds: 3
           livenessProbe:
-            tcpSocket: {port: 4000}
-            initialDelaySeconds: 45
-            periodSeconds: 15
+            httpGet: {path: /health/liveliness, port: 4000}
+            periodSeconds: 20
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

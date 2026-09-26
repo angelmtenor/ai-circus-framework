@@ -222,16 +222,16 @@ set on a local k3d cluster:
   and its CRDs let the `Host(...)` rules and the `admin-basicauth` gate (on `admin.keycloak.localhost`
   and `console.objectstore.localhost`) carry over almost verbatim from docker-compose.yml's own
   Traefik labels.
-- **`securityContext.runAsNonRoot: true` always needs `runAsUser: 1000` alongside it**, for every
-  `services/*` Deployment/Job. Each of those Dockerfiles sets `USER app` (a name, not a UID), and
-  the kubelet can't verify "non-root" from a name alone — it refuses to start the container with
-  `Error: container has runAsNonRoot and image has non-numeric user (app), cannot verify user is
-  non-root`, surfacing as `CreateContainerConfigError` (a *different* root cause than the missing-
-  secret-key version of that same status — see the `k3s-deploy-verify` skill's gotchas). `1000` is
-  the UID `useradd --create-home` assigns `app` in every one of those Dockerfiles (confirmed via
-  `docker run --rm <image> id`); `postgres`/`keycloak`/`qdrant`/`seaweedfs`/`ui-react`/`agui-voice`
-  deliberately skip `runAsNonRoot` instead (see their manifests' comments) since they either need
-  root for entrypoint chown/bind logic or (`agui-voice`) have no non-root `USER` yet.
+- **`securityContext.runAsNonRoot: true` always needs a numeric `runAsUser` alongside it.**
+  The kubelet can't verify "non-root" from a user *name* (`USER app`) — it refuses to start the
+  container with `Error: container has runAsNonRoot and image has non-numeric user (app), cannot
+  verify user is non-root` (`CreateContainerConfigError`, a different root cause than the
+  missing-secret-key version of that status — see the `k3s-deploy-verify` skill). Every
+  `services/*/Dockerfile` creates `app` with an explicit `--uid 1000`; `ui-react` runs as
+  nginx-unprivileged's UID 101 and Keycloak as its image's own UID 1000. Only
+  `postgres`/`qdrant`/`seaweedfs` skip `runAsNonRoot` — their entrypoints need root for
+  data-dir `chown` logic. `agui-voice`'s model-cache PVC predates its non-root image, so a
+  `cache-ownership` init container `chown`s it once (a no-op afterwards).
 - **`ui-react` needs no separate build.** Its backend base URLs are baked in at `docker build` time
   via `VITE_*` args, defaulting to the same `*.localhost` hostnames this cluster's Traefik also
   serves — so the same image `make k3s-build` produces works unchanged. A runtime-injected
@@ -242,8 +242,10 @@ set on a local k3d cluster:
   (add a Deployment/PVC for it yourself if you need the free local LLM fallback here too), and the
   pipeline services are `k8s/jobs/*` applied only via `make k3s-pipeline`, matching their
   one-shot, non-`k3s-up` nature in docker-compose.yml too (`profiles: ["pipeline"]`).
-- **The observability stack (`langfuse.yaml`, `mlflow.yaml`) is in the base, always on, and is
-  the only place besides `keycloak.yaml` that sets `resources.limits`** — Langfuse v4 needs
+- **Every container sets `resources` (memory requests + limits; CPU requests only, never CPU
+  limits — throttling hurts latency more than it saves on one node).** Values come from measured
+  idle RSS (`kubectl top pods`) plus headroom, and match `docker-compose.yml`'s `mem_limit`s.
+- **The observability stack (`langfuse.yaml`, `mlflow.yaml`) is in the base, always on** — Langfuse v4 needs
   web + worker + ClickHouse, and on a laptop-class node the way to keep that affordable is to reuse
   the existing Postgres (`langfuse`/`mlflow` databases), Valkey (`langfuse:` key prefix) and
   SeaweedFS (`langfuse`/`mlflow` buckets), cap ClickHouse at 1 GiB with a low-memory `config.d`,
@@ -262,9 +264,12 @@ set on a local k3d cluster:
   A PVC created before this flag still holds that preallocation — the `k3s-deploy-verify` skill's
   Gotcha 7 has the data-preserving reclaim procedure (stop the StatefulSet, shrink-truncate the
   `.dat` files, start it again).
-- **`rag-agent`/`form-agent` readiness/liveness probes are deliberately loose**
-  (`timeoutSeconds: 5`, `failureThreshold: 6`) — their FastAPI startup makes a live call to
-  `llm-gateway` (embedding dimension probe), which queues behind every other scenario service
-  doing the same thing during a cold `k3s-up` on a single-node cluster. The default 1s probe
-  timeout flakes under that concurrent cold-start load and CrashLoopBackOffs the pod even though
-  the app itself starts fine.
+- **App pods wait for their dependencies instead of crash-looping, and use a `startupProbe`.**
+  Services connect to Postgres/SeaweedFS/llm-gateway in their FastAPI lifespan; on a cold boot
+  those come up in parallel, so each connection goes through `ai_circus_shared.startup.wait_for`
+  (polls up to `DEPENDENCY_WAIT_SECONDS`, default 120s) rather than crashing into
+  CrashLoopBackOff's 10s/20s/40s backoff. The `startupProbe` (every 2s, 180s budget) gates
+  readiness/liveness until the app first answers — so a pod is Ready ~2s after start-up
+  finishes instead of after a fixed `initialDelaySeconds`, and a slow cold boot is never
+  liveness-killed. Infra StatefulSets poll readiness every 2s too: a Service only routes to a
+  pod once it is Ready, so that delay adds directly to every dependent's boot.

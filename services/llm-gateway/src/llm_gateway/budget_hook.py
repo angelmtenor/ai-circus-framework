@@ -101,8 +101,7 @@ class BudgetEnforcer(CustomLogger):
             raise HTTPException(
                 status_code=429,
                 detail=(
-                    f"Monthly AI Gateway budget exhausted for org={org_id!r} "
-                    f"(spent ${spend:.2f} of ${float(cap):.2f})."
+                    f"Monthly AI Gateway budget exhausted for org={org_id!r} (spent ${spend:.2f} of ${float(cap):.2f})."
                 ),
             )
         return None

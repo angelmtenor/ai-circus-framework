@@ -26,10 +26,14 @@ spec:
             allowPrivilegeEscalation: false
           ports:
             - {containerPort: 6379}
+          # Idle ~15Mi (rate-limit counters + Langfuse queues).
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 128Mi}
           readinessProbe:
             exec: {command: ["valkey-cli", "ping"]}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 2
+            periodSeconds: 2
           livenessProbe:
             tcpSocket: {port: 6379}
             initialDelaySeconds: 15

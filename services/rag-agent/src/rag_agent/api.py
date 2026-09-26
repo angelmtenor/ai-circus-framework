@@ -20,6 +20,7 @@ from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -293,7 +294,9 @@ async def agui_endpoint(
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
     assert definition.vector_store is not None  # guaranteed by kind="conversational_rag" filter
-    if store.get_conversation(input_data.thread_id, identity.org_id, identity.subject) is None:
+    # Every DB call in this `async def` route goes through the threadpool: a sync call
+    # here would block the event loop that is also streaming every other chat.
+    if await run_in_threadpool(store.get_conversation, input_data.thread_id, identity.org_id, identity.subject) is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
     # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
@@ -367,6 +370,6 @@ async def agui_endpoint(
             logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)
             yield encoder.encode(RunErrorEvent(message=str(exc)))
         finally:
-            _persist_turn(store, input_data, identity, assistant_text_by_message_id)
+            await run_in_threadpool(_persist_turn, store, input_data, identity, assistant_text_by_message_id)
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())

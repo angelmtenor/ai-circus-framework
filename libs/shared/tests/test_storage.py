@@ -38,3 +38,32 @@ def test_key_rejects_invalid_tenant_org_id(org_id: str) -> None:
 @pytest.mark.parametrize("org_id", ["admin", "engineering-demo", "org_1", "ORG-123"])
 def test_key_accepts_expected_org_id_shapes(org_id: str) -> None:
     assert _store()._key(org_id, "x") == f"tenant-{org_id}/x"
+
+
+def test_connect_shares_one_client_and_lists_buckets_once(monkeypatch) -> None:
+    """Binding N buckets on one endpoint builds one boto3 client; buckets already seen are
+    never re-listed (only a not-yet-known bucket triggers a fresh listing)."""
+    from ai_circus_shared import storage as storage_module
+
+    created: list[object] = []
+    listed: list[int] = []
+
+    class _FakeClient:
+        def list_buckets(self) -> dict[str, list[dict[str, str]]]:
+            listed.append(1)
+            return {"Buckets": [{"Name": "churn"}]}
+
+        def create_bucket(self, Bucket: str) -> None:  # noqa: N803 - boto3's own kwarg name
+            created.append(Bucket)
+
+    fake = _FakeClient()
+    storage_module._s3_client.cache_clear()
+    storage_module._known_buckets.clear()
+    monkeypatch.setattr(storage_module.boto3, "client", lambda *_a, **_kw: fake)
+    kwargs = {"endpoint_url": "http://s3", "access_key": "a", "secret_key": "b"}
+    stores = [storage_module.ObjectStore.connect(bucket=b, **kwargs) for b in ("churn", "mpm", "mpm")]
+    assert all(store._client is fake for store in stores)
+    assert listed == [1, 1]  # churn (known after the first list), mpm (missing -> created), mpm (cached)
+    assert created == ["mpm"]
+    storage_module._s3_client.cache_clear()
+    storage_module._known_buckets.clear()

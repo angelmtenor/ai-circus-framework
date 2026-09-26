@@ -25,10 +25,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any
 
-from sqlalchemy import JSON, DateTime, Engine, ForeignKey, String, create_engine, func, select
+from sqlalchemy import JSON, DateTime, Engine, ForeignKey, String, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
+
+from ai_circus_shared.db import PostgresConfig, connect_engine
 
 # Re-exported so services never need to import sqlalchemy directly just to type
 # a `Depends(get_session)` parameter (keeps sqlalchemy/psycopg as this shared
@@ -53,20 +55,6 @@ def _excerpt_title(text: str, max_length: int = 48) -> str:
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
-
-
-class PostgresConfig(Protocol):
-    """Shape a service's own EnvConfig must satisfy — the same POSTGRES_* field
-    names as platform_registry.core.db's config, so this module can build a
-    connection string for any service without depending on its concrete
-    EnvConfig class.
-    """
-
-    POSTGRES_HOST: str
-    POSTGRES_PORT: str
-    POSTGRES_DB: str
-    POSTGRES_USER: str
-    POSTGRES_PASSWORD: Any  # pydantic.SecretStr
 
 
 class Base(DeclarativeBase):
@@ -110,21 +98,10 @@ class Message(Base):
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
 
-def database_url(config: PostgresConfig) -> str:
-    """Build this service's own Postgres connection string — same shape as
-    platform_registry.core.db.database_url, one call per service's own database.
-    """
-    password = config.POSTGRES_PASSWORD.get_secret_value()
-    return (
-        f"postgresql+psycopg://{config.POSTGRES_USER}:{password}"
-        f"@{config.POSTGRES_HOST}:{config.POSTGRES_PORT}/{config.POSTGRES_DB}"
-    )
-
-
 def init_engine(config: PostgresConfig) -> Engine:
     """Create the process-wide SQLAlchemy engine/session factory. Call once, at startup."""
     global _engine, _session_factory
-    _engine = create_engine(database_url(config), pool_pre_ping=True)
+    _engine = connect_engine(config)
     _session_factory = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 

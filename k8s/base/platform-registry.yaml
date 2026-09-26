@@ -38,14 +38,29 @@ spec:
             - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: platform-registry-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          # Idle ~120Mi; headroom for PDF OCR (one rendered page at a time, see document_extraction.py).
+          resources:
+            requests: {cpu: 25m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          # startupProbe gates the other two until the app first answers, polled every 2s
+          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
+          # with a 180s budget — above the 120s the app itself waits for Postgres/
+          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
+          # liveness-killed mid-start.
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
           readinessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
       volumes:
         - name: scenarios
           hostPath: {path: /scenarios, type: Directory}

@@ -1,93 +1,84 @@
 ---
 name: new-service-scaffold
-description: Scaffold a new backend service in ai-circus-framework via the real cookiecutter template — never hand-write a service's pyproject.toml/Dockerfile/settings.yaml.
-version: 1.0.0
+description: Scaffold a new backend service in ai-circus-framework via the real cookiecutter template (never hand-write a service's pyproject.toml/Dockerfile/settings.yaml), then wire it into k8s, docker-compose, the Makefile, secrets and the admin health dashboard. Use when adding a new microservice/API — not for a new scenario (that's just a scenario.yaml).
+version: 2.0.0
 ---
 
 # New Service Scaffold
 
-## Overview
-
-Every service under `services/*/` is generated from the sibling `ai-circus-template` repo via
-real `cookiecutter`, wrapped by `./scripts/new_service.sh <name>` (equivalently
-`make new-service NAME=<name>` from the repo root). This is the only supported way to create a
-new service — `AGENTS.md` §4 marks hand-writing a service's `pyproject.toml`, `Dockerfile`, or
-`settings.yaml` from scratch as STRICTLY PROHIBITED, since it would drift from every other
-service's cookiecutter-generated conventions (uv, ruff, pyrefly, gitleaks, checkmake, pytest,
-`settings.yaml`/`data_model.py` drift-check pipeline).
-
-## When to use
-
-- The user asks to add a new microservice, backend, or API to this repo.
-- A task implies a new `services/<name>/` directory that doesn't exist yet.
+Every `services/*/` project is generated from the sibling `ai-circus-template` repo by
+`./scripts/new_service.sh <name>` (`make new-service NAME=<name>`). Hand-writing a service's
+`pyproject.toml`/`Dockerfile`/`settings.yaml` is prohibited (`AGENTS.md` §4) — it drifts from
+the uv/ruff/pyrefly/gitleaks/checkmake/pytest and settings.yaml→`data_model.py` conventions.
 
 ## When NOT to use
 
-- Adding a new **scenario** (`scenarios/<slug>/scenario.yaml`) does NOT need this — scenarios are
-  YAML content served by the *existing* `platform-registry`/`prediction`/`assistant`/`rag-agent`/
-  `form-agent` services, never a new service per scenario. See the "Scenario-driven, not
-  per-feature code" section of root `CLAUDE.md` before reaching for this skill.
-- Modifying an existing service — just edit it directly.
+- A new **scenario** is a `scenarios/<slug>/scenario.yaml` served by the existing service for
+  its `kind` — never a new service (root `CLAUDE.md`, "Scenario-driven").
+- Changing an existing service — just edit it.
 
-## Prerequisites — check before running
+## Prerequisite
 
-The script needs the **sibling** `ai-circus-template` repo checked out separately; it is **not
-vendored inside ai-circus-framework**. It reads `$AI_CIRCUS_TEMPLATE`, defaulting to
-`$HOME/PROJECTS/ai-circus-template`. Verify it exists first:
+The template is a separate checkout, not vendored: `$AI_CIRCUS_TEMPLATE`, default
+`~/PROJECTS/ai-circus-template`. `ls "${AI_CIRCUS_TEMPLATE:-$HOME/PROJECTS/ai-circus-template}"`
+first; if it's missing, ask the human to clone it — don't improvise a template.
+
+## 1. Generate
 
 ```bash
-ls "${AI_CIRCUS_TEMPLATE:-$HOME/PROJECTS/ai-circus-template}"
+./scripts/new_service.sh <name>
 ```
 
-If it's missing, the script will fail — tell the human operator to clone it rather than trying to
-improvise a template.
+Runs cookiecutter (`python_version=3.14`), strips the nested `.git`, `uv add ../../libs/shared`,
+and writes the monorepo-aware Dockerfile (repo-root build context, uv cache mount, precompiled
+bytecode, non-root UID 1000 — the same shape as every other service). Then read the generated
+`services/<name>/AGENTS.md` and `SKILLS.md`.
 
-## Workflow
+**Verify the auth settings.** The template historically shipped Logto settings
+(`LOGTO_ISSUER`/`LOGTO_JWKS_URL`/`LOGTO_API_RESOURCE_INDICATOR`); if `settings.yaml` still has
+them, rename to the `KEYCLOAK_*`/`ADMIN_API_KEY`/`ENGINEERING_DEMO_API_KEY`/`AUTH_DISABLED`/
+`DEV_ORG_ID`/`PLATFORM_REGISTRY_URL` fields of an existing service (e.g. `services/prediction/`)
+and `make generate-data-model`.
 
-1. Run the scaffold:
-   ```bash
-   ./scripts/new_service.sh <name>
-   ```
-   This invokes cookiecutter with `--no-input` (project_name, description, author, org,
-   `python_version=3.14`), writes into `services/<name>/`, strips the nested `.git` the template's
-   post-gen hook creates, and runs `uv add ../../libs/shared` inside the new service (adding
-   `ai-circus-shared` as a non-editable local path dependency) if `uv` is available.
+## 2. Code it the platform way
 
-2. **The script does not update `docker-compose.yml`.** Add the new service to the root
-   `docker-compose.yml` by hand, following the pattern of an existing service of the same kind —
-   internal-only unless it needs Traefik ingress (only services actually reached from the browser
-   get `traefik.enable=true`; most get a loopback-only port instead, per root `CLAUDE.md`).
+- **Identity**: copy `services/prediction/src/prediction/core/identity.py` — it is
+  `AuthSettingsAdapter.from_config(get_env_config())` + `resolve_caller_identity`, mapping
+  `TokenValidationError`→401 and `EntitlementDeniedError`→403. Every scenario route depends on it.
+- **Tenancy**: anything reading scenario data, models or vectors is scoped by `org_id` — use
+  `ai_circus_shared.storage.ObjectStore` (tenant-prefixed keys), never raw bucket paths.
+- **Start-up**: connect dependencies through the shared helpers that wait for them
+  (`ObjectStore.connect`, `ai_circus_shared.db.connect_engine`, or `startup.wait_for` for anything
+  else) — never a bare call that crash-loops the pod while its dependency boots.
+- **Async routes** wrap blocking work in `run_in_threadpool`; bound request bodies, uploads and
+  caches; call `configure_metrics(app)` and `enforce_safe_for_public_deployment(...)` like the
+  other `app.py`s.
 
-3. From the repo root, run `make sync-shared` to make sure every service (including the new one)
-   is pinned to the current `libs/shared` build.
+## 3. Wire it into the platform (the script does none of this)
 
-4. If the new service will read scenario data, model artifacts, or vector search results, wire in
-   tenant scoping from the start — every such code path **must** be scoped by `org_id` (the Keycloak
-   Organization). Follow the enforced pattern in `libs/shared/src/ai_circus_shared/storage.py` and
-   `entitlements.py`, and add the entitlement check in the new service itself, not just the UI —
-   see root `AGENTS.md` §1.
+1. **`k8s/base/<name>.yaml`** + add it to `k8s/base/kustomization.yaml` — copy
+   `k8s/base/prediction.yaml`: `runAsNonRoot` + `runAsUser: 1000`, dropped capabilities,
+   `automountServiceAccountToken: false`, memory requests/limits (measure with `kubectl top pods`),
+   `startupProbe` (2s × 90) + readiness + liveness on `/healthz`. Add an `IngressRoute` only if
+   the browser calls it.
+2. **`scripts/k3s_generate_secrets.sh`** — a `<name>-secrets|KEY,KEY,...` entry in `SECRET_SPECS`
+   with only the keys this service needs.
+3. **`Makefile`** — add `<name>` to `K3S_IMAGES` (and to `k3s-wait`'s list if long-running).
+4. **`docker-compose.yml`** — follow a same-kind service; merge the shared `x-*-env` anchors
+   (`<<: [*service-auth-env, *object-store-env, …]`) instead of repeating env vars; set
+   `mem_limit`; Traefik labels only if browser-facing, otherwise a loopback-only port at most.
+5. **`services/data-platform-manager/src/data_platform_manager/core/platform_status.py`** — a
+   row for the new component (its test pins the names).
+6. `make sync-shared`.
 
-   **Known gap:** the `ai-circus-template` repo this skill scaffolds from has not been migrated
-   off Logto — the generated `services/<name>/settings.yaml` will still declare `LOGTO_ISSUER`/
-   `LOGTO_JWKS_URL`/`LOGTO_API_RESOURCE_INDICATOR`, not the `KEYCLOAK_*` names this repo now uses.
-   Rename those three fields by hand to match the pattern in an existing service's `settings.yaml`
-   (e.g. `services/prediction/`) and regenerate `data_model.py` before considering auth wiring
-   done — don't assume a freshly scaffolded service gets Keycloak auth for free.
+## 4. Verify
 
-5. Read the newly generated `services/<name>/AGENTS.md` and `SKILLS.md` — they layer
-   service-specific conventions on top of these root ones.
-
-6. Verify with the [service-check](../service-check/SKILL.md) skill before considering the new
-   service done.
+The `service-check` skill: `make check` in the new service, `make check-all`, then build/import/
+deploy on k3s and `make k3s-verify` (+ a browser check if the UI talks to it). CI picks the new
+service up automatically (`discover-services` matrix: check, image build, SBOM, Trivy).
 
 ## Key rules
 
-- Never bypass this script to write `pyproject.toml`/`Dockerfile`/`settings.yaml` by hand.
-- Never invent a new service for something that should be a `scenario.yaml` instead.
-- Don't commit or push without the human operator inspecting the diff first (root `AGENTS.md` §3).
-
-## References
-
-- `./scripts/new_service.sh` — the actual scaffolding script.
-- Root `AGENTS.md` §1 (tenancy) and §4 (scaffolding mandate).
-- Root `CLAUDE.md` — "Scenario-driven, not per-feature code" and "Tenancy & entitlements" sections.
+- Never bypass the script for `pyproject.toml`/`Dockerfile`/`settings.yaml`.
+- Never invent a service for what should be a `scenario.yaml`.
+- No commit or push without the human inspecting the diff (`AGENTS.md` §3).

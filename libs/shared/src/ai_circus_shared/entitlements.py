@@ -8,8 +8,11 @@ client) to render only the scenarios a tenant is entitled to.
 
 from __future__ import annotations
 
+import re
+import threading
 import time
 from dataclasses import dataclass
+from functools import cache
 from typing import Any
 
 import httpx
@@ -22,10 +25,63 @@ from pydantic import BaseModel, ConfigDict
 # key; a just-revoked entitlement or just-switched model can take up to this long
 # to take effect everywhere.
 _CACHE_TTL_SECONDS = 30.0
-_entitlement_cache: dict[tuple[str, str, str], tuple[bool, float]] = {}
-_active_model_cache: dict[str, tuple[str, float]] = {}
-_providers_cache: dict[str, tuple[list[dict[str, Any]], float]] = {}
-_active_voice_settings_cache: dict[str, tuple[tuple[str, str], float]] = {}
+# Entitlement keys include the caller-chosen scenario slug, so without a ceiling an
+# authenticated caller could grow this process's memory by requesting endless
+# made-up slugs. Expired entries are swept first; only then is the oldest dropped.
+_CACHE_MAX_ENTRIES = 4096
+
+# The org id (a Keycloak organization UUID, or a fixed demo tenant id) and the scenario
+# slug are interpolated into platform-registry URL paths below. Anything outside this
+# alphabet — `?`, `#`, `/`, `%`, `..` — could re-target the request (e.g. `churn?x`
+# would check entitlement to `churn` on behalf of slug `churn?x`), so it is rejected up
+# front instead of escaped: no legitimate org id or slug ever contains one.
+_SAFE_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+class _TtlCache[K, V]:
+    """A tiny thread-safe TTL map with a size ceiling — see _CACHE_MAX_ENTRIES."""
+
+    def __init__(self, ttl_seconds: float = _CACHE_TTL_SECONDS, max_entries: int = _CACHE_MAX_ENTRIES) -> None:
+        self._ttl = ttl_seconds
+        self._max = max_entries
+        self._data: dict[K, tuple[V, float]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: K) -> V | None:
+        with self._lock:
+            entry = self._data.get(key)
+        if entry is None or entry[1] <= time.monotonic():
+            return None
+        return entry[0]
+
+    def put(self, key: K, value: V) -> None:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._data) >= self._max and key not in self._data:
+                for stale in [k for k, (_, expiry) in self._data.items() if expiry <= now]:
+                    del self._data[stale]
+                if len(self._data) >= self._max:
+                    del self._data[next(iter(self._data))]
+            self._data[key] = (value, now + self._ttl)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+
+_entitlement_cache: _TtlCache[tuple[str, str, str], bool] = _TtlCache()
+_active_model_cache: _TtlCache[str, str] = _TtlCache()
+_providers_cache: _TtlCache[str, list[dict[str, Any]]] = _TtlCache()
+_active_voice_settings_cache: _TtlCache[str, tuple[str, str]] = _TtlCache()
+
+
+@cache
+def _http() -> httpx.Client:
+    """One process-wide pooled client (httpx.Client is thread-safe), so the calls
+    below reuse keep-alive connections to platform-registry instead of paying a
+    fresh TCP handshake on every cache miss.
+    """
+    return httpx.Client()
 
 
 class EntitlementDeniedError(Exception):
@@ -106,20 +162,19 @@ class PlatformRegistryClient:
 
         Cached in-process for `_CACHE_TTL_SECONDS` (see module docstring comment).
         """
+        if not (_SAFE_PATH_SEGMENT.match(org_id) and _SAFE_PATH_SEGMENT.match(scenario_slug)):
+            raise EntitlementDeniedError(f"Org {org_id!r} is not entitled to scenario {scenario_slug!r}.")
         cache_key = (self.base_url, org_id, scenario_slug)
-        now = time.monotonic()
-        cached = _entitlement_cache.get(cache_key)
-        if cached is not None and cached[1] > now:
-            entitled = cached[0]
-        else:
-            response = httpx.get(
+        entitled = _entitlement_cache.get(cache_key)
+        if entitled is None:
+            response = _http().get(
                 f"{self.base_url}/entitlements/{org_id}/{scenario_slug}",
                 timeout=self.timeout_seconds,
             )
             entitled = response.status_code != httpx.codes.NOT_FOUND
             if entitled:
                 response.raise_for_status()
-            _entitlement_cache[cache_key] = (entitled, now + _CACHE_TTL_SECONDS)
+            _entitlement_cache.put(cache_key, entitled)
 
         if not entitled:
             raise EntitlementDeniedError(f"Org {org_id!r} is not entitled to scenario {scenario_slug!r}.")
@@ -136,8 +191,10 @@ class PlatformRegistryClient:
         `authorization` only when calling as a trusted admin/dev caller that already
         cleared its own auth check.
         """
+        if not _SAFE_PATH_SEGMENT.match(org_id):
+            raise ValueError(f"Invalid org id {org_id!r}.")
         headers = {"Authorization": authorization} if authorization else {}
-        response = httpx.get(f"{self.base_url}/entitlements/{org_id}", headers=headers, timeout=self.timeout_seconds)
+        response = _http().get(f"{self.base_url}/entitlements/{org_id}", headers=headers, timeout=self.timeout_seconds)
         response.raise_for_status()
         return [ScenarioSummary(**item) for item in response.json()]
 
@@ -147,19 +204,18 @@ class PlatformRegistryClient:
         Raises on failure (network/404/etc); callers decide whether to fall back to a
         static default. Cached in-process for `_CACHE_TTL_SECONDS`.
         """
-        now = time.monotonic()
         cached = _active_model_cache.get(self.base_url)
-        if cached is not None and cached[1] > now:
-            return cached[0]
+        if cached is not None:
+            return cached
 
-        response = httpx.get(
+        response = _http().get(
             f"{self.base_url}/llm-settings/active-model",
             headers={"Authorization": f"Bearer {admin_api_key}"},
             timeout=self.timeout_seconds,
         )
         response.raise_for_status()
         model_name = response.json()["model_name"]
-        _active_model_cache[self.base_url] = (model_name, now + _CACHE_TTL_SECONDS)
+        _active_model_cache.put(self.base_url, model_name)
         return model_name
 
     def get_active_voice_settings(self, *, admin_api_key: str) -> tuple[str, str]:
@@ -168,12 +224,11 @@ class PlatformRegistryClient:
         Raises on failure (network/404/etc); callers decide whether to fall back to a
         static default. Cached in-process for `_CACHE_TTL_SECONDS`.
         """
-        now = time.monotonic()
         cached = _active_voice_settings_cache.get(self.base_url)
-        if cached is not None and cached[1] > now:
-            return cached[0]
+        if cached is not None:
+            return cached
 
-        response = httpx.get(
+        response = _http().get(
             f"{self.base_url}/voice-settings/active",
             headers={"Authorization": f"Bearer {admin_api_key}"},
             timeout=self.timeout_seconds,
@@ -181,7 +236,7 @@ class PlatformRegistryClient:
         response.raise_for_status()
         body = response.json()
         settings = (body["stt_provider"], body["tts_provider"])
-        _active_voice_settings_cache[self.base_url] = (settings, now + _CACHE_TTL_SECONDS)
+        _active_voice_settings_cache.put(self.base_url, settings)
         return settings
 
     def get_llm_provider_display(self, *, admin_api_key: str, model_name: str) -> tuple[str, str, bool] | None:
@@ -199,19 +254,16 @@ class PlatformRegistryClient:
         Reuses the same `/llm-settings/providers` list ui-react's admin Settings page
         renders. Cached in-process for `_CACHE_TTL_SECONDS`.
         """
-        now = time.monotonic()
-        cached = _providers_cache.get(self.base_url)
-        if cached is not None and cached[1] > now:
-            providers = cached[0]
-        else:
-            response = httpx.get(
+        providers = _providers_cache.get(self.base_url)
+        if providers is None:
+            response = _http().get(
                 f"{self.base_url}/llm-settings/providers",
                 headers={"Authorization": f"Bearer {admin_api_key}"},
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()
             providers = response.json()
-            _providers_cache[self.base_url] = (providers, now + _CACHE_TTL_SECONDS)
+            _providers_cache.put(self.base_url, providers)
 
         for provider in providers:
             for model_entry in provider.get("models", []):

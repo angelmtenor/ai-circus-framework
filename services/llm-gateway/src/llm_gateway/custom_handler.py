@@ -14,6 +14,8 @@ Author: ai-circus-framework contributors
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from collections.abc import Callable
 from typing import Any, Final
 
@@ -29,6 +31,7 @@ from litellm.types.utils import EmbeddingResponse, Usage
 DEFAULT_MODEL: Final = "voyageai/voyage-4-nano"
 
 _loaded_models: dict[str, Any] = {}
+_load_lock = threading.Lock()
 
 
 def _get_model(model_name: str) -> Any:
@@ -38,11 +41,12 @@ def _get_model(model_name: str) -> Any:
     is only ever exercised when litellm_config.yaml's custom_provider_map is used,
     so services/tests that never hit that path don't pay for importing torch.
     """
-    if model_name not in _loaded_models:
-        from sentence_transformers import SentenceTransformer
+    with _load_lock:  # aembedding runs on worker threads: load each model once, not per racer
+        if model_name not in _loaded_models:
+            from sentence_transformers import SentenceTransformer
 
-        _loaded_models[model_name] = SentenceTransformer(model_name)
-    return _loaded_models[model_name]
+            _loaded_models[model_name] = SentenceTransformer(model_name)
+        return _loaded_models[model_name]
 
 
 class LocalEmbeddingLLM(CustomLLM):
@@ -84,8 +88,13 @@ class LocalEmbeddingLLM(CustomLLM):
         timeout: float | httpx.Timeout | None = None,
         litellm_params: Any = None,
     ) -> EmbeddingResponse:
-        """Async entry point — sentence-transformers has no async API, so just delegate."""
-        return self.embedding(
+        """Async entry point. sentence-transformers has no async API and a CPU encode of
+        an etl-vectorize batch takes seconds — run it on a worker thread, or LiteLLM's
+        single event loop (which also streams every chat completion) stalls until the
+        batch is done.
+        """
+        return await asyncio.to_thread(
+            self.embedding,
             model,
             input,
             model_response,

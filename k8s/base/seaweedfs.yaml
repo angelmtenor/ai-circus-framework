@@ -33,14 +33,24 @@ spec:
           volumeMounts:
             - {name: seaweedfs-data, mountPath: /data}
             - {name: s3-config, mountPath: /etc/seaweedfs/s3.json, subPath: s3.json, readOnly: true}
+          # Idle ~280Mi (master + volume + filer + S3 gateway in one process).
+          resources:
+            requests: {cpu: 25m, memory: 256Mi}
+            limits: {memory: 768Mi}
+          # master + volume + filer + S3 gateway start in sequence (~25s measured): the
+          # startupProbe (2s × 60) holds liveness off until the S3 port answers — liveness
+          # with a fixed 15s delay nearly killed it mid-boot.
+          startupProbe:
+            tcpSocket: {port: 8333}
+            periodSeconds: 2
+            failureThreshold: 60
           readinessProbe:
             tcpSocket: {port: 8333}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 2
           livenessProbe:
             tcpSocket: {port: 8333}
-            initialDelaySeconds: 15
             periodSeconds: 10
+            failureThreshold: 3
       volumes:
         - name: s3-config
           secret: {secretName: seaweedfs-s3-config}

@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
-from ai_circus_shared.observability import configure_metrics
+from ai_circus_shared.observability import configure_metrics, redact_token_query_params
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
@@ -125,6 +125,9 @@ def main() -> None:
     )
 
     logger.success("agui-voice starting on port {}", config.HTTP_PORT)
+    # The browser can't set headers on a WebSocket, so /ws/{slug} takes its bearer token
+    # as `?token=` — and uvicorn logs every handshake with its query string.
+    redact_token_query_params()
     uvicorn.run(app, host="0.0.0.0", port=int(config.HTTP_PORT), log_level=config.LOG_LEVEL.lower())  # ruff: ignore[hardcoded-bind-all-interfaces]
 
 

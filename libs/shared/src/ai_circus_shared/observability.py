@@ -18,6 +18,8 @@ scenario and conversation in the Langfuse UI — see `langfuse_request_metadata(
 
 from __future__ import annotations
 
+import logging
+import re
 from typing import Any
 
 from fastapi import FastAPI
@@ -57,3 +59,33 @@ def langfuse_request_metadata(
     if thread_id:
         metadata["session_id"] = thread_id
     return metadata
+
+
+# `?token=` / `?access_token=` values in a logged URL — the only way a browser can hand a
+# bearer credential to a WebSocket (it cannot set headers), so agui-voice's `/ws/...`
+# URLs carry one, and uvicorn logs every WebSocket handshake *with its query string*.
+_TOKEN_QUERY_PARAM = re.compile(r"([?&](?:access_)?token=)[^&\s\"']+")
+
+
+def _redact(value: object) -> object:
+    return _TOKEN_QUERY_PARAM.sub(r"\1[REDACTED]", value) if isinstance(value, str) else value
+
+
+class RedactTokenQueryParams(logging.Filter):
+    """Blank bearer credentials out of logged URLs before any handler formats them."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(_redact(arg) for arg in record.args)
+        return True
+
+
+def redact_token_query_params(logger_names: tuple[str, ...] = ("uvicorn.error", "uvicorn.access")) -> None:
+    """Install `RedactTokenQueryParams` on uvicorn's loggers. Call before `uvicorn.run` —
+    uvicorn's own logging dictConfig replaces handlers but keeps logger filters.
+    Without it, an ADMIN_API_KEY or Keycloak JWT passed as `?token=` lands in the
+    container log verbatim.
+    """
+    for name in logger_names:
+        logging.getLogger(name).addFilter(RedactTokenQueryParams())

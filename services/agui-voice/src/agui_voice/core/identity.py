@@ -44,17 +44,5 @@ def resolve_identity_from_token(scenario_slug: str, authorization: str | None) -
     wrapping — for callers (the WebSocket handshake) that need the raw
     `TokenValidationError`/`EntitlementDeniedError` to decide their own close code.
     """
-    config = get_env_config()
-    settings = AuthSettingsAdapter(
-        AUTH_DISABLED=config.AUTH_DISABLED,
-        DEV_ORG_ID=config.DEV_ORG_ID,
-        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
-        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
-        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
-        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
-        ENGINEERING_DEMO_API_KEY=(
-            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
-        ),
-        PLATFORM_REGISTRY_URL=config.PLATFORM_REGISTRY_URL,
-    )
+    settings = AuthSettingsAdapter.from_config(get_env_config())
     return resolve_caller_identity(authorization=authorization, scenario_slug=scenario_slug, settings=settings)

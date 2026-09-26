@@ -305,3 +305,17 @@ def test_extract_document_rejects_unsupported_extension(client: TestClient) -> N
     """An unrecognized extension is a 415, not a silent empty extraction."""
     response = client.post("/documents/extract", files={"file": ("archive.zip", b"PK\x03\x04", "application/zip")})
     assert response.status_code == 415
+
+
+def test_extract_document_refuses_an_upload_over_the_size_cap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An oversized attachment is refused (413) before any parsing — and without first
+    reading the whole body into memory (the route reads at most cap + 1 bytes).
+    """
+    from platform_registry.core import document_extraction
+
+    monkeypatch.setattr(document_extraction, "MAX_UPLOAD_BYTES", 10)
+    response = client.post("/documents/extract", files={"file": ("notes.txt", b"x" * 11, "text/plain")})
+
+    assert response.status_code == 413

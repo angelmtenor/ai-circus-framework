@@ -34,23 +34,29 @@ spec:
             - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: form-agent-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
-          # initialDelaySeconds/timeoutSeconds/failureThreshold are looser than a plain FastAPI
-          # healthz would need: startup makes a live httpx call to llm-gateway (embedding
-          # dimension probe), which queues behind every other scenario-service doing the same
-          # thing on a single-node k3d cluster — the default 1s timeoutSeconds flakes under that
-          # concurrent cold-start load.
+          # Idle ~230Mi; embeddings run in llm-gateway, not here (the old 1Gi dated from in-process torch).
+          resources:
+            requests: {cpu: 25m, memory: 192Mi}
+            limits: {memory: 512Mi}
+          # startupProbe gates the other two until the app first answers, polled every 2s
+          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
+          # with a 180s budget — above the 120s the app itself waits for Postgres/
+          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
+          # liveness-killed mid-start.
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
           readinessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
+            timeoutSeconds: 3
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 45
-            periodSeconds: 15
+            periodSeconds: 20
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 3
       volumes:
         - name: scenarios
           hostPath: {path: /scenarios, type: Directory}

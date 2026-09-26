@@ -49,6 +49,8 @@ fi
 # libs/shared/) so the `../../libs/shared` path dependency resolves identically in
 # both local dev and the container — no path rewriting needed in pyproject.toml.
 PYTHON_VERSION="$(grep -oP 'FROM python:\K[0-9.]+' "$SERVICE_DIR/Dockerfile" | head -1)"
+# Same shape as every existing services/*/Dockerfile (see root CLAUDE.md "Conventions"):
+# BuildKit uv cache, precompiled bytecode, root-owned code, non-root UID 1000.
 cat > "$SERVICE_DIR/Dockerfile" <<EOF
 # ── Builder stage ───────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS builder
@@ -56,19 +58,30 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
+# Precompile bytecode at build time: a fresh container never has .pyc files on disk, so
+# every pod start would otherwise recompile each imported module on first use.
+# UV_LINK_MODE=copy because the uv cache is a mount.
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
 # Preserve the monorepo's relative layout (services/$SERVICE_NAME next to libs/shared)
 # so the service's "../../libs/shared" path dependency resolves the same way here
 # as it does in local dev.
 COPY libs/shared /app/libs/shared
 COPY services/$SERVICE_NAME/pyproject.toml services/$SERVICE_NAME/uv.lock services/$SERVICE_NAME/
-RUN uv sync --project services/$SERVICE_NAME --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \\
+    uv sync --project services/$SERVICE_NAME --frozen --no-dev --no-install-project
 
 COPY services/$SERVICE_NAME services/$SERVICE_NAME
-RUN uv sync --project services/$SERVICE_NAME --frozen --no-cache --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \\
+    uv sync --project services/$SERVICE_NAME --frozen --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
+
+# UID 1000 is what every k8s manifest's runAsUser pins. The code/venv below stay
+# root-owned (read-only to the service): only the home directory (caches) is writable.
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app
 
 COPY --from=builder /app/services/$SERVICE_NAME/.venv services/$SERVICE_NAME/.venv
 COPY --from=builder /app/services/$SERVICE_NAME/src   services/$SERVICE_NAME/src
@@ -76,9 +89,13 @@ COPY --from=builder /app/services/$SERVICE_NAME/pyproject.toml services/$SERVICE
 COPY --from=builder /app/services/$SERVICE_NAME/settings.yaml  services/$SERVICE_NAME/settings.yaml
 
 ENV PATH="/app/services/$SERVICE_NAME/.venv/bin:\$PATH"
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 MALLOC_ARENA_MAX=2
 WORKDIR /app/services/$SERVICE_NAME
+
+USER app
 
 CMD ["python", "-m", "$PACKAGE_NAME.app"]
 EOF
 
-echo "✓ services/$SERVICE_NAME scaffolded — remember to add it to docker-compose.yml"
+echo "✓ services/$SERVICE_NAME scaffolded — next: k8s/base manifest, docker-compose.yml entry, K3S_IMAGES,"
+echo "  platform_status.py row, k3s_generate_secrets.sh spec (see the new-service-scaffold skill)"

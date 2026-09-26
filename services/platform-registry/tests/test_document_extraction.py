@@ -110,3 +110,30 @@ def test_extract_document_image_always_uses_ocr(monkeypatch: pytest.MonkeyPatch)
     assert result.kind == "image"
     assert result.used_ocr is True
     assert result.text == "text from the photo"
+
+
+def test_pdf_ocr_renders_only_the_scanned_pages_one_at_a_time_and_caps_them(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A long scanned PDF must never be rasterized in full: only text-less pages are
+    rendered, one per call, and at most MAX_OCR_PAGES of them (reported as truncated).
+    """
+    rendered: list[tuple[int, int]] = []
+
+    class _Page:
+        def extract_text(self) -> str:
+            return ""
+
+    class _Reader:
+        def __init__(self, _stream: object) -> None:
+            self.pages = [_Page() for _ in range(de.MAX_OCR_PAGES + 5)]
+
+    def fake_convert(_data: bytes, first_page: int, last_page: int) -> list[object]:
+        rendered.append((first_page, last_page))
+        return [object()]
+
+    monkeypatch.setattr(de, "PdfReader", _Reader)
+    monkeypatch.setattr(de, "convert_from_bytes", fake_convert)
+    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda _image: "scanned text")
+    result = de.extract_document("scan.pdf", b"%PDF")
+    assert rendered == [(i, i) for i in range(1, de.MAX_OCR_PAGES + 1)]
+    assert result.used_ocr is True
+    assert result.truncated is True

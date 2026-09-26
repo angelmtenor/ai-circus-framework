@@ -73,12 +73,26 @@ def test_retrained_model_is_picked_up_on_revalidation(monkeypatch: pytest.Monkey
 
 def test_lru_bounds_the_number_of_loaded_models(monkeypatch: pytest.MonkeyPatch) -> None:
     store = MemoryStore()
-    publish(store, "demo", "text")
+    for org in ("a", "b", "c"):
+        publish(store, org, "text")
     monkeypatch.setattr(mc, "MAX_CACHED_MODELS", 2)
     cache = _cache(store)
     for org in ("a", "b", "c"):
         cache.get(org, "triage")
     assert cache.cached_keys() == [("b", "triage"), ("c", "triage")]
+
+
+def test_tenants_on_the_fallback_share_one_loaded_model() -> None:
+    """admin/engineering-demo/new orgs all serve the demo model: one ONNX session, one load."""
+    store = MemoryStore()
+    publish(store, "demo", "text")
+    cache = _cache(store)
+    first = cache.get("admin", "triage")
+    model_reads = sum(key.endswith(DL_MODEL_KEY) for key in store.gets)
+    assert cache.get("engineering-demo", "triage") is first
+    assert cache.get("demo", "triage") is first
+    assert sum(key.endswith(DL_MODEL_KEY) for key in store.gets) == model_reads
+    assert cache.cached_keys() == [("demo", "triage")]
 
 
 def test_images_come_from_the_org_the_model_was_loaded_from_and_are_cached() -> None:

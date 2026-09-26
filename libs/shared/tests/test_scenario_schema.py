@@ -528,8 +528,13 @@ def test_anomaly_detection_task_validation() -> None:
     with pytest.raises(ValidationError, match="exactly two labels"):
         _anomaly_config(labels=[{"key": k, "label": k} for k in "abc"])
     with pytest.raises(ValidationError, match="calibration_holdout_fraction > 0"):
-        _anomaly_config(training={"gpu": {"batch_size": 1, "memory_bank_size": 64}, "cpu": {"batch_size": 1, "memory_bank_size": 64}})
-    with pytest.raises(ValidationError, match="training.cpu needs memory_bank_size"):
+        _anomaly_config(
+            training={
+                "gpu": {"batch_size": 1, "memory_bank_size": 64},
+                "cpu": {"batch_size": 1, "memory_bank_size": 64},
+            }
+        )
+    with pytest.raises(ValidationError, match=r"training\.cpu needs memory_bank_size"):
         _anomaly_config(
             training={
                 "gpu": {"batch_size": 1, "memory_bank_size": 64},
@@ -540,7 +545,7 @@ def test_anomaly_detection_task_validation() -> None:
 
 
 def test_classification_task_needs_epochs_and_no_anomaly_block() -> None:
-    with pytest.raises(ValidationError, match="training.gpu needs epochs and learning_rate"):
+    with pytest.raises(ValidationError, match=r"training\.gpu needs epochs and learning_rate"):
         DeepLearningConfig(
             **{**_dl_config().model_dump(), "training": {"gpu": {"batch_size": 1}, "cpu": BUDGET.model_dump()}}
         )
@@ -580,7 +585,10 @@ def test_triage_board_must_route_every_label_exactly_once() -> None:
 def test_triage_board_also_serves_image_scenarios() -> None:
     """An inspection line is a triage board of images: pass / reject / manual review."""
     board = TriageBoardExtra(
-        lanes=[TriageLane(key="pass", label="Pass", labels=["a"]), TriageLane(key="reject", label="Reject", labels=["b"])],
+        lanes=[
+            TriageLane(key="pass", label="Pass", labels=["a"]),
+            TriageLane(key="reject", label="Reject", labels=["b"]),
+        ],
         item_noun="part",
         reviewer_noun="inspector",
     )
@@ -620,7 +628,12 @@ def test_repo_deep_learning_scenarios_load() -> None:
     from ai_circus_shared.scenario_schema import resolve_scenarios
 
     scenarios = resolve_scenarios(Path(__file__).parents[3] / "scenarios", "", kind="deep_learning")
-    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia", "pcb_visual_inspection", "pasta_visual_inspection"}
+    assert set(scenarios) == {
+        "symptom_triage",
+        "chest_xray_pneumonia",
+        "pcb_visual_inspection",
+        "pasta_visual_inspection",
+    }
 
 
 def test_resolve_scenarios_ignores_other_kinds_it_cannot_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]

@@ -1,17 +1,21 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { config } from "./config";
 import { useIdentity } from "./useIdentity";
 import { useTheme } from "./useTheme";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
-import { TabularView } from "./TabularView";
-import { RagView } from "./RagView";
-import { AssistedFormView } from "./AssistedFormView";
-import { DeepLearningView } from "./DeepLearningView";
 import { ScenarioPicker } from "./ScenarioPicker";
-import { Settings } from "./Settings";
-import { PlatformStatusView } from "./PlatformStatus";
 import { Icon } from "./Icon";
 import "./App.css";
+
+// Code-split per page: the login screen and scenario picker need none of these, and
+// together they carry CopilotKit, the chat/voice stack and every workspace view — each is
+// fetched the first time it is opened instead of on first paint.
+const TabularView = lazy(() => import("./TabularView").then((m) => ({ default: m.TabularView })));
+const RagView = lazy(() => import("./RagView").then((m) => ({ default: m.RagView })));
+const AssistedFormView = lazy(() => import("./AssistedFormView").then((m) => ({ default: m.AssistedFormView })));
+const DeepLearningView = lazy(() => import("./DeepLearningView").then((m) => ({ default: m.DeepLearningView })));
+const Settings = lazy(() => import("./Settings").then((m) => ({ default: m.Settings })));
+const PlatformStatusView = lazy(() => import("./PlatformStatus").then((m) => ({ default: m.PlatformStatusView })));
 
 // Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider / Voice sections
 // manage shared llm-gateway/agui-voice infrastructure, not a per-tenant entitlement, so
@@ -256,53 +260,55 @@ export default function App() {
         </header>
       </div>
       <main className="app-main">
-        {showPlatform && isAdmin ? (
-          <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} scenarios={scenarios} />
-        ) : showSettings ? (
-          <Settings
-            accessToken={identity.accessToken}
-            isAdmin={isAdmin}
-            theme={theme}
-            themes={themes}
-            onThemeChange={setThemeId}
-            // Voice-provider availability isn't scenario-specific data — this is just
-            // an anchor scenario_slug for agui-voice's entitlement check (see
-            // api/providers.py); any scenario the admin org is entitled to works.
-            voiceScenarioSlug={scenarios[0]?.slug ?? null}
-          />
-        ) : (
-          <>
-            {scenariosError && <p className="error">{scenariosError}</p>}
-            {scenariosLoading && <div className="app-loading">Loading scenarios…</div>}
-            {!scenariosLoading && !scenariosError && !selected && (
-              <ScenarioPicker
-                scenarios={scenarios}
-                onSelect={setSelected}
-                industry={scenarioIndustry}
-                onIndustryChange={setScenarioIndustry}
-              />
-            )}
-            {!scenariosLoading && selected?.kind === "tabular_ml" && (
-              <TabularView scenario={selected} accessToken={identity.accessToken} />
-            )}
-            {!scenariosLoading && selected?.kind === "conversational_rag" && (
-              <RagView scenario={selected} accessToken={identity.accessToken} />
-            )}
-            {!scenariosLoading && selected?.kind === "assisted_form" && (
-              <AssistedFormView scenario={selected} accessToken={identity.accessToken} />
-            )}
-            {!scenariosLoading && selected?.kind === "deep_learning" && (
-              <DeepLearningView scenario={selected} accessToken={identity.accessToken} />
-            )}
-            {!scenariosLoading &&
-              selected &&
-              !["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"].includes(selected.kind) && (
-                <div className="app-loading">
-                  {selected.title} ({selected.kind}) doesn't have a workspace view yet.
-                </div>
+        <Suspense fallback={<div className="app-loading">Loading…</div>}>
+          {showPlatform && isAdmin ? (
+            <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} scenarios={scenarios} />
+          ) : showSettings ? (
+            <Settings
+              accessToken={identity.accessToken}
+              isAdmin={isAdmin}
+              theme={theme}
+              themes={themes}
+              onThemeChange={setThemeId}
+              // Voice-provider availability isn't scenario-specific data — this is just
+              // an anchor scenario_slug for agui-voice's entitlement check (see
+              // api/providers.py); any scenario the admin org is entitled to works.
+              voiceScenarioSlug={scenarios[0]?.slug ?? null}
+            />
+          ) : (
+            <>
+              {scenariosError && <p className="error">{scenariosError}</p>}
+              {scenariosLoading && <div className="app-loading">Loading scenarios…</div>}
+              {!scenariosLoading && !scenariosError && !selected && (
+                <ScenarioPicker
+                  scenarios={scenarios}
+                  onSelect={setSelected}
+                  industry={scenarioIndustry}
+                  onIndustryChange={setScenarioIndustry}
+                />
               )}
-          </>
-        )}
+              {!scenariosLoading && selected?.kind === "tabular_ml" && (
+                <TabularView scenario={selected} accessToken={identity.accessToken} />
+              )}
+              {!scenariosLoading && selected?.kind === "conversational_rag" && (
+                <RagView scenario={selected} accessToken={identity.accessToken} />
+              )}
+              {!scenariosLoading && selected?.kind === "assisted_form" && (
+                <AssistedFormView scenario={selected} accessToken={identity.accessToken} />
+              )}
+              {!scenariosLoading && selected?.kind === "deep_learning" && (
+                <DeepLearningView scenario={selected} accessToken={identity.accessToken} />
+              )}
+              {!scenariosLoading &&
+                selected &&
+                !["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"].includes(selected.kind) && (
+                  <div className="app-loading">
+                    {selected.title} ({selected.kind}) doesn't have a workspace view yet.
+                  </div>
+                )}
+            </>
+          )}
+        </Suspense>
       </main>
     </div>
   );

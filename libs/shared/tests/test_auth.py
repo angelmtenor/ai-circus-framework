@@ -290,3 +290,26 @@ class TestResolveOrgIdentity:
             resolve_org_identity(
                 authorization="Bearer anything", settings=FakeSettings(ADMIN_API_KEY=None, KEYCLOAK_ISSUER=None)
             )
+
+
+def test_auth_settings_adapter_from_config_unwraps_secrets_and_tolerates_missing_fields() -> None:
+    """platform-registry's config has no PLATFORM_REGISTRY_URL, data-platform-manager's no
+    ENGINEERING_DEMO_API_KEY — both must still adapt, with the absent field defaulted."""
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+
+    config = SimpleNamespace(
+        AUTH_DISABLED="false",
+        DEV_ORG_ID="demo",
+        KEYCLOAK_ISSUER="iss",
+        KEYCLOAK_AUDIENCE="aud",
+        KEYCLOAK_JWKS_URL="jwks",
+        ADMIN_API_KEY=SecretStr("admin-key"),
+        ENGINEERING_DEMO_API_KEY=None,
+    )
+    settings = auth_module.AuthSettingsAdapter.from_config(config)
+    assert settings.ADMIN_API_KEY == "admin-key"
+    assert settings.ENGINEERING_DEMO_API_KEY is None
+    assert settings.PLATFORM_REGISTRY_URL == ""
+    assert settings.KEYCLOAK_ISSUER == "iss"

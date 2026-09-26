@@ -145,12 +145,10 @@ class AuthSettingsAdapter:
 
     A plain dataclass (not `types.SimpleNamespace`) so static type checkers can
     actually verify it satisfies the `AuthSettings` Protocol — `SimpleNamespace`'s
-    dynamic `__getattr__` defeats that check. Each service's `core/identity.py`
-    constructs one of these, unwrapping `ADMIN_API_KEY` from its own `SecretStr`
-    field in the process (every service types real credentials as `SecretStr`).
-    Deliberately mutable (not `frozen=True`): `AuthSettings`' attributes are
-    read-write by default, and pyrefly checks a Protocol's read-write attributes
-    against a frozen dataclass's read-only ones as an incompatible override.
+    dynamic `__getattr__` defeats that check. Deliberately mutable (not
+    `frozen=True`): `AuthSettings`' attributes are read-write by default, and pyrefly
+    checks a Protocol's read-write attributes against a frozen dataclass's read-only
+    ones as an incompatible override. Build it with `from_config`.
     """
 
     AUTH_DISABLED: str
@@ -162,6 +160,29 @@ class AuthSettingsAdapter:
     ENGINEERING_DEMO_API_KEY: str | None
     PLATFORM_REGISTRY_URL: str
 
+    @classmethod
+    def from_config(cls, config: object) -> AuthSettingsAdapter:
+        """Adapt any service's generated `EnvConfig` (duck-typed — each service has its
+        own pydantic-settings class, no common base), unwrapping the `SecretStr`
+        credential fields. `PLATFORM_REGISTRY_URL` is optional: platform-registry
+        itself has none, and only `resolve_caller_identity` ever reads it.
+        """
+
+        def _secret(name: str) -> str | None:
+            value = getattr(config, name, None)
+            return value.get_secret_value() if value is not None else None
+
+        return cls(
+            AUTH_DISABLED=getattr(config, "AUTH_DISABLED", "false"),
+            DEV_ORG_ID=getattr(config, "DEV_ORG_ID", ""),
+            KEYCLOAK_ISSUER=getattr(config, "KEYCLOAK_ISSUER", None),
+            KEYCLOAK_AUDIENCE=getattr(config, "KEYCLOAK_AUDIENCE", None),
+            KEYCLOAK_JWKS_URL=getattr(config, "KEYCLOAK_JWKS_URL", None),
+            ADMIN_API_KEY=_secret("ADMIN_API_KEY"),
+            ENGINEERING_DEMO_API_KEY=_secret("ENGINEERING_DEMO_API_KEY"),
+            PLATFORM_REGISTRY_URL=getattr(config, "PLATFORM_REGISTRY_URL", ""),
+        )
+
 
 def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool:
     """Constant-time check that `authorization` is exactly `Bearer <admin_api_key>`."""
@@ -170,28 +191,18 @@ def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool
     return secrets.compare_digest(authorization.removeprefix("Bearer "), admin_api_key)
 
 
-def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -> Identity:
-    """Resolve the caller's identity WITHOUT enforcing any scenario entitlement.
+def _resolve_identity(*, authorization: str | None, settings: AuthSettings, bypass_roles: frozenset[str]) -> Identity:
+    """The four identity-resolution paths, tried in order — see `resolve_caller_identity`.
 
-    For platform-registry's own `/entitlements/{org_id}` reads: those endpoints ARE
-    the entitlement check, so routing them through `resolve_caller_identity` would
-    have platform-registry call back into its own API via `check_entitlement` — this
-    covers the same four resolution paths (dev bypass / admin key / engineering-demo
-    key / real Keycloak token) without that trailing call. Deliberately NOT a
-    refactor of `resolve_caller_identity` into a shared helper — keeping the two
-    independent avoids any risk of changing that function's already-tested behavior
-    for prediction/assistant/rag-agent.
-
-    Raises:
-        TokenValidationError: No/malformed token, or a token with no org claim.
-        RuntimeError: AUTH_DISABLED is false but Keycloak isn't configured.
+    `bypass_roles` is what the three fixed (non-Keycloak) identities carry; a real
+    Keycloak identity carries whatever realm roles its token holds.
     """
     if settings.AUTH_DISABLED.lower() == "true":
-        identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=frozenset())
+        identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=bypass_roles)
     elif settings.ADMIN_API_KEY and is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
-        identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=frozenset())
+        identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=bypass_roles)
     elif settings.ENGINEERING_DEMO_API_KEY and is_admin_bearer_token(authorization, settings.ENGINEERING_DEMO_API_KEY):
-        identity = Identity(subject="engineering-demo", org_id=ENGINEERING_DEMO_ORG_ID, roles=frozenset())
+        identity = Identity(subject="engineering-demo", org_id=ENGINEERING_DEMO_ORG_ID, roles=bypass_roles)
     else:
         if not authorization or not authorization.startswith("Bearer "):
             raise TokenValidationError("Missing or malformed Authorization header.")
@@ -200,9 +211,8 @@ def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -
                 "KEYCLOAK_ISSUER/KEYCLOAK_AUDIENCE/KEYCLOAK_JWKS_URL must be set "
                 "unless AUTH_DISABLED=true or a matching ADMIN_API_KEY was supplied."
             )
-        token = authorization.removeprefix("Bearer ")
         identity = validate_token(
-            token,
+            authorization.removeprefix("Bearer "),
             issuer=settings.KEYCLOAK_ISSUER,
             audience=settings.KEYCLOAK_AUDIENCE,
             jwks_url=settings.KEYCLOAK_JWKS_URL,
@@ -211,6 +221,20 @@ def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -
     if identity.org_id is None:
         raise TokenValidationError("Token has no organization (tenant) claim.")
     return identity
+
+
+def resolve_org_identity(*, authorization: str | None, settings: AuthSettings) -> Identity:
+    """Resolve the caller's identity WITHOUT enforcing any scenario entitlement.
+
+    For platform-registry's own `/entitlements/{org_id}` reads: those endpoints ARE
+    the entitlement check, so routing them through `resolve_caller_identity` would
+    have platform-registry call back into its own API via `check_entitlement`.
+
+    Raises:
+        TokenValidationError: No/malformed token, or a token with no org claim.
+        RuntimeError: AUTH_DISABLED is false but Keycloak isn't configured.
+    """
+    return _resolve_identity(authorization=authorization, settings=settings, bypass_roles=frozenset())
 
 
 def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, settings: AuthSettings) -> Identity:
@@ -232,34 +256,11 @@ def resolve_caller_identity(*, authorization: str | None, scenario_slug: str, se
         RuntimeError: AUTH_DISABLED is false but Keycloak isn't configured (server
             misconfiguration, not a caller-facing auth failure).
     """
-    if settings.AUTH_DISABLED.lower() == "true":
-        dev_role = f"scenario:{scenario_slug}"
-        identity = Identity(subject="dev", org_id=settings.DEV_ORG_ID, roles=frozenset({dev_role}))
-    elif settings.ADMIN_API_KEY and is_admin_bearer_token(authorization, settings.ADMIN_API_KEY):
-        admin_role = f"scenario:{scenario_slug}"
-        identity = Identity(subject="admin", org_id=ADMIN_ORG_ID, roles=frozenset({admin_role}))
-    elif settings.ENGINEERING_DEMO_API_KEY and is_admin_bearer_token(authorization, settings.ENGINEERING_DEMO_API_KEY):
-        demo_role = f"scenario:{scenario_slug}"
-        identity = Identity(subject="engineering-demo", org_id=ENGINEERING_DEMO_ORG_ID, roles=frozenset({demo_role}))
-    else:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise TokenValidationError("Missing or malformed Authorization header.")
-        if not (settings.KEYCLOAK_ISSUER and settings.KEYCLOAK_AUDIENCE and settings.KEYCLOAK_JWKS_URL):
-            raise RuntimeError(
-                "KEYCLOAK_ISSUER/KEYCLOAK_AUDIENCE/KEYCLOAK_JWKS_URL must be set "
-                "unless AUTH_DISABLED=true or a matching ADMIN_API_KEY was supplied."
-            )
-        token = authorization.removeprefix("Bearer ")
-        identity = validate_token(
-            token,
-            issuer=settings.KEYCLOAK_ISSUER,
-            audience=settings.KEYCLOAK_AUDIENCE,
-            jwks_url=settings.KEYCLOAK_JWKS_URL,
-        )
-
-    if identity.org_id is None:
-        raise TokenValidationError("Token has no organization (tenant) claim.")
-
-    client = PlatformRegistryClient(base_url=settings.PLATFORM_REGISTRY_URL)
-    client.check_entitlement(org_id=identity.org_id, scenario_slug=scenario_slug)
+    identity = _resolve_identity(
+        authorization=authorization, settings=settings, bypass_roles=frozenset({f"scenario:{scenario_slug}"})
+    )
+    assert identity.org_id is not None  # _resolve_identity raises otherwise
+    PlatformRegistryClient(base_url=settings.PLATFORM_REGISTRY_URL).check_entitlement(
+        org_id=identity.org_id, scenario_slug=scenario_slug
+    )
     return identity

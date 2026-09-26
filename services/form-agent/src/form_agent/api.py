@@ -21,6 +21,7 @@ from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.storage import ObjectStore
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
@@ -306,7 +307,9 @@ async def agui_endpoint(
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
     assert definition.form is not None  # guaranteed by kind="assisted_form" filter
-    if store.get_conversation(input_data.thread_id, identity.org_id, identity.subject) is None:
+    # Every DB call in this `async def` route goes through the threadpool: a sync call
+    # here would block the event loop that is also streaming every other chat.
+    if await run_in_threadpool(store.get_conversation, input_data.thread_id, identity.org_id, identity.subject) is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
     tools: list[BaseTool] = []
@@ -380,7 +383,7 @@ async def agui_endpoint(
                     )
                 yield encoder.encode(event)
         finally:
-            _persist_turn(store, input_data, identity, assistant_text_by_message_id)
+            await run_in_threadpool(_persist_turn, store, input_data, identity, assistant_text_by_message_id)
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
 

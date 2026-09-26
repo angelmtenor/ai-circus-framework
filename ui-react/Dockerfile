@@ -21,9 +21,13 @@ ENV VITE_KEYCLOAK_CLIENT_ID=$VITE_KEYCLOAK_CLIENT_ID
 ENV VITE_KEYCLOAK_AUDIENCE=$VITE_KEYCLOAK_AUDIENCE
 ENV VITE_DEV_MODE=$VITE_DEV_MODE
 ENV VITE_DEV_ORG_ID=$VITE_DEV_ORG_ID
-RUN npm run build
+RUN npm run build \
+    && find dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.json' -o -name '*.html' \) \
+        -size +1k -exec gzip -9 -k {} +
 
-FROM nginx:1.27-alpine
+# Unprivileged variant: runs as UID 101 on :8080, so k8s can enforce runAsNonRoot with
+# every capability dropped (stock nginx starts as root to bind :80).
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 COPY ui-react/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080
