@@ -8,6 +8,7 @@ or the network.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -113,11 +114,14 @@ def test_build_stt_service_unknown_provider_raises() -> None:
         providers_module.build_stt_service(_base_config(STT_PROVIDER="not-a-provider"))
 
 
-def test_build_tts_service_piper(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_tts_service_piper(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """TTS_PROVIDER=piper preloads one PiperTTSService per supported language, wraps
     them in a ServiceSwitcher (so switching voice needs no reload — see the
     docstring), and returns a language -> service switch map for AgentBridgeProcessor.
+    Voices go to the writable cache volume, never the (read-only) working directory.
     """
+    voices_dir = tmp_path / "cache" / "pipecat" / "piper"
+    monkeypatch.setattr(providers_module, "PIPER_VOICES_DIR", voices_dir)
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(providers_module, "PiperTTSService", lambda **kw: calls.append(kw) or f"piper-{kw['voice_id']}")
     switcher_calls: list[dict[str, object]] = []
@@ -130,7 +134,11 @@ def test_build_tts_service_piper(monkeypatch: pytest.MonkeyPatch) -> None:
     result, switch_map = providers_module.build_tts_service(_base_config())
 
     assert result == "the-switcher"
-    assert calls == [{"voice_id": "en_US-lessac-medium"}, {"voice_id": "es_ES-davefx-medium"}]
+    assert calls == [
+        {"voice_id": "en_US-lessac-medium", "download_dir": voices_dir},
+        {"voice_id": "es_ES-davefx-medium", "download_dir": voices_dir},
+    ]
+    assert voices_dir.is_dir()  # created up front — Piper's downloader doesn't create parents
     assert switcher_calls == [
         {
             "services": ["piper-en_US-lessac-medium", "piper-es_ES-davefx-medium"],
@@ -368,3 +376,8 @@ def test_cached_piper_voice_loads_once_for_the_same_path(monkeypatch: pytest.Mon
 
     assert first is second
     assert len(calls) == 1
+
+
+def test_piper_voices_live_on_the_home_cache_volume() -> None:
+    """The k8s/compose voice-model-cache volume is mounted at ~/.cache — the voices dir must be under it."""
+    assert providers_module.PIPER_VOICES_DIR.is_relative_to(Path.home() / ".cache")
