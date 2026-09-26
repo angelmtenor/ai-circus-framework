@@ -153,7 +153,8 @@ mode talks to `agui-voice` over a plain WebSocket.
 
 - **"Failed to fetch" in the browser** is a network-level failure, not an app bug: run
   `make k3s-verify` (compose: `make verify`); common causes are the platform-registry
-  port-forward not running (`ss -tlnp | grep 8010` → `make k3s-portforward`), a stale pod after a
+  port-forward not running (`ss -tlnp | grep 8010` → `make k3s-portforward`; it is a systemd user
+  service `ai-circus-portforward-<cluster>` that survives reboots where user systemd exists), a stale pod after a
   same-tag image import (`rollout restart`), or opening the app from an origin other than
   `http://aiopen.localhost` (CORS allow-lists are exact).
 - A `tabular_ml` scenario returning 503 "No trained model artifacts" on a healthy cluster →

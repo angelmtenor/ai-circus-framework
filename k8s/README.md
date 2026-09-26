@@ -183,17 +183,24 @@ setup. `ui-react`'s bundled default for `VITE_PLATFORM_REGISTRY_URL` is `http://
 (matching docker-compose.yml's `127.0.0.1:8010` host-published port), so the browser needs a
 standing port-forward to `platform-registry`'s loopback-only API — unlike `k3s-verify`'s own
 port-forward, which only lives for that one command. `make k3s-wait` (and therefore `make
-k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`,
-tracking its PID in `/tmp/k3s-portforward-<cluster>.pid` so re-running it doesn't stack duplicate
-forwards on the same port; `make k3s-pause`/`make k3s-down` stop it again. Run `make
-k3s-portforward` yourself only if you need to restart it without a full `k3s-wait` (e.g. after it
-died for some other reason).
+k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`
+(`scripts/k3s_portforward.sh`). Wherever systemd runs a per-user manager — native Linux, and WSL
+with `systemd=true` in `/etc/wsl.conf` — it installs it as the systemd user service
+`ai-circus-portforward-<cluster>`: enabled at boot (lingering on, so no login is needed) and
+restarted 5 s after `kubectl` exits, which it does whenever the platform-registry pod restarts or
+while the cluster is still coming up after a reboot. So the forward survives reboots and pod
+restarts with nothing to re-run. `make k3s-pause`/`make k3s-down` stop it (it stays enabled for the
+next boot); `make k3s-portforward-uninstall` removes the service. Without user systemd (or with
+`K3S_PORTFORWARD_SERVICE=0`) it is a plain background process with its PID in
+`/tmp/k3s-portforward-<cluster>.pid`, which dies with the machine — re-run `make k3s-portforward`
+after a reboot there.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and
-confirm the port-forward is actually running (`ss -tlnp | grep 8010` or check
-`/tmp/k3s-portforward-<cluster>.log`) — `make k3s-verify` only exercises curl-reachable Traefik
-routes and won't catch this class of failure.
+confirm the port-forward is actually running (`ss -tlnp | grep 8010`; its log is
+`journalctl --user -u ai-circus-portforward-<cluster>`, or `/tmp/k3s-portforward-<cluster>.log`
+without user systemd) — `make k3s-verify` only exercises curl-reachable Traefik routes and won't
+catch this class of failure.
 Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.

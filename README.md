@@ -350,16 +350,17 @@ make k3s-pause      # stop the cluster — resume later with `make k3s-resume`
 make k3s-resume     # start it back up
 ```
 
-**Before opening the app in a browser**, start a standing port-forward — `platform-registry`'s
-browser-facing API isn't reachable through Traefik or `k3s-verify`'s own (command-scoped)
-port-forward:
+**The browser also needs a standing port-forward** to `platform-registry` (its browser-facing API
+isn't reachable through Traefik or `k3s-verify`'s own command-scoped port-forward). `make k3s-wait`
+starts it for you, as a systemd user service wherever systemd runs one (native Linux, WSL with
+`systemd=true`) — so it comes back by itself after a reboot or a platform-registry restart:
 
 ```bash
-kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+make k3s-portforward   # (re)start it by hand — only needed without user systemd, after a reboot
 ```
 
-Skipping this shows up as a client-side `Failed to fetch` right on the login screen even though
-every other check passes — see [`k8s/README.md`](k8s/README.md)'s "Design notes" for why.
+A missing port-forward shows up as a client-side `Failed to fetch` right on the login screen even
+though every other check passes — see [`k8s/README.md`](k8s/README.md)'s "Design notes" for why.
 
 This is dev-parity, single-node only today (no registry — images are built locally and imported
 straight into the cluster; no Helm chart, no multi-node/HA) — not yet a drop-in production
@@ -427,7 +428,8 @@ set in `services/platform-registry/src/platform_registry/core/seed.py`'s
 > application error — it means a request never reached a server at all.
 >
 > **On Kubernetes**, this almost always means the standing `platform-registry` port-forward from
-> step 3 above isn't running — see [`k8s/README.md`](k8s/README.md)'s "Design notes".
+> step 3 above isn't running (`ss -tlnp | grep 8010`; `make k3s-portforward` restarts it) — see
+> [`k8s/README.md`](k8s/README.md)'s "Design notes".
 >
 > **On Docker Compose**, run `make verify` (or just `make all` again) to pinpoint which service
 > isn't answering; the most common causes are: (1) you tested right after `make up`, before every
