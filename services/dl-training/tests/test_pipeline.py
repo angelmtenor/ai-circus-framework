@@ -21,6 +21,7 @@ from ai_circus_shared.deep_learning import (
     DL_TOKENIZER_KEY,
 )
 from ai_circus_shared.tabular_ml import artifact_checksum
+from PIL import Image
 from tokenizers import Tokenizer
 
 from dl_training.core import pipeline
@@ -153,6 +154,13 @@ def test_anomaly_detection_scenario_end_to_end(tmp_path: Path) -> None:
     samples = json.loads(store.objects[_key(DL_SAMPLES_KEY)])["samples"]
     with_mask = [s["id"] for s in samples if s.get("has_mask")]
     assert with_mask and all(s["label"] == "1" for s in samples if s.get("has_mask"))
+    # The test file is sorted good-then-defective; the gallery must not be (a UI showing
+    # "the first N" would see one class only) — yet each image keeps its own label.
+    labels = [s["label"] for s in samples]
+    assert set(labels) == {"0", "1"} and labels != sorted(labels)
+    for s in samples:
+        image = np.asarray(Image.open(io.BytesIO(store.objects[_key(f"images/{s['id']}.png")])))
+        assert (image.max() > 200) == (s["label"] == "1")  # only defective parts have the bright square
     masks = sorted(k for k in store.objects if k.startswith(_key(DL_MASKS_PREFIX)))
     assert masks == sorted(_key(f"masks/{sid}.png") for sid in with_mask)
     reference = json.loads(store.objects[_key(DL_REFERENCE_KEY)])

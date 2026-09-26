@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { dlPredict, type DlPredictBody, type DlPrediction, type ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import {
@@ -6,9 +6,11 @@ import {
   HeatmapImage,
   HeatmapLegend,
   isAnomaly,
+  isHardSample,
   labelName,
   labelsOf,
   MaskLegend,
+  pickSamples,
   ProbabilityBars,
   SimilarCases,
   Thumbnail,
@@ -18,6 +20,9 @@ import {
   useDlSamples,
   probText,
 } from "./dlShared";
+
+// Held-out samples offered in the image picker strip at a time.
+const STRIP_SIZE = 18;
 
 type Input = { kind: "text"; text: string } | { kind: "sample"; id: string; text?: string } | { kind: "upload"; dataUrl: string; name: string };
 
@@ -33,6 +38,13 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
   const anomaly = isAnomaly(scenario);
   const [showMask, setShowMask] = useState(true);
   const samples = useDlSamples(scenario.slug, accessToken);
+  const [stripSeed, setStripSeed] = useState(1);
+  const [hardOnly, setHardOnly] = useState(false);
+  const strip = useMemo(
+    () => pickSamples(scenario, samples.data ?? [], STRIP_SIZE, stripSeed, hardOnly),
+    [scenario, samples.data, stripSeed, hardOnly],
+  );
+  const hardCount = useMemo(() => (samples.data ?? []).filter((s) => isHardSample(scenario, s)).length, [scenario, samples.data]);
   const [input, setInput] = useState<Input | null>(null);
   const [draft, setDraft] = useState(dl.input_examples[0] ?? "");
   const [target, setTarget] = useState<string | null>(null);
@@ -69,9 +81,9 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
 
   // Image scenarios open straight onto the first held-out study.
   useEffect(() => {
-    if (isImage && !input && samples.data?.length) submit({ kind: "sample", id: samples.data[0].id });
+    if (isImage && !input && strip.length) submit({ kind: "sample", id: strip[0].id });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isImage, samples.data]);
+  }, [isImage, strip]);
 
   const sample = input?.kind === "sample" ? samples.data?.find((s) => s.id === input.id) : undefined;
   const sampleImage = useDlImage(scenario.slug, isImage && input?.kind === "sample" ? input.id : null, accessToken);
@@ -87,11 +99,27 @@ export function DlPredictView({ scenario, accessToken }: { scenario: ScenarioSum
         {isImage ? (
           <>
             <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
-              Pick a held-out sample (its expert label is shown after the model's read) or upload your own image (PNG/JPEG —
-              processed in memory, never stored).
+              Pick a held-out sample — a mix of every class, the expert label is shown only after the model's read — or
+              upload your own image (PNG/JPEG — processed in memory, never stored).
             </p>
+            <div className="dl-toolbar" style={{ marginBottom: "0.5rem" }}>
+              <button className={`chip${hardOnly ? "" : " active"}`} onClick={() => setHardOnly(false)}>
+                Mixed ({samples.data?.length ?? 0})
+              </button>
+              <button
+                className={`chip${hardOnly ? " active" : ""}`}
+                onClick={() => setHardOnly(true)}
+                disabled={!hardCount}
+                title="Samples the deployed model gets wrong or is less than 80% sure about"
+              >
+                Hardest for the model ({hardCount})
+              </button>
+              <button className="chip" onClick={() => setStripSeed((s) => s + 1)}>
+                🎲 New batch
+              </button>
+            </div>
             <div className="dl-strip">
-              {(samples.data ?? []).slice(0, 18).map((s) => (
+              {strip.map((s) => (
                 <button
                   key={s.id}
                   className={`dl-strip-item${input?.kind === "sample" && input.id === s.id ? " active" : ""}`}

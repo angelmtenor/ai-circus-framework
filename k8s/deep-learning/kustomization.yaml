@@ -1,6 +1,7 @@
 # Optional Deep Learning overlay — dl-inference serving every `kind: deep_learning`
-# scenario (symptom_triage, chest_xray_pneumonia, pcb_visual_inspection). Deliberately NOT
-# part of k8s/base: its ~0.9 GB of ONNX models (all three loaded) are opt-in.
+# scenario (symptom_triage, chest_xray_pneumonia, pcb_visual_inspection,
+# pasta_visual_inspection). Deliberately NOT part of k8s/base: its ~1 GB of ONNX models
+# (all loaded) are opt-in.
 # `make k3s-dl-up` / `make k3s-dl-down` (or `make k3s-all-dl` for a fresh cluster).
 # Training is separate again — the per-scenario Job in k8s/jobs/dl-training-job.yaml,
 # never run by any *-all target.

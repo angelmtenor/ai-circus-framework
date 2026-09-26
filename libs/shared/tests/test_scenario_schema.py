@@ -620,7 +620,7 @@ def test_repo_deep_learning_scenarios_load() -> None:
     from ai_circus_shared.scenario_schema import resolve_scenarios
 
     scenarios = resolve_scenarios(Path(__file__).parents[3] / "scenarios", "", kind="deep_learning")
-    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia", "pcb_visual_inspection"}
+    assert set(scenarios) == {"symptom_triage", "chest_xray_pneumonia", "pcb_visual_inspection", "pasta_visual_inspection"}
 
 
 def test_resolve_scenarios_ignores_other_kinds_it_cannot_parse(tmp_path) -> None:  # type: ignore[no-untyped-def]

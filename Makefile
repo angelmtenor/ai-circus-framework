@@ -382,7 +382,7 @@ k3s-portforward-stop: ## Stop the standing platform-registry port-forward starte
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
 # `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,
-# scenarios/pcb_visual_inspection) fine-tune Hugging Face models — or, for
+# scenarios/pcb_visual_inspection, scenarios/pasta_visual_inspection) fine-tune Hugging Face models — or, for
 # `task: anomaly_detection`, build a memory bank from a frozen one: minutes on a GPU,
 # far longer on a CPU — so training only
 # ever runs from these explicit targets (or the admin console's Platform → Deep Learning
@@ -391,7 +391,8 @@ k3s-portforward-stop: ## Stop the standing platform-registry port-forward starte
 
 DL_SCENARIO_NLP ?= symptom_triage
 DL_SCENARIO_CV  ?= chest_xray_pneumonia
-DL_SCENARIO_ANOMALY ?= pcb_visual_inspection
+# Comma-separated: both manufacturing inspection scenarios (PCB, and the harder pasta line).
+DL_SCENARIO_ANOMALY ?= pcb_visual_inspection,pasta_visual_inspection
 
 dl-gpu-check: ## Report whether this machine has an NVIDIA GPU dl-train-* can use (and what the k3s cluster exposes)
 	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then \
@@ -412,7 +413,7 @@ dl-train-nlp: ## Fine-tune the NLP scenario (BioClinical ModernBERT, symptom tri
 dl-train-cv: ## Fine-tune the computer-vision scenario (ConvNeXt V2, chest X-ray) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_CV)"
 
-dl-train-anomaly: ## Build the CV anomaly detector (frozen DINOv2 + memory bank, PCB inspection) on this machine's GPU
+dl-train-anomaly: ## Build the CV anomaly detectors (frozen DINOv2 + memory bank; PCB + pasta inspection) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_ANOMALY)"
 
 # dl-training image's torch build: auto = the CUDA build when the cluster advertises
@@ -444,8 +445,8 @@ k3s-dl-train-nlp: ## In-cluster Job for the NLP scenario (see k3s-dl-train)
 k3s-dl-train-cv: ## In-cluster Job for the computer-vision scenario (see k3s-dl-train)
 	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_CV)
 
-k3s-dl-train-anomaly: ## In-cluster Job for the CV anomaly-detection scenario (see k3s-dl-train)
-	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_ANOMALY)
+k3s-dl-train-anomaly: ## In-cluster Jobs for the CV anomaly-detection scenarios, one after the other (see k3s-dl-train)
+	@for s in $$(echo "$(DL_SCENARIO_ANOMALY)" | tr ',' ' '); do $(MAKE) --no-print-directory k3s-dl-train SCENARIO=$$s || exit 1; done
 
 k3s-all-dl: k3s-all k3s-dl-build k3s-dl-up ## `k3s-all` + the Deep Learning overlay (no training — run `make dl-train` on a GPU host, or the admin console's Train button)
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up with the Deep Learning overlay — train models with 'make dl-train' (GPU) if not done yet"

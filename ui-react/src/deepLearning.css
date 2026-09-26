@@ -54,6 +54,17 @@
   color: var(--accent);
 }
 
+.chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .dl-textarea {
   width: 100%;
   resize: vertical;
