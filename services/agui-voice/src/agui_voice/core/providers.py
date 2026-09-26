@@ -1,6 +1,6 @@
 """
 - Title:    STT/TTS provider factory
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Mirrors how llm-gateway/litellm_config.yaml treats LLM providers as swappable
 config rather than a hardcoded SDK call: `STT_PROVIDER`/`TTS_PROVIDER` pick a

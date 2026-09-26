@@ -8,7 +8,7 @@ batteries-included LiteLLM proxy (OpenAI-compatible API, model routing, master-k
 auth) is the actual server. Persistent spend-tracking is not enabled — see
 litellm_config.yaml for why.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """
 - Title:    Semantic modeling & query federation (DuckDB)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 A small, named catalog of business-friendly queries (the "semantic model" —
 see SEMANTIC_VIEWS below) run through an embedded DuckDB engine that federates

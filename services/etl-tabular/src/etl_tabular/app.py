@@ -8,7 +8,7 @@ SCENARIOS (empty/unset = all), extracts the tenant's raw dataset from SeaweedFS
 normalized parquet back to SeaweedFS. Runs once and exits — not a long-running server
 (see docker-compose.yml's `profiles: ["pipeline"]`).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

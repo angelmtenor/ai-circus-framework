@@ -1,6 +1,6 @@
 """
 - Title:    Tenant-scoped event streaming (Kafka-protocol)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 The unified data layer's real-time companion to ai_circus_shared.document_store:
 an append-only, fan-out event stream for state changes other parts of the

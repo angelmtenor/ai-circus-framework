@@ -1,6 +1,6 @@
 """
 - Title:    Conversation history storage (Postgres)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Shared by assistant/rag-agent/form-agent: each service owns its own Postgres
 database (its own settings.yaml POSTGRES_* block, its own connection pool) and

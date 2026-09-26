@@ -2,6 +2,7 @@
 # Scaffold a new backend service from ai-circus-template via real cookiecutter
 # generation, then adapt it to live inside this monorepo:
 #   - flatten the nested git repo the template's post-gen hook creates
+#   - point the generated project URLs at this monorepo, not a per-service repo
 #   - add ai-circus-shared (libs/shared) as a local uv path dependency
 #   - rewrite the Dockerfile to expect a repo-root build context (so it can
 #     COPY libs/shared alongside the service's own folder)
@@ -12,6 +13,11 @@ set -euo pipefail
 SERVICE_NAME="${1:?usage: new_service.sh <service-name>}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="${AI_CIRCUS_TEMPLATE:-$HOME/PROJECTS/ai-circus-template}"
+# No local checkout (and no override): generate straight from the published template.
+if [ -z "${AI_CIRCUS_TEMPLATE:-}" ] && [ ! -d "$TEMPLATE" ]; then
+    TEMPLATE="https://github.com/angelmtenor/ai-circus-template"
+fi
+REPO_URL="https://github.com/angelmtenor/ai-circus-framework"
 SERVICE_DIR="$REPO_ROOT/services/$SERVICE_NAME"
 PACKAGE_NAME="${SERVICE_NAME//-/_}"
 
@@ -24,14 +30,24 @@ echo "▶ Generating $SERVICE_NAME from $TEMPLATE ..."
 cookiecutter "$TEMPLATE" --no-input -o "$REPO_ROOT/services" \
     project_name="$SERVICE_NAME" \
     project_description="ai-circus-framework $SERVICE_NAME service" \
-    author_name="ai-circus-framework contributors" \
-    author_email="dev@ai-circus-framework.local" \
-    github_username_or_org="ai-circus-framework" \
+    author_name="Angel Martinez-Tenor" \
+    author_email="angelmtenor@gmail.com" \
+    github_username_or_org="angelmtenor" \
     python_version="3.14"
 
 # The template's post_gen hook git-inits + commits each generated project; flatten
 # that so the service is tracked by this monorepo's single top-level repo instead.
 rm -rf "$SERVICE_DIR/.git"
+
+# The template assumes one repo per project (github.com/<org>/<name>); here every
+# service lives under services/<name> of the monorepo.
+sed -i \
+    -e "s|^Homepage = .*|Homepage = \"$REPO_URL/tree/main/services/$SERVICE_NAME\"|" \
+    -e "s|^Repository = .*|Repository = \"$REPO_URL\"|" \
+    -e "s|^BugTracker = .*|BugTracker = \"$REPO_URL/issues\"|" \
+    "$SERVICE_DIR/pyproject.toml"
+sed -i "s|git clone https://github.com/angelmtenor/$SERVICE_NAME\$|git clone $REPO_URL \&\& cd ai-circus-framework/services/$SERVICE_NAME|" \
+    "$SERVICE_DIR/CONTRIBUTING.md"
 
 # Add the shared library as a local path dependency. Deliberately NOT editable:
 # uv builds and installs it as a normal wheel into the service's .venv, so the

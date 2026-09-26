@@ -1,6 +1,6 @@
 """
 - Title:    Voice provider info (Settings page picker + assistant UI's "STT/TTS" label)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Read-only: the actual mutation (switching the admin's live choice) is a
 platform-registry route (`PUT /voice-settings/active`), gated by its own admin

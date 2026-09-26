@@ -26,7 +26,7 @@ client roles assigned via the realm's own bootstrap admin credentials — see
 after a `make reset-all`, once that bootstrap has been redone and
 `KEYCLOAK_M2M_CLIENT_ID`/`SECRET` are back in `.env`.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

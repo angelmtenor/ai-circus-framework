@@ -12,7 +12,7 @@ model of every `deep_learning` scenario in SCENARIOS (empty/unset = all), for OR
 Deliberately NOT part of `make all`/`make k3s-all`: it runs from `make dl-train-*`
 (host, GPU if present), `make k3s-dl-train-*` or the admin console's "Train" button.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

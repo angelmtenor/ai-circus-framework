@@ -9,7 +9,7 @@ candidate policy, builds a SHAP explainer, and writes both back to SeaweedFS for
 `prediction` service to load. Runs once and exits — not a long-running server (see
 docker-compose.yml's `profiles: ["pipeline"]`).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

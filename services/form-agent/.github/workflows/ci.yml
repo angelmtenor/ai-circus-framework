@@ -1,6 +1,6 @@
 # CI: quality gate for every push and pull request.
 # Mirrors `make check` (qa + test) so local and CI behavior stay identical.
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 name: CI
 
 on:

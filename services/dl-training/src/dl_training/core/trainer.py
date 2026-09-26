@@ -1,6 +1,6 @@
 """
 - Title:    Modality-agnostic fine-tuning loop
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Plain PyTorch (no HF Trainer/accelerate — two fewer heavy dependencies): AdamW over the
 trainable parameters, linear warm-up then linear decay, gradient clipping, bf16

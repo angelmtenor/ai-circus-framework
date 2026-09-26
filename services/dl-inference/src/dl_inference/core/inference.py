@@ -1,6 +1,6 @@
 """
 - Title:    Deep-learning inference + explainability on onnxruntime (no torch)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Preprocessing here must match dl-training's `tasks.py` exactly (same tokenizer.json,
 same resize/normalize), because the metrics in each model's manifest were measured

@@ -1,6 +1,6 @@
 """
 - Title:    Upload a trained deep_learning model's artifacts (tenant-scoped, checksummed)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Writes the ai_circus_shared.deep_learning contract: images first, then the model and
 its side files, and metadata.json *last* with every checksummed artifact's SHA-256 — a

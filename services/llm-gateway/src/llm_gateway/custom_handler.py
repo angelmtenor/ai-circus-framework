@@ -9,7 +9,7 @@ instead of each importing sentence_transformers (and its torch dependency) direc
 See https://docs.litellm.ai/docs/providers/custom_llm_server for the CustomLLM
 extension point this subclasses.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

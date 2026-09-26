@@ -1,6 +1,6 @@
 """
 - Title:    HTTP client for the sibling `prediction` service
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Gives the chat agent (see core/tools.py) real dataset rows, held-out evaluation
 results, and live model predictions — without any code execution (see core/chat.py's

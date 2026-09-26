@@ -4,7 +4,7 @@ test_config_generator.py
 
 Tests for the data model generator and the resulting Pydantic model.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

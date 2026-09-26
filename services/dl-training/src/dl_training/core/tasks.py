@@ -1,6 +1,6 @@
 """
 - Title:    Modality-specific pieces of a deep_learning fine-tune (text / image)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 The training loop (core/trainer.py), export (core/export.py) and artifact code are
 modality-agnostic; everything that differs between "BioClinical ModernBERT on symptom

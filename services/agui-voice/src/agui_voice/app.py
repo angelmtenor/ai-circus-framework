@@ -9,7 +9,7 @@ one-shot `POST /tts/{scenario_slug}` endpoint, serving every scenario kind — s
 form-agent `/agui/{scenario_slug}` endpoint as its "LLM stage" instead of running an
 LLM itself.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

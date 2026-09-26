@@ -1,5 +1,5 @@
 # Pre-commit settings / QA
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 # Update hooks: `uv run pre-commit autoupdate`
 
 files: ^services/rag-agent/

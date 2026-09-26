@@ -5,7 +5,7 @@ app.py
 Entry point for platform-registry: owns the `platform` Postgres schema
 (scenarios/entitlements) and seeds it from ../../scenarios/*.yaml on startup.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

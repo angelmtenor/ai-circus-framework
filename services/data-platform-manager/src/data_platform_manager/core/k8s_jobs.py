@@ -1,6 +1,6 @@
 """
 - Title:    Kubernetes Job control for the pipeline (etl-tabular, training, etl-vectorize)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Mirrors k8s/jobs/*.yaml exactly — kept in sync by hand, the same "documented,
 tested hand-sync" convention scripts/k3s_generate_secrets.sh already uses for its

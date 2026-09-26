@@ -1,6 +1,6 @@
 """
 - Title:    Retrieval over a tenant's vectorized document catalog
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Only used for scenarios that set `form.classification_field` (and therefore
 `documents`/`vector_store` — enforced by scenario_schema's own validator); a plain

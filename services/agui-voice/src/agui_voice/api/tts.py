@@ -1,6 +1,6 @@
 """
 - Title:    One-shot text-to-speech endpoint (the chat UI's loudspeaker icon)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Decoupled from the live voice WebSocket pipeline (`api/ws.py`): this is a plain
 "text in, audio out" HTTP call with no STT/turn-taking, so it runs a minimal

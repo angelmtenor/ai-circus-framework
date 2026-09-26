@@ -1,6 +1,6 @@
 """
 - Title:    Compute device detection and training-budget selection
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 A deep-learning fine-tune is ~100x cheaper on a GPU, so the device decides the whole
 run's shape: CUDA gets the scenario's full `training.gpu` budget, CPU gets its reduced

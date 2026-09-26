@@ -8,7 +8,7 @@ all), shared across every tenant (grounding system prompts are loaded and cached
 (org, scenario) from SeaweedFS on first request — see core/prompt_cache.py; all
 completions go through llm-gateway, never a raw provider SDK).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

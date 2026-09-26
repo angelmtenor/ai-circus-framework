@@ -1,6 +1,6 @@
 """
 - Title:    Entitlement & scenario-metadata API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Its entitlement-mutation and /llm-settings/* routes are admin-only infrastructure,
 called by other backend services or an operator, and are NOT exposed through Traefik.

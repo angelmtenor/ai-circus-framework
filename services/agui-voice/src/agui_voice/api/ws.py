@@ -1,6 +1,6 @@
 """
 - Title:    Live voice WebSocket endpoint
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 One Pipecat pipeline per connection: browser mic audio -> VAD -> STT ->
 `AgentBridgeProcessor` (calls the existing `/agui/{scenario_slug}` agent for this

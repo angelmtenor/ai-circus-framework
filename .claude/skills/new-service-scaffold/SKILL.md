@@ -19,9 +19,11 @@ the uv/ruff/pyrefly/gitleaks/checkmake/pytest and settings.yaml→`data_model.py
 
 ## Prerequisite
 
-The template is a separate checkout, not vendored: `$AI_CIRCUS_TEMPLATE`, default
-`~/PROJECTS/ai-circus-template`. `ls "${AI_CIRCUS_TEMPLATE:-$HOME/PROJECTS/ai-circus-template}"`
-first; if it's missing, ask the human to clone it — don't improvise a template.
+The template is not vendored: `$AI_CIRCUS_TEMPLATE` if set, else a local checkout at
+`~/PROJECTS/ai-circus-template`, else the published
+[angelmtenor/ai-circus-template](https://github.com/angelmtenor/ai-circus-template) (cookiecutter
+clones it). `cookiecutter` must be on `PATH` (`uv tool install cookiecutter`) — don't improvise a
+template.
 
 ## 1. Generate
 

@@ -1,6 +1,6 @@
 """
 - Title:    Caller identity resolution (thin wrapper around the shared implementation)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Entitlement enforcement happens here, at the API — not just in whichever UI called
 us — per the platform's core design requirement (see root AGENTS.md). The actual

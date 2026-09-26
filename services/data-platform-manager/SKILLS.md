@@ -48,6 +48,6 @@ these standards when writing or refactoring code.
   by hand; let the formatter own this.
 
 ## 7. Documentation Responsibility
-- **Docstring Accuracy:** Keep docstrings updated. Every new file must include the standard header: `Author: ai-circus-framework contributors`.
+- **Docstring Accuracy:** Keep docstrings updated. Every new file must include the standard header: `Author: Angel Martinez-Tenor`.
 - **Module Exports:** Ensure `src/data_platform_manager/__init__.py` properly exports all new public components via `__all__ = [...]`.
 - **README Updates:** If the onboarding workflow, CLI tools, or `Makefile` targets change, you must update the "Quick Start" or "Common Workflows" sections in `README.md`.

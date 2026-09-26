@@ -3,7 +3,7 @@ check_full_env.py
 
 Enhanced environment verification utility with beautiful, Makefile-aligned output.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """
 - Title:    Per-(tenant, scenario) deep-learning model cache
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Same contract as prediction's ModelCache — lazy load per (org_id, scenario_slug) from
 the scenario's SeaweedFS bucket, falling back to the shared baseline org until a tenant

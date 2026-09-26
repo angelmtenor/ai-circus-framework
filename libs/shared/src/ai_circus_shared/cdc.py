@@ -1,6 +1,6 @@
 """
 - Title:    Change-data-capture via Postgres logical replication
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Reads row-level changes off a Postgres logical replication slot using the
 `test_decoding` output plugin — built into every stock Postgres image (unlike

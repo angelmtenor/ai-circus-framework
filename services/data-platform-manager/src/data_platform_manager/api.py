@@ -1,6 +1,6 @@
 """
 - Title:    Data platform admin API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Admin-only control surface for the platform's data layer and AI Gateway
 governance — every route below (except /healthz) requires the shared

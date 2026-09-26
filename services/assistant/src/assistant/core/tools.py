@@ -1,6 +1,6 @@
 """
 - Title:    Backend tools giving the chat agent real data/prediction access
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Three LangChain tools built fresh per request (same per-request-construction shape as
 `rag_agent.core.agent.build_retrieve_tool`), each closing over the scenario_slug and the

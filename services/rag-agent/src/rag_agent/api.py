@@ -1,6 +1,6 @@
 """
 - Title:    RAG chat API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations

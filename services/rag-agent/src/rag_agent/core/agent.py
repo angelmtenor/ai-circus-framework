@@ -1,6 +1,6 @@
 """
 - Title:    Agentic RAG: the LLM decides whether retrieval is needed
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Replaces the earlier "always retrieve, then stuff into the prompt" design: the model
 is given a `retrieve_docs` tool and a system prompt describing the scenario's domain

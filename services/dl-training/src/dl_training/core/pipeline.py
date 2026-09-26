@@ -1,6 +1,6 @@
 """
 - Title:    One deep_learning scenario, end to end
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 download/verify data -> pick device + budget -> fine-tune (label-smoothed) -> export
 ONNX (+quantize) -> calibrate a temperature on the exported model's validation logits

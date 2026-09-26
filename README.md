@@ -894,7 +894,11 @@ The flow, in short — git-flow per `AGENTS.md` §5:
 ## Author & license
 
 Created and maintained by **Angel Martinez-Tenor** —
-[github.com/angelmtenor](https://github.com/angelmtenor).
+[github.com/angelmtenor](https://github.com/angelmtenor) — and built largely with the help of
+Anthropic's **Claude** (via Claude Code). It grows out of my earlier
+[`ai-circus`](https://github.com/angelmtenor/ai-circus) (Python best practices) and
+[`ai-circus-template`](https://github.com/angelmtenor/ai-circus-template) (the cookiecutter every
+service is generated from).
 
 Licensed under the [MIT License](LICENSE).
 

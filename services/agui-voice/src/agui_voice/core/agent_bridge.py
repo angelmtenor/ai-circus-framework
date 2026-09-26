@@ -1,6 +1,6 @@
 """
 - Title:    Pipecat "LLM stage" that bridges to an existing AG-UI agent endpoint
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 `AgentBridgeProcessor` sits where an LLM stage normally goes in a Pipecat cascade
 pipeline (STT -> [this] -> TTS). Instead of calling an LLM directly, it POSTs each

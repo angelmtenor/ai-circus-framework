@@ -1,6 +1,6 @@
 """
 - Title:    ETL pipeline for tabular_ml scenarios
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Extract: bootstrap the tenant's raw dataset into SeaweedFS from the scenario's tracked
 sample_data/ file on first run (demo convenience — a real deployment would have each

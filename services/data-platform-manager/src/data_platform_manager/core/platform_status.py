@@ -1,6 +1,6 @@
 """
 - Title:    Platform status — is every microservice/infra piece up and healthy?
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Backs the admin dashboard's "Platform" page (ui-react/src/PlatformStatus.tsx) through
 GET /platform/status: one probe per component, all run concurrently, plus — when this

@@ -1,6 +1,6 @@
 """
 - Title:    Per-(tenant, scenario) model/explainer cache
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 One `prediction` instance serves every tabular_ml scenario in SCENARIOS, shared by
 every tenant of each — the trained pipeline/explainer are loaded from SeaweedFS lazily on

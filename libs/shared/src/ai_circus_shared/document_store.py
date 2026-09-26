@@ -1,6 +1,6 @@
 """
 - Title:    Tenant-scoped non-relational document store (Postgres JSONB)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 The unified data layer's flexible-schema store: services that need to persist
 semi-structured, evolving-shape records — without standing up a dedicated

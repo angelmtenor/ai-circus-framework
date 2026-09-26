@@ -1,6 +1,6 @@
 """
 - Title:    Process-wide Valkey/Redis client
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 ai_circus_shared.cache.connect() is a plain factory (it has no module-global
 state of its own, unlike ai_circus_shared.document_store's engine) — each

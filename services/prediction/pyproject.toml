@@ -1,5 +1,5 @@
 # Project metadata and configuration for prediction
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 
 [project]
 name = "prediction"

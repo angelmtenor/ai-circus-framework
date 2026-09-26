@@ -1,6 +1,6 @@
 """
 - Title:    ORM models for the `platform` Postgres schema
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Deliberately no separate `tenants` table: a Keycloak Organization *is* the tenant record
 (id, name, branding all live in Keycloak) — duplicating that locally would just drift out

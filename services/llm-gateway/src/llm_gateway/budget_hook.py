@@ -1,6 +1,6 @@
 """
 - Title:    Per-tenant monthly AI Gateway spend budgets
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 litellm's own per-key/per-team budget enforcement needs its DB-backed proxy mode,
 which needs prisma-client-py — archived upstream (2025-04-15, read-only, no more

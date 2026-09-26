@@ -1,6 +1,6 @@
 """
 - Title:    Unified AI platform capability roadmap (static)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 A machine-readable version of the "unified AI platform architecture" status
 matrix: which capabilities are LIVE in this platform today, PARTIAL, or still

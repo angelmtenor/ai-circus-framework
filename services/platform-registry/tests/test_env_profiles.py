@@ -4,7 +4,7 @@ test_env_profiles.py
 
 Tests for the environment-aware configuration loading.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

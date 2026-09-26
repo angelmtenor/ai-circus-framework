@@ -7,7 +7,7 @@ POST /predict/{scenario_slug} for every tabular_ml scenario in SCENARIOS (empty/
 = all), shared across every tenant (model/explainer are loaded and cached per
 (org, scenario) from SeaweedFS on first request — see core/model_cache.py).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

@@ -9,7 +9,7 @@ every tenant (models are loaded and cached per (org, scenario) from SeaweedFS on
 request — see core/model_cache.py). Deployed separately from the core platform
 (k8s/deep-learning/, `make k3s-dl-up`) so its memory is opt-in.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

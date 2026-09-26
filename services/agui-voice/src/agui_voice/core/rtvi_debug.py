@@ -1,6 +1,6 @@
 """
 - Title:    Temporary RTVI handshake diagnostics
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 TEMPORARY instrumentation for a live incident: the real browser client (via
 `@pipecat-ai/client-js`) reaches agui-voice, sends `client-ready`, and the server

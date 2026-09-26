@@ -1,5 +1,5 @@
 # Project metadata and configuration for data-platform-manager
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 
 [project]
 name = "data-platform-manager"
@@ -8,7 +8,7 @@ description = "ai-circus-framework data-platform-manager service"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
-authors = [{ name = "ai-circus-framework contributors", email = "dev@ai-circus-framework.local" }]
+authors = [{ name = "Angel Martinez-Tenor", email = "angelmtenor@gmail.com" }]
 keywords = [
     "python",
     "packaging",
@@ -44,9 +44,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/ai-circus-framework/data-platform-manager"
-Repository = "https://github.com/ai-circus-framework/data-platform-manager"
-BugTracker = "https://github.com/ai-circus-framework/data-platform-manager/issues"
+Homepage = "https://github.com/angelmtenor/ai-circus-framework/tree/main/services/data-platform-manager"
+Repository = "https://github.com/angelmtenor/ai-circus-framework"
+BugTracker = "https://github.com/angelmtenor/ai-circus-framework/issues"
 
 [dependency-groups]
 dev = [

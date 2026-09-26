@@ -1,4 +1,4 @@
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 
 VENV_DIR      := .venv
 .DEFAULT_GOAL := help

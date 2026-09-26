@@ -1,6 +1,6 @@
 """
 - Title:    Deep-learning inference API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Every scenario route resolves the caller through `resolve_identity` (Keycloak token /
 ADMIN_API_KEY / engineering-demo key -> org_id + platform-registry entitlement check)
