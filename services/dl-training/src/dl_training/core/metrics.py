@@ -1,6 +1,6 @@
 """
 - Title:    Held-out evaluation of the deployed (ONNX) model
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Everything the UI's "Model insights" tab and the admin model card show: headline
 metrics, per-class breakdown, confusion matrix, calibration (ECE + reliability bins),

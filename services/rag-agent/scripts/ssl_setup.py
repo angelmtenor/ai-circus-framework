@@ -8,7 +8,7 @@ Tests HTTPS connectivity to github.com. If SSL certificate verification fails
 Usage:
     uv run python scripts/ssl_setup.py
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

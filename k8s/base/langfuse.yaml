@@ -221,6 +221,19 @@ spec:
       securityContext:
         seccompProfile: {type: RuntimeDefault}
       initContainers:
+        # Langfuse exits (CrashLoopBackOff, restarts piling up) when ClickHouse isn't
+        # answering yet — on a fresh cluster, and on every Start of the "langfuse"
+        # optional service from the admin Platform page, which scales ClickHouse up at the
+        # same moment. Waiting here keeps that start clean (compose's equivalent is
+        # `depends_on: clickhouse: service_healthy`).
+        - name: wait-for-clickhouse
+          image: curlimages/curl:8.12.1
+          securityContext:
+            allowPrivilegeEscalation: false
+          command: ["sh", "-c", "until curl -sf -o /dev/null http://clickhouse:8123/ping; do echo 'waiting for clickhouse'; sleep 2; done"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 32Mi}
         # infra/postgres/init-multiple-databases.sh only runs on a *fresh* Postgres
         # volume — a cluster created before Langfuse existed has no `langfuse` database.
         # Idempotent create-if-missing, so `make k3s-up` on such a cluster just works.
@@ -351,6 +364,16 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # Same as langfuse-web's: don't crash-loop while ClickHouse is still starting.
+        - name: wait-for-clickhouse
+          image: curlimages/curl:8.12.1
+          securityContext:
+            allowPrivilegeEscalation: false
+          command: ["sh", "-c", "until curl -sf -o /dev/null http://clickhouse:8123/ping; do echo 'waiting for clickhouse'; sleep 2; done"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 32Mi}
       containers:
         - name: langfuse-worker
           image: docker.langfuse.com/langfuse/langfuse-worker:4

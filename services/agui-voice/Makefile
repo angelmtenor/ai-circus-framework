@@ -1,4 +1,4 @@
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 
 VENV_DIR      := .venv
 .DEFAULT_GOAL := help
@@ -53,10 +53,15 @@ generate-data-model: ## Generate Pydantic data model from settings.yaml
 ssl-check: ## Detect and configure SSL CA bundle (for networks with SSL inspection)
 	@uv run python scripts/ssl_setup.py
 
+# GHSA-8mgp-746c-j5xp (nltk <= 3.10.3, no fixed release yet): nltk is pulled in by pipecat-ai for
+# sentence splitting only — the affected model-artifact loaders never see caller input here.
+# --ignore-until-fixed re-arms the gate automatically once a patched nltk is published.
+AUDIT_ACCEPTED = --ignore-until-fixed GHSA-8mgp-746c-j5xp
+
 qa: ## Run all pre-commit checks (ruff, ruff-format, etc.) plus config drift check
 	@set -a && [ -f .env ] && . ./.env; uv run pre-commit run --all-files || { echo "↻ Autofixers modified files — re-running pre-commit to verify..."; uv run pre-commit run --all-files || { echo "❌ qa failed."; exit 1; }; }
 	@uv run agui-voice-config-drift-check || { echo "❌ qa failed: settings.yaml/data_model.py drift."; exit 1; }
-	@uv audit || { echo "❌ qa failed: known CVEs in dependency tree."; exit 1; }
+	@uv audit $(AUDIT_ACCEPTED) || { echo "❌ qa failed: known CVEs in dependency tree."; exit 1; }
 	@echo "✓ qa complete"
 
 test: ## Run test suite

@@ -231,3 +231,64 @@ def test_get_skips_intervals_when_only_one_quantile_checksum_is_present(stores: 
 
     assert artifacts.pipeline_lower is None
     assert artifacts.pipeline_upper is None
+
+
+def test_tenants_on_the_fallback_model_share_one_in_memory_copy(stores: dict[str, FakeObjectStore]) -> None:
+    """admin, engineering-demo and every new org all fall back to the same baseline model —
+    it must be loaded (and held in memory) once, not once per tenant.
+    """
+    cache = ModelCache(stores, fallback_org_id="org-1")
+
+    first = cache.get("admin", "churn")
+    calls_after_first = len(stores["churn"].get_calls)
+    second = cache.get("engineering-demo", "churn")
+
+    assert first is second
+    assert len(stores["churn"].get_calls) == calls_after_first
+    assert list(cache._cache) == [("org-1", "churn")]
+
+
+def test_dataset_is_cached_per_requester_until_its_ttl_expires(
+    stores: dict[str, FakeObjectStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Data tab's sample/evaluation/explainability calls reuse one parquet download."""
+    from prediction.core import dataset as dataset_module
+    from prediction.core import model_cache as model_cache_module
+
+    loads: list[str] = []
+
+    def fake_load(_store: object, org_id: str, _fallback: str) -> str:
+        loads.append(org_id)
+        return f"df-{len(loads)}"
+
+    now = [1000.0]
+    monkeypatch.setattr(dataset_module, "load_normalized", fake_load)
+    monkeypatch.setattr(model_cache_module.time, "monotonic", lambda: now[0])
+    cache = ModelCache(stores, fallback_org_id="org-1")
+
+    assert cache.dataset("org-1", "churn") == "df-1"
+    assert cache.dataset("org-1", "churn") == "df-1"
+    now[0] += model_cache_module.DATASET_TTL_SECONDS + 1
+    assert cache.dataset("org-1", "churn") == "df-2"
+    assert loads == ["org-1", "org-1"]
+
+
+def test_preload_warms_every_trained_scenario_and_skips_the_rest(stores: dict[str, FakeObjectStore]) -> None:
+    """Start-up preload: trained scenarios end up cached (no store hit on the first real
+    request); an untrained one or a broken store is skipped, never raised.
+    """
+
+    class BrokenStore(FakeObjectStore):
+        def exists(self, org_id: str, path: str) -> bool:
+            raise RuntimeError("SeaweedFS hiccup")
+
+    stores_with_gaps = {**stores, "untrained": FakeObjectStore(), "broken": BrokenStore()}
+    cache = ModelCache(stores_with_gaps, fallback_org_id="org-1")  # type: ignore[arg-type]
+
+    assert cache.preload(["churn", "untrained", "broken", "mpm"]) == 2
+
+    calls_after_preload = len(stores["churn"].get_calls)
+    cache.get("tenant-without-own-model", "churn")  # served the warm fallback copy
+    assert len(stores["churn"].get_calls) == calls_after_preload
+    with pytest.raises(ModelNotTrainedError):  # still lazily retried on a real request
+        cache.get("org-1", "untrained")

@@ -28,10 +28,14 @@ spec:
             - {containerPort: 6333}
           volumeMounts:
             - {name: qdrant-storage, mountPath: /qdrant/storage}
+          # Idle ~100Mi; grows with the number of vectorized documents.
+          resources:
+            requests: {cpu: 25m, memory: 64Mi}
+            limits: {memory: 1Gi}
           readinessProbe:
             tcpSocket: {port: 6333}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 2
+            periodSeconds: 2
           livenessProbe:
             tcpSocket: {port: 6333}
             initialDelaySeconds: 15

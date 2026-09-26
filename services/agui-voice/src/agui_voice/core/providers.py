@@ -1,6 +1,6 @@
 """
 - Title:    STT/TTS provider factory
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Mirrors how llm-gateway/litellm_config.yaml treats LLM providers as swappable
 config rather than a hardcoded SDK call: `STT_PROVIDER`/`TTS_PROVIDER` pick a
@@ -23,6 +23,7 @@ import re
 import threading
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -203,6 +204,14 @@ def guess_text_language(text: str) -> str:
     return "es" if es_hits > en_hits else "en"
 
 
+# Where Piper's ONNX voices are downloaded to and loaded from. PiperTTSService defaults to
+# the working directory — the root-owned, read-only code dir in the image — so every voice
+# download failed with PermissionError (and voice-mode TTS with it). ~/.cache is the
+# persistent voice-model-cache volume (k8s/base/agui-voice.yaml, docker-compose.yml): each
+# voice is downloaded once per cluster and then only loaded.
+PIPER_VOICES_DIR = Path.home() / ".cache" / "pipecat" / "piper"
+
+
 def build_tts_service(
     config: EnvConfig, *, provider: str | None = None
 ) -> tuple[FrameProcessor, Mapping[str, FrameProcessor]]:
@@ -226,8 +235,10 @@ def build_tts_service(
     match provider or config.TTS_PROVIDER:
         case "piper":
             voice_by_language = {"en": config.PIPER_VOICE_ID, "es": config.PIPER_VOICE_ID_ES}
+            PIPER_VOICES_DIR.mkdir(parents=True, exist_ok=True)
             services_by_language = {
-                language: PiperTTSService(voice_id=voice_id) for language, voice_id in voice_by_language.items()
+                language: PiperTTSService(voice_id=voice_id, download_dir=PIPER_VOICES_DIR)
+                for language, voice_id in voice_by_language.items()
             }
             switcher = ServiceSwitcher(
                 services=list(services_by_language.values()), strategy_type=ServiceSwitcherStrategyManual

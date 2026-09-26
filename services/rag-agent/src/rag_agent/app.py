@@ -8,7 +8,7 @@ POST /chat/{scenario_slug} for every conversational_rag scenario in SCENARIOS
 caller's own Qdrant collection; completions go through llm-gateway, via a LangChain
 tool-calling agent — see core/agent.py — never a raw provider SDK).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

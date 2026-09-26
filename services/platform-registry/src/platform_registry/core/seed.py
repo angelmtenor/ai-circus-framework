@@ -1,6 +1,6 @@
 """
 - Title:    Seed the `scenarios` table from scenarios/*/scenario.yaml
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 `scenarios/*.yaml` is the human-editable source of truth for what a scenario *is*;
 this module is the only place that file is read — every other service and both UIs

@@ -1,6 +1,6 @@
 """
 - Title:    Custom Logger
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations

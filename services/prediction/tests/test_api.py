@@ -120,3 +120,12 @@ def test_predict_matches_real_predict_function(client: TestClient) -> None:
     results = real_predict(artifacts, records)
 
     assert results == [PredictionResult(prediction=0.6, contributions={"f1": 0.1, "f2": -0.2})]
+
+
+def test_predict_rejects_a_batch_larger_than_max_rows(client: TestClient) -> None:
+    """Every record is scored and SHAP-explained — an unbounded batch is refused up front."""
+    from prediction.api import MAX_ROWS
+
+    response = client.post("/predict/churn", json={"records": [{}] * (MAX_ROWS + 1)})
+
+    assert response.status_code == 422

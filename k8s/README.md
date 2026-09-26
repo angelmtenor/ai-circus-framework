@@ -113,6 +113,12 @@ restart-loops the whole server (k3s-io/k3s#7328; a single-node k3d cluster doesn
 and `setup_gpu_containers.sh` looks for `nvidia-smi` in `/usr/lib/wsl/lib` itself, since
 `sudo`'s `secure_path` drops it from `PATH` on WSL.
 
+On a GPU cluster `make k3s-up` also runs `make k3s-gpu-telemetry`: it patches
+`data-platform-manager` onto the `nvidia` RuntimeClass with `NVIDIA_DRIVER_CAPABILITIES=utility`
+(`k8s/gpu/`), so the admin **Platform → Monitor** tab can read GPU utilization, memory,
+temperature and power through NVML. It never requests `nvidia.com/gpu` (training Jobs keep the
+GPU) and gets no CUDA libraries; on a CPU-only cluster the target does nothing.
+
 With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
 (`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
 RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.
@@ -145,7 +151,10 @@ make k3s-lite K3S_LITE_SKIP="mlflow agui-voice data-platform-manager langfuse-we
 ```
 
 While lite, voice mode and `mlflow.localhost` are unavailable and the Platform health dashboard
-shows those two as down (every other view is unaffected — `make k3s-verify` still passes). The scale
+shows those two as stopped (every other view is unaffected — `make k3s-verify` still passes). The
+same dashboard can do this per service without `make`: **Platform → Health** has Start/Stop on
+the optional services (`agui-voice`, `mlflow`, Langfuse web + worker + ClickHouse, `dl-inference`,
+`kafka`), and **Platform → Monitor** shows which pods are actually using the memory. The scale
 is cluster state, so it survives a plain `k3s-pause`/`k3s-resume`; `make k3s-up` (a fresh
 `kubectl apply -k`) or `make k3s-full` restores every replica. `make k3s-wait` works unchanged in
 either mode — `kubectl rollout status` reports a 0-replica Deployment as rolled out immediately.
@@ -174,17 +183,24 @@ setup. `ui-react`'s bundled default for `VITE_PLATFORM_REGISTRY_URL` is `http://
 (matching docker-compose.yml's `127.0.0.1:8010` host-published port), so the browser needs a
 standing port-forward to `platform-registry`'s loopback-only API — unlike `k3s-verify`'s own
 port-forward, which only lives for that one command. `make k3s-wait` (and therefore `make
-k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`,
-tracking its PID in `/tmp/k3s-portforward-<cluster>.pid` so re-running it doesn't stack duplicate
-forwards on the same port; `make k3s-pause`/`make k3s-down` stop it again. Run `make
-k3s-portforward` yourself only if you need to restart it without a full `k3s-wait` (e.g. after it
-died for some other reason).
+k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`
+(`scripts/k3s_portforward.sh`). Wherever systemd runs a per-user manager — native Linux, and WSL
+with `systemd=true` in `/etc/wsl.conf` — it installs it as the systemd user service
+`ai-circus-portforward-<cluster>`: enabled at boot (lingering on, so no login is needed) and
+restarted 5 s after `kubectl` exits, which it does whenever the platform-registry pod restarts or
+while the cluster is still coming up after a reboot. So the forward survives reboots and pod
+restarts with nothing to re-run. `make k3s-pause`/`make k3s-down` stop it (it stays enabled for the
+next boot); `make k3s-portforward-uninstall` removes the service. Without user systemd (or with
+`K3S_PORTFORWARD_SERVICE=0`) it is a plain background process with its PID in
+`/tmp/k3s-portforward-<cluster>.pid`, which dies with the machine — re-run `make k3s-portforward`
+after a reboot there.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and
-confirm the port-forward is actually running (`ss -tlnp | grep 8010` or check
-`/tmp/k3s-portforward-<cluster>.log`) — `make k3s-verify` only exercises curl-reachable Traefik
-routes and won't catch this class of failure.
+confirm the port-forward is actually running (`ss -tlnp | grep 8010`; its log is
+`journalctl --user -u ai-circus-portforward-<cluster>`, or `/tmp/k3s-portforward-<cluster>.log`
+without user systemd) — `make k3s-verify` only exercises curl-reachable Traefik routes and won't
+catch this class of failure.
 Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.
@@ -222,16 +238,16 @@ set on a local k3d cluster:
   and its CRDs let the `Host(...)` rules and the `admin-basicauth` gate (on `admin.keycloak.localhost`
   and `console.objectstore.localhost`) carry over almost verbatim from docker-compose.yml's own
   Traefik labels.
-- **`securityContext.runAsNonRoot: true` always needs `runAsUser: 1000` alongside it**, for every
-  `services/*` Deployment/Job. Each of those Dockerfiles sets `USER app` (a name, not a UID), and
-  the kubelet can't verify "non-root" from a name alone — it refuses to start the container with
-  `Error: container has runAsNonRoot and image has non-numeric user (app), cannot verify user is
-  non-root`, surfacing as `CreateContainerConfigError` (a *different* root cause than the missing-
-  secret-key version of that same status — see the `k3s-deploy-verify` skill's gotchas). `1000` is
-  the UID `useradd --create-home` assigns `app` in every one of those Dockerfiles (confirmed via
-  `docker run --rm <image> id`); `postgres`/`keycloak`/`qdrant`/`seaweedfs`/`ui-react`/`agui-voice`
-  deliberately skip `runAsNonRoot` instead (see their manifests' comments) since they either need
-  root for entrypoint chown/bind logic or (`agui-voice`) have no non-root `USER` yet.
+- **`securityContext.runAsNonRoot: true` always needs a numeric `runAsUser` alongside it.**
+  The kubelet can't verify "non-root" from a user *name* (`USER app`) — it refuses to start the
+  container with `Error: container has runAsNonRoot and image has non-numeric user (app), cannot
+  verify user is non-root` (`CreateContainerConfigError`, a different root cause than the
+  missing-secret-key version of that status — see the `k3s-deploy-verify` skill). Every
+  `services/*/Dockerfile` creates `app` with an explicit `--uid 1000`; `ui-react` runs as
+  nginx-unprivileged's UID 101 and Keycloak as its image's own UID 1000. Only
+  `postgres`/`qdrant`/`seaweedfs` skip `runAsNonRoot` — their entrypoints need root for
+  data-dir `chown` logic. `agui-voice`'s model-cache PVC predates its non-root image, so a
+  `cache-ownership` init container `chown`s it once (a no-op afterwards).
 - **`ui-react` needs no separate build.** Its backend base URLs are baked in at `docker build` time
   via `VITE_*` args, defaulting to the same `*.localhost` hostnames this cluster's Traefik also
   serves — so the same image `make k3s-build` produces works unchanged. A runtime-injected
@@ -242,8 +258,10 @@ set on a local k3d cluster:
   (add a Deployment/PVC for it yourself if you need the free local LLM fallback here too), and the
   pipeline services are `k8s/jobs/*` applied only via `make k3s-pipeline`, matching their
   one-shot, non-`k3s-up` nature in docker-compose.yml too (`profiles: ["pipeline"]`).
-- **The observability stack (`langfuse.yaml`, `mlflow.yaml`) is in the base, always on, and is
-  the only place besides `keycloak.yaml` that sets `resources.limits`** — Langfuse v4 needs
+- **Every container sets `resources` (memory requests + limits; CPU requests only, never CPU
+  limits — throttling hurts latency more than it saves on one node).** Values come from measured
+  idle RSS (`kubectl top pods`) plus headroom, and match `docker-compose.yml`'s `mem_limit`s.
+- **The observability stack (`langfuse.yaml`, `mlflow.yaml`) is in the base, always on** — Langfuse v4 needs
   web + worker + ClickHouse, and on a laptop-class node the way to keep that affordable is to reuse
   the existing Postgres (`langfuse`/`mlflow` databases), Valkey (`langfuse:` key prefix) and
   SeaweedFS (`langfuse`/`mlflow` buckets), cap ClickHouse at 1 GiB with a low-memory `config.d`,
@@ -251,8 +269,10 @@ set on a local k3d cluster:
   before; on WSL check `.wslconfig`'s memory (see `docs/windows-wsl.md`) before `make k3s-all`.
   Both manifests carry an `ensure-database` init container (idempotent `CREATE DATABASE`) because
   `postgres.yaml`'s init script only ever runs on a fresh volume. `data-platform-manager`'s Role
-  additionally lists pods (read-only) so the admin Platform dashboard can show readiness/restarts —
-  the same dashboard works on docker-compose, minus that pod detail. The MLflow image is built by
+  additionally lists pods and Deployments/StatefulSets (read-only) so the admin Platform dashboard
+  can show readiness/restarts/"stopped", reads the Metrics API for the Monitor tab, and may scale
+  only the optional workloads named in its `resourceNames` (the Start/Stop buttons) — the same
+  dashboard works on docker-compose, minus the pod detail, Start/Stop and Monitor. The MLflow image is built by
   `make k3s-build` from `infra/mlflow/Dockerfile` (not `services/*` — it isn't a cookiecutter
   service, just the official MLflow with a Postgres driver and boto3 added).
 - **SeaweedFS runs with `-master.volumePreallocate=false`** (same in `docker-compose.yml`).
@@ -262,9 +282,12 @@ set on a local k3d cluster:
   A PVC created before this flag still holds that preallocation — the `k3s-deploy-verify` skill's
   Gotcha 7 has the data-preserving reclaim procedure (stop the StatefulSet, shrink-truncate the
   `.dat` files, start it again).
-- **`rag-agent`/`form-agent` readiness/liveness probes are deliberately loose**
-  (`timeoutSeconds: 5`, `failureThreshold: 6`) — their FastAPI startup makes a live call to
-  `llm-gateway` (embedding dimension probe), which queues behind every other scenario service
-  doing the same thing during a cold `k3s-up` on a single-node cluster. The default 1s probe
-  timeout flakes under that concurrent cold-start load and CrashLoopBackOffs the pod even though
-  the app itself starts fine.
+- **App pods wait for their dependencies instead of crash-looping, and use a `startupProbe`.**
+  Services connect to Postgres/SeaweedFS/llm-gateway in their FastAPI lifespan; on a cold boot
+  those come up in parallel, so each connection goes through `ai_circus_shared.startup.wait_for`
+  (polls up to `DEPENDENCY_WAIT_SECONDS`, default 120s) rather than crashing into
+  CrashLoopBackOff's 10s/20s/40s backoff. The `startupProbe` (every 2s, 180s budget) gates
+  readiness/liveness until the app first answers — so a pod is Ready ~2s after start-up
+  finishes instead of after a fixed `initialDelaySeconds`, and a slow cold boot is never
+  liveness-killed. Infra StatefulSets poll readiness every 2s too: a Service only routes to a
+  pod once it is Ready, so that delay adds directly to every dependent's boot.

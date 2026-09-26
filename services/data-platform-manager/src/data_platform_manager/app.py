@@ -7,7 +7,7 @@ platform's data layer and AI Gateway governance (pipeline job status/trigger,
 gateway rate-limit report, capability roadmap). See api.py's module docstring
 for its "admin tenant only" scope.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

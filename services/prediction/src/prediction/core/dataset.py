@@ -1,6 +1,6 @@
 """
 - Title:    Dataset sampling + held-out evaluation for tabular_ml scenarios
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Reads the same normalized parquet training already wrote to SeaweedFS — real rows, not
 fabricated ones. The evaluation reproduces training's exact held-out split

@@ -43,6 +43,9 @@ def test_job_spec_matches_the_real_k8s_jobs_yaml(job_name: str, yaml_file: str) 
     assert py_container.image == yaml_container["image"]
     assert py_container.image_pull_policy == yaml_container["imagePullPolicy"]
 
+    assert py_container.resources.requests == yaml_container["resources"]["requests"]
+    assert py_container.resources.limits == yaml_container["resources"]["limits"]
+
     yaml_secret_refs = {ef["secretRef"]["name"] for ef in yaml_container["envFrom"] if "secretRef" in ef}
     py_secret_refs = {ef.secret_ref.name for ef in py_container.env_from if ef.secret_ref is not None}
     assert py_secret_refs == yaml_secret_refs

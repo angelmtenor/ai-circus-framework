@@ -1,6 +1,6 @@
 """
 - Title:    Submission validation + persistence
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Persists as one JSON object per submission via the tenant-scoped SeaweedFS client
 (`ai_circus_shared.storage`) — the same mechanism etl/training/prediction already use

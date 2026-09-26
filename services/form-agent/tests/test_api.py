@@ -6,8 +6,10 @@ and the _llm/_llm_model_name dependencies.
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -50,7 +52,7 @@ def _seeded_conversation_store(
     with one conversation — stands in for `Depends(_conversation_store)` so tests
     never need a real Postgres.
     """
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     ConversationsBase.metadata.create_all(engine)
     session = Session(engine)
     session.add(
@@ -480,6 +482,23 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
     )
 
     store = _seeded_conversation_store()
+    # The route is `async def`: every blocking DB call must run in the threadpool, never
+    # on the event loop that is streaming every other chat on this instance.
+    db_calls_on_event_loop: list[str] = []
+
+    def _off_loop(method: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                asyncio.get_running_loop()
+                db_calls_on_event_loop.append(method.__name__)
+            except RuntimeError:
+                pass
+            return method(*args, **kwargs)
+
+        return wrapper
+
+    store.get_conversation = _off_loop(store.get_conversation)  # type: ignore[method-assign]
+    store.append_messages = _off_loop(store.append_messages)  # type: ignore[method-assign]
     response = await agui_endpoint(
         scenario_slug="service_request",
         input_data=RunAgentInput(
@@ -503,6 +522,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
 
     # Drain the stream — persistence happens in the generator's `finally` block.
     "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+    assert db_calls_on_event_loop == []  # checked before this test's own store reads below
 
     messages = store.list_messages("t", "org-1", "user-1")
     assert [(m.role, m.content) for m in messages] == [

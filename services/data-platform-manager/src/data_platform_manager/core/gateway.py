@@ -1,6 +1,6 @@
 """
 - Title:    AI Gateway rate-limit report (read-only)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 llm-gateway execs the real LiteLLM proxy (see services/llm-gateway/app.py) — this
 module talks to *that* running process's own admin API (master-key protected),

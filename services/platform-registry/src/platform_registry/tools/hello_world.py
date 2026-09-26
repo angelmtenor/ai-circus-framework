@@ -1,5 +1,5 @@
 """Tool "Hello World" for platform-registry.
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

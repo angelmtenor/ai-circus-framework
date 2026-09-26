@@ -1,6 +1,6 @@
 """
 - Title:    Post-hoc probability calibration (temperature scaling)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 A fine-tuned network is usually right *and* overconfident: on an easy, clean dataset
 its logits keep growing long after the predictions stop changing, so every probability

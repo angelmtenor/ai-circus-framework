@@ -16,6 +16,7 @@ import fakeredis
 import pytest
 from ai_circus_shared.document_store import Base
 from fastapi.testclient import TestClient
+from kubernetes.client.exceptions import ApiException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -23,7 +24,7 @@ from sqlalchemy.pool import StaticPool
 from data_platform_manager.api import get_client, get_producer, require_admin
 from data_platform_manager.api import get_document_session as api_get_document_session
 from data_platform_manager.app import app
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, semantic
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, resources, semantic, workloads
 from tests.conftest import FakeSecret
 
 
@@ -616,6 +617,7 @@ def test_platform_status_endpoint_requires_admin_and_returns_the_feed(
         "description": "d",
         "console_url": None,
         "pod": None,
+        "control": None,
     }
 
 
@@ -695,3 +697,84 @@ def test_deep_learning_train_rejects_a_non_dl_scenario(
     monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
     monkeypatch.setattr(k8s_jobs, "trigger_dl_training", lambda slug: pytest.fail("must not create a Job"))
     assert client.post("/deep-learning/churn/train").status_code == 404
+
+
+# ── Platform monitor: resources, ping, start/stop ─────────────────────────────
+
+
+def test_platform_resources_outside_a_cluster_is_unavailable_not_an_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(resources, "gpu_report", lambda: resources.GpuReport(available=False, reason="no gpu"))
+    response = client.get("/platform/resources")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["available"] is False
+    assert body["reason"] == resources.NO_CLUSTER_REASON
+    assert body["gpu"] == {"available": False, "reason": "no gpu", "driver_version": None, "devices": []}
+    assert body["host"]["total_bytes"] > 0  # this machine's own /proc/meminfo
+
+
+def test_platform_monitor_routes_require_admin(unauthenticated_client: TestClient) -> None:
+    assert unauthenticated_client.get("/platform/resources").status_code == 401
+    assert unauthenticated_client.post("/platform/components/mlflow/ping").status_code == 401
+    assert unauthenticated_client.post("/platform/components/mlflow/stop").status_code == 401
+    assert unauthenticated_client.post("/platform/components/mlflow/start").status_code == 401
+
+
+def test_ping_component(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_ping(target: platform_status.Target) -> list[platform_status.PingResult]:
+        await asyncio.sleep(0)
+        return [platform_status.PingResult(ok=True, latency_ms=3, detail="HTTP 200")]
+
+    monkeypatch.setattr(platform_status, "ping", fake_ping)
+    response = client.post("/platform/components/prediction/ping")
+    assert response.status_code == 200
+    assert response.json() == {"name": "prediction", "results": [{"ok": True, "latency_ms": 3, "detail": "HTTP 200"}]}
+    assert client.post("/platform/components/nope/ping").status_code == 404
+
+
+def test_start_stop_returns_501_outside_a_cluster(client: TestClient) -> None:
+    response = client.post("/platform/components/mlflow/stop")
+    assert response.status_code == 501
+    assert "k3s" in response.json()["detail"]
+
+
+def test_start_stop_only_optional_services(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(workloads, "set_running", lambda name, running: calls.append((name, running)))
+
+    assert client.post("/platform/components/postgres/stop").status_code == 404
+    assert client.post("/platform/components/data-platform-manager/stop").status_code == 404
+    assert calls == []
+
+    stopped = client.post("/platform/components/langfuse/stop")
+    started = client.post("/platform/components/mlflow/start")
+    assert (stopped.status_code, started.status_code) == (202, 202)
+    assert stopped.json()["action"] == "stop" and started.json()["action"] == "start"
+    assert calls == [("langfuse", False), ("mlflow", True)]
+
+
+def test_start_of_an_undeployed_overlay_is_409_with_the_deploy_hint(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def not_deployed(name: str, running: bool) -> None:
+        raise workloads.NotDeployedError(name)
+
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(workloads, "set_running", not_deployed)
+    response = client.post("/platform/components/kafka/start")
+    assert response.status_code == 409
+    assert "make k3s-data-platform-up" in response.json()["detail"]
+
+
+def test_start_stop_surfaces_a_kubernetes_error_as_502(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(name: str, running: bool) -> None:
+        raise ApiException(status=403, reason="Forbidden")
+
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(workloads, "set_running", forbidden)
+    response = client.post("/platform/components/mlflow/stop")
+    assert response.status_code == 502
+    assert "Forbidden" in response.json()["detail"]

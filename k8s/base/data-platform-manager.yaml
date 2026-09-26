@@ -4,12 +4,17 @@
 # only" scope. Unlike every other backend service here, this one needs a real
 # Kubernetes API client (to read/trigger the pipeline Jobs in k8s/jobs/) — hence
 # its own ServiceAccount/Role/RoleBinding below, scoped to exactly `batch/v1`
-# Jobs in this one namespace plus read-only pod listing (the admin platform-status
-# dashboard's ready/restart counts, core/platform_status.py) and read-only node listing
-# (the Deep Learning tab's cluster-GPU check), nothing else. In
+# Jobs in this one namespace plus read-only pod/workload listing (the admin platform-status
+# dashboard's ready/restart/replica counts, core/platform_status.py), read-only node listing
+# (the Deep Learning tab's cluster-GPU check), read-only Metrics API access (the Monitor
+# tab's CPU/memory, core/resources.py) and scaling of the *named* optional workloads only
+# (the Start/Stop buttons, core/workloads.py), nothing else. In
 # docker-compose there's no such API to call at all, so job control reports itself
 # unavailable there (see core/k8s_jobs.py's in_cluster_config_available) and the
 # status dashboard falls back to health probes alone.
+#
+# On a GPU cluster `make k3s-up` also patches this Deployment with k8s/gpu/'s
+# read-only GPU telemetry access (the Monitor tab's GPU tiles) — see that file.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -34,6 +39,21 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
+  # Replica counts for the dashboard's "stopped" state (a workload scaled to 0). Read-only.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list"]
+  # The Start/Stop buttons: scale ONLY these workloads — core/workloads.py's
+  # OPTIONAL_SERVICES, pinned to this list by tests/test_workloads.py. The core platform
+  # (postgres, keycloak, platform-registry, this service, ...) can never be scaled from here.
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    resourceNames: ["agui-voice", "mlflow", "clickhouse", "langfuse-web", "langfuse-worker", "dl-inference", "kafka"]
+    verbs: ["get", "patch", "update"]
+  # The Monitor tab's per-pod CPU/memory (metrics-server). Read-only.
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -51,13 +71,18 @@ roleRef:
 ---
 # Cluster-scoped (Nodes are not namespaced), read-only: the admin console's Deep Learning
 # tab reports whether any node advertises `nvidia.com/gpu` — and data-platform-manager
-# only requests a GPU for a dl-training Job when one does. Get/list on nodes, nothing else.
+# only requests a GPU for a dl-training Job when one does — and the Monitor tab shows each
+# node's CPU/memory usage (metrics-server) against its allocatable capacity. Get/list on
+# nodes and their metrics, nothing else.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: data-platform-manager-node-reader
 rules:
   - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes"]
     verbs: ["get", "list"]
 ---
@@ -111,14 +136,29 @@ spec:
           volumeMounts:
             # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          # Idle ~200Mi (pyiceberg/pyarrow + the Kubernetes client).
+          resources:
+            requests: {cpu: 25m, memory: 192Mi}
+            limits: {memory: 512Mi}
+          # startupProbe gates the other two until the app first answers, polled every 2s
+          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
+          # with a 180s budget — above the 120s the app itself waits for Postgres/
+          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
+          # liveness-killed mid-start.
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
           readinessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
       volumes:
         - name: scenarios
           hostPath: {path: /scenarios, type: Directory}

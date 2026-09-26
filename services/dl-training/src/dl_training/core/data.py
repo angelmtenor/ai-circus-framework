@@ -1,6 +1,6 @@
 """
 - Title:    Public-data download, verification and loading for deep_learning scenarios
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 No dataset file is committed to this repo: each scenario.yaml pins a public source
 (Hugging Face dataset files — JSON Lines text or Parquet images — at a commit + SHA-256,

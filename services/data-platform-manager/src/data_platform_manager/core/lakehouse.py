@@ -1,6 +1,6 @@
 """
 - Title:    Lakehouse table format (Apache Iceberg)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Versioned, ACID tables over the *existing* object store — no new stateful
 container. The catalog (table metadata: names, schemas, current snapshot) is

@@ -1,6 +1,6 @@
 """
 - Title:    Entitlement & scenario-metadata API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Its entitlement-mutation and /llm-settings/* routes are admin-only infrastructure,
 called by other backend services or an operator, and are NOT exposed through Traefik.
@@ -22,12 +22,14 @@ from typing import Literal
 
 from ai_circus_shared.auth import (
     AuthSettingsAdapter,
+    Identity,
     TokenValidationError,
     is_admin_bearer_token,
     resolve_org_identity,
 )
 from ai_circus_shared.entitlements import ScenarioSummary
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -50,6 +52,18 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Admin bearer token required.")
 
 
+def _org_identity(authorization: str | None) -> Identity:
+    """Resolve the caller without a scenario entitlement check (see the two callers
+    below for why), mapping a missing/invalid token to 401.
+    """
+    try:
+        return resolve_org_identity(
+            authorization=authorization, settings=AuthSettingsAdapter.from_config(get_env_config())
+        )
+    except TokenValidationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
 def require_org_match(org_id: str, authorization: str | None = Header(default=None)) -> None:
     """Gate GET /entitlements/{org_id}[/...] on the caller actually being that org.
 
@@ -64,24 +78,7 @@ def require_org_match(org_id: str, authorization: str | None = Header(default=No
     endpoints ARE the entitlement check, so calling through the latter would have
     platform-registry call back into its own API.
     """
-    config = get_env_config()
-    settings = AuthSettingsAdapter(
-        AUTH_DISABLED=config.AUTH_DISABLED,
-        DEV_ORG_ID=config.DEV_ORG_ID,
-        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
-        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
-        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
-        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
-        ENGINEERING_DEMO_API_KEY=(
-            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
-        ),
-        PLATFORM_REGISTRY_URL="",  # unused by resolve_org_identity — no entitlement check here
-    )
-    try:
-        identity = resolve_org_identity(authorization=authorization, settings=settings)
-    except TokenValidationError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    if identity.org_id != org_id:
+    if _org_identity(authorization).org_id != org_id:
         raise HTTPException(status_code=403, detail=f"Not authorized to read org {org_id!r}'s entitlements.")
 
 
@@ -93,23 +90,7 @@ def require_authenticated(authorization: str | None = Header(default=None)) -> N
     `resolve_org_identity`, not `resolve_caller_identity`: there's no `scenario_slug`
     here for the latter's entitlement check to apply to.
     """
-    config = get_env_config()
-    settings = AuthSettingsAdapter(
-        AUTH_DISABLED=config.AUTH_DISABLED,
-        DEV_ORG_ID=config.DEV_ORG_ID,
-        KEYCLOAK_ISSUER=config.KEYCLOAK_ISSUER,
-        KEYCLOAK_AUDIENCE=config.KEYCLOAK_AUDIENCE,
-        KEYCLOAK_JWKS_URL=config.KEYCLOAK_JWKS_URL,
-        ADMIN_API_KEY=config.ADMIN_API_KEY.get_secret_value(),
-        ENGINEERING_DEMO_API_KEY=(
-            config.ENGINEERING_DEMO_API_KEY.get_secret_value() if config.ENGINEERING_DEMO_API_KEY else None
-        ),
-        PLATFORM_REGISTRY_URL="",  # unused by resolve_org_identity
-    )
-    try:
-        resolve_org_identity(authorization=authorization, settings=settings)
-    except TokenValidationError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    _org_identity(authorization)
 
 
 class DocumentExtractOut(BaseModel):
@@ -221,9 +202,19 @@ async def extract_document(file: UploadFile) -> DocumentExtractOut:
     """
     if file.filename is None:
         raise HTTPException(status_code=400, detail="Uploaded file has no filename.")
-    data = await file.read()
+    # Read one byte past the cap rather than the whole upload, so an oversized file is
+    # refused without first being buffered into memory in full.
+    data = await file.read(document_extraction.MAX_UPLOAD_BYTES + 1)
+    if len(data) > document_extraction.MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds the {document_extraction.MAX_UPLOAD_BYTES // (1024 * 1024)} MB attachment limit.",
+        )
     try:
-        extracted = document_extraction.extract_document(file.filename, data)
+        # PDF parsing/OCR is CPU-bound for seconds; on the event loop it would stall
+        # every other request to this service — including the entitlement checks every
+        # other backend makes on each of its own requests.
+        extracted = await run_in_threadpool(document_extraction.extract_document, file.filename, data)
     except document_extraction.UnsupportedDocumentError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     return DocumentExtractOut(

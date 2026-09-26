@@ -6,7 +6,7 @@ Utility to generate a Pydantic Settings model from settings.yaml.
 Automates the synchronization of environment variable definitions
 with the application's data model and .env.example file.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def generate_data_model(
         "Generated Pydantic Settings model from settings.yaml.",
         "DO NOT EDIT DIRECTLY. Run 'make generate-data-model' to update.",
         "",
-        "Author: ai-circus-framework contributors",
+        "Author: Angel Martinez-Tenor",
         '"""',
         "",
         "from __future__ import annotations",

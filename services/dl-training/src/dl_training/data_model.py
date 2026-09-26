@@ -4,7 +4,7 @@ data_model.py
 Generated Pydantic Settings model from settings.yaml.
 DO NOT EDIT DIRECTLY. Run 'make generate-data-model' to update.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "4af1bbe943f3723e274299bbaf161c7add109d550af5243a1e18042e95b42b2b"
+_SOURCE_YAML_HASH = "f49ecb790c0fb0408eafb18cacbabf3caa4c1adc7075e0bdf7c3eeedb9712197"
 
 
 EnvConfig.model_rebuild()

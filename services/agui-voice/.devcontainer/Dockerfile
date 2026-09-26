@@ -1,10 +1,10 @@
 # Dev Container: Python development (Ubuntu 26.04)
-# Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 # Description: Builds a development container with Git, uv, and essential build tools.
 
 FROM ubuntu:26.04
 
-LABEL maintainer="ai-circus-framework contributors <dev@ai-circus-framework.local>" \
+LABEL maintainer="Angel Martinez-Tenor <angelmtenor@gmail.com>" \
     description="Python dev container with Git and uv"
 
 ARG USERNAME=user

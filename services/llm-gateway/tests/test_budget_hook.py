@@ -73,15 +73,25 @@ def test_pre_call_hook_is_scoped_to_org(client: fakeredis.FakeStrictRedis) -> No
 def test_log_success_event_accumulates_spend(client: fakeredis.FakeStrictRedis) -> None:
     enforcer = _enforcer(client)
 
-    asyncio.run(enforcer.async_log_success_event({"user": "org-1", "response_cost": 0.15, "model": "gemini-flash"}, None, None, None))
-    asyncio.run(enforcer.async_log_success_event({"user": "org-1", "response_cost": 0.10, "model": "gemini-flash"}, None, None, None))
+    asyncio.run(
+        enforcer.async_log_success_event(
+            {"user": "org-1", "response_cost": 0.15, "model": "gemini-flash"}, None, None, None
+        )
+    )
+    asyncio.run(
+        enforcer.async_log_success_event(
+            {"user": "org-1", "response_cost": 0.10, "model": "gemini-flash"}, None, None, None
+        )
+    )
 
     spend = client.get(budget_hook._tenant_key("org-1", budget_hook._spend_key()))
     assert float(spend) == pytest.approx(0.25)
 
 
 def test_log_success_event_is_a_noop_without_an_org_id(client: fakeredis.FakeStrictRedis) -> None:
-    asyncio.run(budget_hook.BudgetEnforcer.async_log_success_event(_enforcer(client), {"response_cost": 0.15}, None, None, None))
+    asyncio.run(
+        budget_hook.BudgetEnforcer.async_log_success_event(_enforcer(client), {"response_cost": 0.15}, None, None, None)
+    )
 
     assert client.keys("*") == []
 

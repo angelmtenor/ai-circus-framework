@@ -1,5 +1,5 @@
 # litellm_config.yaml — model routing for the LiteLLM proxy (llm-gateway).
-# Author: ai-circus-framework contributors
+# Author: Angel Martinez-Tenor
 #
 # Add/remove model_list entries to change what's available through the gateway's
 # OpenAI-compatible API — every consumer (assistant, rag-agent, ui-react/CopilotKit)

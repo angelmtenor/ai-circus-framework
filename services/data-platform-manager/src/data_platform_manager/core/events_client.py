@@ -1,6 +1,6 @@
 """
 - Title:    Process-wide Kafka producer
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 ai_circus_shared.events.connect_producer() is a plain factory (no module-global
 state of its own) — each consuming service holds onto the one producer it

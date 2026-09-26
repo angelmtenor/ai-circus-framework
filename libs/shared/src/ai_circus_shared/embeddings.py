@@ -22,6 +22,8 @@ from typing import Protocol
 
 import httpx
 
+from ai_circus_shared.startup import wait_for
+
 # The model_name llm-gateway's litellm_config.yaml registers the local
 # sentence-transformers backend under — not a raw HF model id (that's fixed
 # gateway-side; see custom_handler.py's DEFAULT_MODEL).
@@ -52,6 +54,13 @@ class EmbeddingProvider(Protocol):
         ...
 
 
+def _gateway_starting(exc: Exception) -> bool:
+    """llm-gateway not accepting connections yet, or its proxy answering 5xx mid-start."""
+    if isinstance(exc, httpx.TransportError):
+        return True
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code >= 500
+
+
 class GatewayEmbeddingProvider:
     """Local sentence-transformers embeddings, proxied through llm-gateway's
     OpenAI-compatible `/embeddings` endpoint instead of running in this process.
@@ -68,7 +77,11 @@ class GatewayEmbeddingProvider:
         )
         # Determined by a live probe call rather than hardcoded — see the other
         # providers' constructors for why this class of bug is worth guarding against.
-        self.dimension = len(self.encode_query("dimension probe"))
+        # Made at service start-up, when llm-gateway (still loading LiteLLM) may not be
+        # listening yet — wait for it rather than crash-looping (see startup.py).
+        self.dimension = len(
+            wait_for(lambda: self.encode_query("dimension probe"), what="llm-gateway", retryable=_gateway_starting)
+        )
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
         response = self._client.post("/embeddings", json={"model": self._model_name, "input": texts})

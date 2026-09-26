@@ -1,65 +1,64 @@
 ---
 name: service-check
-description: Definition-of-Done for a change in ai-circus-framework — make check, make check-all, and an actual docker compose smoke test, since CI's compose-validate never boots containers.
-version: 1.0.0
+description: Definition of Done for any change in ai-circus-framework — per-service `make check`, `make check-all` for shared/cross-service changes, the ui-react build, then a real rebuild + redeploy + verify on the local k3s cluster (unit tests alone never count as done). Use before reporting a change as finished or proposing a commit.
+version: 2.0.0
 ---
 
 # Service Check (Definition of Done)
 
-## Overview
+Root `AGENTS.md` §4 defines Done; this is the checklist. Work through it before saying a change
+"works", and before proposing a commit (which still needs the human's inspection — §3).
 
-Root `AGENTS.md` §4 (Verification is Mandatory) defines Definition of Done for any new or changed
-service. This skill is the checklist to run before calling a change complete — whether or not
-you're about to commit (which still requires human inspection first, per `AGENTS.md` §3).
+## 1. Static + unit checks
 
-## When to use
+| Changed | Run |
+|---|---|
+| `services/<name>/` | `cd services/<name> && make check` |
+| `libs/shared/` | `make sync-shared`, then `make check-all` (it lints + tests `libs/shared` first, then every service) |
+| `ui-react/` | `cd ui-react && npm run build && npm run lint` (the build is the typecheck) |
+| `k8s/` | `kubectl apply --dry-run=server -k k8s/base` (and `-k k8s/deep-learning` if touched) |
+| `docker-compose.yml` | `docker compose --env-file .env.example --profile '*' config -q` — and for a refactor, diff the rendered config before/after |
 
-- Before reporting any code change in `services/*/` or `libs/shared` as finished.
-- Before proposing a commit.
+`make check` = pre-commit (ruff, ruff-format, pyrefly, gitleaks, checkmake), settings.yaml ↔
+`data_model.py` drift, `uv audit`, then pytest with the service's coverage floor. All of it must
+pass. A real finding (pyrefly error, CVE, coverage drop) gets a root-cause fix — never an ignore
+rule or a lowered threshold. The one accepted exception pattern is a CVE with **no fixed release**,
+suppressed with `uv audit --ignore-until-fixed <ID>` plus a comment explaining why the affected
+code path isn't reachable (see `services/agui-voice/Makefile`'s `AUDIT_ACCEPTED`).
 
-## Workflow
+The pre-commit hooks may also normalize files you didn't touch (line endings, `noqa` comment
+style) — that's expected; keep those changes, `make check` can't pass cleanly without them.
 
-1. **Per-service check**, from inside the touched service directory:
-   ```bash
-   cd services/<name>
-   make check
-   ```
-   This runs `make qa` (pre-commit: ruff-check, ruff-format, pyrefly-check, gitleaks, checkmake,
-   plus the service's `settings.yaml`/`data_model.py` drift check) followed by `make test`
-   (pytest). All of it must pass — don't hand-wave a failing step.
+Every bug fix needs a regression test (service `AGENTS.md` §4).
 
-2. **Cross-service changes** (anything touching `libs/shared`, or a change that's supposed to
-   apply the same way to multiple services): run `make check-all` from the repo root, which loops
-   `make check` across every `services/*/` directory in sequence.
+## 2. Real deployment on k3s — not optional
 
-3. **After editing `libs/shared`**: run `make sync-shared` from the repo root
-   (`uv sync --reinstall-package ai-circus-shared` per service) before step 1/2, otherwise services
-   are still testing against the old shared build.
+Unit tests can't see wiring problems (a probe that never passes, a missing secret key, a
+blocking call that stalls an event loop, CORS). With the cluster up (`k3d cluster list`; else
+`make k3s-all-lite`, or `make k3s-resume-lite` if paused):
 
-4. **Actual integration smoke test — do not skip this.** CI's `compose-validate` job only runs
-   `docker compose config --quiet` (static YAML validation) — it never boots a single container.
-   `make check`/`make check-all` are unit-test-level only. The real Definition of Done requires
-   bringing the affected service(s) up for real:
-   ```bash
-   make up-infra      # if infra isn't already running
-   make up             # or docker compose up -d <service> for a narrower smoke test
-   make verify          # curl-checks the exact requests the login screen makes
-   ```
-   For a UI-facing change, also exercise the actual feature in a browser at the relevant
-   `*.localhost` Traefik hostname — golden path and at least one edge case — per root `CLAUDE.md`'s
-   guidance on UI changes.
+```bash
+# Detached — a session end or WSL restart must not kill it (see k3s-deploy-verify, Gotcha 6)
+nohup setsid bash -c 'make k3s-build; echo "exit $?"' > ~/.cache/ai-circus-k3s-build.log 2>&1 < /dev/null &
+make k3s-import
+kubectl -n ai-circus rollout restart deployment/<each changed service>   # same-tag imports never restart pods
+kubectl -n ai-circus rollout status deployment/<svc> --timeout=180s
+make k3s-verify
+```
+
+- Changed only one image? `docker build -f services/<svc>/Dockerfile -t ai-circus/<svc>:local .`
+  + `k3d image import ai-circus/<svc>:local -c ai-circus` is much faster than `k3s-build`.
+- Changed `k8s/` manifests: `make k3s-up` (applies `k8s/base`) — changed pod specs roll out by
+  themselves.
+- Changed `training`/`etl-*` or anything a model depends on: `make k3s-pipeline`.
+- Check the pods, not just the curl: `kubectl -n ai-circus get pods` (no restarts climbing),
+  `kubectl -n ai-circus logs deploy/<svc>` (no tracebacks), `kubectl top pods` (memory within
+  its limit, if you touched memory).
+- Anything UI-facing, or "does it work end to end": a real headless-browser pass with the
+  `playwright-headless-verify` skill (login → scenario → the feature, golden path + one edge case).
 
 ## Key rules
 
-- `make check` passing is necessary but not sufficient — it does not replace an actual running
-  smoke test.
-- Never claim a feature "works" from type-checking/unit tests alone if it wasn't exercised live.
-- If `make check` surfaces a real finding (a gitleaks hit, a pyrefly type error, a coverage
-  regression against a service's `--cov-fail-under` floor), fix the root cause — don't suppress it
-  with an ignore rule or lower the threshold to make it pass.
-
-## References
-
-- Root `AGENTS.md` §4 (Verification is Mandatory).
-- Root `CLAUDE.md` — "Debugging 'Failed to fetch'" section, and the per-service `make check`
-  command table.
+- `make check` passing is necessary, not sufficient.
+- Never claim a feature works from type-checks/unit tests alone if it wasn't exercised live.
+- Report failures faithfully with their output; say explicitly which steps you skipped.

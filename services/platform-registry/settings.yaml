@@ -1,6 +1,6 @@
 # settings.yaml
 # Configuration file for environment variables required by the application
-# Author: ai-circus-framework contributors
+# Author: Angel Martinez-Tenor
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #

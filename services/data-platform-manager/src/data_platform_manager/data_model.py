@@ -4,7 +4,7 @@ data_model.py
 Generated Pydantic Settings model from settings.yaml.
 DO NOT EDIT DIRECTLY. Run 'make generate-data-model' to update.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class EnvConfig(BaseSettings):
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
 
 
-_SOURCE_YAML_HASH = "3d7db10b2e8d4f32443b153c917501e2b451ec108696bbbad53f8a0f3e23f628"
+_SOURCE_YAML_HASH = "531b888614aa43774592c7db8377d9c1430c7773280a4b409d4f32caa6265f3f"
 
 
 EnvConfig.model_rebuild()

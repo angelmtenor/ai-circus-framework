@@ -1,6 +1,6 @@
 """
 - Title:    Tenant-scoped cache / key-value store (Redis-protocol)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 The unified data layer's low-latency companion to ai_circus_shared.storage's
 durable object store: session state, rate-limit counters, and anything else a

@@ -1,6 +1,6 @@
 """
 - Title:    Document vectorization pipeline for conversational_rag scenarios
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Extract: bootstrap the tenant's documents into SeaweedFS on first run, from either the
 scenario's tracked sample_docs/ folder or a public GitHub repo folder (demo convenience

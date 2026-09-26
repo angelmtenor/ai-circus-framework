@@ -1,6 +1,6 @@
 # settings.yaml
 # Configuration file for environment variables required by the application
-# Author: ai-circus-framework contributors
+# Author: Angel Martinez-Tenor
 # Defines variable names, descriptions, types, constraints, and validation rules.
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
@@ -40,6 +40,26 @@ env_variables:
     type: string
     mandatory: true
     secret: false
+
+  - name: EMBEDDING_PROVIDER
+    description: "Platform embedding backend (as rag-agent/etl-vectorize): 'local' = this gateway's local-embed"
+    type: string
+    mandatory: false
+    default: "local"
+    secret: false
+    validation:
+      regex: "^(local|gemini|voyage)$"
+      error_message: "EMBEDDING_PROVIDER must be one of: local, gemini, voyage"
+
+  - name: LOCAL_EMBED_PRELOAD
+    description: "'true' = warm local-embed at proxy start, not on the first call (EMBEDDING_PROVIDER=local only)"
+    type: string
+    mandatory: false
+    default: "false"
+    secret: false
+    validation:
+      regex: "^(true|false)$"
+      error_message: "LOCAL_EMBED_PRELOAD must be true or false"
 
   # Referenced by litellm_config.yaml via `os.environ/<NAME>` — read directly by the
   # litellm process, not by this service's own code. Declared here for discoverability
@@ -140,6 +160,9 @@ environments:
   docker:
     # Running as a container inside docker-compose's `ai-circus` network.
     CACHE_URL: "redis://valkey:6379"
+    # Deployed (compose and k8s both run this profile): never make the first chat/RAG
+    # request of a demo pay for loading the embedding model — see custom_handler.py.
+    LOCAL_EMBED_PRELOAD: "true"
 
   staging: {}
     # Staging environment profile — overrides go here

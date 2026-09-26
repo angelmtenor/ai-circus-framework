@@ -1,6 +1,6 @@
 """
 - Title:    Per-(tenant, scenario) system-prompt cache
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Mirrors prediction's ModelCache: `assistant` is one long-running service shared by
 every tenant of every tabular_ml scenario in SCENARIOS, but each tenant has their own

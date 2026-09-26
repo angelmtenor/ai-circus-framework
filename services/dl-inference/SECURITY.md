@@ -56,4 +56,4 @@ Run the `*-config-drift-check` console script (wired into `make qa`) to verify s
 ## Reporting Vulnerabilities
 
 If you discover a security issue, please report it responsibly via a private issue
-or email (dev@ai-circus-framework.local) rather than public disclosure. See [CONTRIBUTING.md](CONTRIBUTING.md).
+or email (angelmtenor@gmail.com) rather than public disclosure. See [CONTRIBUTING.md](CONTRIBUTING.md).

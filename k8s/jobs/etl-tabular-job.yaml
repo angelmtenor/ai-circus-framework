@@ -23,6 +23,11 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: {drop: ["ALL"]}
+          # Mirrors docker-compose.yml's mem_limit (and core/k8s_jobs.py in
+          # data-platform-manager, which builds this same Job — tests keep them equal).
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: etl-tabular-secrets}

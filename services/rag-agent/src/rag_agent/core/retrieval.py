@@ -1,6 +1,6 @@
 """
 - Title:    Retrieval over a tenant's vectorized documents
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations

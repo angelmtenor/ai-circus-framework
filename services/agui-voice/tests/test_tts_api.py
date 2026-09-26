@@ -135,3 +135,12 @@ def test_tts_endpoint_switches_to_the_english_voice_for_english_text(
     app = client_with_language_switch.app
     switch_frames = [f for f in app.state.fake_service.received if f is ManuallySwitchServiceFrame]
     assert switch_frames, app.state.fake_service.received
+
+
+def test_tts_endpoint_rejects_text_over_the_length_cap(client: TestClient) -> None:
+    """Synthesis cost grows with length — an oversized body is refused before any work."""
+    from agui_voice.api.tts import MAX_TTS_CHARS
+
+    response = client.post("/tts/churn", json={"text": "a" * (MAX_TTS_CHARS + 1)})
+
+    assert response.status_code == 422

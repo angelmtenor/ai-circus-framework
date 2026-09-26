@@ -1,6 +1,6 @@
 """
 - Title:    One-shot text-to-speech endpoint (the chat UI's loudspeaker icon)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Decoupled from the live voice WebSocket pipeline (`api/ws.py`): this is a plain
 "text in, audio out" HTTP call with no STT/turn-taking, so it runs a minimal
@@ -30,7 +30,7 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.workers.runner import WorkerRunner
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agui_voice import get_env_config
 from agui_voice.core.identity import resolve_identity
@@ -39,10 +39,16 @@ from agui_voice.core.providers import build_tts_service, guess_text_language, re
 router = APIRouter()
 
 
-class TTSRequest(BaseModel):
-    """Request body for POST /tts/{scenario_slug}."""
+# Comfortably above ChatPanel's longest spoken reply; anything larger is refused (422).
+MAX_TTS_CHARS = 5000
 
-    text: str
+
+class TTSRequest(BaseModel):
+    """Request body for POST /tts/{scenario_slug}. Bounded: synthesis is CPU-bound and
+    proportional to length — one chat reply, not a book.
+    """
+
+    text: str = Field(max_length=MAX_TTS_CHARS)
 
 
 class _AudioCollector(FrameProcessor):

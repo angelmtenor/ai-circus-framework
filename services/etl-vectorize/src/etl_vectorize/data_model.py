@@ -4,7 +4,7 @@ data_model.py
 Generated Pydantic Settings model from settings.yaml.
 DO NOT EDIT DIRECTLY. Run 'make generate-data-model' to update.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "8852ff122d37c8ff900ab6b178b2b078dbe56245e1e8c8d9af2eadb8958877d2"
+_SOURCE_YAML_HASH = "601daee805a083be6106a1976181fbcf017a513c0636af4809e3fa3b93b56b40"
 
 
 EnvConfig.model_rebuild()
@@ -120,12 +120,12 @@ def get_env_config(env: str | None = None) -> EnvConfig:
 def main() -> None:
     """Display the loaded configuration (redacted)."""
     env_config = get_env_config()
-    print("--- Loaded Configuration ---")  # noqa: T201
+    print("--- Loaded Configuration ---")  # ruff: ignore[print]
     for field in EnvConfig.model_fields:
         val = getattr(env_config, field)
         if hasattr(val, "get_secret_value"):
             val = "****" + val.get_secret_value()[-4:] if val and val.get_secret_value() else "None"
-        print(f"{field}: {val}")  # noqa: T201
+        print(f"{field}: {val}")  # ruff: ignore[print]
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Cleanup script for rag_agent.
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 
 NOTE: This script intentionally uses only stdlib — no project imports — so it
 works even when .venv is absent or broken.

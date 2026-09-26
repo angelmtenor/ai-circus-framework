@@ -38,10 +38,14 @@ spec:
           volumeMounts:
             - {name: postgres-data, mountPath: /var/lib/postgresql/data}
             - {name: init-scripts, mountPath: /docker-entrypoint-initdb.d, readOnly: true}
+          # Idle ~80Mi; shared by Keycloak, Langfuse, MLflow and every service database.
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
           readinessProbe:
             exec: {command: ["pg_isready", "-U", "$(POSTGRES_USER)"]}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 2
+            periodSeconds: 2
           livenessProbe:
             exec: {command: ["pg_isready", "-U", "$(POSTGRES_USER)"]}
             initialDelaySeconds: 15

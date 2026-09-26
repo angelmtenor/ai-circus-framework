@@ -11,7 +11,7 @@ GitHub repo folder — see `documents.seed_prefix`/`documents.github_source`), c
 embeds them, and upserts the result into the tenant's Qdrant collection. Runs once
 and exits — not a long-running server (see docker-compose.yml's `profiles: ["pipeline"]`).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

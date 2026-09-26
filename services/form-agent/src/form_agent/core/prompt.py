@@ -1,6 +1,6 @@
 """
 - Title:    Form-filling grounding (system prompt construction)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Entirely data-driven from `definition.form`/`definition.chat.context` — no
 scenario-specific wording is baked in here, so the same function grounds any

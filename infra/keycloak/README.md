@@ -1,9 +1,13 @@
 # Keycloak realm bootstrap
 
-`realm-export.json` is a declarative realm bootstrap loaded by Keycloak's own
-`start --import-realm` on first boot (see `k8s/base/keycloak.yaml`'s
-`keycloak-realm-import` ConfigMap — kept in sync with this file by hand — and
-`docker-compose.yml`'s `keycloak` service, which bind-mounts this file directly).
+`Dockerfile` builds the platform's Keycloak image (`ai-circus/keycloak:local`, via
+`make k3s-build` or docker compose): `kc.sh build` runs once at image build, so the container
+starts with `start --optimized` and skips Quarkus re-augmentation on every boot. The version
+pin (`KEYCLOAK_VERSION`) lives there; DB migrations run automatically and are forward-only.
+
+`realm-export.json` is a declarative realm bootstrap, baked into that image and loaded by
+`--import-realm` on first boot (skipped once the realm exists) — the single copy both
+`k8s/base/keycloak.yaml` and `docker-compose.yml` use.
 
 It defines the `ai-circus` realm with `organizationsEnabled: true`, the built-in
 `organization` client scope (Organization Membership protocol mapper, included in the

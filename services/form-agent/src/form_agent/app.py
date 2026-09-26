@@ -10,7 +10,7 @@ scenarios that configure `form.classification_field`, classifies the request via
 retrieval over the tenant's vectorized document catalog (same embedder/Qdrant pattern
 as rag-agent). Completions always go through llm-gateway, never a raw provider SDK.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

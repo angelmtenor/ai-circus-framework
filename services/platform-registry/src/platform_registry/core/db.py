@@ -1,13 +1,14 @@
 """
 - Title:    Database engine/session
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import Engine, MetaData, create_engine, inspect, text
+from ai_circus_shared import db as shared_db
+from sqlalchemy import URL, Engine, MetaData, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from platform_registry.data_model import EnvConfig
@@ -16,19 +17,17 @@ _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
 
-def database_url(config: EnvConfig) -> str:
-    """Build the Postgres connection string for the `platform` schema from config."""
-    password = config.POSTGRES_PASSWORD.get_secret_value()
-    return (
-        f"postgresql+psycopg://{config.POSTGRES_USER}:{password}"
-        f"@{config.POSTGRES_HOST}:{config.POSTGRES_PORT}/{config.POSTGRES_DB}"
-    )
+def database_url(config: EnvConfig) -> URL:
+    """The `platform` database URL — shared builder, so a password with `@`/`/`/`:` is escaped."""
+    return shared_db.database_url(config)
 
 
 def init_engine(config: EnvConfig) -> Engine:
-    """Create the process-wide SQLAlchemy engine/session factory. Call once, at startup."""
+    """Create the process-wide SQLAlchemy engine/session factory, waiting for Postgres to
+    accept connections first (see ai_circus_shared.startup). Call once, at startup.
+    """
     global _engine, _session_factory
-    _engine = create_engine(database_url(config), pool_pre_ping=True)
+    _engine = shared_db.connect_engine(config)
     _session_factory = sessionmaker(bind=_engine, expire_on_commit=False)
     return _engine
 

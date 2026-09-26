@@ -1,6 +1,6 @@
 """
 - Title:    One-class visual anomaly detection (task: anomaly_detection)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Industrial inspection rarely has a labelled defect for every failure mode — defects are
 rare and never quite the same twice — so the model learns what *normal* looks like and

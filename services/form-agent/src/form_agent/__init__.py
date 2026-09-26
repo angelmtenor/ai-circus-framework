@@ -12,7 +12,7 @@ from form_agent.core.logger import get_logger
 from form_agent.data_model import get_env_config
 
 __version__ = "0.1.0"
-__author__ = "ai-circus-framework contributors"
+__author__ = "Angel Martinez-Tenor"
 __all__: list[str] = [
     "get_env_config",
     "get_logger",

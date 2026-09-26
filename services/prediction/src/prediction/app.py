@@ -7,7 +7,7 @@ POST /predict/{scenario_slug} for every tabular_ml scenario in SCENARIOS (empty/
 = all), shared across every tenant (model/explainer are loaded and cached per
 (org, scenario) from SeaweedFS on first request — see core/model_cache.py).
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -58,6 +59,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.definitions = definitions
     app.state.model_cache = ModelCache(stores, fallback_org_id=config.SHARED_MODEL_ORG_ID)
+    # Before serving (so readiness only passes once models are warm): never make a demo's
+    # first prediction pay for the SeaweedFS download + unpickle. Off the event loop.
+    await run_in_threadpool(app.state.model_cache.preload, list(definitions))
 
     yield
 

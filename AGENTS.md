@@ -35,8 +35,11 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
 
 ## ✅ 4. Verification is Mandatory
 - **Definition of Done** for a new/changed service: `make check` (inside that service) passes,
-  plus an actual `docker compose up` smoke test of the affected service(s) — not just unit tests.
-- **Cross-service changes:** run `make check-all` from the repo root.
+  plus a real smoke test of the affected service(s) on the local k3s cluster (rebuild, import,
+  `rollout restart`, `make k3s-verify`, and a browser check for anything UI-facing) — not just
+  unit tests. See the `service-check` skill. (docker compose remains a supported equivalent.)
+- **Cross-service changes** (anything in `libs/shared`, or the same change across services): run
+  `make check-all` from the repo root — it covers `libs/shared`'s own tests too.
 - **New service scaffolding:** always go through `./scripts/new_service.sh <name>` (real
   cookiecutter generation from `ai-circus-template`) — never hand-write a service's
   `pyproject.toml`/`Dockerfile`/`settings.yaml` from scratch.
@@ -65,10 +68,10 @@ inside a specific service. Adherence is STRICTLY MANDATORY.
 
 ### Branch protection (recommended — apply manually, this is a GitHub setting, not a file)
 For both `main` and `develop`, under GitHub → Settings → Branches:
-- **Required status checks:** `service-check`, `ui-react`, `compose-validate`, `gitleaks`,
-  `container-scan`, `sbom`, `commitlint` (from `.github/workflows/ci.yml`). Leave
-  `integration-smoke` out of the required list for now — it runs with `continue-on-error: true`
-  until it's proven non-flaky; promote it once it is.
+- **Required status checks:** `service-check`, `shared-lib`, `ui-react`, `compose-validate`,
+  `gitleaks`, `container-scan` (image build + SBOM + Trivy), `commitlint` (from
+  `.github/workflows/ci.yml`). Leave `integration-smoke` out of the required list for now — it
+  runs with `continue-on-error: true` until it's proven non-flaky; promote it once it is.
 - **Require a pull request before merging**, with at least one approving review.
 - **Do not allow direct pushes** to `main` or `develop` — every change lands via PR, matching the
   git-flow model above.

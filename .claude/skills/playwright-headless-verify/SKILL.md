@@ -1,4 +1,15 @@
+---
+name: playwright-headless-verify
+description: Real headless-browser verification for ai-circus-framework when the playwright MCP tools fail (no Chrome in this sandbox) — drive Playwright's own Chromium via playwright-core (or the Playwright Docker image), log into the running k3s app with the admin-key shortcut without printing .env, and check pages, charts and predictions. Use for any UI-facing verification or "does it work end to end".
+version: 1.1.0
+---
+
 # Playwright Headless Verify
+
+**Quick start:** copy `k3s-ui-check.js` / `k3s-predict-check.js` from this directory into a
+scratch dir and run them natively (`playwright-core` + the Chromium under
+`~/.cache/ms-playwright`, see below) or with the Docker image — both paths are documented here,
+including how to pass `ADMIN_API_KEY` without it ever being printed.
 
 ## Overview
 

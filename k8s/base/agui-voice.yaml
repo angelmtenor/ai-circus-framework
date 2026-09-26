@@ -26,16 +26,34 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # matches the 'app' user every services/*/Dockerfile creates via useradd
         seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        # The local-path PVC isn't fsGroup-managed, and caches written while this image
+        # still ran as root are root-owned — hand them to UID 1000 before the app starts.
+        # A no-op (milliseconds) once ownership is already right.
+        - name: cache-ownership
+          image: ai-circus/agui-voice:local  # same image: coreutils' chown, nothing extra to pull
+          imagePullPolicy: Never
+          command: ["chown", "-R", "1000:1000", "/cache"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"], add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          volumeMounts:
+            - {name: voice-model-cache, mountPath: /cache}
       containers:
         - name: agui-voice
           image: ai-circus/agui-voice:local
           imagePullPolicy: Never
-          # No runAsNonRoot/dropped capabilities: unlike the other services/*
-          # Dockerfiles, services/agui-voice/Dockerfile has no `USER app` yet, so this
-          # container still runs as root — fix the Dockerfile first, then tighten this.
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           ports:
             - {containerPort: 8000}
           envFrom:
@@ -52,17 +70,34 @@ spec:
             - {name: PIPER_VOICE_ID, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_PIPER_VOICE_ID}}}
             - {name: PIPER_VOICE_ID_ES, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_PIPER_VOICE_ID_ES}}}
           volumeMounts:
-            # faster-whisper caches under ~/.cache/huggingface, Piper under
-            # ~/.cache/pipecat — this container has no dedicated user, so $HOME is /root.
-            - {name: voice-model-cache, mountPath: /root/.cache}
-          readinessProbe:
+            # faster-whisper caches under ~/.cache/huggingface, Piper under ~/.cache/pipecat.
+            - {name: voice-model-cache, mountPath: /home/app/.cache}
+          # ~830Mi with faster-whisper + Piper loaded.
+          resources:
+            requests: {cpu: 50m, memory: 512Mi}
+            limits: {memory: 2Gi}
+          # startupProbe gates the other two until the app first answers, polled every 2s
+          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
+          # with a 180s budget — above the 120s the app itself waits for Postgres/
+          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
+          # liveness-killed mid-start.
+          startupProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
+          # Ready only once the STT/TTS models are pre-warmed (app.py's /readyz) — a demo's
+          # first voice session never waits for them; liveness stays on /healthz, so a slow
+          # first download into voice-model-cache is never mistaken for a hung process.
+          readinessProbe:
+            httpGet: {path: /readyz, port: 8000}
+            periodSeconds: 3
+            timeoutSeconds: 3
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}
-            initialDelaySeconds: 15
-            periodSeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
       volumes:
         - name: voice-model-cache
           persistentVolumeClaim: {claimName: voice-model-cache}

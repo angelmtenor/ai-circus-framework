@@ -33,7 +33,7 @@ Run manually (`make sync-entitlements`) or on a schedule. A Keycloak webhook/eve
 push sync (triggered on role-assignment events, instead of this pull/poll approach) is a
 documented future improvement — see the root README's "Reserved for later" section.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

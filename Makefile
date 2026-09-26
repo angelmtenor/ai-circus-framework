@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
+	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
@@ -232,7 +232,6 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 
 K3S_CLUSTER ?= ai-circus
 K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant training etl-vectorize rag-agent form-agent agui-voice data-platform-manager
-K3S_PORTFORWARD_PID = /tmp/k3s-portforward-$(K3S_CLUSTER).pid
 # Deployments `k3s-lite`/`k3s-resume-lite` scale to 0 — the heaviest pods the day-to-day demo never
 # touches (measured RSS on a running cluster: agui-voice ~830Mi, mlflow ~350Mi). Langfuse
 # (+ clickhouse/valkey) and data-platform-manager (the admin Platform health dashboard) deliberately
@@ -265,6 +264,8 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 	done
 	@echo "── ai-circus/mlflow:local (infra/mlflow/Dockerfile — MLOps monitor) ──"
 	@docker build -f infra/mlflow/Dockerfile -t ai-circus/mlflow:local infra/mlflow || exit 1
+	@echo "── ai-circus/keycloak:local (infra/keycloak/Dockerfile — pre-built, realm baked in) ──"
+	@docker build -t ai-circus/keycloak:local infra/keycloak || exit 1
 	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local \
 		--build-arg VITE_KEYCLOAK_ISSUER="$(VITE_KEYCLOAK_ISSUER)" \
 		--build-arg VITE_KEYCLOAK_CLIENT_ID="$(if $(VITE_KEYCLOAK_CLIENT_ID),$(VITE_KEYCLOAK_CLIENT_ID),ui-react)" \
@@ -274,18 +275,23 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 		.
 	@echo "✓ all images built"
 
-k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd
-	@for svc in $(K3S_IMAGES) ui-react mlflow; do \
-		k3d image import "ai-circus/$$svc:local" -c "$(K3S_CLUSTER)" || exit 1; \
-	done
+k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd (one batched import)
+	@k3d image import $(foreach svc,$(K3S_IMAGES) ui-react mlflow keycloak,ai-circus/$(svc):local) -c "$(K3S_CLUSTER)"
 	@echo "✓ all images imported into k3d cluster '$(K3S_CLUSTER)'"
 
 k3s-secrets: ## Generate the app-env/traefik-basicauth/seaweedfs-s3-config k8s Secrets from .env/infra — never committed, re-run any time those change
 	@./scripts/k3s_generate_secrets.sh
 
-k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend services, ingress)
+k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend services, ingress) — plus, on a GPU cluster, k3s-gpu-telemetry
 	@kubectl apply -k k8s/base
+	@$(MAKE) --no-print-directory k3s-gpu-telemetry
 	@echo "✓ k8s/base applied — 'make k3s-wait' to wait for it to actually be ready"
+
+k3s-gpu-telemetry: ## GPU clusters only (no-op otherwise): give data-platform-manager read-only GPU access (k8s/gpu/) for the admin Platform → Monitor tab — never requests nvidia.com/gpu
+	@if kubectl get runtimeclass nvidia >/dev/null 2>&1; then \
+		kubectl -n ai-circus patch deployment data-platform-manager --patch-file k8s/gpu/data-platform-manager-gpu-telemetry.yaml \
+		&& echo "⚡ GPU cluster — data-platform-manager can read GPU telemetry (Platform → Monitor)"; \
+	fi
 
 k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to report Ready
 	@echo "⏳ waiting for postgres/qdrant/seaweedfs..."
@@ -294,10 +300,14 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=60s
 	@echo "⏳ waiting for keycloak (first boot imports the realm — can take a couple of minutes)..."
 	@kubectl -n ai-circus rollout status deployment/keycloak --timeout=180s
-	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice data-platform-manager ui-react; do \
+	@echo "⏳ waiting for llm-gateway (loads its local embedding model before Ready — a brand-new cluster downloads it first, ~670 MB)..."
+	@kubectl -n ai-circus rollout status deployment/llm-gateway --timeout=600s
+	@for svc in platform-registry prediction assistant rag-agent form-agent data-platform-manager ui-react; do \
 		echo "⏳ waiting for $$svc..."; \
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
 	done
+	@echo "⏳ waiting for agui-voice (Ready once its STT/TTS models are warm — a new cluster downloads them first)..."
+	@kubectl -n ai-circus rollout status deployment/agui-voice --timeout=600s
 	@echo "⏳ waiting for the observability stack (Langfuse's first boot migrates Postgres + ClickHouse — a few minutes on a laptop)..."
 	@kubectl -n ai-circus rollout status statefulset/clickhouse --timeout=180s
 	@for svc in mlflow langfuse-web langfuse-worker; do \
@@ -363,22 +373,14 @@ k3s-full: ## Scale every Deployment `k3s-lite` turned off back to 1 replica (the
 k3s-resume-lite: k3s-resume k3s-lite k3s-wait ## Resume a paused cluster WITHOUT the heavy rarely-used pods (default skips mlflow and agui-voice — ~1.2 GB less RSS), then wait for the rest to be Ready
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' resumed in lite mode — http://aiopen.localhost ('make k3s-full' brings the skipped pods back)"
 
-k3s-portforward: ## Start (or restart) a standing background port-forward to platform-registry so the browser can reach it directly — auto-run by k3s-wait, safe to re-run any time
-	@if [ -f "$(K3S_PORTFORWARD_PID)" ] && kill -0 "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null; then \
-		kill "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null; sleep 1; \
-	fi
-	@rm -f "$(K3S_PORTFORWARD_PID)"
-	@nohup kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-portforward-$(K3S_CLUSTER).log 2>&1 & \
-		echo $$! > "$(K3S_PORTFORWARD_PID)"
-	@sleep 1
-	@echo "✓ platform-registry port-forward running in background (PID $$(cat $(K3S_PORTFORWARD_PID))) — http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}"
+k3s-portforward: ## Standing port-forward to platform-registry (the browser reaches it directly) — a systemd user service where available, so it survives reboots and pod restarts (scripts/k3s_portforward.sh); auto-run by k3s-wait, safe to re-run
+	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${PLATFORM_REGISTRY_PORT:-8010}"
 
-k3s-portforward-stop: ## Stop the standing platform-registry port-forward started by k3s-portforward/k3s-wait
-	@if [ -f "$(K3S_PORTFORWARD_PID)" ]; then \
-		kill "$$(cat $(K3S_PORTFORWARD_PID))" 2>/dev/null || true; \
-		rm -f "$(K3S_PORTFORWARD_PID)"; \
-		echo "✓ platform-registry port-forward stopped"; \
-	fi
+k3s-portforward-stop: ## Stop the platform-registry port-forward (its systemd service stays enabled for the next boot)
+	@./scripts/k3s_portforward.sh stop "$(K3S_CLUSTER)"
+
+k3s-portforward-uninstall: ## Remove the port-forward's systemd user service — back to re-running `make k3s-portforward` after every reboot
+	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)"
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
 # `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,
@@ -424,7 +426,7 @@ DL_TRAINING_TORCH_RESOLVED = $(if $(filter auto,$(strip $(DL_TRAINING_TORCH))),$
 k3s-dl-build: ## Build + import the Deep Learning images (dl-inference, dl-training) into k3d — separate from k3s-build so the ~2 GB torch image is opt-in
 	@docker build -f services/dl-inference/Dockerfile -t ai-circus/dl-inference:local . || exit 1
 	@docker build -f services/dl-training/Dockerfile --build-arg DL_TRAINING_TORCH=$(DL_TRAINING_TORCH_RESOLVED) -t ai-circus/dl-training:local . || exit 1
-	@for img in dl-inference dl-training; do k3d image import "ai-circus/$$img:local" -c "$(K3S_CLUSTER)" || exit 1; done
+	@k3d image import ai-circus/dl-inference:local ai-circus/dl-training:local -c "$(K3S_CLUSTER)"
 	@echo "✓ Deep Learning images built + imported (dl-training torch=$(DL_TRAINING_TORCH_RESOLVED))"
 
 k3s-dl-up: ## Deploy the optional Deep Learning overlay (k8s/deep-learning/: dl-inference) and wait for it — models come from `make dl-train*` / k3s-dl-train-*
@@ -468,7 +470,9 @@ sync-shared: ## Rebuild+reinstall libs/shared in every service (run after editin
 
 # ── QA across services ────────────────────────────────────────────────────────
 
-check-all: ## Run `make check` inside every generated service
+check-all: ## Lint+test libs/shared, then run `make check` inside every generated service
+	@echo "── libs/shared ──"
+	@cd libs/shared && uv run ruff check -q src tests && uv run ruff format -q --check src tests && uv run pytest -q
 	@for dir in services/*/; do \
 		if [ -f "$$dir/Makefile" ]; then \
 			echo "── $$dir ──"; \

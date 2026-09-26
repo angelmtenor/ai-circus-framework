@@ -13,8 +13,9 @@ import socket
 import httpx
 import pytest
 
-from data_platform_manager.core import k8s_jobs, platform_status
+from data_platform_manager.core import k8s_jobs, platform_status, workloads
 from data_platform_manager.core.platform_status import PodInfo, Target
+from data_platform_manager.core.workloads import Replicas
 
 
 def _run(coro):  # ruff: ignore[missing-type-function-argument, missing-return-type-private-function] — tiny asyncio helper for sync tests
@@ -148,6 +149,87 @@ def test_collect_enriches_with_pod_state_only_in_cluster(monkeypatch: pytest.Mon
     monkeypatch.setattr(platform_status, "list_pods_by_app", boom)
     resilient = _run(platform_status.collect(targets))
     assert [c.status for c in resilient.components] == ["up", "up", "up"]
+
+
+def test_collect_reports_scaled_to_zero_as_stopped_with_start_stop_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    targets = (
+        _http_target("mlflow", "http://mlflow:5000/health", app_label="mlflow"),
+        _http_target("langfuse", "http://langfuse-web:3000/api/public/health", app_label="langfuse-web"),
+        _http_target("prediction", "http://prediction:8000/healthz", app_label="prediction"),
+        _http_target("kafka", "http://kafka:9092/", app_label="kafka", optional=True),
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host in {"mlflow", "prediction"}:
+            raise httpx.ConnectError("connection refused")
+        if request.url.host == "kafka":
+            raise httpx.ConnectError("[Errno -2] Name or service not known")
+        return httpx.Response(200)
+
+    real_async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        platform_status.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_async_client(transport=httpx.MockTransport(handler), timeout=kwargs.get("timeout")),
+    )
+    monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: True)
+    monkeypatch.setattr(platform_status, "list_pods_by_app", dict)
+    monkeypatch.setattr(
+        workloads,
+        "list_replicas",
+        lambda: {
+            "mlflow": Replicas(0, 0),
+            "clickhouse": Replicas(1, 1),
+            "langfuse-web": Replicas(1, 1),
+            "langfuse-worker": Replicas(1, 0),
+            "prediction": Replicas(1, 0),
+        },
+    )
+    by_name = {c.name: c for c in _run(platform_status.collect(targets)).components}
+
+    assert by_name["mlflow"].status == "stopped"
+    assert by_name["mlflow"].detail == "scaled to 0 replicas"
+    assert by_name["mlflow"].control is not None and by_name["mlflow"].control.state == "stopped"
+    # langfuse = web + worker + clickhouse: the worker still starting makes the unit "starting".
+    assert by_name["langfuse"].status == "up"
+    assert by_name["langfuse"].control is not None and by_name["langfuse"].control.state == "starting"
+    # A core service that is meant to run but doesn't answer is still "down" — and has no buttons.
+    assert by_name["prediction"].status == "down" and by_name["prediction"].control is None
+    # An overlay never applied: not deployed, and its hint says how to deploy it.
+    assert by_name["kafka"].status == "not_deployed"
+    assert by_name["kafka"].control is not None and by_name["kafka"].control.state == "not_deployed"
+    assert by_name["kafka"].control.deploy_hint == "make k3s-data-platform-up"
+
+
+def test_ping_probes_one_component_several_times() -> None:
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200 if len(calls) < 3 else 503)
+
+    real_async_client = httpx.AsyncClient
+
+    async def go() -> list[platform_status.PingResult]:
+        original = platform_status.httpx.AsyncClient
+        platform_status.httpx.AsyncClient = lambda **kwargs: real_async_client(  # type: ignore[misc]
+            transport=httpx.MockTransport(handler), timeout=kwargs.get("timeout")
+        )
+        try:
+            return await platform_status.ping(_http_target("prediction", "http://prediction:8000/healthz"))
+        finally:
+            platform_status.httpx.AsyncClient = original  # type: ignore[misc]
+
+    results = _run(go())
+    assert calls == ["/healthz"] * platform_status.PING_COUNT
+    assert [r.ok for r in results] == [True, True, False]
+    assert results[2].detail == "HTTP 503"
+    assert all(r.latency_ms is not None for r in results)
+
+
+def test_get_target() -> None:
+    assert platform_status.get_target("langfuse") is not None
+    assert platform_status.get_target("nope") is None
 
 
 def test_targets_cover_every_compose_and_k8s_service() -> None:

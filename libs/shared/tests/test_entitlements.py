@@ -40,6 +40,18 @@ class _FakeResponse:
         return self._payload
 
 
+class _FakeClient:
+    """Stands in for the module's pooled httpx.Client — only `.get` is ever called."""
+
+    def __init__(self, get: object) -> None:
+        self.get = get
+
+
+def _patch_get(monkeypatch: pytest.MonkeyPatch, fake_get: object) -> None:
+    """Route every platform-registry GET through `fake_get`."""
+    monkeypatch.setattr(entitlements_module, "_http", lambda: _FakeClient(fake_get))
+
+
 def test_check_entitlement_caches_across_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """A second check_entitlement() for the same (base_url, org, scenario) doesn't
     re-hit platform-registry within the TTL window — the hot path on every request.
@@ -51,7 +63,7 @@ def test_check_entitlement_caches_across_calls(monkeypatch: pytest.MonkeyPatch) 
         call_count += 1
         return _FakeResponse(payload={}, status_code=200)
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     client.check_entitlement(org_id="org-1", scenario_slug="churn")
@@ -62,11 +74,11 @@ def test_check_entitlement_caches_across_calls(monkeypatch: pytest.MonkeyPatch) 
 
 def test_check_entitlement_cache_is_scoped_per_org_and_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cached result for one (org, scenario) doesn't leak into a different pair."""
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=200))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload={}, status_code=200))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
     client.check_entitlement(org_id="org-1", scenario_slug="churn")
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
 
     with pytest.raises(EntitlementDeniedError):
         client.check_entitlement(org_id="org-1", scenario_slug="mpm")
@@ -74,7 +86,7 @@ def test_check_entitlement_cache_is_scoped_per_org_and_scenario(monkeypatch: pyt
 
 def test_check_entitlement_denied_raises_and_is_not_cached_as_entitled(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 404 (not entitled) raises, and doesn't get cached as if it were a success."""
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     with pytest.raises(EntitlementDeniedError):
@@ -92,7 +104,7 @@ def test_get_active_llm_model_sends_admin_bearer_and_parses_model_name(monkeypat
         captured["headers"] = headers
         return _FakeResponse(payload={"model_name": "gemini-flash"})
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     result = client.get_active_llm_model(admin_api_key="secret-key")
@@ -104,7 +116,7 @@ def test_get_active_llm_model_sends_admin_bearer_and_parses_model_name(monkeypat
 
 def test_get_active_llm_model_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """A non-2xx response propagates as an HTTPError — callers decide whether to fall back."""
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -122,7 +134,7 @@ def test_get_active_llm_model_caches_across_calls(monkeypatch: pytest.MonkeyPatc
         call_count += 1
         return _FakeResponse(payload={"model_name": "gemini-flash"})
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     first = client.get_active_llm_model(admin_api_key="secret-key")
@@ -141,7 +153,7 @@ def test_get_active_voice_settings_sends_admin_bearer_and_parses_providers(monke
         captured["headers"] = headers
         return _FakeResponse(payload={"stt_provider": "whisper", "tts_provider": "piper"})
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     result = client.get_active_voice_settings(admin_api_key="secret-key")
@@ -153,7 +165,7 @@ def test_get_active_voice_settings_sends_admin_bearer_and_parses_providers(monke
 
 def test_get_active_voice_settings_raises_on_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """A non-2xx response propagates as an HTTPError — callers decide whether to fall back."""
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload={}, status_code=404))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -171,7 +183,7 @@ def test_get_active_voice_settings_caches_across_calls(monkeypatch: pytest.Monke
         call_count += 1
         return _FakeResponse(payload={"stt_provider": "whisper", "tts_provider": "piper"})
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     first = client.get_active_voice_settings(admin_api_key="secret-key")
@@ -205,7 +217,7 @@ def test_get_llm_provider_display_matches_by_model_name_and_strips_the_configure
             ],
         },
     ]
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=providers))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload=providers))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama") == (
@@ -229,7 +241,7 @@ def test_get_llm_provider_display_returns_none_when_the_alias_is_not_routed(monk
     """An alias no longer in litellm_config.yaml (e.g. removed) has no match — callers
     fall back to showing the bare alias with no provider label.
     """
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=[]))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload=[]))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     assert client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama") is None
@@ -253,7 +265,7 @@ def test_get_llm_provider_display_caches_across_calls(monkeypatch: pytest.Monkey
         call_count += 1
         return _FakeResponse(payload=providers)
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     client.get_llm_provider_display(admin_api_key="secret-key", model_name="groq-llama")
@@ -274,7 +286,7 @@ def test_list_scenarios_forwards_the_caller_authorization_header(monkeypatch: py
         captured["headers"] = kwargs.get("headers")
         return _FakeResponse(payload=[], status_code=200)
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     client.list_scenarios(org_id="org-1", authorization="Bearer user-token")
@@ -291,7 +303,7 @@ def test_list_scenarios_omits_authorization_header_when_not_given(monkeypatch: p
         captured["headers"] = kwargs.get("headers")
         return _FakeResponse(payload=[], status_code=200)
 
-    monkeypatch.setattr(entitlements_module.httpx, "get", fake_get)
+    _patch_get(monkeypatch, fake_get)
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     client.list_scenarios(org_id="org-1")
@@ -311,10 +323,48 @@ def test_list_scenarios_parses_scenario_summaries(monkeypatch: pytest.MonkeyPatc
             "industry": "banking_finance",
         },
     ]
-    monkeypatch.setattr(entitlements_module.httpx, "get", lambda *_a, **_kw: _FakeResponse(payload=payload))
+    _patch_get(monkeypatch, lambda *_a, **_kw: _FakeResponse(payload=payload))
     client = PlatformRegistryClient(base_url="http://platform-registry:8000")
 
     result = client.list_scenarios(org_id="org-1", authorization="Bearer user-token")
 
     assert [s.slug for s in result] == ["churn"]
     assert result[0].kind == "tabular_ml"
+
+
+@pytest.mark.parametrize(
+    ("org_id", "scenario_slug"),
+    [
+        ("admin", "churn?x=1"),
+        ("admin", "churn#frag"),
+        ("admin", ".."),
+        ("admin", "a/b"),
+        ("ad min", "churn"),
+        ("", "churn"),
+    ],
+)
+def test_check_entitlement_rejects_unsafe_path_segments_without_calling_registry(
+    monkeypatch: pytest.MonkeyPatch, org_id: str, scenario_slug: str
+) -> None:
+    """A slug that could re-target the registry URL (`churn?x` -> `/entitlements/admin/churn`)
+    must fail closed, never reach the network, and never be cached as entitled."""
+
+    def must_not_be_called(*_a: object, **_kw: object) -> _FakeResponse:
+        raise AssertionError("unsafe path segment reached platform-registry")
+
+    _patch_get(monkeypatch, must_not_be_called)
+    with pytest.raises(EntitlementDeniedError):
+        PlatformRegistryClient(base_url="http://registry").check_entitlement(org_id=org_id, scenario_slug=scenario_slug)
+
+
+def test_ttl_cache_is_bounded_and_prefers_evicting_expired_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = [100.0]
+    monkeypatch.setattr(entitlements_module.time, "monotonic", lambda: now[0])
+    cache = entitlements_module._TtlCache[str, int](ttl_seconds=10.0, max_entries=2)
+    cache.put("a", 1)
+    now[0] += 20  # "a" expires
+    cache.put("b", 2)
+    cache.put("c", 3)  # full: the expired "a" goes, "b" survives
+    assert (cache.get("a"), cache.get("b"), cache.get("c")) == (None, 2, 3)
+    cache.put("d", 4)  # full, nothing expired: the oldest ("b") goes
+    assert (cache.get("b"), cache.get("c"), cache.get("d")) == (None, 3, 4)

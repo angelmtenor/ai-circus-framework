@@ -15,7 +15,7 @@ keeping the tracker's footprint tiny on a laptop-class cluster. And because it's
 mirror, a tracker that is down or unset never fails training: MLFLOW_TRACKING_URI empty
 means "skip", any error is logged and swallowed.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

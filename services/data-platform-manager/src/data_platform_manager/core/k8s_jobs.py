@@ -1,6 +1,6 @@
 """
 - Title:    Kubernetes Job control for the pipeline (etl-tabular, training, etl-vectorize)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Mirrors k8s/jobs/*.yaml exactly — kept in sync by hand, the same "documented,
 tested hand-sync" convention scripts/k3s_generate_secrets.sh already uses for its
@@ -39,11 +39,25 @@ def in_cluster_config_available() -> bool:
     return _IN_CLUSTER_TOKEN.exists()
 
 
+# requests/limits per pipeline Job — must equal k8s/jobs/<name>-job.yaml (tests assert it).
+_JOB_RESOURCES: dict[str, tuple[str, str]] = {
+    "etl-tabular": ("256Mi", "1Gi"),
+    "training": ("512Mi", "2Gi"),
+    "etl-vectorize": ("256Mi", "1Gi"),
+}
+
+
 def _container(name: str, image: str, secret_name: str) -> client.V1Container:
+    memory = _JOB_RESOURCES.get(name)  # dl-training sets its own (see dl_training_job)
     return client.V1Container(
         name=name,
         image=image,
         image_pull_policy="Never",
+        resources=client.V1ResourceRequirements(
+            requests={"cpu": "100m", "memory": memory[0]}, limits={"memory": memory[1]}
+        )
+        if memory
+        else None,
         security_context=client.V1SecurityContext(
             allow_privilege_escalation=False, capabilities=client.V1Capabilities(drop=["ALL"])
         ),

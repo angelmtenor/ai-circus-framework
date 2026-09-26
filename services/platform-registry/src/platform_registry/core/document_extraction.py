@@ -23,6 +23,11 @@ from pypdf import PdfReader
 # send an unbounded blob into a chat prompt (which would blow past most models'
 # context window on its own before the user's actual question is even considered).
 MAX_EXTRACTED_CHARS = 50_000
+# A chat attachment, not a document archive: bounds the memory one upload can take.
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# Each OCR'd page is rendered to a full-resolution image first (~25 MB at 200 dpi) —
+# beyond this many scanned pages, the extracted text would be truncated anyway.
+MAX_OCR_PAGES = 20
 
 # A PDF page's text layer shorter than this (after stripping whitespace) is treated as
 # "no real text layer" — e.g. a scanned page with only a stray header/footer OCR'd by
@@ -124,15 +129,15 @@ def _extract_pdf(data: bytes) -> ExtractedDocument:
         else:
             page_texts.append(page_text)
 
-    if ocr_pages:
-        # Rendering every page as an image up front would be wasteful for a mostly
-        # text-native PDF — only render the specific pages whose text layer was empty.
-        images = convert_from_bytes(data, first_page=1, last_page=page_count)
-        for index in ocr_pages:
-            page_texts[index] = str(pytesseract.image_to_string(images[index]))
-            used_ocr = True
+    # Render only the pages whose text layer was empty, one at a time, so memory stays
+    # at one page image no matter how long the PDF is.
+    for index in ocr_pages[:MAX_OCR_PAGES]:
+        (image,) = convert_from_bytes(data, first_page=index + 1, last_page=index + 1)
+        page_texts[index] = str(pytesseract.image_to_string(image))
+        used_ocr = True
 
     text, truncated = _cap("\n\n".join(t for t in page_texts if t))
+    truncated = truncated or len(ocr_pages) > MAX_OCR_PAGES
     return ExtractedDocument(kind="pdf", text=text, truncated=truncated, page_count=page_count, used_ocr=used_ocr)
 
 

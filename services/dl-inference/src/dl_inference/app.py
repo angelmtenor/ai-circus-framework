@@ -9,7 +9,7 @@ every tenant (models are loaded and cached per (org, scenario) from SeaweedFS on
 request — see core/model_cache.py). Deployed separately from the core platform
 (k8s/deep-learning/, `make k3s-dl-up`) so its memory is opt-in.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -62,6 +63,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.model_cache = DlModelCache(
         stores, fallback_org_id=config.SHARED_MODEL_ORG_ID, threads=int(config.ORT_THREADS)
     )
+    # Before serving (so readiness only passes once models are warm): never make a demo's
+    # first prediction pay for the download + ONNX session build + warm-up. Off the loop.
+    await run_in_threadpool(app.state.model_cache.preload, list(definitions))
 
     yield
 

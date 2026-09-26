@@ -1,6 +1,6 @@
 """Tests for the hello_world demonstration tool.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

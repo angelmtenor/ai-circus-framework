@@ -1,6 +1,6 @@
 """
 - Title:    Per-tenant monthly AI Gateway spend budgets
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 litellm's own per-key/per-team budget enforcement needs its DB-backed proxy mode,
 which needs prisma-client-py — archived upstream (2025-04-15, read-only, no more
@@ -101,8 +101,7 @@ class BudgetEnforcer(CustomLogger):
             raise HTTPException(
                 status_code=429,
                 detail=(
-                    f"Monthly AI Gateway budget exhausted for org={org_id!r} "
-                    f"(spent ${spend:.2f} of ${float(cap):.2f})."
+                    f"Monthly AI Gateway budget exhausted for org={org_id!r} (spent ${spend:.2f} of ${float(cap):.2f})."
                 ),
             )
         return None

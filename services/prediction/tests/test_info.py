@@ -1,6 +1,6 @@
 """Tests for core system/environment info utilities.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

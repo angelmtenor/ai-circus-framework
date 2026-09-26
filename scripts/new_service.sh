@@ -2,6 +2,7 @@
 # Scaffold a new backend service from ai-circus-template via real cookiecutter
 # generation, then adapt it to live inside this monorepo:
 #   - flatten the nested git repo the template's post-gen hook creates
+#   - point the generated project URLs at this monorepo, not a per-service repo
 #   - add ai-circus-shared (libs/shared) as a local uv path dependency
 #   - rewrite the Dockerfile to expect a repo-root build context (so it can
 #     COPY libs/shared alongside the service's own folder)
@@ -12,6 +13,11 @@ set -euo pipefail
 SERVICE_NAME="${1:?usage: new_service.sh <service-name>}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="${AI_CIRCUS_TEMPLATE:-$HOME/PROJECTS/ai-circus-template}"
+# No local checkout (and no override): generate straight from the published template.
+if [ -z "${AI_CIRCUS_TEMPLATE:-}" ] && [ ! -d "$TEMPLATE" ]; then
+    TEMPLATE="https://github.com/angelmtenor/ai-circus-template"
+fi
+REPO_URL="https://github.com/angelmtenor/ai-circus-framework"
 SERVICE_DIR="$REPO_ROOT/services/$SERVICE_NAME"
 PACKAGE_NAME="${SERVICE_NAME//-/_}"
 
@@ -24,14 +30,24 @@ echo "▶ Generating $SERVICE_NAME from $TEMPLATE ..."
 cookiecutter "$TEMPLATE" --no-input -o "$REPO_ROOT/services" \
     project_name="$SERVICE_NAME" \
     project_description="ai-circus-framework $SERVICE_NAME service" \
-    author_name="ai-circus-framework contributors" \
-    author_email="dev@ai-circus-framework.local" \
-    github_username_or_org="ai-circus-framework" \
+    author_name="Angel Martinez-Tenor" \
+    author_email="angelmtenor@gmail.com" \
+    github_username_or_org="angelmtenor" \
     python_version="3.14"
 
 # The template's post_gen hook git-inits + commits each generated project; flatten
 # that so the service is tracked by this monorepo's single top-level repo instead.
 rm -rf "$SERVICE_DIR/.git"
+
+# The template assumes one repo per project (github.com/<org>/<name>); here every
+# service lives under services/<name> of the monorepo.
+sed -i \
+    -e "s|^Homepage = .*|Homepage = \"$REPO_URL/tree/main/services/$SERVICE_NAME\"|" \
+    -e "s|^Repository = .*|Repository = \"$REPO_URL\"|" \
+    -e "s|^BugTracker = .*|BugTracker = \"$REPO_URL/issues\"|" \
+    "$SERVICE_DIR/pyproject.toml"
+sed -i "s|git clone https://github.com/angelmtenor/$SERVICE_NAME\$|git clone $REPO_URL \&\& cd ai-circus-framework/services/$SERVICE_NAME|" \
+    "$SERVICE_DIR/CONTRIBUTING.md"
 
 # Add the shared library as a local path dependency. Deliberately NOT editable:
 # uv builds and installs it as a normal wheel into the service's .venv, so the
@@ -49,6 +65,8 @@ fi
 # libs/shared/) so the `../../libs/shared` path dependency resolves identically in
 # both local dev and the container — no path rewriting needed in pyproject.toml.
 PYTHON_VERSION="$(grep -oP 'FROM python:\K[0-9.]+' "$SERVICE_DIR/Dockerfile" | head -1)"
+# Same shape as every existing services/*/Dockerfile (see root CLAUDE.md "Conventions"):
+# BuildKit uv cache, precompiled bytecode, root-owned code, non-root UID 1000.
 cat > "$SERVICE_DIR/Dockerfile" <<EOF
 # ── Builder stage ───────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS builder
@@ -56,19 +74,30 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
 
 WORKDIR /app
 
+# Precompile bytecode at build time: a fresh container never has .pyc files on disk, so
+# every pod start would otherwise recompile each imported module on first use.
+# UV_LINK_MODE=copy because the uv cache is a mount.
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
 # Preserve the monorepo's relative layout (services/$SERVICE_NAME next to libs/shared)
 # so the service's "../../libs/shared" path dependency resolves the same way here
 # as it does in local dev.
 COPY libs/shared /app/libs/shared
 COPY services/$SERVICE_NAME/pyproject.toml services/$SERVICE_NAME/uv.lock services/$SERVICE_NAME/
-RUN uv sync --project services/$SERVICE_NAME --frozen --no-cache --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \\
+    uv sync --project services/$SERVICE_NAME --frozen --no-dev --no-install-project
 
 COPY services/$SERVICE_NAME services/$SERVICE_NAME
-RUN uv sync --project services/$SERVICE_NAME --frozen --no-cache --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \\
+    uv sync --project services/$SERVICE_NAME --frozen --no-dev
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
+
+# UID 1000 is what every k8s manifest's runAsUser pins. The code/venv below stay
+# root-owned (read-only to the service): only the home directory (caches) is writable.
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app
 
 COPY --from=builder /app/services/$SERVICE_NAME/.venv services/$SERVICE_NAME/.venv
 COPY --from=builder /app/services/$SERVICE_NAME/src   services/$SERVICE_NAME/src
@@ -76,9 +105,13 @@ COPY --from=builder /app/services/$SERVICE_NAME/pyproject.toml services/$SERVICE
 COPY --from=builder /app/services/$SERVICE_NAME/settings.yaml  services/$SERVICE_NAME/settings.yaml
 
 ENV PATH="/app/services/$SERVICE_NAME/.venv/bin:\$PATH"
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 MALLOC_ARENA_MAX=2
 WORKDIR /app/services/$SERVICE_NAME
+
+USER app
 
 CMD ["python", "-m", "$PACKAGE_NAME.app"]
 EOF
 
-echo "✓ services/$SERVICE_NAME scaffolded — remember to add it to docker-compose.yml"
+echo "✓ services/$SERVICE_NAME scaffolded — next: k8s/base manifest, docker-compose.yml entry, K3S_IMAGES,"
+echo "  platform_status.py row, k3s_generate_secrets.sh spec (see the new-service-scaffold skill)"

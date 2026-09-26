@@ -1,6 +1,6 @@
 """
 - Title:    ONNX export (+ optional int8 dynamic quantization)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 dl-inference runs onnxruntime only — no torch in the serving image — which is what
 keeps the deployed pod small. The TorchScript-based exporter (`dynamo=False`) is used

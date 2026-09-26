@@ -1,6 +1,6 @@
 """
 - Title:    Model training, Green Code candidate selection, and SHAP explainability
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Generic across tabular_ml scenarios: numeric vs. categorical features are split by
 dtype (etl-tabular already casts non-numeric feature columns to `category`), not by

@@ -1,6 +1,6 @@
 """
 - Title:    llm-gateway provider status (admin-only view/test)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 llm-gateway execs the real LiteLLM proxy CLI (see services/llm-gateway/app.py) — this
 module talks to *that* running process's own admin API (master-key protected), never

@@ -1,6 +1,6 @@
 """
 - Title:    Recursive-character text chunking
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 A minimal recursive-character splitter: tries progressively finer separators
 (paragraph, line, sentence, word) so chunks break on natural boundaries where

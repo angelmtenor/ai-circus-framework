@@ -1,6 +1,6 @@
 """
 - Title:    AG-UI agent wrapper for chat-over-tabular-data
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 `core/chat.py`'s bare `client.chat.completions.create` call has no tool-calling at
 all, so it can't participate in generative UI (a frontend tool call, e.g.

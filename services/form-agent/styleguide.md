@@ -1,5 +1,5 @@
 # Git Commit Message Style Guide
-Author: ai-circus-framework contributors. Scaffolded from ai-circus-template.
+Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
 
 ## Overview
 This guide defines the conventions for writing Git commit messages in this project. It aligns

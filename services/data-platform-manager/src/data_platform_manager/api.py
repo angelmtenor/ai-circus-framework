@@ -1,6 +1,6 @@
 """
 - Title:    Data platform admin API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Admin-only control surface for the platform's data layer and AI Gateway
 governance — every route below (except /healthz) requires the shared
@@ -13,13 +13,16 @@ Settings page, which already gates its own "Data Platform" section on
 Pipeline job status/control (GET/POST /pipeline/jobs*) only works when this
 process is itself running inside a real k3s cluster — see
 core.k8s_jobs.in_cluster_config_available — since a docker-compose deployment
-has no Kubernetes API to call. /roadmap, /gateway/rate-limits and /platform/status
-(the admin dashboard's health feed — probes only, without pod details, outside k8s)
-work in both.
+has no Kubernetes API to call — and so do the Platform page's Start/Stop buttons
+(POST /platform/components/{name}/start|stop) and the Monitor tab's CPU/memory figures
+(GET /platform/resources). /roadmap, /gateway/rate-limits, /platform/status (the admin
+dashboard's health feed — probes only, without pod details, outside k8s) and
+POST /platform/components/{name}/ping work in both.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -39,7 +42,7 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, semantic
+from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, resources, semantic, workloads
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -156,6 +159,82 @@ async def platform_status_endpoint() -> dict[str, object]:
     and the admin console URL of each — see core.platform_status for the target list.
     """
     return (await platform_status.collect()).as_dict()
+
+
+@router.get("/platform/resources", dependencies=[Depends(require_admin)])
+def platform_resources() -> dict[str, object]:
+    """Admin Monitor feed: node CPU/memory against allocatable, per-workload usage against
+    its memory limit (Kubernetes Metrics API, k3s only) and GPU telemetry (NVML) — see
+    core.resources. Unavailable parts come back as `available: false` + a reason, not errors.
+    """
+    return resources.collect().as_dict()
+
+
+class PingOut(BaseModel):
+    """POST /platform/components/{name}/ping — one row per probe, in order."""
+
+    name: str
+    results: list[dict[str, object]]
+
+
+@router.post("/platform/components/{name}/ping", response_model=PingOut, dependencies=[Depends(require_admin)])
+async def ping_component(name: str) -> PingOut:
+    """Probe one dashboard component a few times in a row, on demand."""
+    target = platform_status.get_target(name)
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"Unknown platform component {name!r}.")
+    results = await platform_status.ping(target)
+    return PingOut(name=name, results=[dataclasses.asdict(r) for r in results])
+
+
+class ServiceActionOut(BaseModel):
+    """POST /platform/components/{name}/start|stop — what was asked; the Health poll shows progress."""
+
+    name: str
+    action: str
+    requested_at: str
+
+
+def _set_service_running(name: str, running: bool) -> ServiceActionOut:
+    if not k8s_jobs.in_cluster_config_available():
+        raise HTTPException(
+            status_code=501,
+            detail="Start/stop needs the k3s deployment; under docker-compose use `docker compose start|stop`.",
+        )
+    if name not in workloads.OPTIONAL_SERVICES:
+        raise HTTPException(status_code=404, detail=f"{name!r} is not an optional service that can be started/stopped.")
+    try:
+        workloads.set_running(name, running)
+    except workloads.NotDeployedError as exc:
+        hint = workloads.OPTIONAL_SERVICES[name].deploy_hint
+        raise HTTPException(status_code=409, detail=f"{name!r} is not deployed — deploy it with `{hint}`.") from exc
+    except ApiException as exc:
+        raise HTTPException(status_code=502, detail=f"Kubernetes API error: {exc.reason}") from exc
+    action = "start" if running else "stop"
+    logger.info("Admin %s of optional service %r", action, name)
+    return ServiceActionOut(name=name, action=action, requested_at=datetime.now(UTC).isoformat())
+
+
+@router.post(
+    "/platform/components/{name}/start",
+    status_code=202,
+    response_model=ServiceActionOut,
+    dependencies=[Depends(require_admin)],
+)
+def start_component(name: str) -> ServiceActionOut:
+    """Scale an optional service (core.workloads.OPTIONAL_SERVICES) back to 1 replica."""
+    return _set_service_running(name, running=True)
+
+
+@router.post(
+    "/platform/components/{name}/stop",
+    status_code=202,
+    response_model=ServiceActionOut,
+    dependencies=[Depends(require_admin)],
+)
+def stop_component(name: str) -> ServiceActionOut:
+    """Scale an optional service to 0 replicas — its data (PVCs) and config stay."""
+    return _set_service_running(name, running=False)
 
 
 @router.get("/roadmap", response_model=list[Capability], dependencies=[Depends(require_admin)])

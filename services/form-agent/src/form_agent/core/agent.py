@@ -1,6 +1,6 @@
 """
 - Title:    Form-filling agent graph
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 The model's only server-side tool is `retrieve_catalog` (built when the scenario
 configures classification — see `build_catalog_retrieve_tool`); the tool that

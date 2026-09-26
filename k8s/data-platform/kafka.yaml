@@ -54,6 +54,10 @@ spec:
             - {containerPort: 9092}
           volumeMounts:
             - {name: kafka-data, mountPath: /var/lib/kafka/data}
+          # JVM heap pinned at 512M (KAFKA_HEAP_OPTS) + off-heap.
+          resources:
+            requests: {cpu: 50m, memory: 512Mi}
+            limits: {memory: 768Mi}
           readinessProbe:
             tcpSocket: {port: 9092}
             initialDelaySeconds: 15

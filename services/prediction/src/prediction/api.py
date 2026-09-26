@@ -1,6 +1,6 @@
 """
 - Title:    Prediction API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from ai_circus_shared.auth import Identity
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from prediction.core import dataset as dataset_core
 from prediction.core.identity import resolve_identity
@@ -28,9 +28,12 @@ MAX_ROWS = MAX_DATASET_ROWS
 
 
 class PredictRequest(BaseModel):
-    """One or more records to score, each a mapping of feature name -> value."""
+    """One or more records to score, each a mapping of feature name -> value. Capped at
+    MAX_ROWS — every record is scored and SHAP-explained, so an unbounded batch would
+    let one request pin this service's CPU and memory.
+    """
 
-    records: list[dict[str, object]]
+    records: list[dict[str, object]] = Field(max_length=MAX_ROWS)
 
 
 class PredictionOut(BaseModel):
@@ -176,8 +179,7 @@ def dataset_sample_endpoint(
     """
     assert identity.org_id is not None
     assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
-    store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
+    df = model_cache.dataset(identity.org_id, definition.slug)
     columns = [*definition.dataset.feature_columns, definition.dataset.target]
     sample = dataset_core.sample_rows(df, columns, limit)
     return DatasetSampleOut(columns=sample.columns, rows=sample.rows, total_rows=sample.total_rows)
@@ -196,8 +198,7 @@ def dataset_evaluation_endpoint(
     """
     assert identity.org_id is not None
     artifacts = model_cache.get(identity.org_id, definition.slug)
-    store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
+    df = model_cache.dataset(identity.org_id, definition.slug)
     result = dataset_core.evaluate(artifacts, df, limit)
     return DatasetEvaluationOut(
         task_type=result.task_type,
@@ -227,8 +228,7 @@ def dataset_explainability_endpoint(
     """Dataset-wide global SHAP feature importance for the caller's deployed pipeline."""
     assert identity.org_id is not None
     artifacts = model_cache.get(identity.org_id, definition.slug)
-    store = model_cache.store_for(definition.slug)
-    df = dataset_core.load_normalized(store, identity.org_id, model_cache.fallback_org_id)
+    df = model_cache.dataset(identity.org_id, definition.slug)
     feature_importance, sample_size = dataset_core.shap_importance(artifacts, df, limit)
     return DatasetExplainabilityOut(
         feature_importance=[FeatureImportanceOut(**f) for f in feature_importance],

@@ -1,6 +1,6 @@
 """
 - Title:    Chat-over-tabular-data grounding (system prompt construction)
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 
 Ports smart-data-science's "Hybrid Assistant" chat-over-data idea onto llm-gateway,
 dropping its regex/`exec()`-based code execution: this grounds a system prompt in the

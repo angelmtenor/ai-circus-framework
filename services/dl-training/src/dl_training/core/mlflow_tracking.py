@@ -7,7 +7,7 @@ contract as the tabular `training` service's mirror: an audit copy, never the so
 truth (the ONNX model and manifest dl-inference serves stay in SeaweedFS), a no-op when
 MLFLOW_TRACKING_URI is unset, and never able to fail the run it describes.
 
-Author: ai-circus-framework contributors
+Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations

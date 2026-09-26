@@ -1,6 +1,6 @@
 """
 - Title:    Chat API
-- Author:   ai-circus-framework contributors
+- Author:   Angel Martinez-Tenor
 """
 
 from __future__ import annotations
@@ -269,7 +269,9 @@ async def agui_endpoint(
     per-request entitlement check).
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
-    if store.get_conversation(input_data.thread_id, identity.org_id, identity.subject) is None:
+    # Every DB call in this `async def` route goes through the threadpool: a sync call
+    # here would block the event loop that is also streaming every other chat.
+    if await run_in_threadpool(store.get_conversation, input_data.thread_id, identity.org_id, identity.subject) is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     # prompt_cache.get() does blocking SeaweedFS I/O on a cache miss; this route is
     # `async def` (needed for StreamingResponse below), so FastAPI won't threadpool
@@ -351,6 +353,6 @@ async def agui_endpoint(
             logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)
             yield encoder.encode(RunErrorEvent(message=str(exc)))
         finally:
-            _persist_turn(store, input_data, identity, assistant_text_by_message_id)
+            await run_in_threadpool(_persist_turn, store, input_data, identity, assistant_text_by_message_id)
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
