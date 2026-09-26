@@ -486,20 +486,46 @@ export function ConfusionMatrix({ scenario, matrix }: { scenario: ScenarioSummar
   );
 }
 
+/** A stable pseudo-random permutation (seeded LCG Fisher-Yates) of `items`. */
+export function seededShuffle<T>(items: T[], seed: number): T[] {
+  const out = [...items];
+  let s = seed;
+  for (let i = out.length - 1; i > 0; i--) {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    const j = s % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 /** `n` items with a stable pseudo-random order (seeded), so a replayed "stream" is the
  * same every visit without looking sorted by id/label. */
 export function useSeededOrder<T>(items: T[] | null, seed: number): T[] {
-  return useMemo(() => {
-    if (!items) return [];
-    const out = [...items];
-    let s = seed;
-    for (let i = out.length - 1; i > 0; i--) {
-      s = (s * 1103515245 + 12345) % 2147483648;
-      const j = s % (i + 1);
-      [out[i], out[j]] = [out[j], out[i]];
-    }
-    return out;
-  }, [items, seed]);
+  return useMemo(() => (items ? seededShuffle(items, seed) : []), [items, seed]);
+}
+
+// Below this top-class probability a published sample counts as "hard" for the model.
+const HARD_SAMPLE_CONFIDENCE = 0.8;
+
+/** Whether the deployed model gets a published sample wrong or is unsure about it. */
+export function isHardSample(scenario: ScenarioSummary, sample: DlSample): boolean {
+  const top = topOf(scenario, sample.probs);
+  return top.key !== sample.label || top.confidence < HARD_SAMPLE_CONFIDENCE;
+}
+
+/** Up to `n` published samples for a picker: a seeded shuffle dealt round-robin across
+ * the true labels, so every class shows up whatever order the gallery was published in.
+ * `hardOnly` keeps just the samples the model gets wrong or is unsure about. */
+export function pickSamples(scenario: ScenarioSummary, samples: DlSample[], n: number, seed: number, hardOnly = false): DlSample[] {
+  const pool = seededShuffle(hardOnly ? samples.filter((s) => isHardSample(scenario, s)) : samples, seed);
+  const byLabel = new Map<string, DlSample[]>();
+  pool.forEach((s) => byLabel.set(s.label, [...(byLabel.get(s.label) ?? []), s]));
+  const queues = seededShuffle([...byLabel.values()], seed + 1);
+  const out: DlSample[] = [];
+  for (let i = 0; out.length < Math.min(n, pool.length); i++) {
+    for (const queue of queues) if (i < queue.length && out.length < n) out.push(queue[i]);
+  }
+  return out;
 }
 
 export function fileToBase64(file: File): Promise<string> {

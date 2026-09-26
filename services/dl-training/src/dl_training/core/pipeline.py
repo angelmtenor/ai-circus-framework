@@ -152,6 +152,10 @@ def train_scenario(
         logger.info("{}: deployed-model test metrics {}", definition.slug, evaluation["metrics"])
 
         gallery_rows = data.stratified_indices(test.labels, dl.gallery_size, dl.training.seed)
+        # Published in a seeded random order, not the source's: test files are often
+        # sorted by label (VisA: every defect first), and any "first N samples" view
+        # would then show a single class.
+        gallery_rows = np.random.default_rng(dl.training.seed).permutation(gallery_rows)
         # Similar-case search: for an anomaly detector the reference set is the (normal)
         # training pool — "the closest known-good parts".
         reference = pool.take(data.stratified_indices(pool.labels, dl.reference_size, dl.training.seed))

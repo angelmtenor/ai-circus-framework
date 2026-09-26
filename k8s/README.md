@@ -76,8 +76,8 @@ kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=3
 ### Deep learning (optional) and GPUs
 
 The `kind: deep_learning` scenarios — `symptom_triage` (NLP) and `chest_xray_pneumonia` (computer
-vision) in healthcare, `pcb_visual_inspection` (computer-vision anomaly detection) in manufacturing
-— are served by a separate, opt-in `dl-inference` pod (onnxruntime only, no torch) and trained by
+vision) in healthcare, `pcb_visual_inspection` and the harder `pasta_visual_inspection`
+(computer-vision anomaly detection) in manufacturing — are served by a separate, opt-in `dl-inference` pod (onnxruntime only, no torch) and trained by
 `dl-training`. **Training is never part of `make all`/`k3s-all`** — minutes on a GPU, far longer
 on a CPU:
 
@@ -86,7 +86,7 @@ make k3s-all-dl        # k3s-all + build/import the DL images + deploy dl-infere
 make dl-gpu-check      # does this host have a GPU? does the cluster expose one?
 make dl-train-nlp      # fine-tune on THIS host's GPU (CPU asks first), publish to SeaweedFS
 make dl-train-cv       #   "  — dl-inference serves the new model within a minute, no restart
-make dl-train-anomaly  # PCB anomaly detector: frozen DINOv2 + memory bank of good-board patches
+make dl-train-anomaly  # PCB + pasta anomaly detectors: frozen DINOv2 + memory bank of good-part patches
 make k3s-dl-train-nlp  # the same as an in-cluster Job (CPU budget unless the cluster has a GPU)
 ```
 

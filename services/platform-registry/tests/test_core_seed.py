@@ -47,6 +47,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "symptom_triage",
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
+        "pasta_visual_inspection",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -164,6 +165,12 @@ def test_seed_scenarios_populates_deep_learning_scenarios(session: Session) -> N
     assert pcb.target_value_labels == {"0": "Good", "1": "Defective"}
     assert pcb.ui_extras["kind"] == "triage_board"
 
+    pasta = session.get(Scenario, "pasta_visual_inspection")
+    assert pasta.industry == "manufacturing_industry"
+    assert pasta.task_type == "image_anomaly_detection"
+    assert pasta.deep_learning["anomaly"]["top_k_fraction"] < pcb.deep_learning["anomaly"]["top_k_fraction"]
+    assert pasta.ui_extras["item_noun"] == "tray"
+
     assert session.get(Scenario, "churn").deep_learning is None
 
 
@@ -212,6 +219,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "symptom_triage",
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
+        "pasta_visual_inspection",
     }
 
 
@@ -228,8 +236,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 18
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 18
+    assert session.query(Scenario).count() == 19
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 19
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
