@@ -86,9 +86,12 @@ spec:
             periodSeconds: 2
             timeoutSeconds: 3
             failureThreshold: 90
+          # Ready only once the STT/TTS models are pre-warmed (app.py's /readyz) — a demo's
+          # first voice session never waits for them; liveness stays on /healthz, so a slow
+          # first download into voice-model-cache is never mistaken for a hung process.
           readinessProbe:
-            httpGet: {path: /healthz, port: 8000}
-            periodSeconds: 10
+            httpGet: {path: /readyz, port: 8000}
+            periodSeconds: 3
             timeoutSeconds: 3
           livenessProbe:
             httpGet: {path: /healthz, port: 8000}

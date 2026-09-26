@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import types
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -109,11 +110,13 @@ async def test_prewarm_models_builds_vad_stt_and_tts(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(app, "build_vad_analyzer", lambda: calls.append("vad") or object())
     monkeypatch.setattr(app, "build_stt_service", lambda _config: calls.append("stt") or object())
     monkeypatch.setattr(app, "build_tts_service", lambda _config: calls.append("tts") or (object(), {}))
+    state = types.SimpleNamespace(models_warm=False)
 
-    await app._prewarm_models()
+    await app._prewarm_models(state)
 
     assert calls == ["vad", "stt", "tts"]
     assert fake_logger.success_messages
+    assert state.models_warm is True
 
 
 async def test_prewarm_models_logs_and_swallows_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,11 +133,14 @@ async def test_prewarm_models_logs_and_swallows_errors(monkeypatch: pytest.Monke
         raise ValueError("ELEVENLABS_API_KEY must be set when TTS_PROVIDER=elevenlabs.")
 
     monkeypatch.setattr(app, "build_stt_service", raise_value_error)
+    state = types.SimpleNamespace(models_warm=False)
 
-    await app._prewarm_models()  # must not raise
+    await app._prewarm_models(state)  # must not raise
 
     assert fake_logger.error_messages
     assert not fake_logger.success_messages
+    # Ready anyway: a broken provider config must not keep the pod out of the Service forever.
+    assert state.models_warm is True
 
 
 async def test_lifespan_schedules_prewarming_in_the_background(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,7 +149,7 @@ async def test_lifespan_schedules_prewarming_in_the_background(monkeypatch: pyte
     """
     ran = asyncio.Event()
 
-    async def fake_prewarm() -> None:  # ruff: ignore[unused-async] (must match the real async _prewarm_models signature)
+    async def fake_prewarm(_state: object) -> None:  # ruff: ignore[unused-async] (must match the real async _prewarm_models signature)
         ran.set()
 
     monkeypatch.setattr(app, "_prewarm_models", fake_prewarm)
@@ -153,3 +159,15 @@ async def test_lifespan_schedules_prewarming_in_the_background(monkeypatch: pyte
         assert not ran.is_set()
 
     await asyncio.wait_for(ran.wait(), timeout=1)
+
+
+def test_readyz_holds_traffic_until_models_are_warm() -> None:
+    """/healthz (liveness) is always 200; /readyz (readiness) is 503 until pre-warmed."""
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app.app)  # no lifespan: state is set by hand below
+    app.app.state.models_warm = False
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/readyz").status_code == 503
+    app.app.state.models_warm = True
+    assert client.get("/readyz").status_code == 200

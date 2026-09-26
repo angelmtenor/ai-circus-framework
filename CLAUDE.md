@@ -135,6 +135,11 @@ mode talks to `agui-voice` over a plain WebSocket.
 - **Bound everything a caller controls**: request bodies (`Field(max_length=…)`), uploads (read
   at most cap+1 bytes), and every in-memory cache (size and/or TTL).
 - **Startup dependencies go through `wait_for`**, never a bare first call that crashes the pod.
+- **Models load at start-up, never on a request** (a demo's first question must be instant):
+  anything a service holds in memory — llm-gateway's `local-embed` (`LOCAL_EMBED_PRELOAD`),
+  prediction/dl-inference's `ModelCache.preload`, agui-voice's STT/TTS — is loaded and warmed
+  before the pod reports Ready (readiness gated on it), best-effort so a missing model never
+  blocks boot. Downloaded weights live on a PVC (`embedding-model-cache`, `voice-model-cache`).
 - **Every container** (compose and k8s) has a memory limit; every k8s pod also has requests, a
   `startupProbe` + readiness + liveness probes, `runAsNonRoot` with a *numeric* `runAsUser`,
   `allowPrivilegeEscalation: false` and dropped capabilities. Service Dockerfiles follow the

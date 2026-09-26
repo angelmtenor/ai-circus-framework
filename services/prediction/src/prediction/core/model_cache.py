@@ -3,8 +3,10 @@
 - Author:   Angel Martinez-Tenor
 
 One `prediction` instance serves every tabular_ml scenario in SCENARIOS, shared by
-every tenant of each — the trained pipeline/explainer are loaded from SeaweedFS lazily on
-first request per (org_id, scenario_slug) and cached in memory thereafter. A per-key
+every tenant of each — the trained pipeline/explainer are loaded from SeaweedFS once per
+(source org, scenario_slug) and cached in memory thereafter. app.py `preload`s the shared
+fallback org's model of every scenario at start-up (all 13 take ~3 s and ~130 MB), so no
+demo's first prediction waits for a download; a tenant with its own model loads it lazily. A per-key
 lock avoids a cold-start cache stampede (N concurrent first-requests for the same key
 each redundantly hitting SeaweedFS) without needing to convert this service to async.
 """
@@ -204,6 +206,32 @@ class ModelCache:
                             self._locks.pop(evicted_key, None)
                     self._cache[key] = artifacts
                 return self._cache[key]
+
+    def preload(self, scenario_slugs: list[str]) -> int:
+        """Load the shared fallback org's model of every scenario now (at start-up), so the
+        first real request finds it warm. Best-effort per scenario: one not trained yet (a
+        fresh cluster before `make k3s-pipeline`) or unreadable is logged and skipped — it
+        loads lazily on its first request instead, exactly as before.
+
+        Returns:
+            How many scenarios' models are now cached.
+        """
+        started = time.perf_counter()
+        loaded = 0
+        for slug in scenario_slugs:
+            try:
+                self.get(self.fallback_org_id, slug)
+            except ModelUnavailableError as exc:
+                logger.info("Not pre-loading scenario={}: {}", slug, exc)
+                continue
+            except Exception:
+                logger.exception("Pre-loading scenario={} failed — its first request will retry", slug)
+                continue
+            loaded += 1
+        logger.success(
+            "Pre-loaded {}/{} scenario models in {:.1f}s", loaded, len(scenario_slugs), time.perf_counter() - started
+        )
+        return loaded
 
     def _load(self, load_org_id: str, scenario_slug: str) -> ModelArtifacts:
         store = self._stores[scenario_slug]

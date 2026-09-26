@@ -118,3 +118,23 @@ def test_explanation_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
     assert model.cached_explanation("s-0", 0) is None
     assert model.cached_explanation("s-2", 0) == {"i": 2}
     assert json.loads(json.dumps(model.metadata))["modality"] == "text"
+
+
+def test_preload_warms_the_fallback_models_and_skips_untrained_ones(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Start-up preload: each trained scenario's fallback model is in memory before the
+    first request; an untrained scenario is skipped (not raised); never more than the cache holds.
+    """
+    trained, untrained, extra = MemoryStore(), MemoryStore(), MemoryStore()
+    publish(trained, "demo", "text")
+    publish(extra, "demo", "image")
+    cache = mc.DlModelCache(
+        {"triage": trained, "xray": untrained, "extra": extra},  # type: ignore[dict-item]
+        fallback_org_id="demo",
+        threads=1,
+    )
+    monkeypatch.setattr(mc, "MAX_CACHED_MODELS", 2)
+    assert cache.preload(["triage", "xray", "extra"]) == 1  # "extra" is past the cap
+    assert cache.cached_keys() == [("demo", "triage")]
+    reads = len(trained.gets)
+    cache.get("any-tenant", "triage")
+    assert len(trained.gets) == reads + 1  # just the manifest check — no model download

@@ -10,12 +10,13 @@ Author: Angel Martinez-Tenor
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +37,14 @@ class EnvConfig(BaseSettings):
     )
     CACHE_URL: str = Field(
         description="Redis-protocol connection URL (docker-compose/k8s run Valkey) - backs the budget tracker"
+    )
+    EMBEDDING_PROVIDER: str | None = Field(
+        description="Platform embedding backend (as rag-agent/etl-vectorize): 'local' = this gateway's local-embed",
+        default="local",
+    )
+    LOCAL_EMBED_PRELOAD: str | None = Field(
+        description="'true' = warm local-embed at proxy start, not on the first call (EMBEDDING_PROVIDER=local only)",
+        default="false",
     )
     OPENAI_API_KEY: SecretStr | None = Field(
         description="OpenAI API key (only needed if litellm_config.yaml routes to an openai/* model)", default=None
@@ -80,8 +89,34 @@ class EnvConfig(BaseSettings):
         description="Langfuse project secret key (sk-lf-...); unset = no tracing", default=None
     )
 
+    @field_validator("EMBEDDING_PROVIDER", mode="after")
+    @classmethod
+    def validate_embedding_provider(cls, v: Any) -> Any:
+        """Validate field format via regex."""
+        if v is None:
+            return v
+        val = v.get_secret_value() if hasattr(v, "get_secret_value") else str(v)
+        if not val:
+            return None
+        if not re.match(r"^(local|gemini|voyage)$", val):
+            raise ValueError("EMBEDDING_PROVIDER must be one of: local, gemini, voyage")
+        return v
 
-_SOURCE_YAML_HASH = "78efa2aaa3d7a9894e8a7631cbbf803793e76d770e657d1dd95a8eebfbcb0c6c"
+    @field_validator("LOCAL_EMBED_PRELOAD", mode="after")
+    @classmethod
+    def validate_local_embed_preload(cls, v: Any) -> Any:
+        """Validate field format via regex."""
+        if v is None:
+            return v
+        val = v.get_secret_value() if hasattr(v, "get_secret_value") else str(v)
+        if not val:
+            return None
+        if not re.match(r"^(true|false)$", val):
+            raise ValueError("LOCAL_EMBED_PRELOAD must be true or false")
+        return v
+
+
+_SOURCE_YAML_HASH = "4245e7e20029cddf09ad9fa006d2eabbb94db7ffaa5e6079e526e5636d6e52ad"
 
 
 EnvConfig.model_rebuild()

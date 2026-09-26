@@ -19,13 +19,15 @@ import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics, redact_token_query_params
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from agui_voice import get_env_config
@@ -38,7 +40,7 @@ from agui_voice.core.providers import build_stt_service, build_tts_service, buil
 logger = get_logger(__name__)
 
 
-async def _prewarm_models() -> None:
+async def _prewarm_models(state: Any) -> None:
     """Load the STT/TTS model weights once, right after boot, instead of on the
     first real caller's connection. Model loading is real, multi-second CPU-bound
     work cached process-wide once done (see providers.py's module docstring) — this
@@ -47,6 +49,9 @@ async def _prewarm_models() -> None:
     provider config (e.g. a misconfigured cloud API key) logs and gives up here
     rather than crashing the app — the first real connection will surface the same
     error properly through its own request/response cycle.
+
+    `/readyz` (the k8s readinessProbe) only passes once this has finished, so a demo's
+    first voice session never lands on a pod still loading its models.
     """
     try:
         config = get_env_config()
@@ -56,14 +61,18 @@ async def _prewarm_models() -> None:
         logger.success("agui-voice: STT/TTS models pre-warmed")
     except Exception:
         logger.exception("agui-voice: pre-warming STT/TTS models failed — the first real connection will load them")
+    finally:
+        state.models_warm = True
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Kick off model pre-warming in the background so `/healthz` responds immediately
-    rather than the app only becoming "up" once warming finishes.
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Kick off model pre-warming in the background: `/healthz` (liveness) answers at once,
+    so a slow first model download is never liveness-killed, while `/readyz` holds traffic
+    back until warming is done.
     """
-    asyncio.create_task(_prewarm_models())  # ruff: ignore[asyncio-dangling-task] (fire-and-forget by design)
+    app.state.models_warm = False
+    asyncio.create_task(_prewarm_models(app.state))  # ruff: ignore[asyncio-dangling-task] (fire-and-forget by design)
     yield
 
 
@@ -88,6 +97,14 @@ configure_metrics(app)
 def healthz() -> dict[str, str]:
     """Liveness check."""
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+def readyz(request: Request) -> JSONResponse:
+    """Readiness: 503 until the STT/TTS models are pre-warmed (see `_prewarm_models`)."""
+    if getattr(request.app.state, "models_warm", False):
+        return JSONResponse({"status": "ready"})
+    return JSONResponse({"status": "warming up STT/TTS models"}, status_code=503)
 
 
 def main() -> None:

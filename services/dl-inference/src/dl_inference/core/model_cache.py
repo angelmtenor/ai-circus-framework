@@ -9,6 +9,9 @@ by dl-training), bounded LRU, and a per-key lock against cold-start stampedes �
 DL-specific addition: a cached entry re-reads the small manifest at most every
 `REVALIDATE_SECONDS`, and reloads when it changed. A model retrained from the admin
 console or `make dl-train-*` is therefore served within a minute, no restart needed.
+app.py `preload`s the fallback org's model of every scenario (up to MAX_CACHED_MODELS) at
+start-up, before the pod reports ready — a demo's first prediction never waits for the
+download, ONNX session build and warm-up run.
 """
 
 from __future__ import annotations
@@ -201,6 +204,33 @@ class DlModelCache:
             reference=json.loads(blobs["reference"]),
             reference_embeddings=embeddings,
         )
+
+    def preload(self, scenario_slugs: list[str]) -> int:
+        """Load (and warm up) the fallback org's model of each scenario now, at start-up.
+
+        Capped at MAX_CACHED_MODELS so preloading never evicts what it just loaded.
+        Best-effort per scenario: an untrained or unreadable one is logged and skipped —
+        its first request loads it lazily instead, as before.
+
+        Returns:
+            How many models are now in memory.
+        """
+        started = time.monotonic()
+        loaded = 0
+        for slug in scenario_slugs[:MAX_CACHED_MODELS]:
+            try:
+                self.get(self.fallback_org_id, slug)
+            except ModelUnavailableError as exc:
+                logger.info("Not pre-loading scenario={}: {}", slug, exc)
+                continue
+            except Exception:
+                logger.exception("Pre-loading scenario={} failed — its first request will retry", slug)
+                continue
+            loaded += 1
+        logger.success(
+            "Pre-loaded {}/{} deep-learning models in {:.1f}s", loaded, len(scenario_slugs), time.monotonic() - started
+        )
+        return loaded
 
     def get(self, org_id: str, scenario_slug: str) -> LoadedModel:
         """The tenant's model for this scenario, loading/reloading as needed.

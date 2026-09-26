@@ -74,6 +74,8 @@ volumes:
   # volume's root-owned files aren't writable by UID 1000. The first `up` re-downloads the
   # weights once; `docker volume rm ai-circus-framework_voice-model-cache` reclaims the old one.)
   voice-model-cache-app:
+  # llm-gateway's local-embed model weights (Hugging Face cache, ~670 MB) — same idea.
+  embedding-model-cache:
   # Optional Data Platform profile (off by default) — Kafka's own log segments.
   kafka-data:
   # Langfuse's trace store (see the clickhouse service below).
@@ -681,6 +683,12 @@ services:
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      # With `local`, the local-embed model is loaded + warmed at start-up (the docker
+      # settings profile sets LOCAL_EMBED_PRELOAD) — never on a demo's first RAG question.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+    volumes:
+      # The local-embed weights (HF_HOME, ~670 MB): downloaded once, kept across restarts.
+      - embedding-model-cache:/models/hf
     ports:
       # Loopback-only (like platform-registry/qdrant above) — no caller in ui-react
       # ever hits llm-gateway directly (only assistant/rag-agent/platform-registry do,
@@ -693,9 +701,9 @@ services:
     networks: [ai-circus]
     restart: unless-stopped
     # Bumped from the prior 512m: the `local-embed` model (custom_handler.py) loads a
-    # sentence-transformers/torch model in-process once EMBEDDING_PROVIDER=local is
-    # actually used — the same headroom etl-vectorize/rag-agent needed before that
-    # dependency moved here.
+    # sentence-transformers/torch model in-process at start-up when
+    # EMBEDDING_PROVIDER=local — the same headroom etl-vectorize/rag-agent needed before
+    # that dependency moved here.
     mem_limit: 1g
 
   # Fully local/no-API-key LLM backend for llm-gateway's `llama3` model — OPTIONAL

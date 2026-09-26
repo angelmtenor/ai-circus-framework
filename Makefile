@@ -301,10 +301,14 @@ k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to 
 	@kubectl -n ai-circus rollout status statefulset/seaweedfs --timeout=60s
 	@echo "⏳ waiting for keycloak (first boot imports the realm — can take a couple of minutes)..."
 	@kubectl -n ai-circus rollout status deployment/keycloak --timeout=180s
-	@for svc in platform-registry llm-gateway prediction assistant rag-agent form-agent agui-voice data-platform-manager ui-react; do \
+	@echo "⏳ waiting for llm-gateway (loads its local embedding model before Ready — a brand-new cluster downloads it first, ~670 MB)..."
+	@kubectl -n ai-circus rollout status deployment/llm-gateway --timeout=600s
+	@for svc in platform-registry prediction assistant rag-agent form-agent data-platform-manager ui-react; do \
 		echo "⏳ waiting for $$svc..."; \
 		kubectl -n ai-circus rollout status deployment/$$svc --timeout=120s || exit 1; \
 	done
+	@echo "⏳ waiting for agui-voice (Ready once its STT/TTS models are warm — a new cluster downloads them first)..."
+	@kubectl -n ai-circus rollout status deployment/agui-voice --timeout=600s
 	@echo "⏳ waiting for the observability stack (Langfuse's first boot migrates Postgres + ClickHouse — a few minutes on a laptop)..."
 	@kubectl -n ai-circus rollout status statefulset/clickhouse --timeout=180s
 	@for svc in mlflow langfuse-web langfuse-worker; do \

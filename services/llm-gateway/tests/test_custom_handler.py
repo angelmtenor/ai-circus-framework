@@ -94,3 +94,51 @@ def test_aembedding_runs_the_cpu_bound_encode_off_the_event_loop(monkeypatch: py
     asyncio.run(custom_handler.local_embedding_llm.aembedding(**_call_kwargs("fake-model", ["a"])))
 
     assert ran_on_loop == [False]
+
+
+class _CountingSentenceTransformer(_FakeSentenceTransformer):
+    """Counts encode() calls, to prove preload() warms the model and doesn't just build it."""
+
+    encodes = 0
+
+    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> list[list[float]]:
+        """Count, then behave like the plain fake."""
+        type(self).encodes += 1
+        return super().encode(texts, normalize_embeddings)
+
+
+def test_preload_loads_and_warms_the_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    sys.modules["sentence_transformers"].SentenceTransformer = _CountingSentenceTransformer  # type: ignore[attr-defined]
+    _CountingSentenceTransformer.encodes = 0
+    custom_handler.preload()
+    assert custom_handler.DEFAULT_MODEL in custom_handler._loaded_models
+    assert _CountingSentenceTransformer.encodes == 1
+    # A later real call reuses the warm instance instead of loading again.
+    loaded = custom_handler._loaded_models[custom_handler.DEFAULT_MODEL]
+    assert custom_handler._get_model(custom_handler.DEFAULT_MODEL) is loaded
+
+
+@pytest.mark.parametrize(
+    ("preload", "provider", "expected"),
+    [
+        ("true", "local", True),
+        ("true", None, True),  # unset provider = the platform default, local
+        ("true", "gemini", False),  # the model would never be used
+        ("false", "local", False),  # local dev / tests: stay lazy
+        (None, "local", False),
+    ],
+)
+def test_preload_enabled(
+    monkeypatch: pytest.MonkeyPatch, preload: str | None, provider: str | None, expected: bool
+) -> None:
+    fake_config = types.SimpleNamespace(LOCAL_EMBED_PRELOAD=preload, EMBEDDING_PROVIDER=provider)
+    monkeypatch.setattr(custom_handler, "get_env_config", lambda: fake_config)
+    assert custom_handler.preload_enabled() is expected
+
+
+def test_docker_profile_preloads_and_local_profile_does_not() -> None:
+    """Compose and k8s both run APP_ENVIRONMENT=docker — the profile that must preload."""
+    from llm_gateway.data_model import get_env_config
+
+    assert get_env_config("docker").LOCAL_EMBED_PRELOAD == "true"
+    assert get_env_config("local").LOCAL_EMBED_PRELOAD in {None, "false"}

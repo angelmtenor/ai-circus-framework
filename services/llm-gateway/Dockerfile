@@ -26,8 +26,11 @@ FROM python:3.14-slim AS runtime
 WORKDIR /app
 
 # UID 1000 is what every k8s manifest's runAsUser pins. The code/venv below stay
-# root-owned (read-only to the service): only $HOME (caches) is writable.
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app
+# root-owned (read-only to the service): only $HOME (caches) is writable — plus
+# /models/hf, the local-embed model's Hugging Face cache, where compose/k8s mount a
+# persistent volume (pre-created here so a fresh compose volume inherits app ownership).
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app \
+    && install -d -o app -g app /models/hf
 
 COPY --from=builder /app/services/llm-gateway/.venv services/llm-gateway/.venv
 COPY --from=builder /app/services/llm-gateway/src   services/llm-gateway/src
@@ -43,6 +46,8 @@ ENV PATH="/app/services/llm-gateway/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 MALLOC_ARENA_MAX=2
 # litellm otherwise calls load_dotenv() on import, reading any stray .env on its path.
 ENV LITELLM_MODE=PRODUCTION
+# The local-embed model's weights (~670 MB) — downloaded once into the mounted volume.
+ENV HF_HOME=/models/hf
 WORKDIR /app/services/llm-gateway
 
 USER app
