@@ -88,21 +88,31 @@ sweeps computed from live API calls, not precomputed synthetic charts.
 ### Platform — health dashboard, capabilities & monitors (admin)
 
 Logged in as `admin`, a **Platform** button next to Settings opens the operational side of the
-app, in two tabs:
+app, in four tabs:
 
 - **Health** — a live dashboard of every microservice, store and monitor: up / degraded / down /
-  not deployed, probe latency, and (on k3s) each pod's readiness and restart count, re-checked
-  every 15 s — with one-click links to the admin consoles: **Langfuse** (the GenAI monitor: every
-  LLM call, per tenant/scenario/conversation), **MLflow** (the MLOps monitor: every training run's
-  candidates, scores and selected model), Keycloak and the object store. See
+  stopped / not deployed, probe latency, and (on k3s) each pod's readiness and restart count,
+  re-checked every 15 s — with one-click links to the admin consoles: **Langfuse** (the GenAI
+  monitor: every LLM call, per tenant/scenario/conversation), **MLflow** (the MLOps monitor: every
+  training run's candidates, scores and selected model), Keycloak and the object store. Every card
+  has a **Ping** button (three server-side probes in a row, with their latencies), and on k3s the
+  optional services — voice (`agui-voice`), MLflow, Langfuse (+ its ClickHouse), `dl-inference`
+  and Kafka — get **Start/Stop**: scale to 0 to free memory, back to 1 later, data kept. See
   [Observability](#observability-admin-only) below.
+- **Monitor** — live CPU, memory and GPU usage (k3s): the node against its allocatable capacity,
+  the GPU's utilization/memory/temperature/power, sparklines of the last few minutes, and every
+  workload's CPU and memory against its own memory limit (heaviest first — past ~85 % it's the
+  next OOM kill).
 - **Capabilities** — the live **capability roadmap** (what's built vs. planned, grouped by the
   Data / AI-BI-ML / Governance pillars of the [Architecture](#architecture)) plus the operational
   controls behind it: pipeline job status/trigger, recent Kafka events, Change-Data-Capture,
   the Iceberg lakehouse, semantic/federated queries and the AI Gateway's rate limits. See
   [Data Platform](#data-platform-optional-profile) below.
 
-Only the visible tab is mounted, so the health poll stops while you're on Capabilities.
+- **Deep Learning** — GPU availability, the deployed deep-learning models and in-cluster training
+  (see [Deep learning](#deep-learning--nlp--computer-vision-optional)).
+
+Only the visible tab is mounted, so each tab's poll stops while you're on another one.
 
 <p align="center"><img src="docs/screenshots/platform-health.png" alt="Platform — Health tab: live status of every microservice, store and monitor" width="850"></p>
 <p align="center"><img src="docs/screenshots/platform-capabilities.png" alt="Platform — Capabilities tab: capability roadmap and data-platform controls" width="850"></p>
@@ -340,16 +350,17 @@ make k3s-pause      # stop the cluster — resume later with `make k3s-resume`
 make k3s-resume     # start it back up
 ```
 
-**Before opening the app in a browser**, start a standing port-forward — `platform-registry`'s
-browser-facing API isn't reachable through Traefik or `k3s-verify`'s own (command-scoped)
-port-forward:
+**The browser also needs a standing port-forward** to `platform-registry` (its browser-facing API
+isn't reachable through Traefik or `k3s-verify`'s own command-scoped port-forward). `make k3s-wait`
+starts it for you, as a systemd user service wherever systemd runs one (native Linux, WSL with
+`systemd=true`) — so it comes back by itself after a reboot or a platform-registry restart:
 
 ```bash
-kubectl -n ai-circus port-forward svc/platform-registry 8010:8000 &
+make k3s-portforward   # (re)start it by hand — only needed without user systemd, after a reboot
 ```
 
-Skipping this shows up as a client-side `Failed to fetch` right on the login screen even though
-every other check passes — see [`k8s/README.md`](k8s/README.md)'s "Design notes" for why.
+A missing port-forward shows up as a client-side `Failed to fetch` right on the login screen even
+though every other check passes — see [`k8s/README.md`](k8s/README.md)'s "Design notes" for why.
 
 This is dev-parity, single-node only today (no registry — images are built locally and imported
 straight into the cluster; no Helm chart, no multi-node/HA) — not yet a drop-in production
@@ -417,7 +428,8 @@ set in `services/platform-registry/src/platform_registry/core/seed.py`'s
 > application error — it means a request never reached a server at all.
 >
 > **On Kubernetes**, this almost always means the standing `platform-registry` port-forward from
-> step 3 above isn't running — see [`k8s/README.md`](k8s/README.md)'s "Design notes".
+> step 3 above isn't running (`ss -tlnp | grep 8010`; `make k3s-portforward` restarts it) — see
+> [`k8s/README.md`](k8s/README.md)'s "Design notes".
 >
 > **On Docker Compose**, run `make verify` (or just `make all` again) to pinpoint which service
 > isn't answering; the most common causes are: (1) you tested right after `make up`, before every
@@ -446,7 +458,7 @@ the platform-wide containers and cross-service wiring.
 | **Ingress** | `TRAEFIK_HTTP_PORT`, `TRAEFIK_DASHBOARD_PORT`, `CORS_ALLOWED_ORIGINS` | CORS is keyed to `http://aiopen.localhost` exactly — opening the app from another origin is the classic "Failed to fetch". |
 | **Identity** | `KEYCLOAK_SERVER_URL`/`REALM`/`ISSUER`/`JWKS_URL`/`AUDIENCE`, `KEYCLOAK_M2M_CLIENT_ID`/`SECRET`, `KEYCLOAK_OWNER_EMAIL`/`PASSWORD`, `KEYCLOAK_ADMIN_USERNAME`/`PASSWORD`, `VITE_KEYCLOAK_*` | `*_OWNER_*` is the realm user `provision-owner-user` creates; `*_ADMIN_*` is the container's own bootstrap admin (also gates `admin.keycloak.localhost`). Bootstrap values apply on **first boot only**. |
 | **LLM routing** | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `AZURE_OPENAI_API_KEY`/`API_BASE`, `OLLAMA_API_BASE`, `LITELLM_MASTER_KEY`, `LLM_MODEL` | At least one key (or `make ollama-up`). A new/rotated **key** needs an `llm-gateway` restart; the **active model** is switched live from Settings and only needs `LLM_MODEL` as the boot-time default (`groq-llama` if unset). See [LLM providers](#llm-providers). |
-| **Embeddings** | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `VOYAGE_API_KEY` | Must be identical for `etl-vectorize` and `rag-agent`, or vector search silently returns nothing. |
+| **Embeddings** | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `VOYAGE_API_KEY` | Must be identical for `etl-vectorize` and `rag-agent`, or vector search silently returns nothing. With `local` (the default), `llm-gateway` loads and warms the embedding model at start-up — it is only Ready once embeddings are instant; the weights (~670 MB) are downloaded once into the `embedding-model-cache` volume, so the very first boot of a new cluster takes a few minutes longer. |
 | **Voice mode** | `VOICE_STT_PROVIDER`, `VOICE_TTS_PROVIDER`, `VOICE_WHISPER_MODEL`, `VOICE_PIPER_VOICE_ID[_ES]`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`/`VOICE_ID`, `CARTESIA_API_KEY`/`VOICE_ID` | Defaults (`whisper`/`piper`) need no key. Cloud engines need their key *and* the matching `pipecat-ai[...]` extra inside `services/agui-voice`; the STT/TTS **choice** itself is switched live from Settings. |
 | **Observability** | `LANGFUSE_INIT_USER_EMAIL`/`PASSWORD`, `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`, `LANGFUSE_NEXTAUTH_SECRET`/`SALT`/`ENCRYPTION_KEY`, `CLICKHOUSE_PASSWORD` | `*_INIT_*` applies on Langfuse's **first boot only**. Tracing is on whenever the `PUBLIC_KEY`/`SECRET_KEY` pair is set (keep the `pk-lf-`/`sk-lf-` prefixes). MLflow needs nothing here — it sits behind the console Basic Auth. |
 | **Credentials & deployment** | `ADMIN_API_KEY`, `ENGINEERING_DEMO_API_KEY`, `DEPLOYMENT_TARGET`, `AUTH_DISABLED`, `DEV_MODE` | Every local sign-in ships as `angel2026` (see step 4). `DEPLOYMENT_TARGET=public` makes every service refuse to boot on shipped demo values — see [Public deployment](#public-deployment). `AUTH_DISABLED`/`DEV_MODE` are a dev-only bypass, never beyond local. |
@@ -735,7 +747,8 @@ Valkey and SeaweedFS the platform already runs instead of bringing its own:
 
 | Monitor | What it shows | Where | Backed by |
 | --- | --- | --- | --- |
-| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, not deployed; probe latency; on k3s also pod readiness + restarts | `ui-react` → **Platform → Health** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus a read-only pod listing via RBAC |
+| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, stopped, not deployed; probe latency; on-demand Ping; on k3s also pod readiness + restarts and Start/Stop for the optional services | `ui-react` → **Platform → Health** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus read-only pod/replica listing via RBAC; Start/Stop scales only the allowlisted workloads (`core/workloads.py`, mirrored by the Role's `resourceNames`) |
+| **Resource monitor** | CPU / memory of the node and of every workload (vs. its memory limit); GPU utilization, memory, temperature and power | `ui-react` → **Platform → Monitor** (admin, k3s) | `GET /platform/resources` (`core/resources.py`): the Kubernetes Metrics API (k3s' bundled metrics-server) and NVML — on a GPU cluster `make k3s-up` gives `data-platform-manager` read-only GPU access (`k8s/gpu/`, never a `nvidia.com/gpu` request) |
 | **GenAI monitor — Langfuse v4** | A trace per LLM call (prompt, completion, tokens, cost, latency), grouped into sessions per conversation, filterable by tenant (`org:<id>`), scenario (`scenario:<slug>`) and service | `http://langfuse.localhost` (Langfuse's own sign-in; user/password from `.env`'s `LANGFUSE_INIT_USER_*`) | `llm-gateway`'s LiteLLM `langfuse_otel` callback — switched on at start-up when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (`app.py`); the agent services attach tenant/scenario/thread as request `metadata` (`ai_circus_shared.observability.langfuse_request_metadata`). Stores: the shared Postgres (`langfuse` db), Valkey (`langfuse:` keys), SeaweedFS (`langfuse` bucket) and one new **ClickHouse** container (`k8s/base/langfuse.yaml`) |
 | **MLOps monitor — MLflow** | One experiment per scenario, one run per tenant × training: every candidate's held-out score, the selected model, dataset size, `metadata.json`, and the SeaweedFS keys + checksums of the served artifacts | `http://mlflow.localhost` (behind the same `admin-basicauth` gate as the Keycloak/SeaweedFS consoles — MLflow has no auth of its own) | `training` mirrors each run when `MLFLOW_TRACKING_URI` is set (`core/mlflow_tracking.py`, never fails the job); the server is `infra/mlflow/Dockerfile` (official MLflow + Postgres driver + boto3), run metadata in the shared Postgres (`mlflow` db), artifacts in SeaweedFS (`mlflow` bucket) |
 

@@ -112,7 +112,9 @@ SeaweedFS credentials, ClickHouse low-memory config, MLflow image, k3s GPU node)
 **Observability (admin-only)**, all reachable from ui-react's admin **Platform** view: the health
 dashboard (`data-platform-manager` `GET /platform/status`, `core/platform_status.py` — a
 hand-synced list of every component; add a row for any new container, `tests/test_platform_status.py`
-pins the names); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
+pins the names; Start/Stop only for `core/workloads.py`'s `OPTIONAL_SERVICES`, whose workloads
+must equal the Role's `resourceNames` — `tests/test_workloads.py`); the resource monitor
+(`GET /platform/resources`, `core/resources.py`: metrics-server + NVML via `k8s/gpu/`'s patch); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
 never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_request_metadata`);
 **MLflow** for ML (`training`'s `core/mlflow_tracking.py`, must never fail the job).
 
@@ -121,7 +123,8 @@ never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_requ
 dependencies out of the entry chunk. The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
-provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Capabilities). Voice
+provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
+Deep Learning). Voice
 mode talks to `agui-voice` over a plain WebSocket.
 
 ## Conventions for new or changed code
@@ -132,6 +135,11 @@ mode talks to `agui-voice` over a plain WebSocket.
 - **Bound everything a caller controls**: request bodies (`Field(max_length=…)`), uploads (read
   at most cap+1 bytes), and every in-memory cache (size and/or TTL).
 - **Startup dependencies go through `wait_for`**, never a bare first call that crashes the pod.
+- **Models load at start-up, never on a request** (a demo's first question must be instant):
+  anything a service holds in memory — llm-gateway's `local-embed` (`LOCAL_EMBED_PRELOAD`),
+  prediction/dl-inference's `ModelCache.preload`, agui-voice's STT/TTS — is loaded and warmed
+  before the pod reports Ready (readiness gated on it), best-effort so a missing model never
+  blocks boot. Downloaded weights live on a PVC (`embedding-model-cache`, `voice-model-cache`).
 - **Every container** (compose and k8s) has a memory limit; every k8s pod also has requests, a
   `startupProbe` + readiness + liveness probes, `runAsNonRoot` with a *numeric* `runAsUser`,
   `allowPrivilegeEscalation: false` and dropped capabilities. Service Dockerfiles follow the
@@ -145,7 +153,8 @@ mode talks to `agui-voice` over a plain WebSocket.
 
 - **"Failed to fetch" in the browser** is a network-level failure, not an app bug: run
   `make k3s-verify` (compose: `make verify`); common causes are the platform-registry
-  port-forward not running (`ss -tlnp | grep 8010` → `make k3s-portforward`), a stale pod after a
+  port-forward not running (`ss -tlnp | grep 8010` → `make k3s-portforward`; it is a systemd user
+  service `ai-circus-portforward-<cluster>` that survives reboots where user systemd exists), a stale pod after a
   same-tag image import (`rollout restart`), or opening the app from an origin other than
   `http://aiopen.localhost` (CORS allow-lists are exact).
 - A `tabular_ml` scenario returning 503 "No trained model artifacts" on a healthy cluster →

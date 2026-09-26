@@ -686,13 +686,22 @@ export async function getRoadmap(baseUrl: string, accessToken: string | null): P
 // Mirrors data_platform_manager.core.platform_status's dataclasses exactly.
 
 export type ComponentGroup = "services" | "infra" | "observability";
-export type ComponentHealth = "up" | "degraded" | "down" | "not_deployed";
+export type ComponentHealth = "up" | "degraded" | "down" | "stopped" | "not_deployed";
 
 export type PodInfo = {
   ready: boolean;
   restarts: number;
   phase: string;
   age_seconds: number | null;
+};
+
+export type ServiceState = "running" | "starting" | "stopping" | "stopped" | "partial" | "not_deployed";
+
+/** Start/Stop state of an optional component (data_platform_manager.core.workloads). */
+export type ServiceControl = {
+  state: ServiceState;
+  deploy_hint: string;
+  stop_effect: string;
 };
 
 export type ComponentStatus = {
@@ -706,6 +715,8 @@ export type ComponentStatus = {
   console_url: string | null;
   /** Only populated when data-platform-manager itself runs inside k8s. */
   pod: PodInfo | null;
+  /** Only for optional components, and only inside k8s — drives the Start/Stop button. */
+  control: ServiceControl | null;
 };
 
 export type PlatformStatus = {
@@ -717,6 +728,99 @@ export type PlatformStatus = {
 export async function getPlatformStatus(baseUrl: string, accessToken: string | null): Promise<PlatformStatus> {
   const response = await fetch(`${baseUrl}/platform/status`, { headers: headers(accessToken) });
   return asJson<PlatformStatus>(response);
+}
+
+export type PingResult = { ok: boolean; latency_ms: number | null; detail: string };
+
+/** Probe one component a few times in a row, server-side (the browser can't reach most of them). */
+export async function pingComponent(
+  baseUrl: string,
+  name: string,
+  accessToken: string | null,
+): Promise<{ name: string; results: PingResult[] }> {
+  const response = await fetch(`${baseUrl}/platform/components/${encodeURIComponent(name)}/ping`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
+/** Start (scale to 1) or stop (scale to 0) an optional component — k3s only. */
+export async function setComponentRunning(
+  baseUrl: string,
+  name: string,
+  running: boolean,
+  accessToken: string | null,
+): Promise<{ name: string; action: string; requested_at: string }> {
+  const action = running ? "start" : "stop";
+  const response = await fetch(`${baseUrl}/platform/components/${encodeURIComponent(name)}/${action}`, {
+    method: "POST",
+    headers: headers(accessToken),
+  });
+  return asJson(response);
+}
+
+// ── Admin resource monitor (GET /platform/resources) ─────────────────────────
+// Mirrors data_platform_manager.core.resources' dataclasses exactly.
+
+export type NodeUsage = {
+  name: string;
+  cpu_cores: number;
+  cpu_allocatable_cores: number;
+  memory_bytes: number;
+  memory_allocatable_bytes: number;
+  /** The kubelet's MemoryPressure condition — it is evicting pods. */
+  memory_pressure: boolean;
+};
+
+/** The machine the node runs on (on k3d: the Linux/WSL host) — the real memory headroom. */
+export type HostMemory = {
+  total_bytes: number;
+  available_bytes: number;
+  swap_total_bytes: number;
+  swap_used_bytes: number;
+};
+
+export type WorkloadUsage = {
+  name: string;
+  pods: number;
+  cpu_cores: number;
+  memory_bytes: number;
+  memory_limit_bytes: number | null;
+};
+
+export type GpuDevice = {
+  index: number;
+  name: string;
+  utilization_pct: number | null;
+  memory_used_bytes: number | null;
+  memory_total_bytes: number | null;
+  temperature_c: number | null;
+  power_w: number | null;
+  power_limit_w: number | null;
+};
+
+export type GpuReport = {
+  available: boolean;
+  reason: string | null;
+  driver_version: string | null;
+  devices: GpuDevice[];
+};
+
+export type ResourceReport = {
+  checked_at: string;
+  /** CPU/memory (Kubernetes Metrics API) — false outside k3s, with `reason`. */
+  available: boolean;
+  reason: string | null;
+  gpu: GpuReport;
+  host: HostMemory | null;
+  nodes: NodeUsage[];
+  workloads: WorkloadUsage[];
+};
+
+export async function getPlatformResources(baseUrl: string, accessToken: string | null): Promise<ResourceReport> {
+  const response = await fetch(`${baseUrl}/platform/resources`, { headers: headers(accessToken) });
+  return asJson<ResourceReport>(response);
 }
 
 export type RateLimit = {

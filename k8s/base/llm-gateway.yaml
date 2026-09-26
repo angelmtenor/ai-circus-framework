@@ -2,6 +2,21 @@
 # same reasoning as its loopback-only compose port: only assistant/rag-agent/
 # platform-registry call it, over the cluster network, and its OpenAI-compatible
 # endpoint is gated only by a single shared key with no rate limiting.
+#
+# The `local-embed` model (EMBEDDING_PROVIDER=local, the default) is loaded and warmed
+# while the proxy starts, so this pod is only Ready once embeddings are instant — never
+# on the first RAG/form question (custom_handler.py). Its weights live on the
+# embedding-model-cache PVC: only a brand-new cluster downloads them (~670 MB), which is
+# why the startupProbe allows 10 minutes; every later start just loads them (~10 s).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: embedding-model-cache
+  namespace: ai-circus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: {requests: {storage: 2Gi}}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,20 +47,21 @@ spec:
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: llm-gateway-secrets}
-          # Idle ~870Mi: LiteLLM proxy + the local-embed torch model once first used.
+          volumeMounts:
+            - {name: embedding-model-cache, mountPath: /models/hf}  # HF_HOME (Dockerfile)
+          # Idle ~870Mi: LiteLLM proxy + the local-embed torch model (loaded at start-up).
           resources:
             requests: {cpu: 50m, memory: 768Mi}
             limits: {memory: 1536Mi}
-          # startupProbe gates the other two until the app first answers, polled every 2s
-          # (Ready ~2s after start-up completes instead of after a fixed initialDelay),
-          # with a 180s budget — above the 120s the app itself waits for Postgres/
-          # SeaweedFS/llm-gateway (ai_circus_shared.startup), so a slow cold boot is never
-          # liveness-killed mid-start.
+          # startupProbe gates the other two until the proxy first answers — which is only
+          # after the local-embed model is loaded and warmed (see the header comment).
+          # Polled every 2s, with a 600s budget for a brand-new cluster's one-off model
+          # download; a normal restart answers after ~15-20s.
           startupProbe:
             httpGet: {path: /health/liveliness, port: 4000}
             periodSeconds: 2
             timeoutSeconds: 3
-            failureThreshold: 90
+            failureThreshold: 300
           readinessProbe:
             httpGet: {path: /health/liveliness, port: 4000}
             periodSeconds: 10
@@ -55,6 +71,9 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: embedding-model-cache
+          persistentVolumeClaim: {claimName: embedding-model-cache}
 ---
 apiVersion: v1
 kind: Service

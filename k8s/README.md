@@ -113,6 +113,12 @@ restart-loops the whole server (k3s-io/k3s#7328; a single-node k3d cluster doesn
 and `setup_gpu_containers.sh` looks for `nvidia-smi` in `/usr/lib/wsl/lib` itself, since
 `sudo`'s `secure_path` drops it from `PATH` on WSL.
 
+On a GPU cluster `make k3s-up` also runs `make k3s-gpu-telemetry`: it patches
+`data-platform-manager` onto the `nvidia` RuntimeClass with `NVIDIA_DRIVER_CAPABILITIES=utility`
+(`k8s/gpu/`), so the admin **Platform → Monitor** tab can read GPU utilization, memory,
+temperature and power through NVML. It never requests `nvidia.com/gpu` (training Jobs keep the
+GPU) and gets no CUDA libraries; on a CPU-only cluster the target does nothing.
+
 With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
 (`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
 RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.
@@ -145,7 +151,10 @@ make k3s-lite K3S_LITE_SKIP="mlflow agui-voice data-platform-manager langfuse-we
 ```
 
 While lite, voice mode and `mlflow.localhost` are unavailable and the Platform health dashboard
-shows those two as down (every other view is unaffected — `make k3s-verify` still passes). The scale
+shows those two as stopped (every other view is unaffected — `make k3s-verify` still passes). The
+same dashboard can do this per service without `make`: **Platform → Health** has Start/Stop on
+the optional services (`agui-voice`, `mlflow`, Langfuse web + worker + ClickHouse, `dl-inference`,
+`kafka`), and **Platform → Monitor** shows which pods are actually using the memory. The scale
 is cluster state, so it survives a plain `k3s-pause`/`k3s-resume`; `make k3s-up` (a fresh
 `kubectl apply -k`) or `make k3s-full` restores every replica. `make k3s-wait` works unchanged in
 either mode — `kubectl rollout status` reports a 0-replica Deployment as rolled out immediately.
@@ -174,17 +183,24 @@ setup. `ui-react`'s bundled default for `VITE_PLATFORM_REGISTRY_URL` is `http://
 (matching docker-compose.yml's `127.0.0.1:8010` host-published port), so the browser needs a
 standing port-forward to `platform-registry`'s loopback-only API — unlike `k3s-verify`'s own
 port-forward, which only lives for that one command. `make k3s-wait` (and therefore `make
-k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`,
-tracking its PID in `/tmp/k3s-portforward-<cluster>.pid` so re-running it doesn't stack duplicate
-forwards on the same port; `make k3s-pause`/`make k3s-down` stop it again. Run `make
-k3s-portforward` yourself only if you need to restart it without a full `k3s-wait` (e.g. after it
-died for some other reason).
+k3s-all`/`make k3s-resume` + `k3s-wait`) starts this automatically via `make k3s-portforward`
+(`scripts/k3s_portforward.sh`). Wherever systemd runs a per-user manager — native Linux, and WSL
+with `systemd=true` in `/etc/wsl.conf` — it installs it as the systemd user service
+`ai-circus-portforward-<cluster>`: enabled at boot (lingering on, so no login is needed) and
+restarted 5 s after `kubectl` exits, which it does whenever the platform-registry pod restarts or
+while the cluster is still coming up after a reboot. So the forward survives reboots and pod
+restarts with nothing to re-run. `make k3s-pause`/`make k3s-down` stop it (it stays enabled for the
+next boot); `make k3s-portforward-uninstall` removes the service. Without user systemd (or with
+`K3S_PORTFORWARD_SERVICE=0`) it is a plain background process with its PID in
+`/tmp/k3s-portforward-<cluster>.pid`, which dies with the machine — re-run `make k3s-portforward`
+after a reboot there.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and
-confirm the port-forward is actually running (`ss -tlnp | grep 8010` or check
-`/tmp/k3s-portforward-<cluster>.log`) — `make k3s-verify` only exercises curl-reachable Traefik
-routes and won't catch this class of failure.
+confirm the port-forward is actually running (`ss -tlnp | grep 8010`; its log is
+`journalctl --user -u ai-circus-portforward-<cluster>`, or `/tmp/k3s-portforward-<cluster>.log`
+without user systemd) — `make k3s-verify` only exercises curl-reachable Traefik routes and won't
+catch this class of failure.
 Re-run `make k3s-secrets` any time `.env`/`infra/traefik/console.htpasswd`/
 `infra/seaweedfs/s3.json` change; re-run `make k3s-build k3s-import` and
 `kubectl -n ai-circus rollout restart deployment/<service>` after code changes.
@@ -253,8 +269,10 @@ set on a local k3d cluster:
   before; on WSL check `.wslconfig`'s memory (see `docs/windows-wsl.md`) before `make k3s-all`.
   Both manifests carry an `ensure-database` init container (idempotent `CREATE DATABASE`) because
   `postgres.yaml`'s init script only ever runs on a fresh volume. `data-platform-manager`'s Role
-  additionally lists pods (read-only) so the admin Platform dashboard can show readiness/restarts —
-  the same dashboard works on docker-compose, minus that pod detail. The MLflow image is built by
+  additionally lists pods and Deployments/StatefulSets (read-only) so the admin Platform dashboard
+  can show readiness/restarts/"stopped", reads the Metrics API for the Monitor tab, and may scale
+  only the optional workloads named in its `resourceNames` (the Start/Stop buttons) — the same
+  dashboard works on docker-compose, minus the pod detail, Start/Stop and Monitor. The MLflow image is built by
   `make k3s-build` from `infra/mlflow/Dockerfile` (not `services/*` — it isn't a cookiecutter
   service, just the official MLflow with a Postgres driver and boto3 added).
 - **SeaweedFS runs with `-master.volumePreallocate=false`** (same in `docker-compose.yml`).

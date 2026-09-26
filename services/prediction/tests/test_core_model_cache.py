@@ -271,3 +271,24 @@ def test_dataset_is_cached_per_requester_until_its_ttl_expires(
     now[0] += model_cache_module.DATASET_TTL_SECONDS + 1
     assert cache.dataset("org-1", "churn") == "df-2"
     assert loads == ["org-1", "org-1"]
+
+
+def test_preload_warms_every_trained_scenario_and_skips_the_rest(stores: dict[str, FakeObjectStore]) -> None:
+    """Start-up preload: trained scenarios end up cached (no store hit on the first real
+    request); an untrained one or a broken store is skipped, never raised.
+    """
+
+    class BrokenStore(FakeObjectStore):
+        def exists(self, org_id: str, path: str) -> bool:
+            raise RuntimeError("SeaweedFS hiccup")
+
+    stores_with_gaps = {**stores, "untrained": FakeObjectStore(), "broken": BrokenStore()}
+    cache = ModelCache(stores_with_gaps, fallback_org_id="org-1")  # type: ignore[arg-type]
+
+    assert cache.preload(["churn", "untrained", "broken", "mpm"]) == 2
+
+    calls_after_preload = len(stores["churn"].get_calls)
+    cache.get("tenant-without-own-model", "churn")  # served the warm fallback copy
+    assert len(stores["churn"].get_calls) == calls_after_preload
+    with pytest.raises(ModelNotTrainedError):  # still lazily retried on a real request
+        cache.get("org-1", "untrained")

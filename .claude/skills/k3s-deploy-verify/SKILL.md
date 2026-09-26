@@ -56,9 +56,12 @@ are normal; a pod still waiting after ~2 min means that dependency is really dow
    `make k3s-secrets`, restart the pod.
 2. **Login "Failed to fetch" while every curl passes** — ui-react calls platform-registry
    directly at `http://localhost:8010`, which k3d only serves via the standing port-forward
-   (`make k3s-portforward`, PID in `/tmp/k3s-portforward-<cluster>.pid`, stopped by
-   `k3s-pause`/`k3s-down`, dead after any VM restart). Check `ss -tlnp | grep 8010`. It's also a
-   real portability gap for any non-local cluster — flag it rather than paper over it.
+   (`make k3s-portforward` → `scripts/k3s_portforward.sh`: the systemd user service
+   `ai-circus-portforward-<cluster>`, enabled at boot + auto-restarted after a pod restart; only
+   without user systemd a PID-file background process that dies with the VM). Stopped by
+   `k3s-pause`/`k3s-down`. Check `ss -tlnp | grep 8010` and
+   `journalctl --user -u ai-circus-portforward-ai-circus`. It's also a real portability gap for
+   any non-local cluster — flag it rather than paper over it.
 3. **`CreateContainerConfigError: container has runAsNonRoot and image has non-numeric user`** —
    a manifest with `runAsNonRoot: true` but no numeric `runAsUser`. Every service image's `app`
    user is UID 1000 (explicit `--uid 1000`), ui-react's nginx is 101, Keycloak's is 1000.

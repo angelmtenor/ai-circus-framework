@@ -2830,3 +2830,180 @@ select:focus {
   white-space: nowrap;
   min-width: 6.5rem;
 }
+
+/* Health cards: Ping / Start / Stop (PlatformStatus.tsx) */
+.platform-card--stopped {
+  border-left-color: var(--dim);
+}
+
+.platform-card--stopped h3 {
+  color: var(--dim);
+}
+
+.platform-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.platform-card-actions .btn-secondary {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.76rem;
+}
+
+.platform-card-actions .platform-stop:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.platform-card-actions .platform-start:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+}
+
+.platform-card-actions .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.platform-ping {
+  font-family: var(--mono);
+}
+
+.platform-ping--fail {
+  color: var(--red);
+}
+
+/* ── Platform → Monitor (PlatformMonitor.tsx) ──────────────────────────────── */
+
+.monitor-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.monitor-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.monitor-tile-label {
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.monitor-tile-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text-h);
+}
+
+.monitor-tile-unavailable {
+  margin-top: 0.4rem;
+}
+
+.monitor-tile-footer {
+  margin-top: auto;
+}
+
+/* Same-ramp meter: `color` carries the severity; the fill is that color and the track a
+   light step of it, so the state reads across the whole bar. */
+.monitor-meter {
+  color: var(--accent);
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.monitor-meter--warn {
+  color: var(--amber);
+}
+
+.monitor-meter--crit {
+  color: var(--red);
+}
+
+.monitor-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: currentColor;
+  transition: width 0.4s ease;
+}
+
+.monitor-spark {
+  position: relative;
+  margin-top: 0.3rem;
+}
+
+.monitor-spark svg {
+  display: block;
+  cursor: crosshair;
+}
+
+.monitor-spark-readout {
+  font-size: 0.7rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+}
+
+.monitor-spark-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.monitor-spark-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.monitor-spark-area {
+  fill: var(--accent);
+  opacity: 0.1;
+}
+
+.monitor-spark-cross {
+  stroke: var(--dim);
+  stroke-width: 1;
+}
+
+.monitor-spark-dot {
+  fill: var(--accent);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.monitor-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+
+.monitor-table.data-table td.monitor-num,
+.monitor-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-table.data-table .monitor-limit-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 240px;
+}
+
+.monitor-limit-cell .monitor-meter {
+  flex: 0 0 100px;
+}
