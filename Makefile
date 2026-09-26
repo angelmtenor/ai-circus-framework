@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
+	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop \
 	k3s-data-platform-up k3s-data-platform-down \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
@@ -283,9 +283,16 @@ k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's conta
 k3s-secrets: ## Generate the app-env/traefik-basicauth/seaweedfs-s3-config k8s Secrets from .env/infra — never committed, re-run any time those change
 	@./scripts/k3s_generate_secrets.sh
 
-k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend services, ingress)
+k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend services, ingress) — plus, on a GPU cluster, k3s-gpu-telemetry
 	@kubectl apply -k k8s/base
+	@$(MAKE) --no-print-directory k3s-gpu-telemetry
 	@echo "✓ k8s/base applied — 'make k3s-wait' to wait for it to actually be ready"
+
+k3s-gpu-telemetry: ## GPU clusters only (no-op otherwise): give data-platform-manager read-only GPU access (k8s/gpu/) for the admin Platform → Monitor tab — never requests nvidia.com/gpu
+	@if kubectl get runtimeclass nvidia >/dev/null 2>&1; then \
+		kubectl -n ai-circus patch deployment data-platform-manager --patch-file k8s/gpu/data-platform-manager-gpu-telemetry.yaml \
+		&& echo "⚡ GPU cluster — data-platform-manager can read GPU telemetry (Platform → Monitor)"; \
+	fi
 
 k3s-wait: ## Wait for postgres/qdrant/seaweedfs and every backend Deployment to report Ready
 	@echo "⏳ waiting for postgres/qdrant/seaweedfs..."

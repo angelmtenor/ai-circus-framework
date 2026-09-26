@@ -113,6 +113,12 @@ restart-loops the whole server (k3s-io/k3s#7328; a single-node k3d cluster doesn
 and `setup_gpu_containers.sh` looks for `nvidia-smi` in `/usr/lib/wsl/lib` itself, since
 `sudo`'s `secure_path` drops it from `PATH` on WSL.
 
+On a GPU cluster `make k3s-up` also runs `make k3s-gpu-telemetry`: it patches
+`data-platform-manager` onto the `nvidia` RuntimeClass with `NVIDIA_DRIVER_CAPABILITIES=utility`
+(`k8s/gpu/`), so the admin **Platform → Monitor** tab can read GPU utilization, memory,
+temperature and power through NVML. It never requests `nvidia.com/gpu` (training Jobs keep the
+GPU) and gets no CUDA libraries; on a CPU-only cluster the target does nothing.
+
 With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
 (`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
 RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.
@@ -145,7 +151,10 @@ make k3s-lite K3S_LITE_SKIP="mlflow agui-voice data-platform-manager langfuse-we
 ```
 
 While lite, voice mode and `mlflow.localhost` are unavailable and the Platform health dashboard
-shows those two as down (every other view is unaffected — `make k3s-verify` still passes). The scale
+shows those two as stopped (every other view is unaffected — `make k3s-verify` still passes). The
+same dashboard can do this per service without `make`: **Platform → Health** has Start/Stop on
+the optional services (`agui-voice`, `mlflow`, Langfuse web + worker + ClickHouse, `dl-inference`,
+`kafka`), and **Platform → Monitor** shows which pods are actually using the memory. The scale
 is cluster state, so it survives a plain `k3s-pause`/`k3s-resume`; `make k3s-up` (a fresh
 `kubectl apply -k`) or `make k3s-full` restores every replica. `make k3s-wait` works unchanged in
 either mode — `kubectl rollout status` reports a 0-replica Deployment as rolled out immediately.
@@ -253,8 +262,10 @@ set on a local k3d cluster:
   before; on WSL check `.wslconfig`'s memory (see `docs/windows-wsl.md`) before `make k3s-all`.
   Both manifests carry an `ensure-database` init container (idempotent `CREATE DATABASE`) because
   `postgres.yaml`'s init script only ever runs on a fresh volume. `data-platform-manager`'s Role
-  additionally lists pods (read-only) so the admin Platform dashboard can show readiness/restarts —
-  the same dashboard works on docker-compose, minus that pod detail. The MLflow image is built by
+  additionally lists pods and Deployments/StatefulSets (read-only) so the admin Platform dashboard
+  can show readiness/restarts/"stopped", reads the Metrics API for the Monitor tab, and may scale
+  only the optional workloads named in its `resourceNames` (the Start/Stop buttons) — the same
+  dashboard works on docker-compose, minus the pod detail, Start/Stop and Monitor. The MLflow image is built by
   `make k3s-build` from `infra/mlflow/Dockerfile` (not `services/*` — it isn't a cookiecutter
   service, just the official MLflow with a Postgres driver and boto3 added).
 - **SeaweedFS runs with `-master.volumePreallocate=false`** (same in `docker-compose.yml`).

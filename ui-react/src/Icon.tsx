@@ -19,6 +19,7 @@ const PATHS: Record<string, string> = {
   restore: "M9 9V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-4M3 11a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   back: "M19 12H5m6-7-7 7 7 7",
   pulse: "M3 12h4l3-8 4 16 3-8h4",
+  gauge: "M4 17a8 8 0 0 1 16 0M12 17l4.5-5M12 17h.01",
   external: "M14 4h6v6M20 4l-9 9M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6",
   download: "M12 4v11m0 0-4-4m4 4 4-4M5 19h14",
   plus: "M12 5v14M5 12h14",

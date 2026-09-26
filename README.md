@@ -88,21 +88,31 @@ sweeps computed from live API calls, not precomputed synthetic charts.
 ### Platform — health dashboard, capabilities & monitors (admin)
 
 Logged in as `admin`, a **Platform** button next to Settings opens the operational side of the
-app, in two tabs:
+app, in four tabs:
 
 - **Health** — a live dashboard of every microservice, store and monitor: up / degraded / down /
-  not deployed, probe latency, and (on k3s) each pod's readiness and restart count, re-checked
-  every 15 s — with one-click links to the admin consoles: **Langfuse** (the GenAI monitor: every
-  LLM call, per tenant/scenario/conversation), **MLflow** (the MLOps monitor: every training run's
-  candidates, scores and selected model), Keycloak and the object store. See
+  stopped / not deployed, probe latency, and (on k3s) each pod's readiness and restart count,
+  re-checked every 15 s — with one-click links to the admin consoles: **Langfuse** (the GenAI
+  monitor: every LLM call, per tenant/scenario/conversation), **MLflow** (the MLOps monitor: every
+  training run's candidates, scores and selected model), Keycloak and the object store. Every card
+  has a **Ping** button (three server-side probes in a row, with their latencies), and on k3s the
+  optional services — voice (`agui-voice`), MLflow, Langfuse (+ its ClickHouse), `dl-inference`
+  and Kafka — get **Start/Stop**: scale to 0 to free memory, back to 1 later, data kept. See
   [Observability](#observability-admin-only) below.
+- **Monitor** — live CPU, memory and GPU usage (k3s): the node against its allocatable capacity,
+  the GPU's utilization/memory/temperature/power, sparklines of the last few minutes, and every
+  workload's CPU and memory against its own memory limit (heaviest first — past ~85 % it's the
+  next OOM kill).
 - **Capabilities** — the live **capability roadmap** (what's built vs. planned, grouped by the
   Data / AI-BI-ML / Governance pillars of the [Architecture](#architecture)) plus the operational
   controls behind it: pipeline job status/trigger, recent Kafka events, Change-Data-Capture,
   the Iceberg lakehouse, semantic/federated queries and the AI Gateway's rate limits. See
   [Data Platform](#data-platform-optional-profile) below.
 
-Only the visible tab is mounted, so the health poll stops while you're on Capabilities.
+- **Deep Learning** — GPU availability, the deployed deep-learning models and in-cluster training
+  (see [Deep learning](#deep-learning--nlp--computer-vision-optional)).
+
+Only the visible tab is mounted, so each tab's poll stops while you're on another one.
 
 <p align="center"><img src="docs/screenshots/platform-health.png" alt="Platform — Health tab: live status of every microservice, store and monitor" width="850"></p>
 <p align="center"><img src="docs/screenshots/platform-capabilities.png" alt="Platform — Capabilities tab: capability roadmap and data-platform controls" width="850"></p>
@@ -735,7 +745,8 @@ Valkey and SeaweedFS the platform already runs instead of bringing its own:
 
 | Monitor | What it shows | Where | Backed by |
 | --- | --- | --- | --- |
-| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, not deployed; probe latency; on k3s also pod readiness + restarts | `ui-react` → **Platform → Health** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus a read-only pod listing via RBAC |
+| **Platform dashboard** | Health of every microservice / store / monitor: up, degraded, down, stopped, not deployed; probe latency; on-demand Ping; on k3s also pod readiness + restarts and Start/Stop for the optional services | `ui-react` → **Platform → Health** (admin) | `data-platform-manager`'s admin-gated `GET /platform/status` (`core/platform_status.py`) probing each component over the cluster network, plus read-only pod/replica listing via RBAC; Start/Stop scales only the allowlisted workloads (`core/workloads.py`, mirrored by the Role's `resourceNames`) |
+| **Resource monitor** | CPU / memory of the node and of every workload (vs. its memory limit); GPU utilization, memory, temperature and power | `ui-react` → **Platform → Monitor** (admin, k3s) | `GET /platform/resources` (`core/resources.py`): the Kubernetes Metrics API (k3s' bundled metrics-server) and NVML — on a GPU cluster `make k3s-up` gives `data-platform-manager` read-only GPU access (`k8s/gpu/`, never a `nvidia.com/gpu` request) |
 | **GenAI monitor — Langfuse v4** | A trace per LLM call (prompt, completion, tokens, cost, latency), grouped into sessions per conversation, filterable by tenant (`org:<id>`), scenario (`scenario:<slug>`) and service | `http://langfuse.localhost` (Langfuse's own sign-in; user/password from `.env`'s `LANGFUSE_INIT_USER_*`) | `llm-gateway`'s LiteLLM `langfuse_otel` callback — switched on at start-up when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set (`app.py`); the agent services attach tenant/scenario/thread as request `metadata` (`ai_circus_shared.observability.langfuse_request_metadata`). Stores: the shared Postgres (`langfuse` db), Valkey (`langfuse:` keys), SeaweedFS (`langfuse` bucket) and one new **ClickHouse** container (`k8s/base/langfuse.yaml`) |
 | **MLOps monitor — MLflow** | One experiment per scenario, one run per tenant × training: every candidate's held-out score, the selected model, dataset size, `metadata.json`, and the SeaweedFS keys + checksums of the served artifacts | `http://mlflow.localhost` (behind the same `admin-basicauth` gate as the Keycloak/SeaweedFS consoles — MLflow has no auth of its own) | `training` mirrors each run when `MLFLOW_TRACKING_URI` is set (`core/mlflow_tracking.py`, never fails the job); the server is `infra/mlflow/Dockerfile` (official MLflow + Postgres driver + boto3), run metadata in the shared Postgres (`mlflow` db), artifacts in SeaweedFS (`mlflow` bucket) |
 

@@ -15,6 +15,11 @@ can distinguish "not deployed" (an optional profile such as Kafka) from "down".
 Probes are deliberately the cheapest signal each component offers (its own liveness
 endpoint or a bare TCP connect) with a short timeout — this runs every few seconds
 while the dashboard is open and must never load the platform it is watching.
+
+In-cluster, each component's workload replica count is read too: a service scaled to 0
+(`make k3s-lite`, or the dashboard's own Stop button — core/workloads.py) reports
+"stopped", not "down", and the optional ones carry the state their Start/Stop button
+needs. `ping` re-probes one component a few times on demand (the cards' Ping button).
 """
 
 from __future__ import annotations
@@ -30,11 +35,13 @@ from typing import Literal, cast
 import httpx
 import redis
 
-from data_platform_manager.core import k8s_jobs
+from data_platform_manager.core import k8s_jobs, workloads
+from data_platform_manager.core.workloads import Replicas, ServiceState
 
 PROBE_TIMEOUT_SECONDS = 2.0
+PING_COUNT = 3
 Group = Literal["services", "infra", "observability"]
-Status = Literal["up", "degraded", "down", "not_deployed"]
+Status = Literal["up", "degraded", "down", "stopped", "not_deployed"]
 
 
 @dataclass(frozen=True)
@@ -210,6 +217,15 @@ class PodInfo:
 
 
 @dataclass(frozen=True)
+class ServiceControl:
+    """Start/Stop state of an optional component (core/workloads.py's OPTIONAL_SERVICES)."""
+
+    state: ServiceState
+    deploy_hint: str
+    stop_effect: str
+
+
+@dataclass(frozen=True)
 class ComponentStatus:
     """One probed component, as returned to the dashboard."""
 
@@ -221,6 +237,7 @@ class ComponentStatus:
     description: str
     console_url: str | None
     pod: PodInfo | None = None
+    control: ServiceControl | None = None
 
 
 @dataclass(frozen=True)
@@ -338,29 +355,78 @@ def list_pods_by_app() -> dict[str, PodInfo]:
     return {label: info for label, (_, info) in result.items()}
 
 
-def _merge_pod(component: ComponentStatus, target: Target, pods: dict[str, PodInfo]) -> ComponentStatus:
-    info = pods.get(target.app_label or "")
-    if info is None:
-        return component
+def _merge_cluster_state(
+    component: ComponentStatus, target: Target, pods: dict[str, PodInfo], replicas: dict[str, Replicas]
+) -> ComponentStatus:
     status = component.status
-    if status == "up" and not info.ready:
+    detail = component.detail
+    info = pods.get(target.app_label or "")
+    if info is not None and status == "up" and not info.ready:
         # Answering its probe but not Ready for k8s (readiness gate failing, or a
         # replacement pod still starting): serving, but not healthy.
         status = "degraded"
-    return dataclasses.replace(component, status=status, pod=info)
+    scaled = replicas.get(target.app_label or "")
+    if scaled is not None and scaled.desired == 0 and status == "down":
+        # Deliberately off (lite mode / the Stop button), not broken.
+        status, detail = "stopped", "scaled to 0 replicas"
+    control = None
+    service = workloads.OPTIONAL_SERVICES.get(target.name)
+    if service is not None and replicas:
+        control = ServiceControl(
+            state=workloads.service_state(service, replicas),
+            deploy_hint=service.deploy_hint,
+            stop_effect=service.stop_effect,
+        )
+    return dataclasses.replace(component, status=status, detail=detail, pod=info, control=control)
+
+
+def _cluster_state() -> tuple[dict[str, PodInfo], dict[str, Replicas]]:
+    """Pods and workload replicas from the Kubernetes API — each independently best-effort."""
+    try:
+        pods = list_pods_by_app()
+    except Exception:
+        pods = {}
+    try:
+        replicas = workloads.list_replicas()
+    except Exception:
+        replicas = {}
+    return pods, replicas
 
 
 async def collect(targets: tuple[Target, ...] = TARGETS) -> PlatformStatus:
-    """Probe every target concurrently and (in-cluster) enrich with pod state."""
+    """Probe every target concurrently and (in-cluster) enrich with pod/replica state."""
     async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_SECONDS, follow_redirects=False) as client:
         components = list(await asyncio.gather(*(probe(client, t) for t in targets)))
 
     in_cluster = k8s_jobs.in_cluster_config_available()
     if in_cluster:
-        try:
-            pods = await asyncio.to_thread(list_pods_by_app)
-        except Exception:
-            pods = {}
-        components = [_merge_pod(c, t, pods) for c, t in zip(components, targets, strict=True)]
+        pods, replicas = await asyncio.to_thread(_cluster_state)
+        components = [_merge_cluster_state(c, t, pods, replicas) for c, t in zip(components, targets, strict=True)]
 
     return PlatformStatus(checked_at=datetime.now(UTC).isoformat(), in_cluster=in_cluster, components=components)
+
+
+def get_target(name: str) -> Target | None:
+    """The TARGETS entry called `name`, if any."""
+    return next((t for t in TARGETS if t.name == name), None)
+
+
+@dataclass(frozen=True)
+class PingResult:
+    """One on-demand probe of a single component."""
+
+    ok: bool
+    latency_ms: int | None
+    detail: str
+
+
+async def ping(target: Target, count: int = PING_COUNT) -> list[PingResult]:
+    """Probe one component `count` times in a row over one connection pool — the first
+    reply pays for the TCP (and DNS) setup, the rest show the component's own latency.
+    """
+    results = []
+    async with httpx.AsyncClient(timeout=PROBE_TIMEOUT_SECONDS, follow_redirects=False) as client:
+        for _ in range(count):
+            reply = await probe(client, target)
+            results.append(PingResult(ok=reply.status == "up", latency_ms=reply.latency_ms, detail=reply.detail))
+    return results

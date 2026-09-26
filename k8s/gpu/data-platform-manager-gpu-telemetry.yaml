@@ -1,0 +1,22 @@
+# GPU clusters only — strategic-merge patch for k8s/base/data-platform-manager.yaml, applied
+# by `make k3s-up` (target k3s-gpu-telemetry) whenever the cluster has the `nvidia`
+# RuntimeClass (infra/k3s-gpu/). Gives the admin Platform → Monitor tab its GPU tiles.
+#
+# Read-only GPU access WITHOUT requesting `nvidia.com/gpu`: a request would take the single
+# GPU away from the dl-training Jobs. With the `nvidia` runtime, NVIDIA_VISIBLE_DEVICES=all
+# exposes the device, and NVIDIA_DRIVER_CAPABILITIES=utility mounts only the driver's
+# monitoring library (NVML) + nvidia-smi — no CUDA, so this pod can read utilization,
+# memory, temperature and power (core/resources.py) but never compute on the GPU.
+#
+# Not part of k8s/base: on a CPU-only cluster the RuntimeClass doesn't exist and the pod
+# would be rejected. A `kubectl patch` (not an overlay) so that re-applying k8s/base keeps
+# it — fields a patch added are outside apply's last-applied-configuration.
+spec:
+  template:
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: data-platform-manager
+          env:
+            - {name: NVIDIA_VISIBLE_DEVICES, value: all}
+            - {name: NVIDIA_DRIVER_CAPABILITIES, value: utility}

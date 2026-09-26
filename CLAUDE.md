@@ -112,7 +112,9 @@ SeaweedFS credentials, ClickHouse low-memory config, MLflow image, k3s GPU node)
 **Observability (admin-only)**, all reachable from ui-react's admin **Platform** view: the health
 dashboard (`data-platform-manager` `GET /platform/status`, `core/platform_status.py` — a
 hand-synced list of every component; add a row for any new container, `tests/test_platform_status.py`
-pins the names); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
+pins the names; Start/Stop only for `core/workloads.py`'s `OPTIONAL_SERVICES`, whose workloads
+must equal the Role's `resourceNames` — `tests/test_workloads.py`); the resource monitor
+(`GET /platform/resources`, `core/resources.py`: metrics-server + NVML via `k8s/gpu/`'s patch); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
 never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_request_metadata`);
 **MLflow** for ML (`training`'s `core/mlflow_tracking.py`, must never fail the job).
 
@@ -121,7 +123,8 @@ never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_requ
 dependencies out of the entry chunk. The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
-provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Capabilities). Voice
+provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
+Deep Learning). Voice
 mode talks to `agui-voice` over a plain WebSocket.
 
 ## Conventions for new or changed code
