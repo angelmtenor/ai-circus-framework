@@ -157,10 +157,12 @@ Only the visible tab is mounted, so each tab's poll stops while you're on anothe
 ### Themes
 
 The whole app is skinned from one `Theme` object (colors + a logo, see `ui-react/src/themes/`) —
-switching themes in **Settings → Appearance** is instant, no rebuild. Four ship today: **Tron**
+switching themes in **Settings → Appearance** is instant, no rebuild. Three ship today: **Tron**
 (the neon dark default), **White Tron** (the same blue/cyan branding on flat, light,
-corporate-friendly surfaces), **White Green**, and **AI Liquid Core by Getronics** — adding one is
-a new entry in that folder, nothing else.
+corporate-friendly surfaces) and **White Green** — adding one is a new entry in that folder,
+nothing else. A fork can also keep its own themes out of git: any `demo/themes/<name>/theme.json`
+(untracked) is merged into the picker at build time (`ui-react/vite-plugins/demo-themes.ts`) —
+e.g. the **Lime Slate** theme in the Settings screenshot above.
 
 ### Conversational assistant
 
