@@ -80,9 +80,21 @@ class DatasetSample:
     total_rows: int
 
 
-def sample_rows(df: pd.DataFrame, columns: list[str], limit: int) -> DatasetSample:
+def sample_rows(
+    df: pd.DataFrame,
+    columns: list[str],
+    limit: int,
+    *,
+    id_column: str | None = None,
+    display_columns: list[str] | None = None,
+) -> DatasetSample:
     """Return up to `limit` evenly-spaced rows (so a small sample still spans the
     whole dataset rather than just its head) restricted to `columns`.
+
+    `id_column` (the scenario's `index_col`, stored as the parquet's index) and any
+    `display_columns` lead every row, so a user can always tell *which* record they
+    are looking at. Both are optional per row set: a dataset normalized before a
+    display column existed simply omits it rather than failing the request.
     """
     total_rows = len(df)
     if total_rows <= limit:
@@ -90,6 +102,10 @@ def sample_rows(df: pd.DataFrame, columns: list[str], limit: int) -> DatasetSamp
     else:
         idx = np.linspace(0, total_rows - 1, limit, dtype=int)
         sampled = df.iloc[idx]
+    if id_column is not None and id_column not in sampled.columns and sampled.index.name == id_column:
+        sampled = sampled.reset_index()
+    leading = [c for c in [id_column, *(display_columns or [])] if c is not None and c in sampled.columns]
+    columns = [*leading, *(c for c in columns if c not in leading)]
     subset = sampled.loc[:, columns]
     rows = [
         {k: (v.item() if isinstance(v, np.generic) else v) for k, v in row.items()}

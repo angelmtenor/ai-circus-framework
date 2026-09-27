@@ -48,15 +48,22 @@ def load_raw(store: ObjectStore, org_id: str, dataset: TabularDataset) -> pd.Dat
 
 
 def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
-    """Select feature/target columns, drop protected columns, dedupe, and cast dtypes.
+    """Select id/display/feature/target columns, drop protected columns, dedupe, and
+    cast dtypes.
 
     Deliberately generic (not hardcoded to any one scenario's column names) so this
     same logic serves any future tabular_ml scenario: numeric columns keep their
     inferred dtype, non-numeric feature columns become `category`.
+
+    The row id (`index_col`, kept as the DataFrame index) is part of the dedupe key:
+    two *different* records that merely share every feature value (e.g. two 3rd-class
+    22-year-old men on the same fare) are real, distinct rows — only an exact repeat of
+    the same record is a duplicate. `display_columns` (e.g. a name) ride along for the
+    UI and are never selected as model inputs (training reads `feature_columns` only).
     """
-    columns = [*dataset.feature_columns, dataset.target]
+    columns = [*dataset.display_columns, *dataset.feature_columns, dataset.target]
     selected = df.loc[:, columns]
-    df = selected.drop_duplicates().dropna()
+    df = selected[~selected.reset_index().duplicated().to_numpy()].dropna()
 
     if len(df) > MAX_DATASET_ROWS:
         # Evenly-spaced, not a head/tail slice or random sample — keeps the row cap

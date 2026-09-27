@@ -13,7 +13,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from prediction.core.dataset import DatasetNotAvailableError, evaluate, load_normalized
+from prediction.core.dataset import DatasetNotAvailableError, evaluate, load_normalized, sample_rows
 from prediction.core.model_cache import ModelArtifacts
 
 
@@ -146,3 +146,23 @@ def test_evaluate_feature_values_respects_limit(regression_artifacts: ModelArtif
     assert len(result.actuals) == 10
     for column in result.feature_values.values():
         assert len(column) == 10
+
+
+def test_sample_rows_leads_with_the_id_and_display_columns() -> None:
+    """The row id (stored as the parquet index) and display columns come first, so a
+    user can always tell which record a row is.
+    """
+    df = pd.DataFrame(
+        {"Name": ["Ann", "Bob"], "Age": [30, 40], "Survived": [1, 0]},
+        index=pd.Index([7, 9], name="PassengerId"),
+    )
+    sample = sample_rows(df, ["Age", "Survived"], 10, id_column="PassengerId", display_columns=["Name"])
+    assert sample.columns == ["PassengerId", "Name", "Age", "Survived"]
+    assert sample.rows[0] == {"PassengerId": 7, "Name": "Ann", "Age": 30, "Survived": 1}
+
+
+def test_sample_rows_tolerates_a_dataset_without_the_display_column() -> None:
+    """A dataset normalized before a display column existed still samples fine."""
+    df = pd.DataFrame({"Age": [30]}, index=pd.Index(["a"], name="row_id"))
+    sample = sample_rows(df, ["Age"], 10, id_column="row_id", display_columns=["Name"])
+    assert sample.columns == ["row_id", "Age"]

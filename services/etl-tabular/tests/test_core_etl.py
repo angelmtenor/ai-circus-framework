@@ -211,3 +211,36 @@ def test_run_etl_end_to_end(scenario_dir: Path) -> None:
     restored = pd.read_parquet(io.BytesIO(store.get("org-1", "processed/normalized.parquet")))
     assert list(restored.columns) == ["CreditScore", "Geography", "Age", "Exited"]
     assert len(restored) == 2
+
+
+def test_clean_keeps_distinct_ids_that_share_every_feature_value() -> None:
+    """Two different records (ids 1 and 2) with identical features are both real rows
+    — only a repeat of the same id+values is a duplicate (see clean()'s docstring).
+    """
+    raw = pd.read_csv(
+        io.StringIO(
+            "CustomerId,CreditScore,Geography,Gender,Age,Exited\n"
+            "1,600,France,Female,40,0\n"
+            "2,600,France,Male,40,0\n"
+            "2,600,France,Male,40,0\n"
+        ),
+        index_col="CustomerId",
+    )
+    cleaned = clean(raw, DATASET)
+    assert list(cleaned.index) == [1, 2]
+
+
+def test_clean_carries_display_columns_but_not_protected_ones() -> None:
+    """display_columns ride along for the UI; protected columns are still dropped."""
+    dataset = DATASET.model_copy(update={"display_columns": ["Surname"]})
+    raw = pd.read_csv(
+        io.StringIO(
+            "CustomerId,Surname,CreditScore,Geography,Gender,Age,Exited\n"
+            "1,Smith,600,France,Female,40,0\n"
+            "2,Jones,650,Spain,Male,35,1\n"
+        ),
+        index_col="CustomerId",
+    )
+    cleaned = clean(raw, dataset)
+    assert list(cleaned.columns) == ["Surname", "CreditScore", "Geography", "Age", "Exited"]
+    assert list(cleaned["Surname"]) == ["Smith", "Jones"]

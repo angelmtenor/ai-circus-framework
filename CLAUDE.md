@@ -76,7 +76,8 @@ one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, …). `scenario.yaml` is otherwise read only by `platform-registry` and, as
+`process_optimizer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 
 **Tenancy & entitlements.** `platform-registry` owns tenants/scenarios/entitlements in Postgres;

@@ -94,6 +94,12 @@ def log_training_run(
             for candidate in candidates:
                 mlflow.log_metric(f"test_score.{candidate.name}", candidate.test_score)
             mlflow.log_metric("test_score", selected.test_score)
+            # Per-candidate hold-out/CV metrics (ROC AUC, CV means…) when training recorded them.
+            for entry in metadata.get("candidate_scores") or []:
+                for metric, value in entry["metrics"].items():
+                    mlflow.log_metric(f"{metric}.{entry['name']}", value)
+            for metric, value in (metadata.get("metrics") or {}).items():
+                mlflow.log_metric(metric, value)
             mlflow.log_dict(metadata, "metadata.json")
         logger.success("Run mirrored to MLflow ({}) for scenario={} org={}", tracking_uri, scenario_slug, org_id)
     except Exception:

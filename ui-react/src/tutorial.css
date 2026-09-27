@@ -1,0 +1,391 @@
+/* TutorialView (scenario.tutorial) — theme-driven: only the app's CSS variables, plus
+   the validated survival pair (#3f93eb / #ea4f58) shared with voyage.css. */
+
+.tut {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .tut {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tut-rail {
+  position: sticky;
+  top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.tut-rail-item {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tut-rail-item:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.tut-rail-item.active {
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.tut-rail-item.done {
+  color: var(--text);
+}
+
+.tut-rail-num {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  font-size: 0.7rem;
+}
+
+.tut-rail-item.active .tut-rail-num,
+.tut-rail-item.done .tut-rail-num {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tut-progress {
+  height: 4px;
+  margin-top: 0.5rem;
+  border-radius: 2px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.tut-progress div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.tut-main {
+  scroll-margin-top: 1rem;
+  min-width: 0;
+}
+
+.tut-hero {
+  text-align: left;
+}
+
+.tut-hero .kpi-row {
+  margin-top: 1rem;
+}
+
+.tut-hero-icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.tut-hero h2,
+.tut-step h2 {
+  margin: 0.4rem 0 0.6rem;
+}
+
+.tut-hero-actions,
+.tut-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+}
+
+.tut-nav {
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.tut-step-kicker {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.tut-prose {
+  max-width: 52rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.tut-prose table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 0.82rem;
+}
+
+.tut-prose th,
+.tut-prose td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tut-takeaway {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  max-width: 52rem;
+  margin: 1rem 0;
+  padding: 0.75rem 0.9rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--accent-bg);
+  color: var(--text-h);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.tut-takeaway svg {
+  flex-shrink: 0;
+  color: var(--accent);
+  margin-top: 0.15rem;
+}
+
+.tut-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.tut-chart {
+  margin: 0;
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.tut-chart figcaption {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 0.2rem;
+}
+
+.tut-widget {
+  margin-top: 1.1rem;
+}
+
+.tut-widget h4 {
+  margin: 0 0 0.5rem;
+}
+
+.tut-balance {
+  display: flex;
+  gap: 2px;
+  height: 2.2rem;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tut-balance > div {
+  display: flex;
+  align-items: center;
+  padding: 0 0.7rem;
+  white-space: nowrap;
+}
+
+.tut-balance-neg {
+  background: #ea4f58;
+}
+
+.tut-balance-pos {
+  background: #3f93eb;
+}
+
+.tut-leaderboard tr.tut-winner td {
+  background: var(--accent-bg);
+}
+
+.tut-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.tut-roc-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.tut-roc-body p {
+  flex: 1 1 16rem;
+  max-width: 26rem;
+}
+
+.tut-roc svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.tut-grid {
+  stroke: var(--border);
+  stroke-width: 0.6;
+}
+
+.tut-diagonal {
+  stroke: var(--dim);
+  stroke-dasharray: 4 4;
+}
+
+.tut-roc-area {
+  fill: #3f93eb;
+  opacity: 0.16;
+}
+
+.tut-roc-line {
+  fill: none;
+  stroke: #3f93eb;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.tut-roc-auc {
+  fill: var(--text-h);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.tut-tick {
+  fill: var(--dim);
+  font-size: 9px;
+}
+
+.tut-axis {
+  fill: var(--dim);
+  font-size: 10px;
+}
+
+.tut-cm {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 2px;
+  max-width: 30rem;
+  margin-bottom: 0.8rem;
+}
+
+.tut-cm-head,
+.tut-cm-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+
+.tut-cm-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.8rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.tut-cm-cell strong {
+  font-size: 1.6rem;
+  color: var(--text-h);
+}
+
+.tut-cm-cell--ok {
+  background: color-mix(in srgb, #3f93eb 18%, transparent);
+}
+
+.tut-cm-cell--err {
+  background: color-mix(in srgb, #ea4f58 16%, transparent);
+  border: 1px dashed color-mix(in srgb, #ea4f58 60%, transparent);
+}
+
+.tut-examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.6rem;
+}
+
+.tut-example {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.tut-example-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.tut-example-prob {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.tut-example-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.tut-example-meter div {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.tut-example ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+}
+
+.tut-up {
+  color: #3f93eb;
+  font-weight: 600;
+}
+
+.tut-down {
+  color: #ea4f58;
+  font-weight: 600;
+}

@@ -112,8 +112,8 @@ class ScenarioSummary(BaseModel):
     title: str
     description: str
     icon: str
-    # Industry taxonomy slug (see scenario_schema.Industry) — powers ui-react's
-    # industry filter atop the scenario picker, orthogonal to `kind`.
+    # Domain taxonomy slug (see scenario_schema.Industry — industries plus `tutorial`
+    # / `society_ethics`) — powers ui-react's Domain filter, orthogonal to `kind`.
     industry: str
     # Attribution for a ported public dataset (see scenario_schema.DatasetCredits) —
     # None for scenarios whose content is original.
@@ -148,6 +148,9 @@ class ScenarioSummary(BaseModel):
     # ui-react's generic DeepLearningView (see scenario_schema.DeepLearningConfig);
     # a plain dict for the same reason as `form` above.
     deep_learning: dict[str, Any] | None = None
+    # tabular_ml only — a guided Tutorial tab (see scenario_schema.TutorialConfig); a
+    # plain dict for the same reason as `form` above.
+    tutorial: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

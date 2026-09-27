@@ -103,6 +103,8 @@ function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; 
 }
 
 type RankedRow = {
+  // The source row's id/display columns (see DatasetSample) — who this prediction is for.
+  identity: Record<string, string | number | boolean | null>;
   record: Record_;
   prediction: number;
   prediction_lower: number | null;
@@ -127,6 +129,8 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     value: ranked ? ranked.slice(0, 20).map((r) => ({ ...r.record, prediction: r.prediction, top_feature: r.top?.label })) : null,
   });
 
+  const identityColumns = sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : [];
+
   async function load() {
     setError(null);
     try {
@@ -140,13 +144,15 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     setLoading(true);
     setError(null);
     try {
-      const records = filtered.slice(0, BATCH_PREDICT_CAP).map((row) => {
+      const batch = filtered.slice(0, BATCH_PREDICT_CAP);
+      const records = batch.map((row) => {
         const record: Record_ = {};
         for (const f of featureColumns) record[f] = row[f] as number | string;
         return record;
       });
       const response = await predict(config.predictionUrl, scenario.slug, records, accessToken);
       const rows: RankedRow[] = response.predictions.map((p, i) => ({
+        identity: Object.fromEntries(identityColumns.map((c) => [c, batch[i][c] ?? null])),
         record: records[i],
         prediction: p.prediction,
         prediction_lower: p.prediction_lower,
@@ -182,7 +188,14 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     <div className="tab-panel">
       <div className="panel-card">
         <h3>Query</h3>
-        <DatasetFilterPanel featureColumns={featureColumns} featureSchema={featureSchema} rows={sample.rows} onFilteredChange={setFiltered} />
+        <DatasetFilterPanel
+          featureColumns={featureColumns}
+          featureSchema={featureSchema}
+          rows={sample.rows}
+          onFilteredChange={setFiltered}
+          labelFor={(f) => featureLabel(scenario, f)}
+          searchColumns={identityColumns}
+        />
         <button className="btn-primary" onClick={runBatch} disabled={loading || filtered.length === 0} style={{ marginTop: "0.6rem" }}>
           {loading ? "Running…" : `Predict on ${Math.min(filtered.length, BATCH_PREDICT_CAP)} rows`}
         </button>
@@ -198,6 +211,9 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
               <thead>
                 <tr>
                   <th>#</th>
+                  {identityColumns.map((c) => (
+                    <th key={c}>{c}</th>
+                  ))}
                   {featureColumns.map((f) => (
                     <th key={f}>{featureLabel(scenario, f)}</th>
                   ))}
@@ -210,6 +226,11 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
                 {ranked.map((row, i) => (
                   <tr key={i}>
                     <td>{i + 1}</td>
+                    {identityColumns.map((c) => (
+                      <td key={c} className="data-table-id">
+                        {String(row.identity[c] ?? "—")}
+                      </td>
+                    ))}
                     {featureColumns.map((f) => (
                       <td key={f}>{String(row.record[f])}</td>
                     ))}

@@ -158,6 +158,7 @@ function buildBox(
       layout: { yaxis: { title: { text: labelFor(cfg.y) } } },
     };
   }
+  const categories = [...new Set(filtered.map((r) => String(r[cfg.x])))].sort(naturalCompare);
   return {
     data: [
       {
@@ -167,7 +168,10 @@ function buildBox(
         marker: { color: palette[0] },
       },
     ],
-    layout: { xaxis: { title: { text: labelFor(cfg.x) } }, yaxis: { title: { text: labelFor(cfg.y) } } },
+    layout: {
+      xaxis: { title: { text: labelFor(cfg.x) }, categoryorder: "array", categoryarray: categories },
+      yaxis: { title: { text: labelFor(cfg.y) } },
+    },
   };
 }
 
@@ -266,6 +270,13 @@ function buildLine(
   };
 }
 
+/** Numeric-aware ordering for category axes ("2" < "10", "1st" < "2nd" < "3rd") —
+ * otherwise bars/boxes appear in whatever order the sampled rows happened to list
+ * them, which reads as noise (e.g. "3rd, 1st, 2nd", or hours 7, 0, 13, …). */
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
 function bucketValues(rows: DatasetRow[], x: string, y: string): Map<string, number[]> {
   const buckets = new Map<string, number[]>();
   for (const r of rows) {
@@ -292,7 +303,7 @@ function buildBar(
   const groups = splitByColor(rows, cfg.colorBy);
   const data = groups.map((g, i) => {
     const buckets = bucketValues(g.rows, cfg.x, cfg.y);
-    const categories = [...buckets.keys()];
+    const categories = [...buckets.keys()].sort(naturalCompare);
     const values = categories.map((c) => (cfg.y ? aggregate(buckets.get(c)!, cfg.agg) : buckets.get(c)!.length));
     return { type: "bar", x: categories, y: values, name: g.key || labelFor(cfg.x), marker: { color: palette[i % palette.length] } };
   });
@@ -338,11 +349,31 @@ function buildHeatmap(rows: DatasetRow[], cfg: ChartCardConfig, labelFor: LabelF
   };
 }
 
+/** Friendly legend names for `colorBy` groups (e.g. the target's "0"/"1" ->
+ * "Perished"/"Survived") — applied to trace names only; the row values (and so every
+ * aggregation over them) stay raw. */
+export type ValueLabelFor = (column: string, value: string) => string;
+
 export function buildChart(
   rows: DatasetRow[],
   cfg: ChartCardConfig,
   palette: string[],
   labelFor: LabelFor = identityLabel,
+  valueLabelFor?: ValueLabelFor,
+): { data: PlotlyDatum[]; layout: PlotlyLayout } {
+  const chart = buildChartRaw(rows, cfg, palette, labelFor);
+  if (!valueLabelFor || !cfg.colorBy || cfg.type === "heatmap" || cfg.type === "pie") return chart;
+  return {
+    ...chart,
+    data: chart.data.map((trace) => (typeof trace.name === "string" && trace.name !== "points" ? { ...trace, name: valueLabelFor(cfg.colorBy, trace.name) } : trace)),
+  };
+}
+
+function buildChartRaw(
+  rows: DatasetRow[],
+  cfg: ChartCardConfig,
+  palette: string[],
+  labelFor: LabelFor,
 ): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   switch (cfg.type) {
     case "histogram":

@@ -46,7 +46,8 @@ on the backend, so nothing is a security bypass, just a different way in.
 
 Every scenario a tenant is entitled to, rendered generically from `scenarios/*/scenario.yaml` —
 no per-scenario UI code — grouped by kind (**Machine Learning**, **Conversational Assistant**,
-**Assisted Forms**) with an industry filter. Tabular ML cards show their task type
+**Assisted Forms**) with a **Domain** filter — the industries, plus the learning/society domains
+**Tutorials** and **Society & Ethics**. Tabular ML cards show their task type
 (classification/regression); the full catalog is in the [table below](#scenario-catalog).
 
 <p align="center"><img src="docs/screenshots/scenario-gallery.png" alt="Scenario gallery — every scenario of every kind the admin tenant is entitled to" width="850"></p>
@@ -188,6 +189,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
+| **Titanic Survival — ML Tutorial** (`titanic`) | `tabular_ml` — classification, domain `tutorial` | Passenger survival probability — a guided **Tutorial** tab (every step of the ML workflow, live charts/metrics/SHAP) and a **Voyage** tab (all 891 passengers aboard an illustrated ship, filterable, SHAP-explained, what-if) · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.88 | Kaggle — Titanic (via angelmtenor/data-science-keras) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
@@ -219,6 +221,20 @@ rework cost, Taylor tool life), recommends the recipe that maximizes profit rate
 predicted Ra stays inside a selectable ISO 1302 grade, and lets you apply it — or run a simulated
 live line where the tool wears with real cutting time and an auto-pilot re-optimizes or changes the
 tool as the model's own predicted roughness drifts, side by side with a static-recipe baseline.
+`titanic`'s "Voyage" tab (`voyage_explorer`) berths every real passenger on an illustrated ocean
+liner, coloured by the model's survival probability, with a bow-to-stern "reveal the real fate"
+sweep, cohort filters, name search, a SHAP waterfall per passenger and a live what-if builder.
+
+**A scenario can also carry a guided Tutorial tab** (`tutorial:` in `scenario.yaml`, tabular_ml):
+markdown chapters with live charts and data-backed widgets — dataset preview, class balance, the
+training leaderboard, the leakage-free hold-out ROC curve and confusion matrix (from
+`GET /model/{slug}/card`, recorded by `training` *before* the final refit), global SHAP, and worked
+examples scored by `/predict`. `model.cv_folds`/`model.selection_metric` make `training` rank
+candidates by k-fold cross-validated ROC AUC (or accuracy/R²) instead of one hold-out.
+
+Every dataset view shows each row's **identity first** — the scenario's `index_col` (e.g.
+`CustomerId`), plus any `dataset.display_columns` such as a passenger's name — and it is searchable;
+neither is ever a model input.
 
 ---
 

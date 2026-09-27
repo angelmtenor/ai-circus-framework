@@ -396,7 +396,17 @@ select:focus {
   color: var(--dim);
 }
 
+.scenario-chip--domain {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+}
+
+.scenario-card-footer {
+  gap: 0.35rem;
+}
+
 .scenario-card-open {
+  margin-left: auto;
   color: var(--accent);
   font-size: 0.85rem;
   font-weight: 600;
@@ -1050,6 +1060,12 @@ select:focus {
   background: var(--panel-2);
 }
 
+/* The record's identity (id column + display columns such as a name) — always first. */
+.data-table td.data-table-id {
+  font-family: var(--mono);
+  color: var(--text-h);
+}
+
 /* ── Chat panel ────────────────────────────────────────────────────────────── */
 
 .chat-panel {
@@ -1596,6 +1612,10 @@ select:focus {
 
 .filter-row-range input[type="number"] {
   width: 6rem;
+}
+
+.filter-row-search {
+  max-width: 22rem;
 }
 
 .filter-row-bounds {

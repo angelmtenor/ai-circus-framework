@@ -87,6 +87,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.form = definition.form.model_dump() if definition.form is not None else None
         existing.ui_extras = definition.ui_extras.model_dump() if definition.ui_extras is not None else None
         existing.deep_learning = definition.deep_learning.model_dump() if definition.deep_learning is not None else None
+        existing.tutorial = definition.tutorial.model_dump() if definition.tutorial is not None else None
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.

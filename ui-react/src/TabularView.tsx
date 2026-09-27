@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import type { ChatModel, ScenarioSummary, UiExtras } from "./apiClient";
 import { config } from "./config";
@@ -16,7 +16,12 @@ import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
-type Tab = "scenario" | "data" | "predict" | "explore" | "extra";
+// Only the scenarios that opt in (today: titanic) ever load these two — own chunks, so
+// no other workspace pays for the ship illustration or the tutorial widgets.
+const VoyageView = lazy(() => import("./VoyageView").then((m) => ({ default: m.VoyageView })));
+const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
+
+type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
 
 // Tab chrome per ui_extras kind — the renderer itself is picked below. Partial: the
 // deep_learning-only kinds (triage_board, reading_room) never reach a tabular scenario
@@ -25,7 +30,12 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   region_map: { icon: "map", label: "Regional Map" },
   live_plant: { icon: "factory", label: "Live Plant" },
   process_optimizer: { icon: "sparkle", label: "Optimizer" },
+  voyage_explorer: { icon: "ship", label: "Voyage" },
 };
+
+function extraTabLabel(extras: UiExtras): string | undefined {
+  return extras.kind === "voyage_explorer" ? extras.tab_label : EXTRA_TABS[extras.kind]?.label;
+}
 
 /**
  * Generic tabular_ml workspace, driven entirely by the scenario's feature_columns/
@@ -81,7 +91,8 @@ function TabularViewContent({
   conversation: ReturnType<typeof useConversation>;
 }) {
   useChatGenerativeUiActions();
-  const [tab, setTab] = useState<Tab>("scenario");
+  // A tutorial scenario opens on its tutorial — that *is* the scenario's front page.
+  const [tab, setTab] = useState<Tab>(scenario.tutorial ? "tutorial" : "scenario");
   const extraTab = scenario.ui_extras ? EXTRA_TABS[scenario.ui_extras.kind] : undefined;
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
@@ -94,6 +105,11 @@ function TabularViewContent({
         <button className={tab === "scenario" ? "active" : ""} onClick={() => setTab("scenario")}>
           <Icon name="book" /> Scenario
         </button>
+        {scenario.tutorial && (
+          <button className={tab === "tutorial" ? "active" : ""} onClick={() => setTab("tutorial")}>
+            <Icon name="cap" /> {scenario.tutorial.tab_label}
+          </button>
+        )}
         <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>
           <Icon name="data" /> Data & BI
         </button>
@@ -106,7 +122,7 @@ function TabularViewContent({
         {extraTab && (
           <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
             <Icon name={extraTab.icon} />
-            {extraTab.label}
+            {extraTabLabel(scenario.ui_extras!)}
           </button>
         )}
       </div>
@@ -122,6 +138,12 @@ function TabularViewContent({
       {tab === "extra" && scenario.ui_extras?.kind === "region_map" && <RegionMapView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "live_plant" && <LivePlantView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "process_optimizer" && <ProcessOptimizerView scenario={scenario} accessToken={accessToken} />}
+      <Suspense fallback={<div className="app-loading">Loading…</div>}>
+        {tab === "tutorial" && scenario.tutorial && (
+          <TutorialView scenario={scenario} accessToken={accessToken} onOpenExtra={extraTab ? () => setTab("extra") : undefined} />
+        )}
+        {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
+      </Suspense>
 
       {chatOpen && (
         <div className="chat-dock-overlay" onClick={() => setChatOpen(false)}>

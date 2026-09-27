@@ -28,6 +28,8 @@ const PATHS: Record<string, string> = {
   map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-14v14",
   factory: "M3 21V10l5 3.5V10l5 3.5V10l5 3.5V21H3Zm3-4h2m4 0h2m4 0h2M7 21v-3M3 10l3-2 3 2M17 6V3h3v5",
   sparkle: "M12 3l1.9 5.6L19.5 10.5l-5.6 1.9L12 18l-1.9-5.6L4.5 10.5l5.6-1.9L12 3Zm7 11l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z",
+  ship: "M3 14h18l-2.6 5H5.6L3 14Zm3 0v-4h12v4M9 10V6h2.5v4M13.5 10V7H16v3M2 21.5c1.7 0 1.7-1 3.3-1s1.7 1 3.4 1 1.6-1 3.3-1 1.7 1 3.3 1 1.7-1 3.4-1 1.6 1 2.3 1",
+  cap: "M2 9l10-5 10 5-10 5L2 9Zm4 2.2V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.8M22 9v6",
 };
 
 export type IconName = keyof typeof PATHS;

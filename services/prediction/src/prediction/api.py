@@ -57,11 +57,16 @@ class PredictResponse(BaseModel):
 
 
 class DatasetSampleOut(BaseModel):
-    """Response body for GET /dataset/{scenario_slug}/sample."""
+    """Response body for GET /dataset/{scenario_slug}/sample. `columns` starts with
+    `id_column` (the scenario's row identifier) and then `display_columns` (e.g. a
+    name) when the dataset has them — never model inputs, always shown first.
+    """
 
     columns: list[str]
     rows: list[dict[str, object]]
     total_rows: int
+    id_column: str | None = None
+    display_columns: list[str] = []
 
 
 class FeatureImportanceOut(BaseModel):
@@ -69,6 +74,54 @@ class FeatureImportanceOut(BaseModel):
 
     feature: str
     importance: float
+
+
+class CandidateScoreOut(BaseModel):
+    """One training candidate's selection score and every metric recorded for it."""
+
+    name: str
+    selection_score: float
+    metrics: dict[str, float]
+
+
+class RocCurveOut(BaseModel):
+    """ROC curve points (false-positive rate vs true-positive rate)."""
+
+    fpr: list[float]
+    tpr: list[float]
+
+
+class HoldoutEvaluationOut(BaseModel):
+    """The selected classifier on the untouched hold-out, scored before the final
+    refit — see training's core/training.py holdout_evaluation().
+    """
+
+    n: int
+    threshold: float
+    positive_rate: float
+    roc_curve: RocCurveOut
+    confusion_matrix: dict[str, int]
+
+
+class ModelCardOut(BaseModel):
+    """Response body for GET /model/{scenario_slug}/card — how the deployed model was
+    chosen and how it scores on data it never saw (from training's metadata.json).
+    Fields added after a model was trained are None/empty until it is retrained.
+    """
+
+    model_name: str
+    task_type: str
+    target: str
+    test_score: float
+    selection_metric: str | None = None
+    cv_folds: int | None = None
+    accuracy_gain_threshold_for_complexity: float | None = None
+    candidates: list[CandidateScoreOut] = []
+    metrics: dict[str, float] = {}
+    holdout_evaluation: HoldoutEvaluationOut | None = None
+    global_feature_importance: list[FeatureImportanceOut] = []
+    training_rows: int | None = None
+    holdout_rows: int | None = None
 
 
 class BreakdownItemOut(BaseModel):
@@ -181,8 +234,49 @@ def dataset_sample_endpoint(
     assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
     df = model_cache.dataset(identity.org_id, definition.slug)
     columns = [*definition.dataset.feature_columns, definition.dataset.target]
-    sample = dataset_core.sample_rows(df, columns, limit)
-    return DatasetSampleOut(columns=sample.columns, rows=sample.rows, total_rows=sample.total_rows)
+    sample = dataset_core.sample_rows(
+        df,
+        columns,
+        limit,
+        id_column=definition.dataset.index_col,
+        display_columns=definition.dataset.display_columns,
+    )
+    id_column = definition.dataset.index_col if definition.dataset.index_col in sample.columns else None
+    return DatasetSampleOut(
+        columns=sample.columns,
+        rows=sample.rows,
+        total_rows=sample.total_rows,
+        id_column=id_column,
+        display_columns=[c for c in definition.dataset.display_columns if c in sample.columns],
+    )
+
+
+@router.get("/model/{scenario_slug}/card", response_model=ModelCardOut)
+def model_card_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> ModelCardOut:
+    """The caller's deployed model card: candidates, selection protocol, leakage-free
+    hold-out metrics/ROC/confusion matrix, and global SHAP importance.
+    """
+    assert identity.org_id is not None
+    metadata = model_cache.get(identity.org_id, definition.slug).metadata
+    return ModelCardOut(
+        model_name=metadata["model_name"],
+        task_type=metadata["task_type"],
+        target=metadata["target"],
+        test_score=metadata["test_score"],
+        selection_metric=metadata.get("selection_metric"),
+        cv_folds=metadata.get("cv_folds"),
+        accuracy_gain_threshold_for_complexity=metadata.get("accuracy_gain_threshold_for_complexity"),
+        candidates=[CandidateScoreOut(**c) for c in metadata.get("candidate_scores") or []],
+        metrics=metadata.get("metrics") or {},
+        holdout_evaluation=metadata.get("holdout_evaluation"),
+        global_feature_importance=[FeatureImportanceOut(**f) for f in metadata.get("global_feature_importance") or []],
+        training_rows=metadata.get("training_rows"),
+        holdout_rows=metadata.get("holdout_rows"),
+    )
 
 
 @router.get("/dataset/{scenario_slug}/evaluation", response_model=DatasetEvaluationOut)

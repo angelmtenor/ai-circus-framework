@@ -160,7 +160,48 @@ export type ReadingRoomExtra = {
   arrival_minutes: number;
   worklist_size: number;
 };
-export type UiExtras = RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | TriageBoardExtra | ReadingRoomExtra;
+// Mirrors scenario_schema.py's ExampleRecord — a named, complete feature record.
+export type ExampleRecord = { label: string; description?: string | null; record: Record<string, number | string> };
+export type VoyageZone = { key: string; label: string; description?: string | null };
+export type VoyageExplorerExtra = {
+  kind: "voyage_explorer";
+  scene: "ocean_liner";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  person_noun: string;
+  zone_by: string;
+  zones: VoyageZone[];
+  filters: string[];
+  range_filters: string[];
+  name_column?: string | null;
+  personas: ExampleRecord[];
+};
+export type UiExtras =
+  | RegionMapExtra
+  | LivePlantExtra
+  | ProcessOptimizerExtra
+  | VoyageExplorerExtra
+  | TriageBoardExtra
+  | ReadingRoomExtra;
+
+// Mirrors scenario_schema.py's TutorialConfig — drives TutorialView.tsx.
+export type TutorialWidget =
+  | "dataset_preview"
+  | "class_balance"
+  | "model_card"
+  | "roc_curve"
+  | "confusion_matrix"
+  | "feature_importance"
+  | "examples";
+export type TutorialStep = {
+  title: string;
+  body: string;
+  takeaway?: string | null;
+  charts: ChartSpec[];
+  widgets: TutorialWidget[];
+};
+export type TutorialConfig = { tab_label: string; intro: string; steps: TutorialStep[]; examples: ExampleRecord[] };
 
 // Mirrors scenario_schema.py's DeepLearningConfig (the scenario.yaml `deep_learning`
 // block, as seeded by platform-registry) — drives DeepLearningView.tsx.
@@ -203,8 +244,8 @@ export type ScenarioSummary = {
   title: string;
   description: string;
   icon: string;
-  // Industry taxonomy slug (see scenario_schema.Industry) — drives ScenarioPicker's
-  // industry filter, orthogonal to `kind`.
+  // Domain taxonomy slug (see scenario_schema.Industry — industries plus "tutorial" /
+  // "society_ethics") — drives ScenarioPicker's Domain filter, orthogonal to `kind`.
   industry: string;
   // Attribution for a ported public dataset (see scenario_schema.py's
   // DatasetCredits) — null for scenarios whose content is original.
@@ -236,6 +277,8 @@ export type ScenarioSummary = {
   ui_extras?: UiExtras | null;
   // deep_learning only — see DeepLearningConfig above.
   deep_learning?: DeepLearningConfig | null;
+  // tabular_ml only — a guided Tutorial tab (see TutorialView.tsx).
+  tutorial?: TutorialConfig | null;
 };
 
 export type PredictionResult = {
@@ -248,9 +291,37 @@ export type PredictionResult = {
 };
 
 export type DatasetSample = {
+  // Starts with id_column then display_columns (when the dataset has them) — the
+  // record's identity, shown first everywhere and never a model input.
   columns: string[];
   rows: Record<string, string | number | null>[];
   total_rows: number;
+  id_column?: string | null;
+  display_columns?: string[];
+};
+
+// GET /model/{slug}/card — how the deployed model was chosen, and how it scores on
+// the hold-out it never saw (scored before the final refit, so leakage-free).
+export type ModelCard = {
+  model_name: string;
+  task_type: string;
+  target: string;
+  test_score: number;
+  selection_metric: string | null;
+  cv_folds: number | null;
+  accuracy_gain_threshold_for_complexity: number | null;
+  candidates: { name: string; selection_score: number; metrics: Record<string, number> }[];
+  metrics: Record<string, number>;
+  holdout_evaluation: {
+    n: number;
+    threshold: number;
+    positive_rate: number;
+    roc_curve: { fpr: number[]; tpr: number[] };
+    confusion_matrix: { tn: number; fp: number; fn: number; tp: number };
+  } | null;
+  global_feature_importance: FeatureImportance[];
+  training_rows: number | null;
+  holdout_rows: number | null;
 };
 
 export type FeatureImportance = { feature: string; importance: number };
@@ -375,6 +446,11 @@ export async function datasetSample(
   const response = await fetch(`${baseUrl}/dataset/${scenarioSlug}/sample?limit=${limit}`, {
     headers: headers(accessToken),
   });
+  return asJson(response);
+}
+
+export async function modelCard(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ModelCard> {
+  const response = await fetch(`${baseUrl}/model/${scenarioSlug}/card`, { headers: headers(accessToken) });
   return asJson(response);
 }
 

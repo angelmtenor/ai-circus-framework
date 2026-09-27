@@ -36,6 +36,10 @@ function passesFilter(row: DatasetRow, feature: string, filter: Filter): boolean
  * here; this is the "query the data" piece shared by the Dataset (view/export) and
  * ML Predictions (batch-predict on the filtered rows) sections, so filter behavior
  * stays identical between them.
+ *
+ * `searchColumns` (the record's identity: the dataset's id column plus any display
+ * columns such as a name — see DatasetSample) adds a free-text search box, so a
+ * specific record can be found by who it is rather than only by its feature values.
  */
 export function DatasetFilterPanel({
   featureColumns,
@@ -43,19 +47,26 @@ export function DatasetFilterPanel({
   rows,
   onFilteredChange,
   labelFor = (f) => f,
+  searchColumns = [],
 }: {
   featureColumns: string[];
   featureSchema: Record<string, FeatureSpec>;
   rows: DatasetRow[];
   onFilteredChange: (rows: DatasetRow[]) => void;
   labelFor?: (feature: string) => string;
+  searchColumns?: string[];
 }) {
   const [filters, setFilters] = useState<Record<string, Filter>>(() => initialFilters(featureColumns, featureSchema));
+  const [search, setSearch] = useState("");
 
-  const filteredRows = useMemo(
-    () => rows.filter((row) => featureColumns.every((feature) => passesFilter(row, feature, filters[feature]))),
-    [rows, featureColumns, filters],
-  );
+  const filteredRows = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return rows.filter(
+      (row) =>
+        (!needle || searchColumns.some((c) => String(row[c] ?? "").toLowerCase().includes(needle))) &&
+        featureColumns.every((feature) => passesFilter(row, feature, filters[feature])),
+    );
+  }, [rows, featureColumns, filters, search, searchColumns]);
 
   useEffect(() => {
     onFilteredChange(filteredRows);
@@ -78,6 +89,18 @@ export function DatasetFilterPanel({
 
   return (
     <div className="filter-panel">
+      {searchColumns.length > 0 && (
+        <div className="filter-row">
+          <span className="filter-row-label">Search {searchColumns.map(labelFor).join(" / ")}</span>
+          <input
+            type="search"
+            className="filter-row-search"
+            placeholder={`e.g. an ${labelFor(searchColumns[0])}${searchColumns.length > 1 ? " or a name" : ""}`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
       {featureColumns.map((feature) => {
         const spec = featureSchema[feature];
         const filter = filters[feature];

@@ -1,0 +1,612 @@
+/* VoyageView (voyage_explorer ui_extras) — the scene itself has a fixed night palette
+   (it is an illustration); everything around it uses the theme's CSS variables. */
+
+.voy-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.voy-header > div:first-child {
+  flex: 1 1 22rem;
+}
+
+.voy-header .kpi-row {
+  flex: 1 1 26rem;
+}
+
+.voy-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: var(--dim);
+}
+
+.voy-loading-ship {
+  font-size: 2rem;
+  animation: voy-bob 2.4s ease-in-out infinite;
+}
+
+.voy-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.25rem 0 0.6rem;
+}
+
+.voy-modes {
+  margin: 0;
+}
+
+.voy-search {
+  position: relative;
+  flex: 0 1 20rem;
+}
+
+.voy-search input {
+  width: 100%;
+}
+
+.voy-suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+.voy-suggestions button {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.voy-suggestions button:hover {
+  background: var(--accent-soft);
+}
+
+.voy-stage {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  background: #02050d;
+}
+
+.voy-scene {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
+.voy-deck-letter {
+  fill: #6f7d94;
+  font: 600 11px var(--mono);
+}
+
+.voy-room-label {
+  fill: #7a5a3a;
+  font: italic 11px var(--sans);
+  letter-spacing: 0.08em;
+}
+
+.voy-scene-title {
+  fill: #e9eef6;
+  font: 700 18px Georgia, "Times New Roman", serif;
+  letter-spacing: 0.32em;
+}
+
+.voy-person {
+  transition:
+    fill 0.6s ease,
+    stroke 0.6s ease,
+    opacity 0.35s ease;
+}
+
+.voy-person--dim {
+  opacity: 0.1;
+}
+
+.voy-person--glow {
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.55));
+}
+
+.voy-selected circle {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+  animation: voy-pulse 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.voy-selected line {
+  stroke: #ffffff;
+  stroke-width: 0.8;
+  stroke-dasharray: 3 4;
+  opacity: 0.6;
+}
+
+.voy-you circle {
+  fill: rgba(255, 207, 77, 0.18);
+  stroke: #ffcf4d;
+  stroke-width: 1.4;
+  animation: voy-pulse 1.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.voy-you path {
+  fill: #ffcf4d;
+}
+
+.voy-star--twinkle {
+  animation: voy-twinkle 3.2s ease-in-out infinite;
+}
+
+.voy-boiler {
+  animation: voy-flicker 2.8s ease-in-out infinite;
+}
+
+.voy-swell {
+  animation: voy-swell 9s linear infinite;
+}
+
+.voy-steam {
+  animation: voy-steam 7s ease-in-out infinite;
+}
+
+.voy-reflection {
+  animation: voy-shimmer 4.5s ease-in-out infinite;
+}
+
+.voy-tooltip {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 11rem;
+  max-width: 18rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(8, 14, 26, 0.94);
+  border: 1px solid #33455f;
+  color: #e9eef6;
+  font-size: 0.74rem;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.voy-tooltip span {
+  color: #aab7cb;
+}
+
+.voy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.6rem 0.2rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.voy-legend-ramp {
+  width: 12rem;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ea4f58, #7d828c, #3f93eb);
+}
+
+.voy-legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-left: 0.6rem;
+}
+
+.voy-legend-dot--pos {
+  background: #3f93eb;
+}
+
+.voy-legend-dot--neg {
+  border: 2.5px solid #ea4f58;
+}
+
+.voy-legend-dot--neg.voy-legend-dot--solid {
+  background: #ea4f58;
+  border: none;
+}
+
+.voy-legend-dot--ok {
+  background: #3a4150;
+}
+
+.voy-zones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.voy-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.voy-zone span {
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.voy-zone small {
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.voy-zone.active,
+.voy-zone:hover {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.voy-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .voy-panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+.voy-panels .filter-row {
+  margin-bottom: 0.45rem;
+}
+
+.voy-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.voy-cohort {
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.voy-cohort h4 {
+  margin: 0 0 0.5rem;
+}
+
+.voy-meter {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr 3rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  margin: 0.3rem 0;
+}
+
+.voy-meter strong {
+  text-align: right;
+  color: var(--text-h);
+}
+
+.voy-meter-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.voy-meter-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.5s ease;
+}
+
+.voy-meter--model .voy-meter-fill {
+  background: linear-gradient(90deg, #7d828c, #3f93eb);
+}
+
+.voy-meter--real .voy-meter-fill {
+  background: #3f93eb;
+}
+
+.voy-person-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.voy-person-head h3 {
+  margin-bottom: 0.1rem;
+}
+
+.voy-fate {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+}
+
+.voy-fate--pos {
+  color: #3f93eb;
+  border: 1px solid #3f93eb;
+}
+
+.voy-fate--neg {
+  color: #ea4f58;
+  border: 1px dashed #ea4f58;
+}
+
+.voy-explain-headline {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  margin: 0.6rem 0 0.8rem;
+}
+
+.voy-explain-prob {
+  font-size: 2.4rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.voy-waterfall {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.voy-wf-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 13rem) 1fr 4.2rem;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.77rem;
+}
+
+.voy-wf-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.voy-wf-row > strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.voy-wf-row--total > span {
+  color: var(--dim);
+}
+
+.voy-wf-track {
+  position: relative;
+  height: 14px;
+  border-radius: 4px;
+  background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--border) calc(25% - 1px) 25%);
+}
+
+.voy-wf-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 4px;
+  transition:
+    left 0.4s ease,
+    width 0.4s ease;
+}
+
+.voy-wf-bar--up {
+  background: #3f93eb;
+}
+
+.voy-wf-bar--down {
+  background: #ea4f58;
+}
+
+.voy-wf-bar--total {
+  background: var(--panel-3);
+  border: 1px solid var(--border-strong);
+}
+
+.voy-wf-note {
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+}
+
+.voy-personas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.voy-persona {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.voy-persona span {
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+
+.voy-persona:hover {
+  border-color: var(--accent-border);
+}
+
+.voy-persona--blank {
+  border-style: dashed;
+}
+
+.voy-whatif .feature-grid {
+  margin-top: 0.9rem;
+}
+
+.voy-delta {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}
+
+.voy-delta--up {
+  color: #3f93eb;
+}
+
+.voy-delta--down {
+  color: #ea4f58;
+}
+
+@keyframes voy-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.55;
+  }
+}
+
+@keyframes voy-twinkle {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes voy-flicker {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  45% {
+    opacity: 0.45;
+  }
+  60% {
+    opacity: 1;
+  }
+}
+
+@keyframes voy-swell {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(120px);
+  }
+}
+
+@keyframes voy-steam {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(-14px, -8px);
+    opacity: 0.45;
+  }
+}
+
+@keyframes voy-shimmer {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateX(6px);
+  }
+}
+
+@keyframes voy-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(2deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voy-person,
+  .voy-wf-bar,
+  .voy-meter-fill {
+    transition: none;
+  }
+  .voy-selected circle,
+  .voy-you circle,
+  .voy-star--twinkle,
+  .voy-boiler,
+  .voy-swell,
+  .voy-steam,
+  .voy-reflection,
+  .voy-loading-ship {
+    animation: none;
+  }
+}
