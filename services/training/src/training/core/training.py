@@ -30,8 +30,9 @@ logger = get_logger(__name__)
 
 # Gradient boosting sized for small tables (hundreds to a few thousand rows): shallow
 # trees, a slow learning rate, row/column subsampling and L2 — the plain `lightgbm`
-# defaults memorise a table that small. Measured on `titanic` (5-fold CV ROC AUC):
-# 0.884 for this vs 0.867 for `lightgbm` and 0.865 for logistic regression.
+# defaults memorise a table that small. Measured on `titanic` (5-fold CV ROC AUC on
+# the training split): 0.885 for this vs 0.860 for `lightgbm` and 0.872 for logistic
+# regression.
 _SMALL_DATA_LGBM: dict[str, Any] = {
     "n_estimators": 300,
     "learning_rate": 0.03,
