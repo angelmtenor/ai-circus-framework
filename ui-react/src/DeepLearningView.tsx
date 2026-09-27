@@ -7,7 +7,7 @@ import { DlPredictView } from "./DlPredictView";
 import { DlInsightsView } from "./DlInsightsView";
 import { TriageBoardView } from "./TriageBoardView";
 import { ReadingRoomView } from "./ReadingRoomView";
-import { INDUSTRY_LABELS } from "./ScenarioPicker";
+import { domainLabel } from "./ScenarioPicker";
 import { DlModelUnavailable, isAnomaly, labelsOf, pct, useDlModel } from "./dlShared";
 import "./deepLearning.css";
 
@@ -105,7 +105,7 @@ function DlScenarioView({ scenario, model }: { scenario: ScenarioSummary; model:
         </h3>
         <p style={{ marginTop: "-0.2rem" }}>{scenario.description}</p>
         <div className="scenario-meta-row">
-          <span className="scenario-meta-pill">Industry: {INDUSTRY_LABELS[scenario.industry] ?? scenario.industry}</span>
+          <span className="scenario-meta-pill">Domain: {domainLabel(scenario.industry)}</span>
           <span className="scenario-meta-pill">{taskPill}</span>
           <span className="scenario-meta-pill">{anomaly ? "learns from normal samples only" : `${labels.length} classes`}</span>
           <span className="scenario-meta-pill">Deep learning · Hugging Face</span>

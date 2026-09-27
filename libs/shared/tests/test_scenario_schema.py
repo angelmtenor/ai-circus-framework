@@ -650,3 +650,98 @@ def test_resolve_scenarios_ignores_other_kinds_it_cannot_parse(tmp_path) -> None
 
     assert set(resolve_scenarios(tmp_path, "", kind="deep_learning")) == {"symptom_triage"}
     assert resolve_scenarios(tmp_path, "", kind="tabular_ml") == {}
+
+
+# --- titanic-era additions: display columns, CV/metric selection, voyage_explorer, tutorial ---
+
+
+def _titanic() -> ScenarioDefinition:
+    from pathlib import Path
+
+    return ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/titanic/scenario.yaml")
+
+
+def _with(definition: ScenarioDefinition, **changes: object) -> ScenarioDefinition:
+    """Re-validate a copy with `changes` applied (model_copy alone skips validators)."""
+    return ScenarioDefinition.model_validate({**definition.model_dump(), **changes})
+
+
+def test_repo_titanic_scenario_loads_as_a_tutorial() -> None:
+    titanic = _titanic()
+    assert titanic.industry == "tutorial"
+    assert titanic.model is not None and titanic.model.selection_metric == "roc_auc"
+    assert titanic.model.cv_folds == 5
+    assert titanic.dataset is not None and titanic.dataset.display_columns == ["Name"]
+    assert titanic.ui_extras is not None and titanic.ui_extras.kind == "voyage_explorer"
+    assert titanic.tutorial is not None and len(titanic.tutorial.steps) >= 10
+
+
+def test_society_ethics_is_a_valid_domain() -> None:
+    assert _with(_titanic(), industry="society_ethics").industry == "society_ethics"
+
+
+def test_display_columns_cannot_be_features_or_protected() -> None:
+    titanic = _titanic()
+    dataset = titanic.dataset.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="display_columns"):
+        TabularDataset.model_validate({**dataset, "display_columns": ["Sex"]})
+    with pytest.raises(ValidationError, match="display_columns"):
+        TabularDataset.model_validate({**dataset, "display_columns": ["Name"], "protected_features_excluded": ["Name"]})
+
+
+def test_selection_metric_must_match_the_task_and_cv_folds_cannot_be_one() -> None:
+    base = {"candidates": ["lightgbm"], "accuracy_gain_threshold_for_complexity": 0.01, "target_label": "Y"}
+    with pytest.raises(ValidationError, match="not valid for regression"):
+        TabularModel(task_type="regression", selection_metric="roc_auc", **base)  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match="cv_folds"):
+        TabularModel(task_type="classification", cv_folds=1, **base)  # type: ignore[arg-type]
+    assert TabularModel(task_type="regression", selection_metric="r2", cv_folds=3, **base).cv_folds == 3  # type: ignore[arg-type]
+
+
+def test_voyage_explorer_requires_every_zone_option_exactly_once() -> None:
+    titanic = _titanic()
+    extras = titanic.ui_extras.model_dump()  # type: ignore[union-attr]
+    extras["zones"] = extras["zones"][:2]
+    with pytest.raises(ValidationError, match="exactly once"):
+        _with(titanic, ui_extras=extras)
+
+
+def test_voyage_explorer_rejects_bad_filters_names_and_personas() -> None:
+    titanic = _titanic()
+    extras = titanic.ui_extras.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="must be a categorical feature"):
+        _with(titanic, ui_extras={**extras, "filters": ["Age"]})
+    with pytest.raises(ValidationError, match="not a display_column"):
+        _with(titanic, ui_extras={**extras, "name_column": "Ticket"})
+    bad_persona = {**extras["personas"][0], "record": {**extras["personas"][0]["record"], "Pclass": "4th"}}
+    with pytest.raises(ValidationError, match="not among its options"):
+        _with(titanic, ui_extras={**extras, "personas": [bad_persona]})
+
+
+def test_voyage_explorer_requires_a_classification_model() -> None:
+    titanic = _titanic()
+    model = {**titanic.model.model_dump(), "task_type": "regression", "selection_metric": None}  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="requires a classification model"):
+        _with(titanic, model=model)
+
+
+def test_tutorial_validates_chart_columns_and_examples() -> None:
+    titanic = _titanic()
+    tutorial = titanic.tutorial.model_dump()  # type: ignore[union-attr]
+    step = {**tutorial["steps"][0], "charts": [{"type": "bar", "x": "Cabin"}]}
+    with pytest.raises(ValidationError, match="unknown"):
+        _with(titanic, tutorial={**tutorial, "steps": [step]})
+    missing = {**tutorial["examples"][0], "record": {"Pclass": "1st"}}
+    with pytest.raises(ValidationError, match="missing features"):
+        _with(titanic, tutorial={**tutorial, "examples": [missing]})
+    out_of_range = {**tutorial["examples"][0], "record": {**tutorial["examples"][0]["record"], "Age": 300}}
+    with pytest.raises(ValidationError, match="outside"):
+        _with(titanic, tutorial={**tutorial, "examples": [out_of_range]})
+    with pytest.raises(ValidationError, match="examples widget"):
+        _with(titanic, tutorial={**tutorial, "examples": []})
+
+
+def test_tutorial_is_tabular_ml_only() -> None:
+    titanic = _titanic()
+    with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
+        _with(titanic, kind="conversational_rag")

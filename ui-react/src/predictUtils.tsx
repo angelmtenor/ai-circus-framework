@@ -105,3 +105,31 @@ export function exportJson(filename: string, data: unknown) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** Every transformed (one-hot) SHAP column summed back into the original feature it
+ * came from — unlike mapContributions (which keeps only the *selected* category's
+ * column), this keeps the whole effect of a categorical feature, so
+ * `base + Σ contributions === prediction` holds exactly and a waterfall adds up.
+ * `base` is recovered as `prediction − Σ contributions` (the model's average output
+ * over the SHAP background data).
+ */
+export function explainByFeature(
+  featureColumns: string[],
+  prediction: number,
+  contributions: Record<string, number>,
+): { base: number; items: { feature: string; value: number }[] } {
+  // Longest match first, so a feature named e.g. "Age" never swallows "AgeGroup_x".
+  const byLength = [...featureColumns].sort((a, b) => b.length - a.length);
+  const totals = new Map<string, number>(featureColumns.map((f) => [f, 0]));
+  let sum = 0;
+  for (const [name, value] of Object.entries(contributions)) {
+    const unprefixed = name.includes("__") ? name.slice(name.indexOf("__") + 2) : name;
+    const feature = byLength.find((f) => unprefixed === f || unprefixed.startsWith(`${f}_`));
+    if (feature === undefined) continue;
+    totals.set(feature, (totals.get(feature) ?? 0) + value);
+    sum += value;
+  }
+  const items = [...totals.entries()].map(([feature, value]) => ({ feature, value }));
+  items.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  return { base: prediction - sum, items };
+}

@@ -42,10 +42,14 @@ class CategoricalFeatureUI(BaseModel):
 
 FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI, Field(discriminator="type")]
 
-# Industry taxonomy a scenario belongs to — a second, orthogonal axis to `kind`
-# (ML/RAG/form). Powers ui-react's industry filter atop the scenario picker; closed
-# set (not a free string) so a scenario.yaml typo fails fast at seed time rather than
-# silently creating an unfiltered "industry" nobody meant to add.
+# The *domain* a scenario belongs to — a second, orthogonal axis to `kind`
+# (ML/RAG/form). Powers ui-react's "Domain" filter atop the scenario picker. Mostly
+# industries, plus two non-industry domains: `tutorial` (a didactic walkthrough of a
+# classic dataset, e.g. `titanic`) and `society_ethics` (social impact, fairness and
+# ethics). The YAML/DB key is still `industry` (the field predates the broader
+# meaning; renaming it would need a real DB migration for no behavioural gain).
+# Closed set (not a free string) so a scenario.yaml typo fails fast at seed time
+# rather than silently creating an unfiltered domain nobody meant to add.
 Industry = Literal[
     "banking_finance",
     "manufacturing_industry",
@@ -55,6 +59,8 @@ Industry = Literal[
     "public_sector",
     "healthcare",
     "general",
+    "tutorial",
+    "society_ethics",
 ]
 
 
@@ -91,6 +97,23 @@ class TabularDataset(BaseModel):
     # Seeds ui-react's Data tab dashboard on first load (still user-editable/addable
     # there) — optional; an empty list falls back to the UI's own generic default.
     default_charts: list[ChartSpec] = []
+    # Descriptive columns (e.g. a passenger's `Name`) etl-tabular carries through to
+    # the normalized dataset so the UI can show *who* a row is — never a model input
+    # (training reads `feature_columns` only). Must be non-null in the raw data.
+    display_columns: list[str] = []
+
+    @model_validator(mode="after")
+    def _display_columns_are_not_model_inputs(self) -> TabularDataset:
+        """A display column must never double as a feature/target, nor resurface a
+        column the scenario explicitly excludes for Responsible AI reasons.
+        """
+        clashing = set(self.display_columns) & {*self.feature_columns, self.target, *self.protected_features_excluded}
+        if clashing:
+            raise ValueError(
+                f"display_columns {sorted(clashing)} are also features/target/protected columns — "
+                "a display column is shown to users only, never trained on or re-exposed."
+            )
+        return self
 
     @model_validator(mode="after")
     def _protected_features_actually_excluded(self) -> TabularDataset:
@@ -114,6 +137,15 @@ class TabularModel(BaseModel):
     task_type: Literal["classification", "regression"]
     candidates: list[str]
     accuracy_gain_threshold_for_complexity: float
+    # What the Green Code comparison ranks candidates by — None = the task's default
+    # (accuracy for classification, R² for regression). `roc_auc` ranks a classifier
+    # by how well it *orders* risk, independent of any 0.5 threshold.
+    selection_metric: Literal["accuracy", "roc_auc", "r2"] | None = None
+    # 0 = score each candidate once on the 20% hold-out (fast; the default). >= 2 =
+    # stratified k-fold cross-validation on the 80% training split instead — a far
+    # less noisy comparison on small datasets, where one hold-out of a few hundred
+    # rows can swing a metric by several points. The hold-out is still reported.
+    cv_folds: int = Field(default=0, ge=0, le=10)
     explainability: Literal["shap"] = "shap"
     # Display-only unit for a regression target (e.g. "days") — None for classification.
     target_units: str | None = None
@@ -127,6 +159,15 @@ class TabularModel(BaseModel):
     # friendly label (e.g. {"0": "Stayed", "1": "Churned"}) so the UI never shows a
     # bare 0/1 for the target's real-world meaning. None for regression (no classes).
     target_value_labels: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _selection_settings_match_task(self) -> TabularModel:
+        if self.cv_folds == 1:
+            raise ValueError("model.cv_folds must be 0 (single hold-out) or >= 2.")
+        allowed = {"classification": {"accuracy", "roc_auc"}, "regression": {"r2"}}[self.task_type]
+        if self.selection_metric is not None and self.selection_metric not in allowed:
+            raise ValueError(f"model.selection_metric {self.selection_metric!r} is not valid for {self.task_type}.")
+        return self
 
 
 class TabularServices(BaseModel):
@@ -376,14 +417,100 @@ class ReadingRoomExtra(BaseModel):
     worklist_size: int = Field(default=40, ge=5, le=200)
 
 
+class ExampleRecord(BaseModel):
+    """A named, complete input record (every `feature_columns` entry) — a preset the
+    UI scores live against `/predict/{slug}`, e.g. the notebook's "Boy, 3rd class" or
+    a what-if persona. Validated against `feature_schema` at seed time.
+    """
+
+    label: str
+    description: str | None = None
+    record: dict[str, float | str]
+
+
+class VoyageZone(BaseModel):
+    """One berth zone on a `VoyageExplorerExtra` vessel — every row whose `zone_by`
+    value equals `key` is drawn inside it."""
+
+    key: str  # one of zone_by's categorical `options`
+    label: str  # e.g. "First class"
+    description: str | None = None  # e.g. "Staterooms on decks A-C, near the lifeboats"
+
+
+class VoyageExplorerExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario whose
+    rows are *people aboard a vessel*: every real row is drawn as one person inside an
+    illustrated cross-section (`scene`), berthed by `zone_by` (top deck = first zone),
+    coloured by the model's predicted probability of the positive class — or, once
+    "revealed", by the real outcome. Filters on `filters` (categorical) and
+    `range_filters` (numeric) highlight a cohort with its real vs predicted rate;
+    clicking a person shows their SHAP-explained probability, and any row (or a
+    `personas` preset) can be edited as a what-if. See ui-react's VoyageView.tsx — the
+    single generic renderer; the wording fields are its only domain vocabulary.
+    """
+
+    kind: Literal["voyage_explorer"] = "voyage_explorer"
+    scene: Literal["ocean_liner"] = "ocean_liner"  # the built-in illustration
+    tab_label: str = "Voyage"
+    title: str
+    subtitle: str | None = None
+    person_noun: str = "passenger"
+    zone_by: str  # a categorical feature_columns entry, e.g. "Pclass"
+    zones: list[VoyageZone] = Field(min_length=1)
+    filters: list[str] = []  # categorical feature_columns offered as filter chips
+    range_filters: list[str] = []  # numeric feature_columns offered as min-max sliders
+    name_column: str | None = None  # a dataset.display_columns entry naming each person
+    personas: list[ExampleRecord] = []
+
+
+# A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
+# dataset_preview = the first rows; class_balance = the target's class split;
+# model_card = the training leaderboard + selection protocol; roc_curve /
+# confusion_matrix = the selected model on the untouched hold-out; feature_importance
+# = global mean(|SHAP|); examples = `tutorial.examples` scored and explained live.
+TutorialWidget = Literal[
+    "dataset_preview",
+    "class_balance",
+    "model_card",
+    "roc_curve",
+    "confusion_matrix",
+    "feature_importance",
+    "examples",
+]
+
+
+class TutorialStep(BaseModel):
+    """One chapter of a scenario's Tutorial tab: markdown prose plus optional live
+    charts (same ChartSpec as `default_charts`) and widgets."""
+
+    title: str
+    body: str  # markdown (headers, bold, code, lists, pipe tables, links)
+    takeaway: str | None = None  # one-sentence "key insight" callout
+    charts: list[ChartSpec] = []
+    widgets: list[TutorialWidget] = []
+
+
+class TutorialConfig(BaseModel):
+    """A guided, data-backed walkthrough of the whole ML workflow for this scenario —
+    rendered as its own "Tutorial" tab (tabular_ml only for now: its widgets read the
+    prediction service's dataset/model endpoints). Pure content: adding a tutorial to
+    another scenario is YAML, never UI code.
+    """
+
+    tab_label: str = "Tutorial"
+    intro: str  # markdown
+    steps: list[TutorialStep] = Field(min_length=1)
+    examples: list[ExampleRecord] = []
+
+
 UiExtras = Annotated[
-    RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | TriageBoardExtra | ReadingRoomExtra,
+    RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | VoyageExplorerExtra | TriageBoardExtra | ReadingRoomExtra,
     Field(discriminator="kind"),
 ]
 
 # ui_extras kinds meant for each scenario kind — a tabular renderer given a
 # deep_learning scenario (or vice versa) would have none of the data it needs.
-_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra)
+_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra, VoyageExplorerExtra)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
 
@@ -795,6 +922,8 @@ class ScenarioDefinition(BaseModel):
     # generic 5th workspace tabs (see UiExtras above). None (the common case) means the
     # plain 4-tab workspace every scenario of that kind already gets.
     ui_extras: UiExtras | None = None
+    # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
+    tutorial: TutorialConfig | None = None
     services: TabularServices | RagServices | FormServices | DeepLearningServices
 
     @model_validator(mode="after")
@@ -929,6 +1058,85 @@ class ScenarioDefinition(BaseModel):
                 )
         if extras.spec_default not in {o.value for o in extras.spec_options}:
             raise ValueError(f"ui_extras.spec_default {extras.spec_default!r} is not among spec_options values.")
+        return self
+
+    def _check_example(self, example: ExampleRecord, where: str) -> None:
+        """An example record must set every feature, each to a value the form could
+        produce — otherwise /predict would 422 (missing column) or score a category
+        the model never saw."""
+        assert self.dataset is not None
+        schema = self.dataset.feature_schema
+        missing = [f for f in self.dataset.feature_columns if f not in example.record]
+        unknown = sorted(set(example.record) - set(self.dataset.feature_columns))
+        if missing or unknown:
+            raise ValueError(f"{where} {example.label!r}: missing features {missing}, unknown features {unknown}.")
+        for feature, value in example.record.items():
+            spec = schema[feature]
+            if spec.type == "categorical" and value not in spec.options:
+                raise ValueError(f"{where} {example.label!r}: {feature}={value!r} is not among its options.")
+            if spec.type == "numeric" and (isinstance(value, str) or not spec.min <= value <= spec.max):
+                raise ValueError(f"{where} {example.label!r}: {feature}={value!r} is outside [{spec.min}, {spec.max}].")
+
+    def _feature_of_type(self, feature: str, expected: str, where: str) -> None:
+        assert self.dataset is not None
+        spec = self.dataset.feature_schema.get(feature)
+        if spec is None:
+            raise ValueError(f"{where} {feature!r} is not among dataset.feature_columns.")
+        if spec.type != expected:
+            raise ValueError(f"{where} {feature!r} must be a {expected} feature, got {spec.type!r}.")
+
+    @model_validator(mode="after")
+    def _voyage_explorer_references_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `voyage_explorer` block would leave a person un-berthed (a
+        `zone_by` option with no zone), filter on a column that doesn't exist, or run
+        on a scenario with no probability to colour people by."""
+        extras = self.ui_extras
+        if not isinstance(extras, VoyageExplorerExtra) or self.dataset is None:
+            return self
+        if self.model is None or self.model.task_type != "classification":
+            raise ValueError("ui_extras.voyage_explorer requires a classification model (a probability per person).")
+        self._feature_of_type(extras.zone_by, "categorical", "ui_extras.voyage_explorer zone_by")
+        zone_spec = self.dataset.feature_schema[extras.zone_by]
+        assert isinstance(zone_spec, CategoricalFeatureUI)
+        zone_keys = [zone.key for zone in extras.zones]
+        if sorted(zone_keys) != sorted(zone_spec.options):
+            raise ValueError(
+                f"ui_extras.voyage_explorer zones {zone_keys} must list each {extras.zone_by!r} option "
+                f"{zone_spec.options} exactly once."
+            )
+        for feature in extras.filters:
+            self._feature_of_type(feature, "categorical", "ui_extras.voyage_explorer filters")
+        for feature in extras.range_filters:
+            self._feature_of_type(feature, "numeric", "ui_extras.voyage_explorer range_filters")
+        if extras.name_column is not None and extras.name_column not in self.dataset.display_columns:
+            raise ValueError(f"ui_extras.voyage_explorer name_column {extras.name_column!r} is not a display_column.")
+        for persona in extras.personas:
+            self._check_example(persona, "ui_extras.voyage_explorer persona")
+        return self
+
+    @model_validator(mode="after")
+    def _tutorial_references_real_columns(self) -> ScenarioDefinition:
+        """A tutorial is tabular_ml-only (its widgets read prediction's endpoints); its
+        charts must name real columns and its examples must be scoreable."""
+        tutorial = self.tutorial
+        if tutorial is None:
+            return self
+        if self.kind != "tabular_ml" or self.dataset is None:
+            raise ValueError("`tutorial` is only available for kind='tabular_ml' scenarios.")
+        known = {*self.dataset.feature_columns, self.dataset.target}
+        for step in tutorial.steps:
+            for chart in step.charts:
+                named = {c for c in (chart.x, chart.y, chart.z, chart.color_by) if c is not None}
+                if named - known:
+                    raise ValueError(
+                        f"tutorial step {step.title!r}: chart columns {sorted(named - known)} are unknown."
+                    )
+            if "examples" in step.widgets and not tutorial.examples:
+                raise ValueError(
+                    f"tutorial step {step.title!r} shows the examples widget but tutorial.examples is empty."
+                )
+        for example in tutorial.examples:
+            self._check_example(example, "tutorial example")
         return self
 
     @model_validator(mode="after")

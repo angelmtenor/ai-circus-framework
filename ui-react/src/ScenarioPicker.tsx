@@ -7,8 +7,10 @@ type Category = {
   match: (scenario: ScenarioSummary) => boolean;
 };
 
-// Mirrors scenario_schema.Industry (libs/shared) — order here is the dropdown's
-// display order, not just a lookup table.
+// Mirrors scenario_schema.Industry (libs/shared) — the scenario's *domain*: mostly
+// industries, plus learning/society domains that aren't an industry at all. Order here
+// is the dropdown's display order, not just a lookup table. (The wire field is still
+// called `industry`; see scenario_schema.py for why it wasn't renamed.)
 export const INDUSTRY_LABELS: Record<string, string> = {
   banking_finance: "Banking & Finance",
   manufacturing_industry: "Manufacturing & Industry",
@@ -18,7 +20,18 @@ export const INDUSTRY_LABELS: Record<string, string> = {
   public_sector: "Public Sector",
   healthcare: "Healthcare",
   general: "General",
+  tutorial: "Tutorials",
+  society_ethics: "Society & Ethics",
 };
+
+// Domains that aren't industries — grouped separately in the Domain dropdown and
+// flagged with a chip on their scenario cards.
+const LEARNING_DOMAINS = new Set(["tutorial", "society_ethics"]);
+const DOMAIN_CHIPS: Record<string, string> = { tutorial: "Tutorial", society_ethics: "Society & Ethics" };
+
+export function domainLabel(domain: string): string {
+  return INDUSTRY_LABELS[domain] ?? domain.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
 
 const CATEGORIES: Category[] = [
   {
@@ -104,21 +117,30 @@ export function ScenarioPicker({
     <div className="scenario-groups">
       {availableIndustries.length > 1 && (
         <div className="scenario-industry-filter">
-          <label htmlFor="scenario-industry-select">Industry</label>
+          <label htmlFor="scenario-industry-select">Domain</label>
           <select id="scenario-industry-select" value={industry} onChange={(e) => onIndustryChange(e.target.value)}>
-            <option value="all">All industries</option>
-            {availableIndustries.map((key) => (
-              <option key={key} value={key}>
-                {INDUSTRY_LABELS[key]}
-              </option>
-            ))}
+            <option value="all">All domains</option>
+            {[
+              { label: "Industries", keys: availableIndustries.filter((key) => !LEARNING_DOMAINS.has(key)) },
+              { label: "Learning & society", keys: availableIndustries.filter((key) => LEARNING_DOMAINS.has(key)) },
+            ]
+              .filter((group) => group.keys.length > 0)
+              .map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.keys.map((key) => (
+                    <option key={key} value={key}>
+                      {INDUSTRY_LABELS[key]}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
           </select>
         </div>
       )}
       {groups.length === 0 && (
         <div className="scenario-empty">
           <span className="scenario-empty-icon">🗂️</span>
-          <p>No scenarios match this industry.</p>
+          <p>No scenarios match this domain.</p>
         </div>
       )}
       {groups.map((group) => (
@@ -136,6 +158,9 @@ export function ScenarioPicker({
                     <p>{scenario.description}</p>
                   </div>
                   <div className="scenario-card-footer">
+                    {DOMAIN_CHIPS[scenario.industry] && (
+                      <span className="scenario-chip scenario-chip--domain">{DOMAIN_CHIPS[scenario.industry]}</span>
+                    )}
                     {subtype && <span className="scenario-chip">{subtype}</span>}
                     <span className="scenario-card-open">Open →</span>
                   </div>

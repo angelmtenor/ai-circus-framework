@@ -4,7 +4,7 @@ import { config, MAX_ROWS } from "./config";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
 import { StatTile } from "./charts";
 import { PlotlyChart } from "./PlotlyChart";
-import { buildChart, specToChartCardConfig, defaultChartCardConfig, type ChartCardConfig } from "./chartBuilder";
+import { buildChart, specToChartCardConfig, defaultChartCardConfig, type ChartCardConfig, type ValueLabelFor } from "./chartBuilder";
 import { useTheme } from "./useTheme";
 import { Icon } from "./Icon";
 import { exportJson, featureLabel } from "./predictUtils";
@@ -65,6 +65,12 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   const labelFor = useCallback(
     (f: string) => (f === targetName ? `${scenario.target_label ?? targetName} (target)` : featureLabel(scenario, f)),
     [targetName, scenario],
+  );
+
+  // Legend names for the target's classes (e.g. "0"/"1" -> "Stayed"/"Churned").
+  const valueLabelFor = useCallback<ValueLabelFor>(
+    (column, value) => (column === targetName ? (scenario.target_value_labels?.[value] ?? value) : value),
+    [targetName, scenario.target_value_labels],
   );
 
   const [sample, setSample] = useState<DatasetSample | null>(null);
@@ -180,6 +186,10 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
     return String(value);
   }
 
+  // The record's identity (id column + display columns such as a name) — leads the
+  // sample-rows table and is searchable, but is never a chart axis or model input.
+  const identityColumns = sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : [];
+
   if (error) {
     return (
       <div className="tab-panel">
@@ -253,6 +263,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
           labelFor={labelFor}
           rows={sample.rows}
           onFilteredChange={setFiltered}
+          searchColumns={identityColumns}
         />
         <button className="btn-secondary" onClick={() => exportJson(`${scenario.slug}-filtered.json`, filtered)} style={{ marginTop: "0.6rem" }}>
           <Icon name="download" size={14} /> Export {filtered.length} filtered rows
@@ -277,6 +288,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
               allOptions={allFeaturesWithTarget}
               palette={theme.categoryPalette}
               labelFor={labelFor}
+              valueLabelFor={valueLabelFor}
               onChange={(patch) => updateChart(cfg.id, patch)}
               onRemove={charts.length > 1 ? () => removeChart(cfg.id) : undefined}
             />
@@ -297,9 +309,11 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
             </thead>
             <tbody>
               {filtered.slice(0, 30).map((row, i) => (
-                <tr key={i}>
+                <tr key={sample.id_column ? String(row[sample.id_column]) : i}>
                   {sample.columns.map((c) => (
-                    <td key={c}>{displayValue(c, row[c])}</td>
+                    <td key={c} className={identityColumns.includes(c) ? "data-table-id" : undefined}>
+                      {displayValue(c, row[c])}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -319,6 +333,7 @@ function ChartCard({
   allOptions,
   palette,
   labelFor,
+  valueLabelFor,
   onChange,
   onRemove,
 }: {
@@ -329,6 +344,7 @@ function ChartCard({
   allOptions: string[];
   palette: string[];
   labelFor: (f: string) => string;
+  valueLabelFor: ValueLabelFor;
   onChange: (patch: Partial<ChartCardConfig>) => void;
   onRemove?: () => void;
 }) {
@@ -343,7 +359,7 @@ function ChartCard({
   // by discrete category, so numeric columns would be meaningless there.
   const colorByOptions = cfg.type === "scatter" || cfg.type === "scatter3d" ? allOptions : categoricalOptions;
 
-  const { data, layout } = useMemo(() => buildChart(rows, cfg, palette, labelFor), [rows, cfg, palette, labelFor]);
+  const { data, layout } = useMemo(() => buildChart(rows, cfg, palette, labelFor, valueLabelFor), [rows, cfg, palette, labelFor, valueLabelFor]);
   const [maximized, setMaximized] = useState(false);
 
   const card = (

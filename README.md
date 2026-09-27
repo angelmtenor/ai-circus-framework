@@ -14,10 +14,22 @@ GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form 
   <img src="docs/screenshots/scenarios.png" alt="AI Open Framework scenario gallery" width="850">
 </p>
 
+### ✨ Featured scenario — 🚢 [Titanic Survival: an explained ML tutorial](docs/scenarios/titanic.md)
+
+All 891 passengers back aboard an illustrated RMS Titanic, each coloured by a cross-validated
+**ROC AUC 0.885** model. Reveal who really survived, filter any cohort, click a passenger to see
+*why* the model gave them their chance, and ask "what if?". Alongside it, an 11-chapter
+tutorial walks the whole ML workflow on live data. **[Read the scenario chapter →](docs/scenarios/titanic.md)**
+
+<p align="center">
+  <a href="docs/scenarios/titanic.md"><img src="docs/screenshots/titanic/voyage-model.png" alt="Titanic Voyage tab: all 891 passengers aboard an illustrated cutaway of the ship at night, coloured by the model's survival probability" width="850"></a>
+</p>
+
 ---
 
 ## Table of contents
 
+- [Featured: Titanic tutorial](docs/scenarios/titanic.md)
 - [Tour of the platform](#tour-of-the-platform)
 - [Scenario catalog](#scenario-catalog)
 - [Getting started](#getting-started)
@@ -45,11 +57,36 @@ on the backend, so nothing is a security bypass, just a different way in.
 ### Scenario gallery
 
 Every scenario a tenant is entitled to, rendered generically from `scenarios/*/scenario.yaml` —
-no per-scenario UI code — grouped by kind (**Machine Learning**, **Conversational Assistant**,
-**Assisted Forms**) with an industry filter. Tabular ML cards show their task type
-(classification/regression); the full catalog is in the [table below](#scenario-catalog).
+no per-scenario UI code — grouped by kind (**Machine Learning**, **Deep Learning**,
+**Conversational Assistant**, **Assisted Forms**) with a **Domain** filter — the industries,
+plus the learning/society domains **Tutorials** and **Society & Ethics**. Cards show their task
+type (classification/regression, NLP/computer vision) and a chip for tutorial scenarios; the
+full catalog is in the [table below](#scenario-catalog).
 
 <p align="center"><img src="docs/screenshots/scenario-gallery.png" alt="Scenario gallery — every scenario of every kind the admin tenant is entitled to" width="850"></p>
+
+### Tutorials — Titanic
+
+A **tutorial** scenario teaches the ML workflow on a classic dataset. `titanic` opens on an
+11-chapter **Tutorial** tab (framing, cleaning, feature engineering, exploration,
+cross-validated model selection, honest hold-out evaluation, SHAP, what-ifs, Responsible AI),
+where every chart and metric is live. Its **Voyage** tab puts every passenger back aboard the
+ship: reveal their real fate, find the model's surprises, and get any passenger's
+probability explained as a SHAP waterfall, with a live what-if editor. Full walkthrough:
+[docs/scenarios/titanic.md](docs/scenarios/titanic.md).
+
+<p align="center">
+  <img src="docs/screenshots/titanic/voyage-fate.png" alt="Reveal real fate: survivors filled blue, victims as hollow red rings" width="49%">
+  <img src="docs/screenshots/titanic/voyage-surprises.png" alt="Model vs reality: only the passengers the model misjudged light up" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/titanic/voyage-explain.png" alt="A passenger's survival probability explained as a SHAP waterfall" width="62%">
+  <img src="docs/screenshots/titanic/voyage-whatif.png" alt="What if she had travelled 1st class: 57% becomes 90%" width="30%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/titanic/tutorial-model.png" alt="Tutorial chapter 6: the real model-selection leaderboard" width="49%">
+  <img src="docs/screenshots/titanic/tutorial-evaluate.png" alt="Tutorial chapter 7: hold-out ROC curve and confusion matrix" width="49%">
+</p>
 
 ### Data
 
@@ -188,6 +225,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
+| **[Titanic Survival — ML Tutorial](docs/scenarios/titanic.md)** (`titanic`) | `tabular_ml` — classification, domain `tutorial` | Passenger survival probability — a guided **Tutorial** tab (every step of the ML workflow, live charts/metrics/SHAP) and a **Voyage** tab (all 891 passengers aboard an illustrated ship, filterable, SHAP-explained, what-if) · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.88 | Kaggle — Titanic (via angelmtenor/data-science-keras) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
@@ -219,6 +257,20 @@ rework cost, Taylor tool life), recommends the recipe that maximizes profit rate
 predicted Ra stays inside a selectable ISO 1302 grade, and lets you apply it — or run a simulated
 live line where the tool wears with real cutting time and an auto-pilot re-optimizes or changes the
 tool as the model's own predicted roughness drifts, side by side with a static-recipe baseline.
+`titanic`'s "Voyage" tab (`voyage_explorer`) berths every real passenger on an illustrated ocean
+liner, coloured by the model's survival probability, with a bow-to-stern "reveal the real fate"
+sweep, cohort filters, name search, a SHAP waterfall per passenger and a live what-if builder.
+
+**A scenario can also carry a guided Tutorial tab** (`tutorial:` in `scenario.yaml`, tabular_ml):
+markdown chapters with live charts and data-backed widgets — dataset preview, class balance, the
+training leaderboard, the leakage-free hold-out ROC curve and confusion matrix (from
+`GET /model/{slug}/card`, recorded by `training` *before* the final refit), global SHAP, and worked
+examples scored by `/predict`. `model.cv_folds`/`model.selection_metric` make `training` rank
+candidates by k-fold cross-validated ROC AUC (or accuracy/R²) instead of one hold-out.
+
+Every dataset view shows each row's **identity first** — the scenario's `index_col` (e.g.
+`CustomerId`), plus any `dataset.display_columns` such as a passenger's name — and it is searchable;
+neither is ever a model input.
 
 ---
 

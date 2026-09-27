@@ -32,6 +32,15 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
         score_phrase = f"test R² of {float(metadata['test_score']):.3f}"
     else:
         score_phrase = f"test accuracy {float(metadata['test_score']):.2%}"
+    # Model-card metrics (see training's metadata "metrics") — absent on older models.
+    metrics: dict[str, float] = metadata.get("metrics") or {}
+    if "cv_roc_auc_mean" in metrics:
+        score_phrase += (
+            f", {metadata.get('cv_folds')}-fold cross-validated ROC AUC {metrics['cv_roc_auc_mean']:.3f}"
+            f" (± {metrics.get('cv_roc_auc_std', 0):.3f})"
+        )
+    if "holdout_roc_auc" in metrics:
+        score_phrase += f" and hold-out ROC AUC {metrics['holdout_roc_auc']:.3f}"
 
     # Absent on metadata written before this field existed (an untrained-since scenario
     # falling back to a cached artifact) — degrades gracefully rather than erroring.

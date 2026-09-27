@@ -70,6 +70,22 @@ function renderTable(lines: string[], key: number): ReactNode {
   );
 }
 
+/** Consecutive list items starting at `start`; an indented, non-marker line right
+ * after an item continues it (markdown's lazy continuation), so a bullet hard-wrapped
+ * across several lines stays one bullet instead of spilling into a paragraph. */
+function collectListItems(lines: string[], start: number, marker: RegExp): { items: string[]; next: number } {
+  const items: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    if (marker.test(trimmed)) items.push(trimmed.replace(marker, ""));
+    else if (items.length > 0 && trimmed !== "" && /^\s/.test(lines[i]) && !/^[-*]\s+|^\d+\.\s+/.test(trimmed)) items[items.length - 1] += ` ${trimmed}`;
+    else break;
+    i++;
+  }
+  return { items, next: i };
+}
+
 export function renderMarkdown(text: string): ReactNode {
   const lines = text.split("\n");
   const blocks: ReactNode[] = [];
@@ -123,14 +139,11 @@ export function renderMarkdown(text: string): ReactNode {
     }
 
     if (/^[-*]\s+/.test(line.trim())) {
-      const items: string[] = [];
-      while (i < lines.length && /^[-*]\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^[-*]\s+/, ""));
-        i++;
-      }
+      const items = collectListItems(lines, i, /^[-*]\s+/);
+      i = items.next;
       blocks.push(
         <ul key={key++}>
-          {items.map((item, idx) => (
+          {items.items.map((item, idx) => (
             <li key={idx}>{renderInline(item)}</li>
           ))}
         </ul>,
@@ -139,14 +152,11 @@ export function renderMarkdown(text: string): ReactNode {
     }
 
     if (/^\d+\.\s+/.test(line.trim())) {
-      const items: string[] = [];
-      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
-        items.push(lines[i].trim().replace(/^\d+\.\s+/, ""));
-        i++;
-      }
+      const items = collectListItems(lines, i, /^\d+\.\s+/);
+      i = items.next;
       blocks.push(
         <ol key={key++}>
-          {items.map((item, idx) => (
+          {items.items.map((item, idx) => (
             <li key={idx}>{renderInline(item)}</li>
           ))}
         </ol>,

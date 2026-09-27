@@ -13,6 +13,7 @@ from training.core.training import (
     build_explainer,
     build_pipeline,
     global_shap_importance,
+    holdout_evaluation,
     select_best_candidate,
     split_features,
     train_candidate,
@@ -134,10 +135,10 @@ def test_train_candidate_scores_lightgbm_classifier_on_test_set(synthetic_data: 
 class _FakeCandidate:
     """Minimal stand-in for TrainedCandidate, avoiding a real sklearn fit in selection tests."""
 
-    def __init__(self, name: str, test_score: float) -> None:
+    def __init__(self, name: str, selection_score: float) -> None:
         """Store the fields select_best_candidate() reads."""
         self.name = name
-        self.test_score = test_score
+        self.selection_score = selection_score
 
 
 def test_select_best_candidate_keeps_simpler_model_below_threshold() -> None:
@@ -265,3 +266,78 @@ def test_transformed_feature_names_include_one_hot_columns(synthetic_data: tuple
 
     assert any("category_feature" in name for name in names)
     assert any("numeric_feature" in name for name in names)
+
+
+def test_train_candidate_reports_holdout_accuracy_and_roc_auc(synthetic_data: tuple) -> None:
+    """Without CV, a classifier is ranked on its hold-out accuracy (the default) and
+    also reports hold-out ROC AUC.
+    """
+    x_train, x_test, y_train, y_test = synthetic_data
+    candidate = train_candidate(
+        "logistic_regression", x_train, y_train, x_test, y_test, ["numeric_feature"], ["category_feature"]
+    )
+    assert set(candidate.metrics) == {"holdout_accuracy", "holdout_roc_auc"}
+    assert candidate.selection_score == candidate.metrics["holdout_accuracy"]
+    assert candidate.metrics["holdout_roc_auc"] > 0.9
+
+
+def test_train_candidate_ranks_on_cross_validated_selection_metric(synthetic_data: tuple) -> None:
+    """With cv_folds, the selection score is the CV mean of the chosen metric, and the
+    hold-out is still reported alongside it.
+    """
+    x_train, x_test, y_train, y_test = synthetic_data
+    candidate = train_candidate(
+        "lightgbm_small_data",
+        x_train,
+        y_train,
+        x_test,
+        y_test,
+        ["numeric_feature"],
+        ["category_feature"],
+        selection_metric="roc_auc",
+        cv_folds=3,
+    )
+    assert candidate.selection_score == candidate.metrics["cv_roc_auc_mean"]
+    assert {"cv_accuracy_mean", "cv_accuracy_std", "cv_roc_auc_std", "holdout_roc_auc"} <= set(candidate.metrics)
+    assert 0.5 < candidate.selection_score <= 1.0
+
+
+def test_train_candidate_cross_validates_regression_on_r2(synthetic_regression_data: tuple) -> None:
+    """Regression CV reports (and ranks on) R²."""
+    x_train, x_test, y_train, y_test = synthetic_regression_data
+    candidate = train_candidate(
+        "linear_regression",
+        x_train,
+        y_train,
+        x_test,
+        y_test,
+        ["numeric_feature"],
+        ["category_feature"],
+        "regression",
+        cv_folds=3,
+    )
+    assert candidate.selection_score == candidate.metrics["cv_r2_mean"] > 0.9
+    assert "holdout_r2" in candidate.metrics
+
+
+def test_holdout_evaluation_returns_a_consistent_roc_curve_and_confusion_matrix(synthetic_data: tuple) -> None:
+    """The hold-out evaluation covers every hold-out row and a monotone ROC curve from (0,0) to (1,1)."""
+    x_train, x_test, y_train, y_test = synthetic_data
+    pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LogisticRegression()).fit(x_train, y_train)
+
+    evaluation = holdout_evaluation(pipeline, x_test, y_test)
+
+    assert evaluation is not None
+    matrix = evaluation["confusion_matrix"]
+    assert sum(matrix.values()) == evaluation["n"] == len(y_test)
+    assert matrix["tp"] + matrix["fn"] == int(y_test.sum())
+    fpr, tpr = evaluation["roc_curve"]["fpr"], evaluation["roc_curve"]["tpr"]
+    assert (fpr[0], tpr[0], fpr[-1], tpr[-1]) == (0.0, 0.0, 1.0, 1.0)
+    assert fpr == sorted(fpr) and tpr == sorted(tpr)
+
+
+def test_holdout_evaluation_is_none_for_a_single_class_holdout(synthetic_data: tuple) -> None:
+    """No ROC curve exists when the hold-out has only one class."""
+    x_train, x_test, y_train, _y_test = synthetic_data
+    pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LogisticRegression()).fit(x_train, y_train)
+    assert holdout_evaluation(pipeline, x_test, pd.Series([1] * len(x_test), index=x_test.index)) is None

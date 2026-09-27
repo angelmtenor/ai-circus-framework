@@ -79,3 +79,15 @@ def test_build_system_prompt_names_the_prediction_service_tools() -> None:
     assert "get_dataset_sample" in prompt
     assert "get_predictions_vs_actuals" in prompt
     assert "predict_records" in prompt
+
+
+def test_build_system_prompt_cites_cross_validated_and_holdout_roc_auc_when_present() -> None:
+    """A model card's ROC AUC figures are quoted so the assistant never has to guess them."""
+    metadata = {
+        **METADATA,
+        "cv_folds": 5,
+        "metrics": {"cv_roc_auc_mean": 0.8848, "cv_roc_auc_std": 0.0154, "holdout_roc_auc": 0.8727},
+    }
+    prompt = build_system_prompt(DEFINITION, metadata)
+    assert "5-fold cross-validated ROC AUC 0.885 (± 0.015)" in prompt
+    assert "hold-out ROC AUC 0.873" in prompt

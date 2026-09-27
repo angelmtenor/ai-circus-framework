@@ -48,6 +48,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
         "pasta_visual_inspection",
+        "titanic",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -220,6 +221,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
         "pasta_visual_inspection",
+        "titanic",
     }
 
 
@@ -236,8 +238,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 19
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 19
+    assert session.query(Scenario).count() == 20
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 20
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -277,3 +279,18 @@ def test_seed_default_voice_setting_never_overwrites_an_existing_choice(session:
     seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
 
     assert session.get(VoiceSetting, 1).tts_provider == "elevenlabs"
+
+
+def test_seed_scenarios_populates_the_titanic_tutorial(session: Session) -> None:
+    """The tutorial domain's scenario seeds its Voyage extra and its Tutorial block;
+    every other scenario has no tutorial.
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    titanic = session.get(Scenario, "titanic")
+    assert titanic.industry == "tutorial"
+    assert titanic.ui_extras["kind"] == "voyage_explorer"
+    assert [zone["key"] for zone in titanic.ui_extras["zones"]] == ["1st", "2nd", "3rd"]
+    assert titanic.tutorial["tab_label"] == "Tutorial"
+    assert "roc_curve" in {w for step in titanic.tutorial["steps"] for w in step["widgets"]}
+    assert session.get(Scenario, "churn").tutorial is None

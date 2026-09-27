@@ -40,9 +40,11 @@ from training import get_env_config
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
 from training.core.training import (
+    DEFAULT_SELECTION_METRIC,
     build_explainer,
     fit_quantile_pipelines,
     global_shap_importance,
+    holdout_evaluation,
     select_best_candidate,
     split_features,
     train_candidate,
@@ -81,14 +83,35 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     stratify = y if definition.model.task_type == "classification" else None
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=0, stratify=stratify)
 
+    model = definition.model
+    selection_metric = model.selection_metric or DEFAULT_SELECTION_METRIC[model.task_type]
     candidates = [
         train_candidate(
-            name, x_train, y_train, x_test, y_test, numeric_features, categorical_features, definition.model.task_type
+            name,
+            x_train,
+            y_train,
+            x_test,
+            y_test,
+            numeric_features,
+            categorical_features,
+            model.task_type,
+            selection_metric=selection_metric,
+            cv_folds=model.cv_folds,
         )
-        for name in definition.model.candidates
+        for name in model.candidates
     ]
-    best = select_best_candidate(candidates, definition.model.accuracy_gain_threshold_for_complexity)
-    logger.success("Selected model: {!r} (test score={:.4f})", best.name, best.test_score)
+    best = select_best_candidate(candidates, model.accuracy_gain_threshold_for_complexity)
+    logger.success(
+        "Selected model: {!r} ({}={:.4f}, test score={:.4f})",
+        best.name,
+        selection_metric,
+        best.selection_score,
+        best.test_score,
+    )
+    # Scored before the refit below — the only leakage-free ROC curve/confusion matrix
+    # of the selected model (see holdout_evaluation's docstring).
+    # pyrefly: ignore [bad-argument-type]
+    evaluation = holdout_evaluation(best.pipeline, x_test, y_test) if model.task_type == "classification" else None
 
     # Refit the selected model on the full dataset for the final artifact.
     best.pipeline.fit(x, y)
@@ -127,6 +150,18 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "test_score": best.test_score,
         "task_type": definition.model.task_type,
         "candidates_evaluated": [c.name for c in candidates],
+        # Model card (served by prediction's GET /model/{slug}/card): how the model was
+        # chosen and how it scores on data it never saw.
+        "selection_metric": selection_metric,
+        "cv_folds": model.cv_folds,
+        "accuracy_gain_threshold_for_complexity": model.accuracy_gain_threshold_for_complexity,
+        "candidate_scores": [
+            {"name": c.name, "selection_score": c.selection_score, "metrics": c.metrics} for c in candidates
+        ],
+        "metrics": best.metrics,
+        "holdout_evaluation": evaluation,
+        "training_rows": len(x_train),
+        "holdout_rows": len(x_test),
         "feature_columns": definition.dataset.feature_columns,
         "transformed_feature_names": transformed_feature_names(best.pipeline),
         "global_feature_importance": feature_importance,

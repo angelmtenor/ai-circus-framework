@@ -129,3 +129,78 @@ def test_predict_rejects_a_batch_larger_than_max_rows(client: TestClient) -> Non
     response = client.post("/predict/churn", json={"records": [{}] * (MAX_ROWS + 1)})
 
     assert response.status_code == 422
+
+
+def test_model_card_serves_training_metadata() -> None:
+    """GET /model/{slug}/card exposes the model card fields training wrote."""
+    from fastapi import FastAPI
+
+    metadata = {
+        "model_name": "lightgbm_small_data",
+        "task_type": "classification",
+        "target": "Survived",
+        "test_score": 0.82,
+        "selection_metric": "roc_auc",
+        "cv_folds": 5,
+        "candidate_scores": [
+            {"name": "lightgbm_small_data", "selection_score": 0.88, "metrics": {"cv_roc_auc_mean": 0.88}}
+        ],
+        "metrics": {"holdout_roc_auc": 0.87},
+        "holdout_evaluation": {
+            "n": 4,
+            "threshold": 0.5,
+            "positive_rate": 0.5,
+            "roc_curve": {"fpr": [0.0, 1.0], "tpr": [0.0, 1.0]},
+            "confusion_matrix": {"tn": 1, "fp": 1, "fn": 1, "tp": 1},
+        },
+        "global_feature_importance": [{"feature": "Sex", "importance": 0.2}],
+        "training_rows": 712,
+        "holdout_rows": 179,
+    }
+
+    class CardModelCache(ModelCache):
+        def __init__(self) -> None:
+            pass
+
+        def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
+            return ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata=metadata)
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="org-1", roles=frozenset())
+    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="titanic")
+    cache = CardModelCache()
+    app.dependency_overrides[_model_cache] = lambda: cache
+
+    body = TestClient(app).get("/model/titanic/card").json()
+
+    assert body["selection_metric"] == "roc_auc"
+    assert body["candidates"][0]["metrics"] == {"cv_roc_auc_mean": 0.88}
+    assert body["holdout_evaluation"]["confusion_matrix"]["tp"] == 1
+    assert body["global_feature_importance"] == [{"feature": "Sex", "importance": 0.2}]
+
+
+def test_model_card_tolerates_metadata_from_before_the_model_card() -> None:
+    """A model trained before these fields existed still returns a (sparser) card."""
+    from fastapi import FastAPI
+
+    legacy = {"model_name": "lightgbm", "task_type": "classification", "target": "Exited", "test_score": 0.86}
+
+    class LegacyModelCache(ModelCache):
+        def __init__(self) -> None:
+            pass
+
+        def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
+            return ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata=legacy)
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="org-1", roles=frozenset())
+    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
+    cache = LegacyModelCache()
+    app.dependency_overrides[_model_cache] = lambda: cache
+
+    body = TestClient(app).get("/model/churn/card").json()
+
+    assert body["model_name"] == "lightgbm"
+    assert body["candidates"] == [] and body["holdout_evaluation"] is None

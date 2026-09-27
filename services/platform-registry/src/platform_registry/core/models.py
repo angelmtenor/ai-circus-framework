@@ -39,8 +39,9 @@ class Scenario(Base):
     description: Mapped[str] = mapped_column(String(2000))
     icon: Mapped[str] = mapped_column(String(8))
     role_required: Mapped[str] = mapped_column(String(64))
-    # Industry taxonomy slug (see ai_circus_shared.scenario_schema.Industry) — powers
-    # ui-react's industry filter atop the scenario picker, orthogonal to `kind`.
+    # Domain taxonomy slug (see ai_circus_shared.scenario_schema.Industry — industries
+    # plus `tutorial`/`society_ethics`; the column predates the broader meaning) —
+    # powers ui-react's Domain filter atop the scenario picker, orthogonal to `kind`.
     industry: Mapped[str] = mapped_column(String(32))
 
     # Attribution for a ported public dataset (see ai_circus_shared.scenario_schema.
@@ -78,6 +79,9 @@ class Scenario(Base):
     # Added after the table first shipped: core/db.py's ensure_added_columns() adds it
     # to an existing database (create_all() never alters a table that already exists).
     deep_learning: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml only — see ai_circus_shared.scenario_schema.TutorialConfig. Also added
+    # after first ship (auto-added by ensure_added_columns, like deep_learning above).
+    tutorial: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

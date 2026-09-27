@@ -1,7 +1,7 @@
-import { useMemo } from "react";
 import type { ScenarioSummary } from "./apiClient";
 import { InfoButton } from "./InfoButton";
 import { featureLabel } from "./predictUtils";
+import { domainLabel } from "./ScenarioPicker";
 
 /**
  * Static "about this scenario" tab — the plain-language counterpart to Data & BI's
@@ -15,10 +15,6 @@ export function ScenarioView({ scenario }: { scenario: ScenarioSummary }) {
   const featureSchema = scenario.feature_schema ?? {};
   const classLabels = scenario.target_value_labels ? Object.entries(scenario.target_value_labels) : [];
 
-  const industryLabel = useMemo(() => {
-    const words = scenario.industry.split("_");
-    return words.map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
-  }, [scenario.industry]);
 
   return (
     <div className="tab-panel">
@@ -28,7 +24,7 @@ export function ScenarioView({ scenario }: { scenario: ScenarioSummary }) {
         </h3>
         <p style={{ marginTop: "-0.2rem" }}>{scenario.description}</p>
         <div className="scenario-meta-row">
-          <span className="scenario-meta-pill">Industry: {industryLabel}</span>
+          <span className="scenario-meta-pill">Domain: {domainLabel(scenario.industry)}</span>
           {scenario.task_type && <span className="scenario-meta-pill">Task: {scenario.task_type}</span>}
           <span className="scenario-meta-pill">Features: {featureColumns.length}</span>
         </div>

@@ -19,6 +19,8 @@ from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.metrics import accuracy_score, confusion_matrix, r2_score, roc_auc_score, roc_curve
+from sklearn.model_selection import KFold, StratifiedKFold, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -26,20 +28,49 @@ from training.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Gradient boosting sized for small tables (hundreds to a few thousand rows): shallow
+# trees, a slow learning rate, row/column subsampling and L2 — the plain `lightgbm`
+# defaults memorise a table that small. Measured on `titanic` (5-fold CV ROC AUC on
+# the training split): 0.885 for this vs 0.860 for `lightgbm` and 0.872 for logistic
+# regression.
+_SMALL_DATA_LGBM: dict[str, Any] = {
+    "n_estimators": 300,
+    "learning_rate": 0.03,
+    "num_leaves": 8,
+    "max_depth": 4,
+    "min_child_samples": 10,
+    "subsample": 0.8,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.7,
+    "reg_lambda": 2.0,
+    "random_state": 0,
+    "verbosity": -1,
+}
+
 # Keyed by task_type, then candidate name (as referenced by scenario.yaml's
 # model.candidates) — .score() is accuracy for the classification estimators and R²
-# for the regression ones; both are "higher is better", so select_best_candidate()'s
-# gain-threshold comparison works unchanged across task types.
+# for the regression ones; every selection metric (accuracy, ROC AUC, R²) is "higher
+# is better", so select_best_candidate()'s gain-threshold comparison works unchanged.
 CANDIDATE_ESTIMATORS = {
     "classification": {
         "logistic_regression": lambda: LogisticRegression(max_iter=1000),
         "lightgbm": lambda: LGBMClassifier(n_estimators=200, max_depth=6, random_state=0, verbosity=-1),
+        "lightgbm_small_data": lambda: LGBMClassifier(**_SMALL_DATA_LGBM),
     },
     "regression": {
         "linear_regression": lambda: LinearRegression(),
         "lightgbm": lambda: LGBMRegressor(n_estimators=200, max_depth=6, random_state=0, verbosity=-1),
+        "lightgbm_small_data": lambda: LGBMRegressor(**_SMALL_DATA_LGBM),
     },
 }
+
+# scenario.yaml's model.selection_metric when unset — the historical behaviour.
+DEFAULT_SELECTION_METRIC = {"classification": "accuracy", "regression": "r2"}
+# Every metric reported per candidate (hold-out, and CV when enabled) — the selection
+# metric is always one of these.
+REPORTED_METRICS = {"classification": ("accuracy", "roc_auc"), "regression": ("r2",)}
+# Points kept from the hold-out ROC curve in metadata.json — plenty for a smooth plot.
+ROC_CURVE_MAX_POINTS = 80
 
 # 90% prediction interval (5th/95th percentile) — LightGBM's native quantile
 # objective is the same technique used for ExtendedRegressor in the smart-data-science
@@ -50,11 +81,19 @@ INTERVAL_UPPER_ALPHA = 0.95
 
 @dataclass(frozen=True)
 class TrainedCandidate:
-    """One trained candidate model and its held-out test score (accuracy or R²)."""
+    """One trained candidate model (fit on the training split) and its scores.
+
+    `test_score` keeps its historical meaning (hold-out accuracy / R² — what the
+    assistant quotes); `selection_score` is what select_best_candidate() compares (the
+    scenario's selection metric, cross-validated when `cv_folds` is set); `metrics`
+    holds every reported value (`holdout_<metric>`, `cv_<metric>_mean`/`_std`).
+    """
 
     name: str
     pipeline: Pipeline
     test_score: float
+    selection_score: float
+    metrics: dict[str, float]
 
 
 def split_features(df: pd.DataFrame, feature_columns: list[str]) -> tuple[list[str], list[str]]:
@@ -92,6 +131,45 @@ def build_pipeline(numeric_features: list[str], categorical_features: list[str],
     return Pipeline([("preprocessor", preprocessor), ("model", estimator)])
 
 
+def holdout_metrics(pipeline: Pipeline, x_test: pd.DataFrame, y_test: pd.Series, task_type: str) -> dict[str, float]:
+    """Every REPORTED_METRICS value of a fitted pipeline on the hold-out, as `holdout_<metric>`."""
+    if task_type == "regression":
+        return {"holdout_r2": round(float(r2_score(y_test, pipeline.predict(x_test))), 4)}
+    metrics = {"holdout_accuracy": round(float(accuracy_score(y_test, pipeline.predict(x_test))), 4)}
+    if y_test.nunique() == 2:  # ROC AUC is defined for a binary target with both classes present
+        proba = pipeline.predict_proba(x_test)[:, 1]
+        metrics["holdout_roc_auc"] = round(float(roc_auc_score(y_test == pipeline.classes_[1], proba)), 4)
+    return metrics
+
+
+def cross_validated_metrics(
+    estimator_name: str,
+    x: pd.DataFrame,
+    y: pd.Series,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    task_type: str,
+    folds: int,
+) -> dict[str, float]:
+    """k-fold CV (stratified for classification) of a fresh pipeline on `x`/`y` — the
+    training split only, so the hold-out stays untouched for the final report.
+    """
+    pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][estimator_name]())
+    splitter = (
+        StratifiedKFold(n_splits=folds, shuffle=True, random_state=0)
+        if task_type == "classification"
+        else KFold(n_splits=folds, shuffle=True, random_state=0)
+    )
+    names = [m for m in REPORTED_METRICS[task_type] if m != "roc_auc" or y.nunique() == 2]
+    scores = cross_validate(pipeline, x, y, cv=splitter, scoring=names, n_jobs=1)
+    metrics: dict[str, float] = {}
+    for name in names:
+        values = np.asarray(scores[f"test_{name}"], dtype=float)
+        metrics[f"cv_{name}_mean"] = round(float(values.mean()), 4)
+        metrics[f"cv_{name}_std"] = round(float(values.std()), 4)
+    return metrics
+
+
 def train_candidate(
     name: str,
     x_train: pd.DataFrame,
@@ -101,26 +179,67 @@ def train_candidate(
     numeric_features: list[str],
     categorical_features: list[str],
     task_type: str = "classification",
+    *,
+    selection_metric: str | None = None,
+    cv_folds: int = 0,
 ) -> TrainedCandidate:
-    """Train one named candidate estimator and score it on the held-out test set."""
+    """Train one named candidate estimator on the training split and score it — on the
+    hold-out, plus k-fold CV on the training split when `cv_folds` >= 2.
+    """
+    metric = selection_metric or DEFAULT_SELECTION_METRIC[task_type]
+    metrics: dict[str, float] = {}
+    if cv_folds >= 2:
+        metrics.update(
+            cross_validated_metrics(name, x_train, y_train, numeric_features, categorical_features, task_type, cv_folds)
+        )
     pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name]())
     pipeline.fit(x_train, y_train)
     score = pipeline.score(x_test, y_test)
-    logger.info("Trained candidate {!r}: test score={:.4f}", name, score)
-    return TrainedCandidate(name, pipeline, score)
+    metrics.update(holdout_metrics(pipeline, x_test, y_test, task_type))
+    selection_key = f"cv_{metric}_mean" if cv_folds >= 2 else f"holdout_{metric}"
+    selection_score = metrics.get(selection_key, score)
+    logger.info("Trained candidate {!r}: {}={:.4f} (test score={:.4f})", name, selection_key, selection_score, score)
+    return TrainedCandidate(name, pipeline, score, selection_score, metrics)
+
+
+def holdout_evaluation(pipeline: Pipeline, x_test: pd.DataFrame, y_test: pd.Series) -> dict[str, Any] | None:
+    """The selected classifier's ROC curve and confusion matrix (at 0.5) on the
+    untouched hold-out — computed *before* the final refit on every row, so unlike
+    prediction's live /dataset/{slug}/evaluation (which scores the refit, deployed
+    weights on rows they were fit on) these numbers carry no leakage. None for a
+    non-binary target.
+    """
+    if y_test.nunique() != 2:
+        return None
+    positive = pipeline.classes_[1]
+    actual = (y_test == positive).to_numpy()
+    proba = pipeline.predict_proba(x_test)[:, 1]
+    fpr, tpr, _ = roc_curve(actual, proba)
+    if len(fpr) > ROC_CURVE_MAX_POINTS:
+        keep = np.unique(np.linspace(0, len(fpr) - 1, ROC_CURVE_MAX_POINTS).astype(int))
+        fpr, tpr = fpr[keep], tpr[keep]
+    tn, fp, fn, tp = confusion_matrix(actual, proba >= 0.5, labels=[False, True]).ravel()
+    return {
+        "n": len(y_test),
+        "threshold": 0.5,
+        "positive_rate": round(float(actual.mean()), 4),
+        "roc_curve": {"fpr": [round(float(v), 4) for v in fpr], "tpr": [round(float(v), 4) for v in tpr]},
+        "confusion_matrix": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
+    }
 
 
 def select_best_candidate(candidates: list[TrainedCandidate], accuracy_gain_threshold: float) -> TrainedCandidate:
     """Green Code policy: candidates are ordered simplest-first in scenario.yaml.
 
     A more complex candidate only replaces the current best if it beats it by more
-    than `accuracy_gain_threshold` — a minor score gain (accuracy for classification,
-    R² for regression; both higher-is-better) is not worth the added
-    training/inference/explainability cost of a more complex model.
+    than `accuracy_gain_threshold` — a minor gain in the selection score (the
+    scenario's selection metric: accuracy / ROC AUC / R², all higher-is-better,
+    cross-validated when enabled) is not worth the added training/inference/
+    explainability cost of a more complex model.
     """
     best = candidates[0]
     for candidate in candidates[1:]:
-        gain = candidate.test_score - best.test_score
+        gain = candidate.selection_score - best.selection_score
         if gain > accuracy_gain_threshold:
             logger.info(
                 "Selecting {!r} over {!r}: score gain {:.4f} > threshold {:.4f}",
