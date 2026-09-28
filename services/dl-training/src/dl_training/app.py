@@ -25,7 +25,7 @@ from ai_circus_shared.storage import ObjectStore
 from pydantic import ValidationError
 
 from dl_training import get_env_config
-from dl_training.core import data, pipeline
+from dl_training.core import data, pipeline, text_embeddings
 from dl_training.core.device import resolve_device
 from dl_training.core.logger import configure_logger, get_logger
 from dl_training.data_model import EnvConfig
@@ -112,3 +112,35 @@ def download_main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def embed_texts_main() -> None:
+    """Embed the free text of every selected tabular_ml scenario with a
+    `model.text_challenger` on this machine (GPU when present) into the SeaweedFS cache
+    training reads — see core/text_embeddings.py. Run via `make k3s-text-embeddings`.
+    """
+    configure_logger()
+    try:
+        config = get_env_config()
+        device = resolve_device(config.DL_DEVICE or "auto")
+    except (ValidationError, ValueError, RuntimeError) as e:
+        logger.error("Configuration error: {}", e)
+        sys.exit(1)
+    definitions = {
+        slug: d
+        for slug, d in resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS or "", kind="tabular_ml").items()
+        if d.model is not None and d.model.text_challenger is not None
+    }
+    if not definitions:
+        logger.error("No tabular_ml scenario with a model.text_challenger matched SCENARIOS={!r}", config.SCENARIOS)
+        sys.exit(1)
+    for slug, definition in definitions.items():
+        assert definition.dataset is not None
+        store = ObjectStore.connect(
+            bucket=definition.dataset.bucket,
+            endpoint_url=config.OBJECT_STORE_ENDPOINT,
+            access_key=config.OBJECT_STORE_ACCESS_KEY,
+            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
+        )
+        summary = text_embeddings.embed_scenario_texts(definition, store, config.ORG_ID, device)
+        logger.success("{}: text embeddings cached for org={} — {}", slug, config.ORG_ID, summary)

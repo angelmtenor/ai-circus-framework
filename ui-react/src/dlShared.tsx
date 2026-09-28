@@ -7,10 +7,11 @@ import {
   type DlModelInfo,
   type DlSample,
   type DlSimilarCase,
-  type DlTokenWeight,
   type ScenarioSummary,
 } from "./apiClient";
 import { config } from "./config";
+// Re-exported so existing deep_learning views keep importing them from here.
+export { TokenHighlights, TopWords } from "./textHighlights";
 
 /**
  * Shared pieces of the generic deep_learning workspace (DeepLearningView.tsx and its
@@ -176,49 +177,6 @@ export function ProbabilityBars({
           </span>
           <span className="dl-prob-value">{probText(item.probability)}</span>
         </div>
-      ))}
-    </div>
-  );
-}
-
-/** Words colored by their attribution: warm = evidence FOR the explained class,
- * cool = evidence against, intensity relative to the strongest word. */
-export function TokenHighlights({ text, tokens }: { text: string; tokens: DlTokenWeight[] }) {
-  const max = Math.max(1e-9, ...tokens.map((t) => Math.abs(t.weight ?? 0)));
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-  tokens.forEach((t, i) => {
-    if (t.start > cursor) parts.push(<span key={`g${i}`}>{text.slice(cursor, t.start)}</span>);
-    const w = t.weight ?? 0;
-    const strength = Math.round((Math.abs(w) / max) * 70);
-    const color = w >= 0 ? "var(--red)" : "var(--blue)";
-    parts.push(
-      <span
-        key={i}
-        className="dl-token"
-        style={strength > 4 ? { background: `color-mix(in srgb, ${color} ${strength}%, transparent)` } : undefined}
-        title={t.weight === null ? "Beyond the model's input length" : `${w >= 0 ? "+" : ""}${w.toFixed(3)} log-odds`}
-      >
-        {text.slice(t.start, t.end)}
-      </span>,
-    );
-    cursor = t.end;
-  });
-  if (cursor < text.length) parts.push(<span key="tail">{text.slice(cursor)}</span>);
-  return <p className="dl-token-text">{parts}</p>;
-}
-
-export function TopWords({ tokens, limit = 8 }: { tokens: DlTokenWeight[]; limit?: number }) {
-  const ranked = tokens
-    .filter((t) => t.weight !== null && /\w/.test(t.text))
-    .sort((a, b) => Math.abs(b.weight ?? 0) - Math.abs(a.weight ?? 0))
-    .slice(0, limit);
-  return (
-    <div className="dl-top-words">
-      {ranked.map((t, i) => (
-        <span key={i} className={`dl-word-chip ${(t.weight ?? 0) >= 0 ? "dl-word-chip--for" : "dl-word-chip--against"}`}>
-          {t.text} <small>{(t.weight ?? 0) >= 0 ? "+" : ""}{(t.weight ?? 0).toFixed(2)}</small>
-        </span>
       ))}
     </div>
   );

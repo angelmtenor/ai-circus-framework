@@ -30,6 +30,10 @@ spec:
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: training-secrets}
+          env:
+            # Renamed from .env's LITELLM_MASTER_KEY — only used to verify/fill the text
+            # challenger's embedding cache (llm-gateway's `local-embed`).
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: training-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
       volumes:

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useCopilotReadable } from "@copilotkit/react-core";
-import { predict, datasetSample, type ScenarioSummary, type DatasetSample } from "./apiClient";
+import { predict, datasetSample, type ScenarioSummary, type DatasetSample, type PredictionResult } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, Gauge, CHART_COLORS } from "./charts";
 import { DatasetFilterPanel, type DatasetRow } from "./DatasetFilterPanel";
-import { mapContributions, topContribution, exportJson, initialRecord, featureLabel, FeatureInput, type Record_ } from "./predictUtils";
+import { mapContributions, topContribution, exportJson, initialRecord, featureLabel, FeatureInput, isTextFeature, type Record_ } from "./predictUtils";
+import { ModelDuel, scoreTextRecord, textFeatures, TextFeatureExplanations, type TextScore } from "./textModels";
 
 // A batch /predict call computes a per-row SHAP explanation for every record in one
 // batched call — the same ~linear-in-row-count cost as explainability's "compute
@@ -16,26 +17,31 @@ function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; 
   const featureColumns = scenario.feature_columns ?? [];
   const featureSchema = scenario.feature_schema ?? {};
   const [record, setRecord] = useState<Record_>(() => initialRecord(featureColumns, featureSchema));
-  const [result, setResult] = useState<{
-    prediction: number;
-    contributions: Record<string, number>;
-    prediction_lower: number | null;
-    prediction_upper: number | null;
-  } | null>(null);
+  const [result, setResult] = useState<PredictionResult | null>(null);
+  // Text scenarios: the same record also scored by the transformer challenger.
+  const [textScore, setTextScore] = useState<TextScore | null>(null);
+  const hasText = textFeatures(scenario).length > 0;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function update(feature: string, value: number | string) {
     setRecord((r) => ({ ...r, [feature]: value }));
     setResult(null);
+    setTextScore(null);
   }
 
   async function runPredict() {
     setError(null);
     setLoading(true);
     try {
-      const response = await predict(config.predictionUrl, scenario.slug, [record], accessToken);
-      setResult(response.predictions[0]);
+      if (hasText) {
+        const score = await scoreTextRecord(scenario, record, accessToken, true);
+        setTextScore(score);
+        setResult(score.champion);
+      } else {
+        const response = await predict(config.predictionUrl, scenario.slug, [record], accessToken);
+        setResult(response.predictions[0]);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -94,8 +100,15 @@ function IndividualMode({ scenario, accessToken }: { scenario: ScenarioSummary; 
               ⬇ Export result
             </button>
           </div>
+          {textScore && scenario.text_challenger && (
+            <>
+              <h4>Bag of words vs transformer</h4>
+              <ModelDuel scenario={scenario} score={textScore} />
+            </>
+          )}
           <h4>Explained prediction (SHAP)</h4>
           <BarList items={contributionItems} valueFormatter={(v) => v.toFixed(4)} />
+          <TextFeatureExplanations scenario={scenario} record={record} result={result} />
         </div>
       )}
     </div>
@@ -232,7 +245,13 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
                       </td>
                     ))}
                     {featureColumns.map((f) => (
-                      <td key={f}>{String(row.record[f])}</td>
+                      <td
+                        key={f}
+                        className={isTextFeature(scenario, f) ? "data-table-text" : undefined}
+                        title={isTextFeature(scenario, f) ? String(row.record[f]) : undefined}
+                      >
+                        {String(row.record[f])}
+                      </td>
                     ))}
                     <td>{isRegression ? `${row.prediction.toFixed(2)} ${scenario.target_units ?? ""}` : `${(row.prediction * 100).toFixed(1)}%`}</td>
                     {isRegression && (

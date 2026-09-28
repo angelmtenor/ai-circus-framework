@@ -78,7 +78,9 @@ type Sweep = {
 function PartialDependenceSection({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const featureColumns = scenario.feature_columns ?? [];
   const featureSchema = scenario.feature_schema ?? {};
-  const [feature, setFeature] = useState(featureColumns[0] ?? "");
+  // Free text can't be swept across a range — it stays an editable input only.
+  const sweepable = featureColumns.filter((f) => featureSchema[f]?.type !== "text");
+  const [feature, setFeature] = useState(sweepable[0] ?? "");
   const [record, setRecord] = useState<Record_>(() => initialRecord(featureColumns, featureSchema));
   const [sweep, setSweep] = useState<Sweep | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,8 +95,10 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
       if (spec.type === "numeric") {
         const steps = 14;
         xValues = Array.from({ length: steps }, (_, i) => Math.round((spec.min + (i / (steps - 1)) * (spec.max - spec.min)) * 100) / 100);
-      } else {
+      } else if (spec.type === "categorical") {
         xValues = spec.options;
+      } else {
+        return;
       }
       const records = xValues.map((v) => ({ ...record, [feature]: v }));
       const response = await predict(config.predictionUrl, scenario.slug, records, accessToken);
@@ -136,7 +140,7 @@ function PartialDependenceSection({ scenario, accessToken }: { scenario: Scenari
           <label>
             Sweep feature
             <select value={feature} onChange={(e) => setFeature(e.target.value)}>
-              {featureColumns.map((f) => (
+              {sweepable.map((f) => (
                 <option key={f} value={f}>
                   {featureLabel(scenario, f)}
                 </option>

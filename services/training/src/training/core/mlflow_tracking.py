@@ -85,6 +85,7 @@ def log_training_run(
                 "accuracy_gain_threshold_for_complexity": accuracy_gain_threshold,
                 "dataset_rows": dataset_rows,
                 "feature_count": len(metadata.get("feature_columns", [])),
+                "text_features": ",".join(metadata.get("text_columns") or []) or "none",
                 "target": str(metadata.get("target", "")),
                 # Where the served artifacts actually live (tenant-scoped SeaweedFS
                 # keys, see ai_circus_shared.tabular_ml) + the checksums prediction

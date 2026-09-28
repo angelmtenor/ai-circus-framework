@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { datasetSample, modelCard, predict, type DatasetSample, type ModelCard, type ScenarioSummary, type TutorialWidget } from "./apiClient";
+import {
+  datasetSample,
+  modelCard,
+  predict,
+  type DatasetSample,
+  type DlTokenWeight,
+  type ModelCard,
+  type ScenarioSummary,
+  type TutorialWidget,
+} from "./apiClient";
 import { config } from "./config";
 import { BarList, StatTile } from "./charts";
 import { PlotlyChart } from "./PlotlyChart";
 import { buildChart, specToChartCardConfig, type ValueLabelFor } from "./chartBuilder";
 import { renderMarkdown } from "./markdown";
-import { explainByFeature, featureLabel } from "./predictUtils";
+import { explainByFeature, featureLabel, isTextFeature } from "./predictUtils";
+import { probabilityPoints, TokenHighlights } from "./textHighlights";
+import { textFeatures } from "./textModels";
 import { useTheme } from "./useTheme";
 import { Icon } from "./Icon";
 import "./tutorial.css";
@@ -19,10 +30,20 @@ const MODEL_NAMES: Record<string, string> = {
   lightgbm_small_data: "LightGBM (small data)",
 };
 const modelName = (key: string) => MODEL_NAMES[key] ?? key.replace(/_/g, " ");
-const POSITIVE_HEX = "#3f93eb";
-const NEGATIVE_HEX = "#ea4f58";
+const GOOD_HEX = "#3f93eb";
+const BAD_HEX = "#ea4f58";
+// Colour of the positive class (e.g. titanic "survived" = good/blue; toxic_leadership
+// "bad leadership" = adverse/red — see TutorialConfig.positive_is_adverse).
+const positiveHex = (scenario: ScenarioSummary) => (scenario.tutorial?.positive_is_adverse ? BAD_HEX : GOOD_HEX);
+const negativeHex = (scenario: ScenarioSummary) => (scenario.tutorial?.positive_is_adverse ? GOOD_HEX : BAD_HEX);
 
-type ExampleResult = { prediction: number; items: { feature: string; value: number }[] };
+type ExampleResult = {
+  prediction: number;
+  items: { feature: string; value: number }[];
+  // Free-text scenarios: word-level explanation and the transformer challenger's score.
+  tokens?: Record<string, DlTokenWeight[]> | null;
+  challenger?: number | null;
+};
 
 /**
  * Generic "Tutorial" tab for any tabular_ml scenario with a `tutorial:` block (see
@@ -57,22 +78,32 @@ export function TutorialView({
       .then((c) => !cancelled && setCard(c))
       .catch((e) => !cancelled && setCardError((e as Error).message));
     if (tutorial.examples.length > 0) {
-      predict(
-        config.predictionUrl,
-        scenario.slug,
-        tutorial.examples.map((e) => e.record),
-        accessToken,
-      )
-        .then((r) => {
+      const records = tutorial.examples.map((e) => e.record);
+      const hasText = textFeatures(scenario).length > 0;
+      const champion = predict(config.predictionUrl, scenario.slug, records, accessToken, { explainText: hasText });
+      // The transformer challenger scores the same examples when trained (else skipped).
+      const challenger = scenario.text_challenger
+        ? predict(config.predictionUrl, scenario.slug, records, accessToken, { model: "challenger" }).catch(() => null)
+        : Promise.resolve(null);
+      Promise.all([champion, challenger])
+        .then(([r, ch]) => {
           if (cancelled) return;
           const features = scenario.feature_columns ?? [];
-          setExamples(r.predictions.map((p) => ({ prediction: p.prediction, items: explainByFeature(features, p.prediction, p.contributions).items })));
+          setExamples(
+            r.predictions.map((p, i) => ({
+              prediction: p.prediction,
+              items: explainByFeature(features, p.prediction, p.contributions).items,
+              tokens: p.text_explanations,
+              challenger: ch?.predictions[i]?.prediction ?? null,
+            })),
+          );
         })
         .catch(() => undefined);
     }
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scenario.slug, scenario.feature_columns, accessToken, tutorial.examples]);
 
   const total = tutorial.steps.length;
@@ -212,7 +243,8 @@ function Widget({
   cardError: string | null;
   examples: ExampleResult[] | null;
 }) {
-  const needsCard = widget === "model_card" || widget === "roc_curve" || widget === "confusion_matrix" || widget === "feature_importance";
+  const needsCard =
+    widget === "model_card" || widget === "roc_curve" || widget === "confusion_matrix" || widget === "feature_importance" || widget === "top_terms";
   if (needsCard && !card) {
     return cardError ? (
       <p className="error">The model isn't available yet ({cardError}) — train it first (make k3s-pipeline).</p>
@@ -245,6 +277,8 @@ function Widget({
       );
     case "examples":
       return <Examples scenario={scenario} results={examples} />;
+    case "top_terms":
+      return <TopTerms scenario={scenario} card={card!} />;
     default:
       return null;
   }
@@ -270,7 +304,11 @@ function DatasetPreview({ scenario, sample }: { scenario: ScenarioSummary; sampl
             {sample.rows.slice(0, 8).map((row, i) => (
               <tr key={i}>
                 {sample.columns.map((c) => (
-                  <td key={c} className={identity.has(c) ? "data-table-id" : undefined}>
+                  <td
+                    key={c}
+                    className={identity.has(c) ? "data-table-id" : isTextFeature(scenario, c) ? "data-table-text" : undefined}
+                    title={isTextFeature(scenario, c) ? String(row[c]) : undefined}
+                  >
                     {c === scenario.target ? (scenario.target_value_labels?.[String(row[c])] ?? String(row[c])) : String(row[c])}
                   </td>
                 ))}
@@ -293,7 +331,10 @@ function ClassBalance({ scenario, sample }: { scenario: ScenarioSummary; sample:
   return (
     <div className="tut-widget">
       <h4>Class balance of the target</h4>
-      <div className="tut-balance" role="img" aria-label={`${positive} ${(rate * 100).toFixed(1)}%, ${negative} ${((1 - rate) * 100).toFixed(1)}%`}>
+      <div
+        className={`tut-balance${scenario.tutorial?.positive_is_adverse ? " tut-balance--adverse" : ""}`}
+        role="img"
+        aria-label={`${positive} ${(rate * 100).toFixed(1)}%, ${negative} ${((1 - rate) * 100).toFixed(1)}%`}>
         <div className="tut-balance-neg" style={{ width: `${(1 - rate) * 100}%` }}>
           {negative} · {n - positives} ({((1 - rate) * 100).toFixed(0)}%)
         </div>
@@ -339,6 +380,26 @@ function ModelLeaderboard({ card }: { card: ModelCard }) {
                 <td>{c.name === card.model_name && <span className="tut-badge">✓ deployed</span>}</td>
               </tr>
             ))}
+            {card.challenger && (
+              <tr className="tut-challenger">
+                <td>
+                  {modelName(card.challenger.name)} on <em>{card.challenger.label}</em>
+                </td>
+                <td>
+                  <strong>{card.challenger.selection_score.toFixed(3)}</strong>
+                  {cv && card.challenger.metrics[`cv_${metric}_std`] !== undefined && (
+                    <span className="panel-hint"> ± {card.challenger.metrics[`cv_${metric}_std`].toFixed(3)}</span>
+                  )}
+                </td>
+                <td>{card.challenger.metrics.holdout_roc_auc?.toFixed(3) ?? "—"}</td>
+                <td>
+                  {card.challenger.metrics.holdout_accuracy !== undefined ? `${(card.challenger.metrics.holdout_accuracy * 100).toFixed(1)}%` : "—"}
+                </td>
+                <td>
+                  <span className="tut-badge tut-badge--challenger">challenger</span>
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -347,6 +408,16 @@ function ModelLeaderboard({ card }: { card: ModelCard }) {
         a more complex candidate must win by more than {card.accuracy_gain_threshold_for_complexity ?? "—"} {name} to be adopted (Green Code). The
         {` ${card.holdout_rows ?? "held-out"}`} hold-out rows were never used to choose. The winner was then refit on all rows for deployment.
       </p>
+      {card.challenger && (
+        <p className="panel-hint">
+          The <strong>challenger</strong> reads the text with {card.challenger.hf_model_id} ({card.challenger.embedding_dim}-dimension sentence
+          embeddings) instead of TF-IDF, on exactly the same split: {card.challenger.gain_over_deployed !== null && card.challenger.gain_over_deployed >= 0 ? "+" : ""}
+          {card.challenger.gain_over_deployed?.toFixed(3) ?? "—"} {name} vs the deployed model —{" "}
+          {card.challenger.would_be_adopted
+            ? "enough to be worth promoting under Green Code."
+            : `under the ${card.accuracy_gain_threshold_for_complexity} bar, so the cheaper, word-explainable model stays deployed.`}
+        </p>
+      )}
     </div>
   );
 }
@@ -443,11 +514,14 @@ function ConfusionMatrix({ scenario, card }: { scenario: ScenarioSummary; card: 
 function Examples({ scenario, results }: { scenario: ScenarioSummary; results: ExampleResult[] | null }) {
   const examples = scenario.tutorial?.examples ?? [];
   const positive = scenario.target_value_labels?.["1"] ?? "positive";
+  const POSITIVE_HEX = positiveHex(scenario);
+  const NEGATIVE_HEX = negativeHex(scenario);
+  const text = new Set(textFeatures(scenario));
   if (!results) return <div className="app-loading">Asking the model…</div>;
   return (
     <div className="tut-widget">
       <h4>Scored live by the deployed model</h4>
-      <div className="tut-examples">
+      <div className={`tut-examples${scenario.tutorial?.positive_is_adverse ? " tut-examples--adverse" : ""}`}>
         {examples.map((example, i) => {
           const r = results[i];
           return (
@@ -462,10 +536,22 @@ function Examples({ scenario, results }: { scenario: ScenarioSummary; results: E
                 <div style={{ width: `${r.prediction * 100}%`, background: r.prediction >= 0.5 ? POSITIVE_HEX : NEGATIVE_HEX }} />
               </div>
               <span className="panel-hint">probability of “{positive.toLowerCase()}” — mainly:</span>
+              {r.challenger !== null && r.challenger !== undefined && (
+                <span className="panel-hint tut-example-challenger">
+                  transformer challenger: <strong>{(r.challenger * 100).toFixed(0)}%</strong>
+                </span>
+              )}
+              {r.tokens &&
+                Object.entries(r.tokens).map(([feature, tokens]) => (
+                  <div key={feature} className="tut-example-text">
+                    <TokenHighlights text={String(example.record[feature] ?? "")} tokens={tokens} format={probabilityPoints} />
+                  </div>
+                ))}
               <ul>
                 {r.items.slice(0, 3).map((item) => (
                   <li key={item.feature}>
-                    {featureLabel(scenario, item.feature)} = {String(example.record[item.feature])}{" "}
+                    {featureLabel(scenario, item.feature)}
+                    {text.has(item.feature) ? " (the words above)" : ` = ${String(example.record[item.feature])}`}{" "}
                     <span className={item.value >= 0 ? "tut-up" : "tut-down"}>
                       {item.value >= 0 ? "+" : "−"}
                       {Math.abs(item.value * 100).toFixed(1)} pts
@@ -477,6 +563,47 @@ function Examples({ scenario, results }: { scenario: ScenarioSummary; results: E
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** The words and phrases of each text feature that push predictions up ("red flags")
+ * and down, from the model card's text_term_importance (mean SHAP where present). */
+function TopTerms({ scenario, card }: { scenario: ScenarioSummary; card: ModelCard }) {
+  const terms = card.text_term_importance ?? {};
+  const positive = scenario.target_value_labels?.["1"] ?? "the positive class";
+  const negative = scenario.target_value_labels?.["0"] ?? "the negative class";
+  const adverse = Boolean(scenario.tutorial?.positive_is_adverse);
+  if (Object.keys(terms).length === 0) return <p className="panel-hint">No word-level importance recorded for this model (retrain to add it).</p>;
+  return (
+    <div className="tut-widget">
+      {Object.entries(terms).map(([feature, { positive: up, negative: down }]) => (
+        <div key={feature} className="tut-terms">
+          <div className="tut-terms-col">
+            <h4>
+              {adverse ? "🚩 Red flags" : "Push up"} — toward “{positive}”
+            </h4>
+            <BarList
+              items={up.slice(0, 15).map((t) => ({ label: `${t.term}  ·  ${t.docs} reviews`, value: t.weight * 100 }))}
+              signed={false}
+              valueFormatter={(v) => `+${v.toFixed(1)} pts`}
+            />
+          </div>
+          <div className="tut-terms-col">
+            <h4>
+              {adverse ? "✅ Green flags" : "Push down"} — toward “{negative}”
+            </h4>
+            <BarList
+              items={down.slice(0, 15).map((t) => ({ label: `${t.term}  ·  ${t.docs} reviews`, value: Math.abs(t.weight) * 100 }))}
+              signed={false}
+              valueFormatter={(v) => `−${v.toFixed(1)} pts`}
+            />
+          </div>
+          <p className="panel-hint tut-terms-note">
+            {featureLabel(scenario, feature)}: each term's average SHAP contribution in the training texts that contain it (terms in at least 10 texts).
+          </p>
+        </div>
+      ))}
     </div>
   );
 }

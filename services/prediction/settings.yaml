@@ -53,6 +53,18 @@ env_variables:
     mandatory: true
     secret: true
 
+  - name: LLM_GATEWAY_URL
+    description: "llm-gateway API base URL — embeds text for model.text_challenger; unset = no challenger"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LLM_GATEWAY_API_KEY
+    description: "API key presented to llm-gateway (its LITELLM_MASTER_KEY) — only for model.text_challenger"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: PLATFORM_REGISTRY_URL
     description: "Base URL of the platform-registry service's entitlement-check API"
     type: string
@@ -150,12 +162,14 @@ environments:
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
+    LLM_GATEWAY_URL: "http://localhost:4000"
     SCENARIOS_DIR: "../../scenarios"
     OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
+    LLM_GATEWAY_URL: "http://llm-gateway:4000"
     SCENARIOS_DIR: "/app/scenarios"
     OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"

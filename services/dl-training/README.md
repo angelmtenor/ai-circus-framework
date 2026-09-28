@@ -107,6 +107,12 @@ Each tool target is a thin wrapper around a `uv run` console script — they're 
 `[project.scripts]` in [pyproject.toml](pyproject.toml) and can be run directly without `make`,
 e.g. `uv run dl-training-hello-world`.
 
+Besides fine-tuning `deep_learning` scenarios (`uv run dl-training`, driven from the repo root by
+`make dl-train*`), `uv run dl-training-embed-texts` embeds the free text of every `tabular_ml`
+scenario with a `model.text_challenger` (e.g. `toxic_leadership`) on this machine's GPU, with the
+same sentence-transformer llm-gateway serves as `local-embed`, into a SeaweedFS cache the
+`training` job reads — run it from the repo root as `make k3s-text-embeddings`.
+
 ---
 
 ## Contributing

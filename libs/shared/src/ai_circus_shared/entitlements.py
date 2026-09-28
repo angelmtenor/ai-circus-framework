@@ -151,6 +151,11 @@ class ScenarioSummary(BaseModel):
     # tabular_ml only — a guided Tutorial tab (see scenario_schema.TutorialConfig); a
     # plain dict for the same reason as `form` above.
     tutorial: dict[str, Any] | None = None
+    # tabular_ml with a free-text feature only — an LLM rubric check over a behaviour
+    # description, and the sentence-embedding challenger model (see
+    # scenario_schema.RubricCheckConfig / TextChallenger); plain dicts like `form`.
+    rubric_check: dict[str, Any] | None = None
+    text_challenger: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

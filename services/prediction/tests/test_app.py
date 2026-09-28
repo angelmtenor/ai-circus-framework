@@ -158,7 +158,9 @@ def test_model_unavailable_error_gets_503_with_cors_headers_not_a_bare_500() -> 
     test_app.dependency_overrides[resolve_identity] = lambda: Identity(
         subject="user-1", org_id="org-1", roles=frozenset()
     )
-    test_app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="mpm")
+    test_app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(
+        slug="mpm", dataset=SimpleNamespace(text_columns=list, feature_schema={})
+    )
     test_app.dependency_overrides[_model_cache] = lambda: FailingModelCache()
 
     response = TestClient(test_app).post(

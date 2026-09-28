@@ -25,11 +25,24 @@ tutorial walks the whole ML workflow on live data. **[Read the scenario chapter 
   <a href="docs/scenarios/titanic.md"><img src="docs/screenshots/titanic/voyage-model.png" alt="Titanic Voyage tab: all 891 passengers aboard an illustrated cutaway of the ship at night, coloured by the model's survival probability" width="850"></a>
 </p>
 
+### ✨ New — 🚩 [Toxic Leadership: an NLP + ML tutorial](docs/scenarios/toxic_leadership.md)
+
+"People don't leave companies, they leave managers." 4,000 real reviews by software, data and AI
+engineers, read by a LightGBM model that combines the **words** (TF-IDF, explained word by word)
+with the facts of the job, then raced against a modern **sentence-transformer**. Every review is
+a desk in an illustrated office tower (the C-suite penthouse's lights are on; nobody is at
+their desk), and a **Leadership check** asks an LLM to read any description of a leader's
+behaviour against a research-based rubric. **[Read the scenario chapter →](docs/scenarios/toxic_leadership.md)**
+
+<p align="center">
+  <a href="docs/scenarios/toxic_leadership.md"><img src="docs/screenshots/toxic_leadership/office-model.png" alt="The Office tab: every engineer's review a desk in an illustrated office tower at night, coloured by the model's probability of bad leadership" width="850"></a>
+</p>
+
 ---
 
 ## Table of contents
 
-- [Featured: Titanic tutorial](docs/scenarios/titanic.md)
+- [Featured: Titanic tutorial](docs/scenarios/titanic.md) · [New: Toxic Leadership NLP tutorial](docs/scenarios/toxic_leadership.md)
 - [Tour of the platform](#tour-of-the-platform)
 - [Scenario catalog](#scenario-catalog)
 - [Getting started](#getting-started)
@@ -65,7 +78,7 @@ full catalog is in the [table below](#scenario-catalog).
 
 <p align="center"><img src="docs/screenshots/scenario-gallery.png" alt="Scenario gallery — every scenario of every kind the admin tenant is entitled to" width="850"></p>
 
-### Tutorials — Titanic
+### Tutorials — Titanic and Toxic Leadership
 
 A **tutorial** scenario teaches the ML workflow on a classic dataset. `titanic` opens on an
 11-chapter **Tutorial** tab (framing, cleaning, feature engineering, exploration,
@@ -86,6 +99,20 @@ probability explained as a SHAP waterfall, with a live what-if editor. Full walk
 <p align="center">
   <img src="docs/screenshots/titanic/tutorial-model.png" alt="Tutorial chapter 6: the real model-selection leaderboard" width="49%">
   <img src="docs/screenshots/titanic/tutorial-evaluate.png" alt="Tutorial chapter 7: hold-out ROC curve and confusion matrix" width="49%">
+</p>
+
+`toxic_leadership` is the **NLP** tutorial: free text plus structured data. Its 13 chapters cover
+anonymisation, the halo effect, TF-IDF, gradient boosting on words and ratings together, the
+vocabulary of toxic leadership, and bag of words vs transformers (TF-IDF, MiniLM, MPNet and
+voyage-4-nano, measured). **The Office** tab seats every review in an office tower; click one to
+read it with the words the model weighed highlighted, and compare the deployed TF-IDF model with
+the sentence-transformer challenger. The **Leadership check** reads a description of behaviour
+(never a named person) against Project Oxygen's great-manager behaviours and the Toxic
+Leadership Scale. Full walkthrough: [docs/scenarios/toxic_leadership.md](docs/scenarios/toxic_leadership.md).
+
+<p align="center">
+  <img src="docs/screenshots/toxic_leadership/office-review.png" alt="One review explained: 97% bad leadership, with 'away', 'management', 'no direction' and 'meetings' highlighted, and both models side by side" width="36%">
+  <img src="docs/screenshots/toxic_leadership/leadership-check.png" alt="Leadership check: an LLM coach rates a described behaviour against the rubric, quoting the text as evidence" width="62%">
 </p>
 
 ### Data
@@ -228,6 +255,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
 | **[Titanic Survival — ML Tutorial](docs/scenarios/titanic.md)** (`titanic`) | `tabular_ml` — classification, domain `tutorial` | Passenger survival probability — a guided **Tutorial** tab (every step of the ML workflow, live charts/metrics/SHAP) and a **Voyage** tab (all 891 passengers aboard an illustrated ship, filterable, SHAP-explained, what-if) · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.88 | Kaggle — Titanic (via angelmtenor/data-science-keras) |
+| **[Toxic Leadership — NLP + ML Tutorial](docs/scenarios/toxic_leadership.md)** (`toxic_leadership`) | `tabular_ml` — classification with free text, domain `tutorial` | Whether an engineer rated senior management 1–2★, from their review text + job context — a 13-chapter **Tutorial**, **The Office** tab (4,000 reviews in an office tower, word-level SHAP, TF-IDF vs sentence-transformer challenger) and an LLM **Leadership check** · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.87, hold-out 0.886 | Kaggle — Glassdoor Job Reviews (CC BY-SA 4.0) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
@@ -262,6 +290,13 @@ tool as the model's own predicted roughness drifts, side by side with a static-r
 `titanic`'s "Voyage" tab (`voyage_explorer`) berths every real passenger on an illustrated ocean
 liner, coloured by the model's survival probability, with a bow-to-stern "reveal the real fate"
 sweep, cohort filters, name search, a SHAP waterfall per passenger and a live what-if builder.
+The same engine draws `toxic_leadership`'s office tower (`scene: office_tower`).
+
+**A tabular feature can be free text** (`type: text`): TF-IDF runs inside the model pipeline, SHAP
+explains predictions word by word (`/predict` with `explain_text`), and a scenario can add a
+sentence-embedding **challenger** (`model.text_challenger`, vectors from llm-gateway's `local-embed`,
+precomputed on the host GPU by `make k3s-text-embeddings`) and an LLM **rubric check**
+(`rubric_check`, assistant `POST /rubric-check/{slug}`).
 
 **A scenario can also carry a guided Tutorial tab** (`tutorial:` in `scenario.yaml`, tabular_ml):
 markdown chapters with live charts and data-backed widgets — dataset preview, class balance, the

@@ -29,6 +29,10 @@ spec:
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: prediction-secrets}
+          env:
+            # Renamed from .env's LITELLM_MASTER_KEY — only used to embed text for a
+            # scenario's model.text_challenger (llm-gateway's `local-embed`).
+            - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: prediction-secrets, key: LITELLM_MASTER_KEY}}}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           # Idle ~200Mi; grows with each loaded model (shared across tenants) + SHAP batches.

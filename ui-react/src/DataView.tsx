@@ -7,7 +7,7 @@ import { PlotlyChart } from "./PlotlyChart";
 import { buildChart, specToChartCardConfig, defaultChartCardConfig, type ChartCardConfig, type ValueLabelFor } from "./chartBuilder";
 import { useTheme } from "./useTheme";
 import { Icon } from "./Icon";
-import { exportJson, featureLabel } from "./predictUtils";
+import { exportJson, featureLabel, isTextFeature } from "./predictUtils";
 
 const DEFAULT_SAMPLE_LIMIT = 5000;
 const SAMPLE_LIMIT_OPTIONS = [500, 1000, 5000, MAX_ROWS];
@@ -311,7 +311,11 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
               {filtered.slice(0, 30).map((row, i) => (
                 <tr key={sample.id_column ? String(row[sample.id_column]) : i}>
                   {sample.columns.map((c) => (
-                    <td key={c} className={identityColumns.includes(c) ? "data-table-id" : undefined}>
+                    <td
+                      key={c}
+                      className={identityColumns.includes(c) ? "data-table-id" : isTextFeature(scenario, c) ? "data-table-text" : undefined}
+                      title={isTextFeature(scenario, c) ? String(row[c]) : undefined}
+                    >
                       {displayValue(c, row[c])}
                     </td>
                   ))}

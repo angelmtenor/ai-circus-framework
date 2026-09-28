@@ -21,9 +21,12 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MODEL_CHALLENGER_EXPLAINER_KEY,
+    MODEL_CHALLENGER_PIPELINE_KEY,
     MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
@@ -37,6 +40,7 @@ from pydantic import ValidationError
 from sklearn.model_selection import train_test_split
 
 from training import get_env_config
+from training.core.challenger import ChallengerResult, ChallengerUnavailableError, train_text_challenger
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
 from training.core.training import (
@@ -47,6 +51,7 @@ from training.core.training import (
     holdout_evaluation,
     select_best_candidate,
     split_features,
+    text_term_importance,
     train_candidate,
     transformed_feature_names,
 )
@@ -76,7 +81,8 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     df = pd.read_parquet(io.BytesIO(store.get(config.ORG_ID, NORMALIZED_DATASET_KEY)))
     x = df.loc[:, definition.dataset.feature_columns]
     y = df[definition.dataset.target]
-    numeric_features, categorical_features = split_features(x, definition.dataset.feature_columns)
+    text_features = definition.dataset.text_columns()
+    numeric_features, categorical_features = split_features(x, definition.dataset.feature_columns, text_features)
 
     # stratify=y requires discrete classes — not meaningful (and not possible) for a
     # continuous regression target.
@@ -97,6 +103,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
             model.task_type,
             selection_metric=selection_metric,
             cv_folds=model.cv_folds,
+            text_features=text_features,
         )
         for name in model.candidates
     ]
@@ -116,7 +123,10 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     # Refit the selected model on the full dataset for the final artifact.
     best.pipeline.fit(x, y)
     explainer = build_explainer(best.pipeline, x)
-    feature_importance = global_shap_importance(best.pipeline, explainer, x, definition.dataset.feature_columns)
+    feature_importance = global_shap_importance(
+        best.pipeline, explainer, x, definition.dataset.feature_columns, text_features=text_features
+    )
+    term_importance = text_term_importance(best.pipeline, explainer, x, text_features)
 
     checksums: dict[str, str] = {}
 
@@ -130,8 +140,14 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
 
     has_intervals = definition.model.task_type == "regression"
     if has_intervals:
-        # pyrefly: ignore [bad-argument-type]
-        pipeline_lower, pipeline_upper = fit_quantile_pipelines(numeric_features, categorical_features, x, y)
+        pipeline_lower, pipeline_upper = fit_quantile_pipelines(
+            numeric_features,
+            categorical_features,
+            x,
+            # pyrefly: ignore [bad-argument-type]
+            y,
+            text_features,
+        )
         lower_bytes = _dump(pipeline_lower)
         store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_bytes)
         checksums["pipeline_lower"] = artifact_checksum(lower_bytes)
@@ -140,6 +156,38 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         store.put(config.ORG_ID, MODEL_PIPELINE_UPPER_KEY, upper_bytes)
         checksums["pipeline_upper"] = artifact_checksum(upper_bytes)
         logger.success("90% prediction interval models trained for scenario={} org={}", slug, config.ORG_ID)
+
+    challenger = _train_challenger(
+        config,
+        store,
+        definition,
+        x,
+        # pyrefly: ignore [bad-argument-type]
+        y,
+        x_train.index,
+        x_test.index,
+        numeric_features,
+        categorical_features,
+        text_features,
+        selection_metric,
+    )
+    if challenger is not None:
+        challenger_pipeline_bytes = _dump(challenger.pipeline)
+        store.put(config.ORG_ID, MODEL_CHALLENGER_PIPELINE_KEY, challenger_pipeline_bytes)
+        checksums["challenger_pipeline"] = artifact_checksum(challenger_pipeline_bytes)
+        challenger_explainer_bytes = _dump(challenger.explainer)
+        store.put(config.ORG_ID, MODEL_CHALLENGER_EXPLAINER_KEY, challenger_explainer_bytes)
+        checksums["challenger_explainer"] = artifact_checksum(challenger_explainer_bytes)
+        gain = challenger.metadata["selection_score"] - best.selection_score
+        challenger.metadata["gain_over_deployed"] = round(gain, 4)
+        # Reported, never auto-promoted (see scenario_schema.TextChallenger).
+        challenger.metadata["would_be_adopted"] = gain > model.accuracy_gain_threshold_for_complexity
+        if challenger.metadata["would_be_adopted"]:
+            logger.warning(
+                "Text challenger beats the deployed model by {:.4f} (> {:.4f}) — consider promoting it",
+                gain,
+                model.accuracy_gain_threshold_for_complexity,
+            )
 
     # Written last, once every artifact above is confirmed uploaded — prediction's
     # model_cache treats this as the manifest: it won't serve an artifact whose bytes
@@ -165,6 +213,13 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "feature_columns": definition.dataset.feature_columns,
         "transformed_feature_names": transformed_feature_names(best.pipeline),
         "global_feature_importance": feature_importance,
+        # Free-text features: which vocabulary pushes predictions up/down (see
+        # text_term_importance) — and which columns prediction must treat as text.
+        "text_columns": text_features,
+        "text_term_importance": term_importance,
+        # The sentence-embedding challenger's model card (None when not configured or
+        # not trainable this run — see _train_challenger).
+        "challenger": challenger.metadata if challenger is not None else None,
         "target": definition.dataset.target,
         "has_intervals": has_intervals,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
@@ -185,6 +240,61 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     )
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
+
+
+def _train_challenger(
+    config: EnvConfig,
+    store: ObjectStore,
+    definition: ScenarioDefinition,
+    x: pd.DataFrame,
+    y: pd.Series,
+    train_index: pd.Index,
+    test_index: pd.Index,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    text_features: list[str],
+    selection_metric: str,
+) -> ChallengerResult | None:
+    """The scenario's sentence-embedding challenger, or None. Optional by design: a
+    missing embedding cache or an unreachable gateway is logged, never a failed job —
+    the deployed (champion) model's artifacts are already safely written.
+    """
+    assert definition.dataset is not None and definition.model is not None
+    challenger = definition.model.text_challenger
+    if challenger is None or not text_features:
+        return None
+    provider = None
+    if config.LLM_GATEWAY_URL and config.LLM_GATEWAY_API_KEY:
+        provider = GatewayEmbeddingProvider(
+            config.LLM_GATEWAY_URL,
+            config.LLM_GATEWAY_API_KEY.get_secret_value(),
+            challenger.embedding_model,
+            probe=False,
+            timeout=120.0,
+        )
+    try:
+        return train_text_challenger(
+            challenger,
+            store=store,
+            org_id=config.ORG_ID,
+            provider=provider,
+            x=x,
+            y=y,
+            train_index=train_index,
+            test_index=test_index,
+            numeric_features=numeric_features,
+            categorical_features=categorical_features,
+            text_features=text_features,
+            feature_columns=definition.dataset.feature_columns,
+            task_type=definition.model.task_type,
+            selection_metric=selection_metric,
+            cv_folds=definition.model.cv_folds,
+        )
+    except ChallengerUnavailableError as exc:
+        logger.warning("Text challenger skipped for scenario={}: {}", definition.slug, exc)
+    except Exception:
+        logger.exception("Text challenger failed for scenario={} — the deployed model is unaffected", definition.slug)
+    return None
 
 
 def main() -> None:

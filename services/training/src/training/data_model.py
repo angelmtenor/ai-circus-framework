@@ -43,12 +43,20 @@ class EnvConfig(BaseSettings):
     OBJECT_STORE_SECRET_KEY: SecretStr = Field(
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
+    LLM_GATEWAY_URL: str | None = Field(
+        description="llm-gateway API base URL — embeds text for model.text_challenger; unset = no challenger",
+        default=None,
+    )
+    LLM_GATEWAY_API_KEY: SecretStr | None = Field(
+        description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) — only for model.text_challenger",
+        default=None,
+    )
     MLFLOW_TRACKING_URI: str | None = Field(
         description="MLflow tracking server runs are mirrored to (e.g. http://mlflow:5000); unset = off", default=None
     )
 
 
-_SOURCE_YAML_HASH = "c6ceedb4727941fadae270ffb0da9d1241ecdb892579e54a91844e54c7ce0b93"
+_SOURCE_YAML_HASH = "1daa8e2de4f345489289aee82dd903122ca3702c5e66af33334294c9b66c3fa6"
 
 
 EnvConfig.model_rebuild()

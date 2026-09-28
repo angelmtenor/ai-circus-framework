@@ -70,17 +70,27 @@ class GatewayEmbeddingProvider:
     with a 4xx from the gateway rather than silently loading some other model.
     """
 
-    def __init__(self, base_url: str, api_key: str, model_name: str = DEFAULT_LOCAL_MODEL) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        model_name: str = DEFAULT_LOCAL_MODEL,
+        *,
+        probe: bool = True,
+        timeout: float = _GATEWAY_HTTP_TIMEOUT_SECONDS,
+    ) -> None:
         self._model_name = model_name
-        self._client = httpx.Client(
-            base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=_GATEWAY_HTTP_TIMEOUT_SECONDS
-        )
+        self._client = httpx.Client(base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout)
         # Determined by a live probe call rather than hardcoded — see the other
         # providers' constructors for why this class of bug is worth guarding against.
         # Made at service start-up, when llm-gateway (still loading LiteLLM) may not be
         # listening yet — wait for it rather than crash-looping (see startup.py).
-        self.dimension = len(
-            wait_for(lambda: self.encode_query("dimension probe"), what="llm-gateway", retryable=_gateway_starting)
+        # probe=False (dimension 0 until the first call) is for a client built on a
+        # request path, which must fail fast rather than wait for the gateway.
+        self.dimension = (
+            len(wait_for(lambda: self.encode_query("dimension probe"), what="llm-gateway", retryable=_gateway_starting))
+            if probe
+            else 0
         )
 
     def _embed(self, texts: list[str]) -> list[list[float]]:

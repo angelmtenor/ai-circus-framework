@@ -146,7 +146,7 @@ def test_unsupported_gpu_metric_is_none_not_an_error(monkeypatch: pytest.MonkeyP
     _fake_nvml(monkeypatch, power_limit_supported=False)
     (gpu,) = resources.gpu_report().devices
     assert gpu.power_limit_w is None
-    assert gpu.power_w == 14.7
+    assert gpu.power_w == pytest.approx(14.7)
 
 
 def test_no_driver_is_unavailable_and_not_retried_on_every_poll(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,9 +167,7 @@ def test_no_driver_is_unavailable_and_not_retried_on_every_poll(monkeypatch: pyt
 def test_collect_outside_a_cluster_still_reports_the_gpu_and_host(monkeypatch: pytest.MonkeyPatch) -> None:
     _fake_nvml(monkeypatch, power_limit_supported=True)
     monkeypatch.setattr(k8s_jobs, "in_cluster_config_available", lambda: False)
-    monkeypatch.setattr(
-        resources.psutil, "virtual_memory", lambda: SimpleNamespace(total=12 * GIB, available=3 * GIB)
-    )
+    monkeypatch.setattr(resources.psutil, "virtual_memory", lambda: SimpleNamespace(total=12 * GIB, available=3 * GIB))
     monkeypatch.setattr(resources.psutil, "swap_memory", lambda: SimpleNamespace(total=3 * GIB, used=GIB))
     report = resources.collect()
     assert report.available is False

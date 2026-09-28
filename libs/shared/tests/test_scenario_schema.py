@@ -26,6 +26,7 @@ from ai_circus_shared.scenario_schema import (
     TabularDataset,
     TabularModel,
     TabularServices,
+    TextFeatureUI,
     ToolLifeModel,
     VectorStoreConfig,
     qdrant_collection_name,
@@ -745,3 +746,109 @@ def test_tutorial_is_tabular_ml_only() -> None:
     titanic = _titanic()
     with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
         _with(titanic, kind="conversational_rag")
+
+
+# --- free-text features (toxic_leadership) ---
+
+
+def _titanic_with_text(max_length: int = 200) -> dict:  # type: ignore[type-arg]
+    """Titanic's dump with an extra `Notes` text feature (every example/persona gets one)."""
+    raw = _titanic().model_dump()
+    raw["dataset"]["feature_columns"].append("Notes")
+    raw["dataset"]["feature_schema"]["Notes"] = {"type": "text", "label": "Notes", "max_length": max_length}
+    for example in [*raw["tutorial"]["examples"], *raw["ui_extras"]["personas"]]:
+        example["record"]["Notes"] = "Travelling with family."
+    return raw
+
+
+def test_text_feature_is_parsed_and_capped() -> None:
+    definition = ScenarioDefinition.model_validate(_titanic_with_text())
+    assert definition.dataset is not None
+    assert definition.dataset.feature_schema["Notes"].type == "text"
+    assert definition.dataset.text_columns() == ["Notes"]
+    assert TextFeatureUI(label="Review").max_length == 1000
+    with pytest.raises(ValidationError):
+        TextFeatureUI(label="Review", max_length=50_000)
+
+
+def test_text_features_cannot_be_charted() -> None:
+    raw = _titanic_with_text()
+    with pytest.raises(ValidationError, match="free-text"):
+        ScenarioDefinition.model_validate(
+            {**raw, "dataset": {**raw["dataset"], "default_charts": [{"type": "bar", "x": "Notes"}]}}
+        )
+    with pytest.raises(ValidationError, match="unknown"):
+        ScenarioDefinition.model_validate(
+            {**raw, "dataset": {**raw["dataset"], "default_charts": [{"type": "bar", "x": "Cabin"}]}}
+        )
+    step = {**raw["tutorial"]["steps"][0], "charts": [{"type": "histogram", "x": "Age", "color_by": "Notes"}]}
+    with pytest.raises(ValidationError, match="free-text"):
+        ScenarioDefinition.model_validate({**raw, "tutorial": {**raw["tutorial"], "steps": [step]}})
+
+
+def test_text_example_values_are_length_checked() -> None:
+    raw = _titanic_with_text(max_length=10)
+    with pytest.raises(ValidationError, match="at most 10 chars"):
+        ScenarioDefinition.model_validate(raw)
+
+
+def test_text_features_cannot_be_voyage_filters() -> None:
+    raw = _titanic_with_text()
+    with pytest.raises(ValidationError, match="must be a categorical feature"):
+        ScenarioDefinition.model_validate({**raw, "ui_extras": {**raw["ui_extras"], "filters": ["Notes"]}})
+
+
+def test_top_terms_widget_needs_a_text_feature() -> None:
+    titanic = _titanic()
+    tutorial = titanic.tutorial.model_dump()  # type: ignore[union-attr]
+    step = {**tutorial["steps"][0], "widgets": ["top_terms"]}
+    with pytest.raises(ValidationError, match="no text feature"):
+        _with(titanic, tutorial={**tutorial, "steps": [step]})
+    raw = _titanic_with_text()
+    raw["tutorial"]["steps"][0]["widgets"] = ["top_terms"]
+    assert ScenarioDefinition.model_validate(raw).tutorial is not None
+
+
+def test_office_tower_is_a_valid_voyage_scene() -> None:
+    titanic = _titanic()
+    extras = titanic.ui_extras.model_dump()  # type: ignore[union-attr]
+    assert _with(titanic, ui_extras={**extras, "scene": "office_tower"}).ui_extras.scene == "office_tower"  # type: ignore[union-attr]
+    with pytest.raises(ValidationError):
+        _with(titanic, ui_extras={**extras, "scene": "submarine"})
+
+
+def _toxic() -> ScenarioDefinition:
+    from pathlib import Path
+
+    return ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/toxic_leadership/scenario.yaml")
+
+
+def test_repo_toxic_leadership_scenario_loads_with_text_challenger_and_rubric() -> None:
+    toxic = _toxic()
+    assert toxic.industry == "tutorial"
+    assert toxic.dataset is not None and toxic.dataset.text_columns() == ["Review"]
+    assert toxic.model is not None and "logistic_regression" not in toxic.model.candidates
+    assert toxic.model.text_challenger is not None and toxic.model.text_challenger.embedding_model == "local-embed"
+    assert toxic.ui_extras is not None and toxic.ui_extras.scene == "office_tower"  # type: ignore[union-attr]
+    assert toxic.rubric_check is not None and toxic.rubric_check.text_feature == "Review"
+    assert toxic.tutorial is not None and any("top_terms" in s.widgets for s in toxic.tutorial.steps)
+
+
+def test_rubric_check_needs_a_text_feature_and_unique_keys() -> None:
+    toxic = _toxic()
+    rubric = toxic.rubric_check.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="text_feature"):
+        _with(toxic, rubric_check={**rubric, "text_feature": "CompBenefits"})
+    duplicate = {**rubric, "negative": [*rubric["negative"], rubric["positive"][0]]}
+    with pytest.raises(ValidationError, match="unique"):
+        _with(toxic, rubric_check=duplicate)
+    with pytest.raises(ValidationError, match="type: text"):
+        _with(_titanic(), rubric_check=rubric)
+
+
+def test_text_challenger_needs_a_text_feature() -> None:
+    titanic = _titanic()
+    challenger = _toxic().model.text_challenger.model_dump()  # type: ignore[union-attr]
+    model = {**titanic.model.model_dump(), "text_challenger": challenger}  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="text_challenger requires"):
+        _with(titanic, model=model)

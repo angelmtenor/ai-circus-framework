@@ -244,3 +244,36 @@ def test_clean_carries_display_columns_but_not_protected_ones() -> None:
     cleaned = clean(raw, dataset)
     assert list(cleaned.columns) == ["Surname", "CreditScore", "Geography", "Age", "Exited"]
     assert list(cleaned["Surname"]) == ["Smith", "Jones"]
+
+
+def test_clean_keeps_text_features_as_trimmed_truncated_strings(scenario_dir: Path) -> None:
+    """A `type: text` feature is never cast to category (that would one-hot every
+    unique review): it stays a plain string, missing -> "", cut at max_length, and
+    survives the parquet round-trip as a string.
+    """
+    dataset = TabularDataset.model_validate({
+        **DATASET.model_dump(),
+        "feature_columns": [*DATASET.feature_columns, "Review"],
+        "feature_schema": {
+            **DATASET.model_dump()["feature_schema"],
+            "Review": {"type": "text", "label": "Review", "max_length": 12},
+        },
+    })
+    raw = pd.read_csv(
+        io.StringIO(
+            "CustomerId,CreditScore,Geography,Gender,Age,Review,Exited\n"
+            '1,600,France,Female,40,"  Great manager, listens to the team  ",0\n'
+            "2,650,Spain,Male,35,,1\n"
+        ),
+        index_col="CustomerId",
+    )
+    cleaned = clean(raw, dataset)
+    assert list(cleaned.index) == [1, 2]  # an empty review is not a missing record
+    assert list(cleaned["Review"]) == ["Great manage", ""]
+    assert not isinstance(cleaned["Review"].dtype, pd.CategoricalDtype)
+    assert isinstance(cleaned["Geography"].dtype, pd.CategoricalDtype)
+
+    store = FakeObjectStore()
+    save_normalized(store, "acme", cleaned)  # type: ignore[arg-type]
+    round_trip = pd.read_parquet(io.BytesIO(store.get("acme", "processed/normalized.parquet")))
+    assert list(round_trip["Review"]) == ["Great manage", ""]

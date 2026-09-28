@@ -39,6 +39,7 @@ make k3s-build k3s-import && kubectl -n ai-circus rollout restart deployment/<sv
 
 # deep learning (optional, never part of k3s-all)
 make k3s-all-dl | dl-train-nlp | dl-train-cv | dl-train-anomaly | k3s-dl-train SCENARIO=<slug>
+make k3s-text-embeddings     # host-GPU sentence embeddings for a tabular text scenario's challenger (toxic_leadership), then retrain
 
 # quality
 make check-all               # libs/shared lint+tests, then `make check` in every service
@@ -79,6 +80,13 @@ mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `T
 `process_optimizer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
+A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
+SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
+`explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a
+scenario may add a `model.text_challenger` (sentence embeddings from llm-gateway's `local-embed`,
+cached from the host GPU — the cluster's CPU embedder is ~0.6 s/text; served as `/predict`
+`model: "challenger"`, never auto-promoted) and a `rubric_check` (assistant `POST /rubric-check`: the
+active LLM reads a *description of behaviour* against a YAML rubric — never judges named people).
 
 **Tenancy & entitlements.** `platform-registry` owns tenants/scenarios/entitlements in Postgres;
 every other service calls its entitlement check (`ai_circus_shared.auth.resolve_caller_identity`,

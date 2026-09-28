@@ -18,6 +18,11 @@ from prediction.core.predict import PredictionResult
 from prediction.core.predict import predict as real_predict
 
 
+def _definition(slug: str) -> SimpleNamespace:
+    """A stand-in ScenarioDefinition with a tabular dataset and no text features."""
+    return SimpleNamespace(slug=slug, dataset=SimpleNamespace(text_columns=list, feature_schema={}))
+
+
 class FakePipeline:
     """Stand-in whose predict_proba/named_steps satisfy predict()'s interface."""
 
@@ -71,7 +76,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[resolve_identity] = lambda: Identity(
         subject="user-1", org_id="org-1", roles=frozenset({"scenario:churn"})
     )
-    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
+    app.dependency_overrides[_scenario_definition] = lambda: _definition("churn")
     fake_model_cache = FakeModelCache()
     app.dependency_overrides[_model_cache] = lambda: fake_model_cache
     yield TestClient(app)

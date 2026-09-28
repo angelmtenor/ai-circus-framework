@@ -1,0 +1,195 @@
+/* RubricCheckPanel.tsx — the LLM rubric check (toxic_leadership's Leadership check). */
+
+.rubric-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.rubric-intro p {
+  margin: 0.3rem 0 0.6rem;
+}
+
+.rubric-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+
+.rubric-input {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.5rem 0;
+}
+
+.rubric-input textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.45;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, transparent);
+  color: inherit;
+}
+
+.rubric-results {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .rubric-results {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rubric-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 10px);
+  padding: 0.8rem 1rem;
+}
+
+.rubric-card h4 {
+  margin: 0 0 0.5rem;
+}
+
+.rubric-verdict-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+}
+
+.rubric-verdict {
+  font-weight: 700;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.rubric-verdict--toxic {
+  color: #ea4f58;
+}
+
+.rubric-verdict--great {
+  color: #2fa56b;
+}
+
+.rubric-verdict--mixed {
+  color: #d99a2b;
+}
+
+.rubric-verdict--unclear {
+  color: var(--dim);
+}
+
+.rubric-balance {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.rubric-balance-label {
+  font-size: 0.72rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.rubric-balance-track {
+  position: relative;
+  flex: 1;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ea4f58, #7d828c, #2fa56b);
+}
+
+.rubric-balance-marker {
+  position: absolute;
+  top: -0.3rem;
+  width: 0.35rem;
+  height: 1.15rem;
+  border-radius: 2px;
+  background: var(--text, #fff);
+  box-shadow: 0 0 0 2px var(--bg, #000);
+  transform: translateX(-50%);
+  transition: left 0.5s ease;
+}
+
+.rubric-behaviours {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.8rem;
+}
+
+.rubric-list h5,
+.rubric-reading h5,
+.rubric-reference h5 {
+  margin: 0.6rem 0 0.3rem;
+}
+
+.rubric-list ul,
+.rubric-advice,
+.rubric-reference ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.rubric-list li {
+  margin-bottom: 0.45rem;
+}
+
+.rubric-list blockquote {
+  margin: 0.2rem 0;
+  padding-left: 0.5rem;
+  border-left: 3px solid color-mix(in srgb, var(--dim) 45%, transparent);
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.rubric-list--negative blockquote {
+  border-left-color: #ea4f58;
+}
+
+.rubric-list--positive blockquote {
+  border-left-color: #2fa56b;
+}
+
+.rubric-unverified {
+  opacity: 0.65;
+}
+
+.rubric-strength {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.rubric-strength--strong {
+  color: var(--text, inherit);
+  font-weight: 700;
+}
+
+.rubric-reference {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+  font-size: 0.86rem;
+  margin: 0.4rem 0 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--dim) 8%, transparent);
+}
+
+.rubric-caveat {
+  margin-top: 0.8rem;
+}

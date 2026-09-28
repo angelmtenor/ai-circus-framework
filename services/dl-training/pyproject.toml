@@ -70,8 +70,10 @@ dev = [
 # Linux wheel bundles ~3 GB of CUDA libraries): `cpu` is the default (Docker image,
 # CI, `make check`), `gpu` is what `make dl-train-*` syncs on a host with an NVIDIA GPU
 # (`uv sync --no-default-groups --group gpu`). See [tool.uv.sources] below.
-cpu = ["torch>=2.14.0"]
-gpu = ["torch>=2.14.0"]
+# sentence-transformers rides with torch (it depends on it): `dl-training-embed-texts`
+# encodes a tabular scenario's free text with the exact model llm-gateway serves.
+cpu = ["torch>=2.14.0", "sentence-transformers>=6.0.0"]
+gpu = ["torch>=2.14.0", "sentence-transformers>=6.0.0"]
 
 [tool.uv]
 default-groups = ["dev", "cpu"]
@@ -227,3 +229,4 @@ dl-training-config-drift-check = "dl_training.core.config_generator:check_env_dr
 dl-training-app = "dl_training.app:main"
 dl-training = "dl_training.app:main"
 dl-training-download = "dl_training.app:download_main"
+dl-training-embed-texts = "dl_training.app:embed_texts_main"
