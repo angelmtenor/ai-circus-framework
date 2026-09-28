@@ -6,6 +6,9 @@
 #
 # Usage: ./scripts/dl_train_host.sh [comma,separated,slugs]   (empty = every deep_learning scenario)
 #        ./scripts/dl_train_host.sh --download-only [slugs]  (fetch + verify + store raw data only)
+#        ./scripts/dl_train_host.sh --embed-texts [slugs]    (sentence embeddings of a tabular_ml
+#            scenario's free text for its model.text_challenger — e.g. toxic_leadership; the
+#            cluster's CPU `local-embed` would take ~40 min for 4,000 reviews, the GPU seconds)
 #
 # GPU: detected with nvidia-smi. With a GPU, torch comes from the CUDA wheel index into a
 # separate `.venv-gpu` (so `make check`'s CPU `.venv` is never flipped back and forth);
@@ -21,8 +24,12 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="$REPO_ROOT/services/dl-training"
 
 download_only=false
+embed_texts=false
 if [ "${1:-}" = "--download-only" ]; then
     download_only=true
+    shift
+elif [ "${1:-}" = "--embed-texts" ]; then
+    embed_texts=true
     shift
 fi
 SCENARIOS="${1:-}"
@@ -90,6 +97,11 @@ else
     device="${DL_DEVICE:-cpu}"
 fi
 
-echo "▶ training: ${SCENARIOS:-every deep_learning scenario} (DL_DEVICE=$device)"
 cd "$PROJECT"
+if $embed_texts; then
+    echo "▶ text embeddings: ${SCENARIOS:-every tabular_ml scenario with a text_challenger} (DL_DEVICE=$device)"
+    SCENARIOS="$SCENARIOS" DL_DEVICE="$device" APP_ENVIRONMENT=local uv run --no-sync dl-training-embed-texts
+    exit 0
+fi
+echo "▶ training: ${SCENARIOS:-every deep_learning scenario} (DL_DEVICE=$device)"
 SCENARIOS="$SCENARIOS" DL_DEVICE="$device" APP_ENVIRONMENT=local uv run --no-sync dl-training

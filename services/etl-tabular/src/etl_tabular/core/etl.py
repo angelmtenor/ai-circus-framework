@@ -53,7 +53,9 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
 
     Deliberately generic (not hardcoded to any one scenario's column names) so this
     same logic serves any future tabular_ml scenario: numeric columns keep their
-    inferred dtype, non-numeric feature columns become `category`.
+    inferred dtype, non-numeric feature columns become `category` — except `type: text`
+    features (free text, e.g. a review), which stay plain strings (missing = "",
+    whitespace-trimmed, cut at the schema's `max_length`) for training's TF-IDF step.
 
     The row id (`index_col`, kept as the DataFrame index) is part of the dedupe key:
     two *different* records that merely share every feature value (e.g. two 3rd-class
@@ -62,7 +64,12 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     UI and are never selected as model inputs (training reads `feature_columns` only).
     """
     columns = [*dataset.display_columns, *dataset.feature_columns, dataset.target]
-    selected = df.loc[:, columns]
+    selected = df.loc[:, columns].copy()
+    text_columns = dataset.text_columns()
+    for column in text_columns:
+        # Casting before dedupe/dropna: an empty review is still a valid record.
+        max_length = dataset.feature_schema[column].max_length  # type: ignore[union-attr]
+        selected[column] = selected[column].fillna("").astype(str).str.strip().str.slice(0, max_length)
     df = selected[~selected.reset_index().duplicated().to_numpy()].dropna()
 
     if len(df) > MAX_DATASET_ROWS:
@@ -74,6 +81,8 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
         logger.info("Capped dataset at {} rows (was larger)", MAX_DATASET_ROWS)
 
     for column in dataset.feature_columns:
+        if column in text_columns:
+            continue
         is_numeric = pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])
         if not is_numeric:
             # bool columns go through str first: a `category` dtype whose categories

@@ -91,3 +91,22 @@ def test_build_system_prompt_cites_cross_validated_and_holdout_roc_auc_when_pres
     prompt = build_system_prompt(DEFINITION, metadata)
     assert "5-fold cross-validated ROC AUC 0.885 (± 0.015)" in prompt
     assert "hold-out ROC AUC 0.873" in prompt
+
+
+def test_build_system_prompt_cites_red_and_green_flag_terms_for_text_features() -> None:
+    """A text feature's strongest terms (training's text_term_importance) are cited."""
+    metadata = {
+        **METADATA,
+        "text_term_importance": {
+            "Review": {
+                "positive": [{"term": "upper management", "weight": 0.31, "docs": 90}],
+                "negative": [{"term": "supportive", "weight": -0.2, "docs": 50}],
+            }
+        },
+    }
+    prompt = build_system_prompt(DEFINITION, metadata)
+
+    assert "'Review' is free text" in prompt
+    assert "'upper management' (+0.310)" in prompt
+    assert "'supportive' (-0.200)" in prompt
+    assert "free text" not in build_system_prompt(DEFINITION, METADATA)

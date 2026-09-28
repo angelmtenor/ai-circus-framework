@@ -3027,3 +3027,28 @@ select:focus {
 .monitor-limit-cell .monitor-meter {
   flex: 0 0 100px;
 }
+
+/* Free-text feature cells (e.g. a review): one line, full text on hover. */
+.data-table td.data-table-text {
+  max-width: 28rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Free-text feature input (textarea) spans the whole feature grid row. */
+.feature-input--text {
+  grid-column: 1 / -1;
+}
+
+.feature-input--text textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.45;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, transparent);
+  color: inherit;
+}

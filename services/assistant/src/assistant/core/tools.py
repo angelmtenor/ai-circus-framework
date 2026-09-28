@@ -27,6 +27,21 @@ from assistant.core.prediction_client import PredictionServiceClient
 # context budget and invite transcription errors, not just cost.
 _MAX_SAMPLE_LIMIT = 100
 _MAX_EVALUATION_LIMIT = 500
+# Free-text feature values (e.g. a 1,000-character review) are clipped in tool output:
+# 100 full reviews would cost ~25k tokens per call for text the model rarely needs whole.
+_MAX_SAMPLE_TEXT_CHARS = 280
+_MAX_EVALUATION_TEXT_CHARS = 120
+
+
+def _clip_text(value: Any, max_chars: int) -> Any:
+    """Recursively shorten every string longer than `max_chars` (with an ellipsis)."""
+    if isinstance(value, str):
+        return value if len(value) <= max_chars else f"{value[:max_chars]}…"
+    if isinstance(value, dict):
+        return {k: _clip_text(v, max_chars) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clip_text(v, max_chars) for v in value]
+    return value
 
 
 def _error_result(action: str, exc: httpx.HTTPError) -> str:
@@ -67,14 +82,14 @@ def build_prediction_tools(
             result = client.sample(scenario_slug=scenario_slug, authorization=authorization, limit=limit)
         except httpx.HTTPError as exc:
             return _error_result("fetch dataset rows", exc)
-        return json.dumps(result)
+        return json.dumps(_clip_text(result, _MAX_SAMPLE_TEXT_CHARS))
 
     def _get_predictions_vs_actuals(limit: int = 200) -> str:
         try:
             result = client.evaluation(scenario_slug=scenario_slug, authorization=authorization, limit=limit)
         except httpx.HTTPError as exc:
             return _error_result("fetch predictions vs. actuals", exc)
-        return json.dumps(result)
+        return json.dumps(_clip_text(result, _MAX_EVALUATION_TEXT_CHARS))
 
     def _predict_records(records: list[dict[str, Any]]) -> str:
         try:

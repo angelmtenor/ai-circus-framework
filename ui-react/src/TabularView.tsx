@@ -37,6 +37,11 @@ function extraTabLabel(extras: UiExtras): string | undefined {
   return extras.kind === "voyage_explorer" ? extras.tab_label : EXTRA_TABS[extras.kind]?.label;
 }
 
+function extraTabIcon(extras: UiExtras, fallback: IconName): IconName {
+  // The voyage engine draws more than ships (see scenes.ts).
+  return extras.kind === "voyage_explorer" && extras.scene === "office_tower" ? "building" : fallback;
+}
+
 /**
  * Generic tabular_ml workspace, driven entirely by the scenario's feature_columns/
  * feature_schema (see libs/shared/scenario_schema.py) plus prediction's /predict and
@@ -121,7 +126,7 @@ function TabularViewContent({
         </button>
         {extraTab && (
           <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
-            <Icon name={extraTab.icon} />
+            <Icon name={extraTabIcon(scenario.ui_extras!, extraTab.icon)} />
             {extraTabLabel(scenario.ui_extras!)}
           </button>
         )}

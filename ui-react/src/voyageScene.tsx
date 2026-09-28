@@ -10,13 +10,14 @@
  */
 
 import { memo } from "react";
+import type { Point, SceneModule } from "./scenes";
 
 export const SCENE_W = 1200;
 export const SCENE_H = 520;
 export const WATERLINE = 384;
 
 type Rect = { x0: number; x1: number; y0: number; y1: number };
-export type Point = { x: number; y: number };
+export type { Point };
 
 // Deck bands (top, bottom) — A/B in the superstructure, C–G inside the hull.
 const DECKS: Record<string, [number, number]> = {
@@ -266,3 +267,28 @@ export const SceneForeground = memo(function SceneForeground({ nameplate }: { na
     </g>
   );
 });
+
+function LinerBackdrop() {
+  return <SceneBackdrop />;
+}
+
+/** The ocean liner as a VoyageView scene module (titanic). */
+export const oceanLiner: SceneModule = {
+  width: SCENE_W,
+  height: SCENE_H,
+  packZones,
+  Backdrop: LinerBackdrop,
+  Foreground: SceneForeground,
+  // The reveal sweeps from bow to stern, the way the ship went down.
+  revealDelay: (at) => ((SCENE_W - at.x) / SCENE_W) * 0.9,
+  copy: {
+    loadingIcon: "🚢",
+    loading: (noun) => `Boarding every ${noun} and asking the model about each one…`,
+    aboard: "aboard",
+    everyone: "Everyone aboard",
+    reveal: "Reveal real fate",
+    star: "the ★ on the ship",
+    pickHint: () =>
+      "Click anyone aboard (or search by name) to see the model's probability and exactly which facts about them pushed it up or down. Or put someone new aboard:",
+  },
+};

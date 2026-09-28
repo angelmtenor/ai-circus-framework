@@ -5,7 +5,9 @@ export type DatasetRow = Record<string, string | number | boolean | null>;
 
 type NumericFilter = { type: "numeric"; min: number; max: number };
 type CategoricalFilter = { type: "categorical"; selected: Set<string> };
-type Filter = NumericFilter | CategoricalFilter;
+// Free text (e.g. a review): keep rows containing the query (case-insensitive).
+type TextFilter = { type: "text"; query: string };
+type Filter = NumericFilter | CategoricalFilter | TextFilter;
 
 function initialFilters(featureColumns: string[], featureSchema: Record<string, FeatureSpec>): Record<string, Filter> {
   const filters: Record<string, Filter> = {};
@@ -13,7 +15,11 @@ function initialFilters(featureColumns: string[], featureSchema: Record<string, 
     const spec = featureSchema[feature];
     if (!spec) continue;
     filters[feature] =
-      spec.type === "numeric" ? { type: "numeric", min: spec.min, max: spec.max } : { type: "categorical", selected: new Set(spec.options) };
+      spec.type === "numeric"
+        ? { type: "numeric", min: spec.min, max: spec.max }
+        : spec.type === "text"
+          ? { type: "text", query: "" }
+          : { type: "categorical", selected: new Set(spec.options) };
   }
   return filters;
 }
@@ -27,12 +33,13 @@ function passesFilter(row: DatasetRow, feature: string, filter: Filter): boolean
   const value = row[feature];
   if (value === null || value === undefined) return true;
   if (filter.type === "numeric") return Number(value) >= filter.min && Number(value) <= filter.max;
+  if (filter.type === "text") return !filter.query.trim() || String(value).toLowerCase().includes(filter.query.trim().toLowerCase());
   return filter.selected.has(normalizeCategorical(value));
 }
 
 /**
  * Query/filter builder driven by feature_schema — numeric range sliders, categorical
- * multiselects — applied client-side over an already-fetched dataset sample. No ML
+ * multiselects, a "contains" box for free-text features — applied client-side over an already-fetched dataset sample. No ML
  * here; this is the "query the data" piece shared by the Dataset (view/export) and
  * ML Predictions (batch-predict on the filtered rows) sections, so filter behavior
  * stays identical between them.
@@ -75,6 +82,10 @@ export function DatasetFilterPanel({
 
   function updateNumeric(feature: string, key: "min" | "max", value: number) {
     setFilters((f) => ({ ...f, [feature]: { ...(f[feature] as NumericFilter), [key]: value } }));
+  }
+
+  function updateText(feature: string, query: string) {
+    setFilters((f) => ({ ...f, [feature]: { type: "text", query } }));
   }
 
   function toggleCategory(feature: string, option: string) {
@@ -129,6 +140,20 @@ export function DatasetFilterPanel({
                   (full range: {spec.min}–{spec.max})
                 </span>
               </div>
+            </div>
+          );
+        }
+        if (spec.type === "text" && filter.type === "text") {
+          return (
+            <div className="filter-row" key={feature}>
+              <span className="filter-row-label">{labelFor(feature)} contains</span>
+              <input
+                type="search"
+                className="filter-row-search"
+                placeholder="e.g. politics, micromanag, no direction"
+                value={filter.query}
+                onChange={(e) => updateText(feature, e.target.value)}
+              />
             </div>
           );
         }

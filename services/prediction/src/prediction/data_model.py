@@ -43,6 +43,14 @@ class EnvConfig(BaseSettings):
     OBJECT_STORE_SECRET_KEY: SecretStr = Field(
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
+    LLM_GATEWAY_URL: str | None = Field(
+        description="llm-gateway API base URL — embeds text for model.text_challenger; unset = no challenger",
+        default=None,
+    )
+    LLM_GATEWAY_API_KEY: SecretStr | None = Field(
+        description="API key presented to llm-gateway (its LITELLM_MASTER_KEY) — only for model.text_challenger",
+        default=None,
+    )
     PLATFORM_REGISTRY_URL: str = Field(description="Base URL of the platform-registry service's entitlement-check API")
     AUTH_DISABLED: str = Field(
         description="DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
@@ -72,7 +80,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "3acbd10720af9f52e353034281f3bed6ffc34485f3f8e580e5ece96c8e47c065"
+_SOURCE_YAML_HASH = "31a51094a676985d60fbb79de97de1d1acaebdf3a086a0eefb243246eadca777"
 
 
 EnvConfig.model_rebuild()

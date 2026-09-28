@@ -16,6 +16,7 @@ from training.core.training import (
     holdout_evaluation,
     select_best_candidate,
     split_features,
+    text_term_importance,
     train_candidate,
     transformed_feature_names,
 )
@@ -341,3 +342,124 @@ def test_holdout_evaluation_is_none_for_a_single_class_holdout(synthetic_data: t
     x_train, x_test, y_train, _y_test = synthetic_data
     pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LogisticRegression()).fit(x_train, y_train)
     assert holdout_evaluation(pipeline, x_test, pd.Series([1] * len(x_test), index=x_test.index)) is None
+
+
+# --- free-text (`type: text`) features -------------------------------------------------
+
+BAD_WORDS = ["politics", "micromanagement", "no direction", "blame culture", "incompetent leadership"]
+GOOD_WORDS = ["supportive lead", "great mentoring", "transparent roadmap", "trust", "listens"]
+NEUTRAL = ["the office is old", "parking is hard", "long commute", "canteen food", "legacy code"]
+
+
+@pytest.fixture
+def synthetic_text_data() -> tuple[pd.DataFrame, pd.Series]:
+    """Reviews whose words carry the signal (bad-leadership words -> 1), plus a numeric
+    and a categorical column — every phrase repeats in many documents (TF-IDF min_df).
+    """
+    rng = np.random.default_rng(0)
+    n = 300
+    target = rng.integers(0, 2, size=n)
+    reviews = [
+        f"{rng.choice(BAD_WORDS if t else GOOD_WORDS)} and {rng.choice(NEUTRAL)}. {rng.choice(NEUTRAL)}" for t in target
+    ]
+    x = pd.DataFrame({
+        "pay": rng.integers(1, 6, size=n).astype(float),
+        "family": pd.Categorical(rng.choice(["Data", "Software"], size=n)),
+        "Review": reviews,
+    })
+    return x, pd.Series(target, name="bad")
+
+
+def test_split_features_leaves_text_features_out(synthetic_text_data: tuple) -> None:
+    """A text column is neither numeric nor categorical — it's named by the schema."""
+    x, _y = synthetic_text_data
+    assert split_features(x, list(x.columns), ["Review"]) == (["pay"], ["family"])
+
+
+def test_text_pipeline_learns_words_and_rolls_shap_up_to_the_column(synthetic_text_data: tuple) -> None:
+    """TF-IDF terms are prefixed by their column's step name, the model learns from the
+    words, and global importance reports `Review` once (not 1 row per term).
+    """
+    x, y = synthetic_text_data
+    pipeline = build_pipeline(["pay"], ["family"], LogisticRegression(max_iter=1000), ["Review"])
+    pipeline.fit(x, y)
+    names = transformed_feature_names(pipeline)
+    assert "text_Review__politics" in names and "text_Review__no direction" in names
+    assert pipeline.score(x, y) > 0.95
+
+    explainer = build_explainer(pipeline, x)
+    importance = global_shap_importance(pipeline, explainer, x, ["pay", "family", "Review"], text_features=["Review"])
+    assert importance[0]["feature"] == "Review"
+    assert {item["feature"] for item in importance} == {"pay", "family", "Review"}
+
+
+def test_text_term_importance_ranks_red_and_green_flag_terms(synthetic_text_data: tuple) -> None:
+    """Terms that push toward the positive class come out `positive`, and vice versa."""
+    x, y = synthetic_text_data
+    pipeline = build_pipeline(["pay"], ["family"], LogisticRegression(max_iter=1000), ["Review"])
+    pipeline.fit(x, y)
+    explainer = build_explainer(pipeline, x)
+
+    terms = text_term_importance(pipeline, explainer, x, ["Review"], top_k=5)
+
+    positive = {t["term"] for t in terms["Review"]["positive"]}
+    negative = {t["term"] for t in terms["Review"]["negative"]}
+    assert "politics" in positive and "micromanagement" in positive
+    assert "trust" in negative and "listens" in negative
+    assert all(t["docs"] >= 10 for t in terms["Review"]["positive"])
+    assert text_term_importance(pipeline, explainer, x, []) == {}
+
+
+def test_text_pipeline_trains_and_explains_with_lightgbm_and_cv(synthetic_text_data: tuple) -> None:
+    """The text branch works for both candidate families, cross-validated."""
+    x, y = synthetic_text_data
+    candidate = train_candidate(
+        "lightgbm_small_data",
+        x.iloc[:240],
+        y.iloc[:240],
+        x.iloc[240:],
+        y.iloc[240:],
+        ["pay"],
+        ["family"],
+        "classification",
+        selection_metric="roc_auc",
+        cv_folds=3,
+        text_features=["Review"],
+    )
+    assert candidate.metrics["cv_roc_auc_mean"] > 0.9
+    explainer = build_explainer(candidate.pipeline, x)
+    terms = text_term_importance(candidate.pipeline, explainer, x, ["Review"])
+    assert terms["Review"]["positive"]
+
+
+def test_linear_explainer_keeps_only_the_background_mean(synthetic_text_data: tuple) -> None:
+    """A linear model's explainer stores a mean vector, not the background rows —
+    explainer.joblib stays small however wide the vocabulary is.
+    """
+    import io
+
+    import joblib
+
+    x, y = synthetic_text_data
+    pipeline = build_pipeline(["pay"], ["family"], LogisticRegression(max_iter=1000), ["Review"])
+    pipeline.fit(x, y)
+    explainer = build_explainer(pipeline, x)
+    width = len(transformed_feature_names(pipeline))
+    assert np.asarray(explainer.mean).shape == (width,)
+    buffer = io.BytesIO()
+    joblib.dump(explainer, buffer, compress=True)
+    assert buffer.tell() < 200_000
+
+
+def test_global_shap_importance_works_for_a_linear_model(synthetic_data: tuple) -> None:
+    """Regression: LinearExplainer.shap_values() takes no check_additivity argument —
+    passing it crashed training whenever a linear candidate won selection.
+    """
+    x_train, _x_test, y_train, _y_test = synthetic_data
+    pipeline = build_pipeline(["numeric_feature"], ["category_feature"], LogisticRegression())
+    pipeline.fit(x_train, y_train)
+    explainer = build_explainer(pipeline, x_train)
+
+    result = global_shap_importance(pipeline, explainer, x_train, ["numeric_feature", "category_feature"])
+
+    assert result[0]["feature"] == "numeric_feature"

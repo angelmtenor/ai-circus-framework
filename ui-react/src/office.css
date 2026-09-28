@@ -1,0 +1,86 @@
+/* The office_tower scene (officeScene.tsx) — fixed night palette, like an illustration. */
+
+.off-neon {
+  font: 700 22px/1 "Courier New", monospace;
+  letter-spacing: 0.18em;
+  fill: #ff4fd8;
+  filter: drop-shadow(0 0 6px #ff4fd8);
+  animation: off-flicker 7s infinite;
+}
+
+@keyframes off-flicker {
+  0%, 18%, 22%, 62%, 64%, 100% {
+    opacity: 1;
+  }
+  20%, 63% {
+    opacity: 0.25;
+  }
+}
+
+.off-floor-label {
+  font: 600 8.5px/1 system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  fill: #7f95b8;
+}
+
+.off-floor-label--suite {
+  fill: #f0cf8c;
+}
+
+.off-whiteboard {
+  font: 700 9px/1 "Comic Sans MS", "Chalkboard SE", cursive;
+  fill: #2d4f8c;
+}
+
+.off-whiteboard--small {
+  font-size: 7.5px;
+  fill: #b03b3b;
+}
+
+.off-exit {
+  font: 700 6px/1 system-ui, sans-serif;
+  fill: #d7ffe3;
+}
+
+.off-banner {
+  font: 700 8px/1 system-ui, sans-serif;
+  letter-spacing: 0.05em;
+  fill: #ffd76a;
+}
+
+.off-elevator {
+  animation: off-elevator 16s ease-in-out infinite;
+}
+
+@keyframes off-elevator {
+  0%, 12% {
+    transform: translateY(0);
+  }
+  38%, 50% {
+    transform: translateY(-300px);
+  }
+  76%, 100% {
+    transform: translateY(-120px);
+  }
+}
+
+.off-beacon {
+  animation: off-beacon 2.4s ease-in-out infinite;
+}
+
+@keyframes off-beacon {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .off-neon,
+  .off-beacon,
+  .off-elevator {
+    animation: none;
+  }
+}

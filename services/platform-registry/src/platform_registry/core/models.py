@@ -82,6 +82,10 @@ class Scenario(Base):
     # tabular_ml only — see ai_circus_shared.scenario_schema.TutorialConfig. Also added
     # after first ship (auto-added by ensure_added_columns, like deep_learning above).
     tutorial: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml with a free-text feature only — see scenario_schema.RubricCheckConfig
+    # and TextChallenger (auto-added by ensure_added_columns, like tutorial above).
+    rubric_check: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    text_challenger: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

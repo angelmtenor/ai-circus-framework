@@ -40,7 +40,25 @@ class CategoricalFeatureUI(BaseModel):
     default: str
 
 
-FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI, Field(discriminator="type")]
+class TextFeatureUI(BaseModel):
+    """Declarative UI hint for a free-text feature (e.g. an employee review): a textarea.
+
+    Training vectorizes it with TF-IDF inside the model pipeline (see
+    `ai_circus_shared.tabular_ml.TEXT_VECTORIZER_PARAMS`), so the model reads raw text at
+    predict time and SHAP explains it word by word. Never a chart axis or a filter chip.
+    """
+
+    type: Literal["text"] = "text"
+    label: str
+    info: str | None = None
+    default: str = ""
+    # Hard cap on characters — etl-tabular truncates the dataset to it and prediction
+    # rejects longer values, bounding TF-IDF/SHAP cost per record.
+    max_length: int = Field(default=1000, ge=1, le=5000)
+    placeholder: str | None = None
+
+
+FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI | TextFeatureUI, Field(discriminator="type")]
 
 # The *domain* a scenario belongs to — a second, orthogonal axis to `kind`
 # (ML/RAG/form). Powers ui-react's "Domain" filter atop the scenario picker. Mostly
@@ -116,6 +134,18 @@ class TabularDataset(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _default_charts_reference_chartable_columns(self) -> TabularDataset:
+        """A default chart must name real columns, and never a free-text one (a
+        histogram of 4,000 unique reviews is noise, not a chart)."""
+        for chart in self.default_charts:
+            check_chart_columns(chart, self, "dataset.default_charts")
+        return self
+
+    def text_columns(self) -> list[str]:
+        """The `type: text` feature columns, in feature order."""
+        return [c for c in self.feature_columns if getattr(self.feature_schema.get(c), "type", None) == "text"]
+
+    @model_validator(mode="after")
     def _protected_features_actually_excluded(self) -> TabularDataset:
         """Fail fast if a column listed as protected (Responsible AI) also appears in
         `feature_columns` — etl_tabular.core.etl.clean() trusts this list is accurate
@@ -129,6 +159,37 @@ class TabularDataset(BaseModel):
                 "feature_columns — they would not actually be excluded from training."
             )
         return self
+
+
+def check_chart_columns(chart: ChartSpec, dataset: TabularDataset, where: str) -> None:
+    """Raise if `chart` names a column that isn't a feature/target, or a text feature."""
+    named = [c for c in (chart.x, chart.y, chart.z, chart.color_by) if c is not None]
+    unknown = sorted(set(named) - {*dataset.feature_columns, dataset.target})
+    if unknown:
+        raise ValueError(f"{where}: chart columns {unknown} are unknown.")
+    text = sorted(c for c in named if getattr(dataset.feature_schema.get(c), "type", None) == "text")
+    if text:
+        raise ValueError(f"{where}: chart columns {text} are free-text features and cannot be charted.")
+
+
+class TextChallenger(BaseModel):
+    """An opt-in second model for a scenario with a free-text feature: the same tabular
+    features, but the text read by a *sentence-transformer* (dense embeddings) instead of
+    TF-IDF, then `estimator`. Trained and scored next to the deployed model every run
+    and served on demand (`/predict?model=challenger`) so the two can be compared on any
+    input — never auto-promoted: the deployed model stays the Green Code winner of
+    `candidates`, and the model card flags when the challenger would have won.
+
+    Embeddings come from llm-gateway's `embedding_model` (no torch in training or
+    prediction). The whole dataset is embedded once on the host GPU
+    (`make k3s-text-embeddings` loads `hf_model_id` — the same weights the gateway
+    serves) into a SeaweedFS cache that training reads.
+    """
+
+    embedding_model: str = "local-embed"  # an llm-gateway model_name (litellm_config.yaml)
+    hf_model_id: str  # the sentence-transformers id llm-gateway serves as embedding_model
+    label: str  # e.g. "voyage-4-nano sentence embeddings"
+    estimator: str = "lightgbm_small_data"  # a training candidate name
 
 
 class TabularModel(BaseModel):
@@ -159,6 +220,8 @@ class TabularModel(BaseModel):
     # friendly label (e.g. {"0": "Stayed", "1": "Churned"}) so the UI never shows a
     # bare 0/1 for the target's real-world meaning. None for regression (no classes).
     target_value_labels: dict[str, str] | None = None
+    # Free-text scenarios only — see TextChallenger.
+    text_challenger: TextChallenger | None = None
 
     @model_validator(mode="after")
     def _selection_settings_match_task(self) -> TabularModel:
@@ -450,7 +513,9 @@ class VoyageExplorerExtra(BaseModel):
     """
 
     kind: Literal["voyage_explorer"] = "voyage_explorer"
-    scene: Literal["ocean_liner"] = "ocean_liner"  # the built-in illustration
+    # The built-in illustration: `ocean_liner` (a ship's decks — titanic) or
+    # `office_tower` (an office building's floors — toxic_leadership).
+    scene: Literal["ocean_liner", "office_tower"] = "ocean_liner"
     tab_label: str = "Voyage"
     title: str
     subtitle: str | None = None
@@ -461,13 +526,18 @@ class VoyageExplorerExtra(BaseModel):
     range_filters: list[str] = []  # numeric feature_columns offered as min-max sliders
     name_column: str | None = None  # a dataset.display_columns entry naming each person
     personas: list[ExampleRecord] = []
+    # Colour the positive class as the bad outcome (red) — e.g. "bad leadership" —
+    # instead of the good one (titanic's "survived").
+    positive_is_adverse: bool = False
 
 
 # A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
 # dataset_preview = the first rows; class_balance = the target's class split;
 # model_card = the training leaderboard + selection protocol; roc_curve /
 # confusion_matrix = the selected model on the untouched hold-out; feature_importance
-# = global mean(|SHAP|); examples = `tutorial.examples` scored and explained live.
+# = global mean(|SHAP|); examples = `tutorial.examples` scored and explained live;
+# top_terms = the words/phrases of a text feature that push predictions up vs down
+# (the model card's `text_term_importance`; needs a `type: text` feature).
 TutorialWidget = Literal[
     "dataset_preview",
     "class_balance",
@@ -476,6 +546,7 @@ TutorialWidget = Literal[
     "confusion_matrix",
     "feature_importance",
     "examples",
+    "top_terms",
 ]
 
 
@@ -501,6 +572,47 @@ class TutorialConfig(BaseModel):
     intro: str  # markdown
     steps: list[TutorialStep] = Field(min_length=1)
     examples: list[ExampleRecord] = []
+    # See VoyageExplorerExtra.positive_is_adverse.
+    positive_is_adverse: bool = False
+
+
+class RubricBehaviour(BaseModel):
+    """One observable behaviour of a `RubricCheckConfig` rubric."""
+
+    key: str  # stable id the LLM must answer with, e.g. "credit_taking"
+    name: str  # e.g. "Self-promotion & credit-taking"
+    description: str  # what it looks like in practice — the LLM's definition
+
+
+class RubricExample(BaseModel):
+    """A ready-made description the user can load into the rubric check."""
+
+    label: str
+    text: str
+
+
+class RubricCheckConfig(BaseModel):
+    """An LLM-assessed rubric over a free-text *description of behaviour* (tabular_ml
+    scenarios with a text feature): the user describes what someone does, `assistant`
+    asks the active LLM (via llm-gateway) which `positive` / `negative` behaviours the
+    description shows — quoting it as evidence — and ui-react shows that next to the
+    trained model(s) scoring the same text as `text_feature`. It assesses the behaviour
+    described, never a named person: `guidance` carries the scenario's own guardrails.
+    """
+
+    title: str  # e.g. "Leadership check"
+    intro: str  # markdown shown above the input
+    input_label: str
+    placeholder: str | None = None
+    max_chars: int = Field(default=1500, ge=100, le=4000)
+    text_feature: str  # the dataset text feature the description is also scored as
+    subject_noun: str = "person"  # e.g. "leader"
+    positive_label: str  # verdict wording, e.g. "Great leadership"
+    negative_label: str  # e.g. "Toxic management"
+    positive: list[RubricBehaviour] = Field(min_length=1)
+    negative: list[RubricBehaviour] = Field(min_length=1)
+    guidance: str  # extra instructions for the LLM (tone, caveats, what not to do)
+    examples: list[RubricExample] = []
 
 
 UiExtras = Annotated[
@@ -924,6 +1036,8 @@ class ScenarioDefinition(BaseModel):
     ui_extras: UiExtras | None = None
     # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
     tutorial: TutorialConfig | None = None
+    # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
+    rubric_check: RubricCheckConfig | None = None
     services: TabularServices | RagServices | FormServices | DeepLearningServices
 
     @model_validator(mode="after")
@@ -1072,6 +1186,10 @@ class ScenarioDefinition(BaseModel):
             raise ValueError(f"{where} {example.label!r}: missing features {missing}, unknown features {unknown}.")
         for feature, value in example.record.items():
             spec = schema[feature]
+            if spec.type == "text" and (not isinstance(value, str) or len(value) > spec.max_length):
+                raise ValueError(
+                    f"{where} {example.label!r}: {feature} must be text of at most {spec.max_length} chars."
+                )
             if spec.type == "categorical" and value not in spec.options:
                 raise ValueError(f"{where} {example.label!r}: {feature}={value!r} is not among its options.")
             if spec.type == "numeric" and (isinstance(value, str) or not spec.min <= value <= spec.max):
@@ -1115,6 +1233,29 @@ class ScenarioDefinition(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _rubric_check_scores_a_real_text_feature(self) -> ScenarioDefinition:
+        """The rubric check also runs the description through the model as its text
+        feature — so that must be a real `type: text` feature, and keys must be unique."""
+        check = self.rubric_check
+        if check is None:
+            return self
+        if self.kind != "tabular_ml" or self.dataset is None or check.text_feature not in self.dataset.text_columns():
+            raise ValueError("rubric_check.text_feature must be a `type: text` feature of a tabular_ml scenario.")
+        keys = [b.key for b in (*check.positive, *check.negative)]
+        if len(keys) != len(set(keys)):
+            raise ValueError("rubric_check behaviour keys must be unique across positive and negative.")
+        return self
+
+    @model_validator(mode="after")
+    def _text_challenger_needs_a_text_feature(self) -> ScenarioDefinition:
+        """A sentence-embedding challenger only makes sense with free text to embed."""
+        if self.model is None or self.model.text_challenger is None:
+            return self
+        if self.dataset is None or not self.dataset.text_columns():
+            raise ValueError("model.text_challenger requires a `type: text` feature in dataset.feature_schema.")
+        return self
+
+    @model_validator(mode="after")
     def _tutorial_references_real_columns(self) -> ScenarioDefinition:
         """A tutorial is tabular_ml-only (its widgets read prediction's endpoints); its
         charts must name real columns and its examples must be scoreable."""
@@ -1123,14 +1264,11 @@ class ScenarioDefinition(BaseModel):
             return self
         if self.kind != "tabular_ml" or self.dataset is None:
             raise ValueError("`tutorial` is only available for kind='tabular_ml' scenarios.")
-        known = {*self.dataset.feature_columns, self.dataset.target}
         for step in tutorial.steps:
             for chart in step.charts:
-                named = {c for c in (chart.x, chart.y, chart.z, chart.color_by) if c is not None}
-                if named - known:
-                    raise ValueError(
-                        f"tutorial step {step.title!r}: chart columns {sorted(named - known)} are unknown."
-                    )
+                check_chart_columns(chart, self.dataset, f"tutorial step {step.title!r}")
+            if "top_terms" in step.widgets and not self.dataset.text_columns():
+                raise ValueError(f"tutorial step {step.title!r} shows top_terms but the dataset has no text feature.")
             if "examples" in step.widgets and not tutorial.examples:
                 raise ValueError(
                     f"tutorial step {step.title!r} shows the examples widget but tutorial.examples is empty."

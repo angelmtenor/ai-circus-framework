@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from ai_circus_shared.storage import ObjectStore
-from ai_circus_shared.tabular_ml import NORMALIZED_DATASET_KEY
+from ai_circus_shared.tabular_ml import NORMALIZED_DATASET_KEY, original_feature
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -35,6 +35,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 
 from prediction.core.model_cache import ModelArtifacts, ModelUnavailableError
+from prediction.core.predict import prepare_text, shap_matrix, text_columns
 
 TEST_SIZE = 0.2
 SPLIT_RANDOM_STATE = 0
@@ -114,15 +115,17 @@ def sample_rows(
     return DatasetSample(columns=columns, rows=rows, total_rows=total_rows)
 
 
-def _aggregate_by_feature(names: list[str], values: np.ndarray, feature_columns: list[str]) -> list[dict[str, Any]]:
-    """Aggregate per-transformed-(one-hot)-column values back to the original feature
-    they came from (e.g. `cat__Geography_France` -> `Geography`), summed and ranked
-    descending — shared by both the estimator-importance and SHAP importance paths.
+def _aggregate_by_feature(
+    names: list[str], values: np.ndarray, feature_columns: list[str], text_features: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """Aggregate per-transformed-(one-hot / TF-IDF term)-column values back to the
+    original feature they came from (e.g. `cat__Geography_France` -> `Geography`,
+    `text_Review__politics` -> `Review`), summed and ranked descending — shared by both
+    the estimator-importance and SHAP importance paths.
     """
     totals: dict[str, float] = {}
     for name, value in zip(names, values, strict=True):
-        unprefixed = name.split("__", 1)[-1]
-        original = next((f for f in feature_columns if unprefixed.startswith(f)), unprefixed)
+        original = original_feature(name, feature_columns, text_features or [])
         totals[original] = totals.get(original, 0.0) + float(value)
 
     ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
@@ -145,15 +148,19 @@ def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: in
         idx = np.linspace(0, len(x) - 1, sample_size, dtype=int)
         x = x.iloc[idx]
 
-    x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
-    # See core/predict.py's matching comment: densify before handing this to SHAP.
-    if hasattr(x_transformed, "toarray"):
-        x_transformed = x_transformed.toarray()
-    # check_additivity=False — see predict.py's matching note (a known SHAP/LightGBM
-    # false positive that would otherwise 500 the whole sample on one bad row).
-    shap_values = np.asarray(artifacts.explainer.shap_values(x_transformed, check_additivity=False))
-    if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
-        shap_values = shap_values[:, :, 1]
+    text_features = text_columns(artifacts)
+    x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(prepare_text(x, text_features))
+    shap_values = shap_matrix(artifacts.explainer, x_transformed)
+    if text_features:
+        # Same definition as training's global_shap_importance for text models: the
+        # size of each feature's *total* push per row (summed over its terms first),
+        # so a 3,000-term vocabulary doesn't outrank every column by sheer width.
+        groups = [original_feature(n, feature_columns, text_features) for n in names]
+        per_feature = pd.DataFrame(shap_values, columns=names).T.groupby(groups).sum().T
+        mean_abs_by_feature = per_feature.abs().mean(axis=0)
+        return _aggregate_by_feature(
+            list(mean_abs_by_feature.index), mean_abs_by_feature.to_numpy(), feature_columns
+        ), len(x)
 
     mean_abs = np.abs(shap_values).mean(axis=0)
     return _aggregate_by_feature(names, mean_abs, feature_columns), len(x)
@@ -191,7 +198,8 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
     target: str = artifacts.metadata["target"]
     task_type: str = artifacts.metadata["task_type"]
 
-    x = df.loc[:, feature_columns]
+    text_features = text_columns(artifacts)
+    x = prepare_text(df.loc[:, feature_columns], text_features)
     y = df[target]
     stratify = y if task_type == "classification" else None
     _, x_test, _, y_test = train_test_split(
@@ -234,7 +242,10 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
             "roc_auc": round(float(roc_auc_score(y_test, predictions)), 4),
         }
 
-    categorical_features = [c for c in feature_columns if not pd.api.types.is_numeric_dtype(x_test[c])]
+    # Free text is never a breakdown axis (one "group" per review).
+    categorical_features = [
+        c for c in feature_columns if c not in text_features and not pd.api.types.is_numeric_dtype(x_test[c])
+    ]
     breakdown_feature = categorical_features[0] if categorical_features else None
     breakdown: list[dict[str, Any]] = []
     if breakdown_feature is not None:

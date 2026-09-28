@@ -20,7 +20,18 @@ export type CategoricalFeatureSpec = {
   info?: string | null;
 };
 
-export type FeatureSpec = NumericFeatureSpec | CategoricalFeatureSpec;
+// Mirrors scenario_schema.py's TextFeatureUI — free text (e.g. a review) the model
+// reads with TF-IDF inside its pipeline; a textarea in every form, never a chart axis.
+export type TextFeatureSpec = {
+  type: "text";
+  default: string;
+  max_length: number;
+  placeholder?: string | null;
+  label: string;
+  info?: string | null;
+};
+
+export type FeatureSpec = NumericFeatureSpec | CategoricalFeatureSpec | TextFeatureSpec;
 
 // Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's ChartSpec — one chart
 // in a scenario's default "Data" dashboard combination (see DataView.tsx/chartBuilder.ts).
@@ -165,7 +176,8 @@ export type ExampleRecord = { label: string; description?: string | null; record
 export type VoyageZone = { key: string; label: string; description?: string | null };
 export type VoyageExplorerExtra = {
   kind: "voyage_explorer";
-  scene: "ocean_liner";
+  // The illustration: a liner's decks (titanic) or an office tower's floors (toxic_leadership).
+  scene: "ocean_liner" | "office_tower";
   tab_label: string;
   title: string;
   subtitle?: string | null;
@@ -176,6 +188,8 @@ export type VoyageExplorerExtra = {
   range_filters: string[];
   name_column?: string | null;
   personas: ExampleRecord[];
+  // The positive class is the bad outcome (red), e.g. "bad leadership".
+  positive_is_adverse?: boolean;
 };
 export type UiExtras =
   | RegionMapExtra
@@ -193,7 +207,8 @@ export type TutorialWidget =
   | "roc_curve"
   | "confusion_matrix"
   | "feature_importance"
-  | "examples";
+  | "examples"
+  | "top_terms";
 export type TutorialStep = {
   title: string;
   body: string;
@@ -201,7 +216,13 @@ export type TutorialStep = {
   charts: ChartSpec[];
   widgets: TutorialWidget[];
 };
-export type TutorialConfig = { tab_label: string; intro: string; steps: TutorialStep[]; examples: ExampleRecord[] };
+export type TutorialConfig = {
+  tab_label: string;
+  intro: string;
+  steps: TutorialStep[];
+  examples: ExampleRecord[];
+  positive_is_adverse?: boolean;
+};
 
 // Mirrors scenario_schema.py's DeepLearningConfig (the scenario.yaml `deep_learning`
 // block, as seeded by platform-registry) — drives DeepLearningView.tsx.
@@ -279,6 +300,47 @@ export type ScenarioSummary = {
   deep_learning?: DeepLearningConfig | null;
   // tabular_ml only — a guided Tutorial tab (see TutorialView.tsx).
   tutorial?: TutorialConfig | null;
+  // tabular_ml with a text feature only — an LLM rubric check over a description of
+  // behaviour (see RubricCheckPanel.tsx) and the sentence-embedding challenger model.
+  rubric_check?: RubricCheckConfig | null;
+  text_challenger?: TextChallengerConfig | null;
+};
+
+// Mirrors scenario_schema.py's RubricCheckConfig / TextChallenger.
+export type RubricBehaviour = { key: string; name: string; description: string };
+export type RubricCheckConfig = {
+  title: string;
+  intro: string;
+  input_label: string;
+  placeholder?: string | null;
+  max_chars: number;
+  text_feature: string;
+  subject_noun: string;
+  positive_label: string;
+  negative_label: string;
+  positive: RubricBehaviour[];
+  negative: RubricBehaviour[];
+  guidance: string;
+  examples: { label: string; text: string }[];
+};
+export type TextChallengerConfig = { embedding_model: string; hf_model_id: string; label: string; estimator: string };
+// POST assistant /rubric-check/{slug}
+export type RubricCheckResult = {
+  verdict: "great" | "mixed" | "toxic" | "unclear";
+  verdict_label: string;
+  balance: number;
+  summary: string;
+  behaviours: {
+    key: string;
+    name: string;
+    polarity: "positive" | "negative";
+    evidence: string;
+    verified: boolean;
+    strength: "weak" | "clear" | "strong";
+    note: string;
+  }[];
+  advice: string[];
+  model: string;
 };
 
 export type PredictionResult = {
@@ -288,6 +350,9 @@ export type PredictionResult = {
   // classification scenarios or if a scenario has no interval models trained.
   prediction_lower: number | null;
   prediction_upper: number | null;
+  // Only with `explainText`: per text feature, every word of the submitted text with its
+  // share of that feature's contribution (the rest is words absent from it).
+  text_explanations?: Record<string, DlTokenWeight[]> | null;
 };
 
 export type DatasetSample = {
@@ -322,6 +387,25 @@ export type ModelCard = {
   global_feature_importance: FeatureImportance[];
   training_rows: number | null;
   holdout_rows: number | null;
+  // Free-text scenarios: which terms push predictions up/down, and the sentence-
+  // embedding challenger scored on the same split (null until trained).
+  text_columns?: string[];
+  text_term_importance?: Record<string, { positive: TextTerm[]; negative: TextTerm[] }>;
+  challenger?: ChallengerCard | null;
+};
+export type TextTerm = { term: string; weight: number; docs: number };
+export type ChallengerCard = {
+  name: string;
+  label: string;
+  embedding_model: string;
+  hf_model_id: string;
+  embedding_dim: number;
+  selection_score: number;
+  metrics: Record<string, number>;
+  holdout_evaluation: ModelCard["holdout_evaluation"];
+  global_feature_importance: FeatureImportance[];
+  gain_over_deployed: number | null;
+  would_be_adopted: boolean;
 };
 
 export type FeatureImportance = { feature: string; importance: number };
@@ -421,18 +505,43 @@ export async function verifyEngineeringDemoKey(baseUrl: string, demoKey: string)
   return response.status !== 401;
 }
 
+// explain=false: probabilities only (no SHAP) — for scoring a whole dataset at once.
+// explainText: per-word contributions of text features (≤ 50 records).
+// model="challenger": the scenario's sentence-embedding text challenger (≤ 50 records).
+export type PredictOptions = { explain?: boolean; explainText?: boolean; model?: "champion" | "challenger" };
+
 export async function predict(
   baseUrl: string,
   scenarioSlug: string,
   records: Record<string, unknown>[],
   accessToken: string | null,
+  options: PredictOptions = {},
 ): Promise<{ predictions: PredictionResult[] }> {
   // One consolidated prediction instance serves every tabular_ml scenario — see root
   // plan's "Consolidation mechanism" decision — routed here by scenarioSlug.
   const response = await fetch(`${baseUrl}/predict/${scenarioSlug}`, {
     method: "POST",
     headers: headers(accessToken),
-    body: JSON.stringify({ records }),
+    body: JSON.stringify({
+      records,
+      ...(options.explain === false ? { explain: false } : {}),
+      ...(options.explainText ? { explain_text: true } : {}),
+      ...(options.model === "challenger" ? { model: "challenger" } : {}),
+    }),
+  });
+  return asJson(response);
+}
+
+export async function rubricCheck(
+  baseUrl: string,
+  scenarioSlug: string,
+  text: string,
+  accessToken: string | null,
+): Promise<RubricCheckResult> {
+  const response = await fetch(`${baseUrl}/rubric-check/${scenarioSlug}`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ text }),
   });
   return asJson(response);
 }

@@ -4,19 +4,24 @@
 
 Generic across tabular_ml scenarios: numeric vs. categorical features are split by
 dtype (etl-tabular already casts non-numeric feature columns to `category`), not by
-any scenario-specific hardcoded column list.
+any scenario-specific hardcoded column list. Free-text features (`type: text` in the
+scenario's feature_schema) are named explicitly by the caller and get their own TF-IDF
+step, so the model reads raw text and SHAP explains it term by term.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import shap
+from ai_circus_shared.tabular_ml import KEPT_NEGATIONS, TEXT_VECTORIZER_PARAMS, original_feature, text_transformer_name
 from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.compose import ColumnTransformer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, r2_score, roc_auc_score, roc_curve
@@ -78,6 +83,17 @@ ROC_CURVE_MAX_POINTS = 80
 INTERVAL_LOWER_ALPHA = 0.05
 INTERVAL_UPPER_ALPHA = 0.95
 
+# sklearn's English stop words, minus the negations a review model must read.
+TEXT_STOP_WORDS = sorted(ENGLISH_STOP_WORDS - KEPT_NEGATIONS)
+# Rows per SHAP batch: a TF-IDF feature's SHAP matrix is dense (an absent word still
+# contributes -coef*mean), so a few thousand rows x a 3,000-term vocabulary are
+# explained in slices rather than densified in one go.
+SHAP_CHUNK_ROWS = 500
+# text_term_importance(): terms per direction, and the minimum number of documents a
+# term must appear in to be ranked (rarer terms are noise at this data size).
+TOP_TERMS = 25
+TOP_TERMS_MIN_DOCS = 10
+
 
 @dataclass(frozen=True)
 class TrainedCandidate:
@@ -96,19 +112,32 @@ class TrainedCandidate:
     metrics: dict[str, float]
 
 
-def split_features(df: pd.DataFrame, feature_columns: list[str]) -> tuple[list[str], list[str]]:
-    """Split feature columns into (numeric, categorical) by dtype."""
+def split_features(
+    df: pd.DataFrame, feature_columns: list[str], text_features: Sequence[str] = ()
+) -> tuple[list[str], list[str]]:
+    """Split feature columns into (numeric, categorical) by dtype, leaving out the
+    free-text ones (`text_features`, taken from the scenario schema — never inferred
+    from dtype, where a review is indistinguishable from a category label).
+    """
 
     def is_numeric(column: str) -> bool:
         return pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])
 
-    numeric = [c for c in feature_columns if is_numeric(c)]
-    categorical = [c for c in feature_columns if c not in numeric]
+    tabular = [c for c in feature_columns if c not in text_features]
+    numeric = [c for c in tabular if is_numeric(c)]
+    categorical = [c for c in tabular if c not in numeric]
     return numeric, categorical
 
 
-def build_pipeline(numeric_features: list[str], categorical_features: list[str], estimator: object) -> Pipeline:
-    """Build a ColumnTransformer (impute+encode) + estimator scikit-learn Pipeline."""
+def build_pipeline(
+    numeric_features: list[str],
+    categorical_features: list[str],
+    estimator: object,
+    text_features: Sequence[str] = (),
+) -> Pipeline:
+    """Build a ColumnTransformer (impute+encode, TF-IDF per text feature) + estimator
+    scikit-learn Pipeline.
+    """
     # Numeric features are scaled: unscaled raw magnitudes (e.g. account balances in
     # the hundreds of thousands) otherwise slow/prevent logistic regression convergence.
     numeric_transformer = Pipeline([
@@ -125,6 +154,18 @@ def build_pipeline(numeric_features: list[str], categorical_features: list[str],
                     ("encode", OneHotEncoder(handle_unknown="ignore")),
                 ]),
                 categorical_features,
+            ),
+            # One vectorizer per text column, selected by a bare string (not a list) so
+            # it receives the 1-D sequence of documents TF-IDF expects. The step name
+            # prefixes every term (`text_Review__upper management`) — how training and
+            # prediction trace a term back to its column (tabular_ml.original_feature).
+            *(
+                (
+                    text_transformer_name(column),
+                    TfidfVectorizer(stop_words=TEXT_STOP_WORDS, **TEXT_VECTORIZER_PARAMS),
+                    column,
+                )  # type: ignore[arg-type]
+                for column in text_features
             ),
         ]
     )
@@ -150,11 +191,14 @@ def cross_validated_metrics(
     categorical_features: list[str],
     task_type: str,
     folds: int,
+    text_features: Sequence[str] = (),
 ) -> dict[str, float]:
     """k-fold CV (stratified for classification) of a fresh pipeline on `x`/`y` — the
     training split only, so the hold-out stays untouched for the final report.
     """
-    pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][estimator_name]())
+    pipeline = build_pipeline(
+        numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][estimator_name](), text_features
+    )
     splitter = (
         StratifiedKFold(n_splits=folds, shuffle=True, random_state=0)
         if task_type == "classification"
@@ -182,6 +226,7 @@ def train_candidate(
     *,
     selection_metric: str | None = None,
     cv_folds: int = 0,
+    text_features: Sequence[str] = (),
 ) -> TrainedCandidate:
     """Train one named candidate estimator on the training split and score it — on the
     hold-out, plus k-fold CV on the training split when `cv_folds` >= 2.
@@ -190,9 +235,13 @@ def train_candidate(
     metrics: dict[str, float] = {}
     if cv_folds >= 2:
         metrics.update(
-            cross_validated_metrics(name, x_train, y_train, numeric_features, categorical_features, task_type, cv_folds)
+            cross_validated_metrics(
+                name, x_train, y_train, numeric_features, categorical_features, task_type, cv_folds, text_features
+            )
         )
-    pipeline = build_pipeline(numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name]())
+    pipeline = build_pipeline(
+        numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name](), text_features
+    )
     pipeline.fit(x_train, y_train)
     score = pipeline.score(x_test, y_test)
     metrics.update(holdout_metrics(pipeline, x_test, y_test, task_type))
@@ -264,6 +313,12 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
     """Build a SHAP explainer appropriate for the pipeline's fitted estimator."""
     model = pipeline.named_steps["model"]
     x_transformed = pipeline.named_steps["preprocessor"].transform(x_background)
+    if not isinstance(model, LGBMClassifier | LGBMRegressor):
+        # Linear model: interventional SHAP only needs the background *mean* —
+        # (mean, cov=None) keeps explainer.joblib a single vector however wide the
+        # TF-IDF vocabulary, and uses every row rather than a 100-row sample.
+        mean = np.asarray(x_transformed.mean(axis=0)).ravel()
+        return shap.LinearExplainer(model, (mean, None))
     # OneHotEncoder emits a sparse matrix; LightGBM's own predict path handles that
     # fine, but shap.TreeExplainer's internal background-subsampling (see
     # "Background dataset has N samples but max_samples=100" above) hits a real
@@ -281,9 +336,7 @@ def build_explainer(pipeline: Pipeline, x_background: pd.DataFrame) -> shap.Expl
         return shap.TreeExplainer(
             model, data=x_transformed, feature_perturbation="interventional", model_output="probability"
         )
-    if isinstance(model, LGBMRegressor):
-        return shap.TreeExplainer(model, data=x_transformed, feature_perturbation="interventional")
-    return shap.LinearExplainer(model, x_transformed)
+    return shap.TreeExplainer(model, data=x_transformed, feature_perturbation="interventional")
 
 
 def fit_quantile_pipelines(
@@ -291,6 +344,7 @@ def fit_quantile_pipelines(
     categorical_features: list[str],
     x: pd.DataFrame,
     y: pd.Series,
+    text_features: Sequence[str] = (),
 ) -> tuple[Pipeline, Pipeline]:
     """Fit a (lower, upper) pair of LightGBM quantile-objective pipelines for a 90%
     prediction interval, independent of which regression candidate `select_best_candidate`
@@ -300,11 +354,13 @@ def fit_quantile_pipelines(
         numeric_features,
         categorical_features,
         LGBMRegressor(objective="quantile", alpha=INTERVAL_LOWER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
+        text_features,
     )
     upper = build_pipeline(
         numeric_features,
         categorical_features,
         LGBMRegressor(objective="quantile", alpha=INTERVAL_UPPER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
+        text_features,
     )
     lower.fit(x, y)
     upper.fit(x, y)
@@ -316,21 +372,53 @@ def transformed_feature_names(pipeline: Pipeline) -> list[str]:
     return list(pipeline.named_steps["preprocessor"].get_feature_names_out())
 
 
-def _aggregate_by_feature(names: list[str], values: np.ndarray, feature_columns: list[str]) -> list[dict[str, Any]]:
-    """Aggregate per-transformed-(one-hot)-column values back to the original feature
-    they came from (e.g. `cat__Geography_France` -> `Geography`), summed and ranked
-    descending. Mirrors prediction/core/dataset.py's identically-named helper — kept
-    as a small duplicate rather than a new libs/shared dependency, since it's the
-    only numpy-dependent code either service would need to share for this.
+def _aggregate_by_feature(
+    names: list[str], values: np.ndarray, feature_columns: list[str], text_features: Sequence[str] = ()
+) -> list[dict[str, Any]]:
+    """Aggregate per-transformed-(one-hot / TF-IDF term)-column values back to the
+    original feature they came from (e.g. `cat__Geography_France` -> `Geography`,
+    `text_Review__politics` -> `Review`), summed and ranked descending. Mirrors
+    prediction/core/dataset.py's identically-named helper — kept as a small duplicate
+    rather than a new libs/shared dependency, since it's the only numpy-dependent code
+    either service would need to share for this (the name mapping itself is shared:
+    tabular_ml.original_feature).
     """
     totals: dict[str, float] = {}
     for name, value in zip(names, values, strict=True):
-        unprefixed = name.split("__", 1)[-1]
-        original = next((f for f in feature_columns if unprefixed.startswith(f)), unprefixed)
+        original = original_feature(name, feature_columns, text_features)
         totals[original] = totals.get(original, 0.0) + float(value)
 
     ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
     return [{"feature": name, "importance": round(value, 4)} for name, value in ranked]
+
+
+def _shap_values(explainer: shap.Explainer, x: np.ndarray) -> Any:
+    """Raw SHAP values for a dense block. check_additivity=False only exists on
+    TreeExplainer (see prediction.core.predict's matching note: a known SHAP/LightGBM
+    false positive that would otherwise fail the job on one row) — LinearExplainer's
+    shap_values() takes no such argument and is exact anyway.
+    """
+    if isinstance(explainer, shap.TreeExplainer):
+        return explainer.shap_values(x, check_additivity=False)
+    # pyrefly: ignore [missing-attribute]
+    return explainer.shap_values(x)
+
+
+def shap_matrix(explainer: shap.Explainer, x_transformed: Any) -> np.ndarray:
+    """(n_rows, n_transformed_columns) positive-class SHAP values, explained
+    SHAP_CHUNK_ROWS rows at a time (each slice densified — see build_explainer's
+    comment on why LightGBM needs dense input).
+    """
+    chunks = []
+    for start in range(0, x_transformed.shape[0], SHAP_CHUNK_ROWS):
+        chunk = x_transformed[start : start + SHAP_CHUNK_ROWS]
+        if hasattr(chunk, "toarray"):
+            chunk = chunk.toarray()
+        values = np.asarray(_shap_values(explainer, chunk))
+        if values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
+            values = values[:, :, 1]
+        chunks.append(values)
+    return np.vstack(chunks)
 
 
 def global_shap_importance(
@@ -339,6 +427,7 @@ def global_shap_importance(
     x: pd.DataFrame,
     feature_columns: list[str],
     sample_size: int = 500,
+    text_features: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """Global feature importance (mean(|SHAP value|) per feature) computed once at
     training time, over a sample of the full dataset the final pipeline was refit on.
@@ -353,15 +442,67 @@ def global_shap_importance(
         x = x.iloc[idx]
 
     x_transformed = pipeline.named_steps["preprocessor"].transform(x)
-    # See build_explainer's matching comment: densify before handing this to SHAP.
-    if hasattr(x_transformed, "toarray"):
-        x_transformed = x_transformed.toarray()
-    # pyrefly: ignore [missing-attribute]
-    # check_additivity=False — see prediction.core.predict's matching note (a known
-    # SHAP/LightGBM false positive that would otherwise fail the training job on one row).
-    shap_values = np.asarray(explainer.shap_values(x_transformed, check_additivity=False))
-    if shap_values.ndim == 3:  # binary-classification TreeExplainer: (n, features, classes)
-        shap_values = shap_values[:, :, 1]
+    shap_values = shap_matrix(explainer, x_transformed)
+    if text_features:
+        # A text feature's importance is the size of its *total* push per row (the
+        # sum over its terms), not the sum of every term's separate |push| — the
+        # latter would rank a 3,000-term vocabulary above any single column.
+        names = transformed_feature_names(pipeline)
+        per_feature = (
+            pd
+            .DataFrame(shap_values, columns=names)
+            .T.groupby([original_feature(n, feature_columns, text_features) for n in names])
+            .sum()
+            .T
+        )
+        mean_abs_by_feature = per_feature.abs().mean(axis=0)
+        return _aggregate_by_feature(
+            list(mean_abs_by_feature.index), mean_abs_by_feature.to_numpy(), feature_columns, ()
+        )
 
     mean_abs = np.abs(shap_values).mean(axis=0)
     return _aggregate_by_feature(transformed_feature_names(pipeline), mean_abs, feature_columns)
+
+
+def text_term_importance(
+    pipeline: Pipeline,
+    explainer: shap.Explainer,
+    x: pd.DataFrame,
+    text_features: Sequence[str],
+    top_k: int = TOP_TERMS,
+    min_docs: int = TOP_TERMS_MIN_DOCS,
+) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """Per text feature, the terms that push predictions up (`positive`) and down
+    (`negative`) the most: each term's mean SHAP value over the documents that contain
+    it (terms in fewer than `min_docs` documents are skipped as noise). Computed from
+    SHAP rather than model coefficients, so it means the same thing for a linear model
+    and for gradient boosting. Written into the model card (the Tutorial's `top_terms`
+    widget and the assistant's grounding prompt).
+    """
+    if not text_features:
+        return {}
+    x_transformed = pipeline.named_steps["preprocessor"].transform(x)
+    shap_values = shap_matrix(explainer, x_transformed)
+    present = x_transformed.tocsc() if hasattr(x_transformed, "tocsc") else x_transformed
+    names = transformed_feature_names(pipeline)
+    result: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for column in text_features:
+        prefix = f"{text_transformer_name(column)}__"
+        terms: list[dict[str, Any]] = []
+        for j, name in enumerate(names):
+            if not name.startswith(prefix):
+                continue
+            rows = present[:, j].nonzero()[0]
+            if len(rows) < min_docs:
+                continue
+            terms.append({
+                "term": name[len(prefix) :],
+                "weight": round(float(shap_values[rows, j].mean()), 4),
+                "docs": len(rows),
+            })
+        ranked = sorted(terms, key=lambda t: t["weight"])
+        result[column] = {
+            "positive": [t for t in reversed(ranked) if t["weight"] > 0][:top_k],
+            "negative": [t for t in ranked if t["weight"] < 0][:top_k],
+        }
+    return result

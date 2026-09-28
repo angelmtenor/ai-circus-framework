@@ -49,6 +49,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "pcb_visual_inspection",
         "pasta_visual_inspection",
         "titanic",
+        "toxic_leadership",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -222,6 +223,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "pcb_visual_inspection",
         "pasta_visual_inspection",
         "titanic",
+        "toxic_leadership",
     }
 
 
@@ -238,8 +240,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 20
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 20
+    assert session.query(Scenario).count() == 21
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 21
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -294,3 +296,17 @@ def test_seed_scenarios_populates_the_titanic_tutorial(session: Session) -> None
     assert titanic.tutorial["tab_label"] == "Tutorial"
     assert "roc_curve" in {w for step in titanic.tutorial["steps"] for w in step["widgets"]}
     assert session.get(Scenario, "churn").tutorial is None
+
+
+def test_seed_scenarios_populates_the_rubric_check_and_text_challenger(session: Session) -> None:
+    """toxic_leadership ships its LLM rubric and transformer challenger to the UI; others don't."""
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    toxic = session.get(Scenario, "toxic_leadership")
+    assert toxic.feature_schema["Review"]["type"] == "text"
+    assert toxic.ui_extras["scene"] == "office_tower"
+    assert toxic.rubric_check["text_feature"] == "Review"
+    assert {b["key"] for b in toxic.rubric_check["negative"]} >= {"dishonesty", "offloading", "no_depth"}
+    assert toxic.text_challenger["embedding_model"] == "local-embed"
+    titanic = session.get(Scenario, "titanic")
+    assert titanic.rubric_check is None and titanic.text_challenger is None

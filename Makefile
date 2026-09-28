@@ -18,7 +18,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down \
-	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly \
+	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
 
 help: ## Show this help message
@@ -408,6 +408,15 @@ dl-data: ## Download + checksum-verify every deep_learning scenario's public dat
 
 dl-train: ## Fine-tune every deep_learning scenario on this machine (GPU if present; CPU asks first) and publish to SeaweedFS — SCENARIOS=… to narrow
 	@./scripts/dl_train_host.sh "$(SCENARIOS)"
+
+text-embeddings: ## Embed free-text tabular scenarios' reviews (toxic_leadership) on this machine's GPU into SeaweedFS for their transformer challenger — then re-run training
+	@./scripts/dl_train_host.sh --embed-texts "$(SCENARIOS)"
+
+k3s-text-embeddings: text-embeddings ## text-embeddings, then re-run the training Job (champion + challenger) and reload prediction
+	@kubectl -n ai-circus delete job training --ignore-not-found
+	@kubectl apply -f k8s/jobs/training-job.yaml
+	@kubectl -n ai-circus wait --for=condition=complete job/training --timeout=900s
+	@kubectl -n ai-circus rollout restart deployment/prediction
 
 dl-train-nlp: ## Fine-tune the NLP scenario (BioClinical ModernBERT, symptom triage) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_NLP)"

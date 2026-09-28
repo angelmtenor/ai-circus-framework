@@ -117,3 +117,17 @@ def test_each_tool_degrades_to_a_plain_string_on_http_error(tool_name: str, kwar
 
     assert isinstance(result, str)
     assert "prediction service is unavailable" in result
+
+
+def test_long_text_values_are_clipped_in_sample_and_evaluation_output() -> None:
+    """A 1,000-character review must not be dumped whole into the LLM's context."""
+    review = "Management " * 100
+    client = _FakeClient()
+    client.sample = lambda **_: {"rows": [{"Review": review, "pay": 3}]}  # type: ignore[method-assign]
+    client.evaluation = lambda **_: {"feature_values": {"Review": [review]}}  # type: ignore[method-assign]
+    tools = build_prediction_tools(client, scenario_slug="toxic_leadership", authorization=None)
+
+    row = json.loads(_tool_named(tools, "get_dataset_sample").func(limit=1))["rows"][0]
+    assert len(row["Review"]) == 281 and row["Review"].endswith("…") and row["pay"] == 3
+    values = json.loads(_tool_named(tools, "get_predictions_vs_actuals").func(limit=1))["feature_values"]["Review"]
+    assert len(values[0]) == 121

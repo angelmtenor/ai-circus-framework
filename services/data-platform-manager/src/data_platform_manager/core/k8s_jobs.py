@@ -98,16 +98,17 @@ def _job(name: str, container: client.V1Container) -> client.V1Job:
     )
 
 
-def _etl_vectorize_container() -> client.V1Container:
-    """etl-vectorize additionally forwards LITELLM_MASTER_KEY as LLM_GATEWAY_API_KEY —
-    only reached when EMBEDDING_PROVIDER=local (llm-gateway's `local-embed` model).
+def _gateway_container(name: str, image: str, secret_name: str) -> client.V1Container:
+    """A container that additionally forwards LITELLM_MASTER_KEY as LLM_GATEWAY_API_KEY
+    for llm-gateway's `local-embed` model — etl-vectorize (EMBEDDING_PROVIDER=local) and
+    training (a scenario's model.text_challenger).
     """
-    container = _container("etl-vectorize", "ai-circus/etl-vectorize:local", "etl-vectorize-secrets")
+    container = _container(name, image, secret_name)
     container.env = [
         client.V1EnvVar(
             name="LLM_GATEWAY_API_KEY",
             value_from=client.V1EnvVarSource(
-                secret_key_ref=client.V1SecretKeySelector(name="etl-vectorize-secrets", key="LITELLM_MASTER_KEY")
+                secret_key_ref=client.V1SecretKeySelector(name=secret_name, key="LITELLM_MASTER_KEY")
             ),
         )
     ]
@@ -116,8 +117,10 @@ def _etl_vectorize_container() -> client.V1Container:
 
 PIPELINE_JOBS: dict[str, client.V1Job] = {
     "etl-tabular": _job("etl-tabular", _container("etl-tabular", "ai-circus/etl-tabular:local", "etl-tabular-secrets")),
-    "training": _job("training", _container("training", "ai-circus/training:local", "training-secrets")),
-    "etl-vectorize": _job("etl-vectorize", _etl_vectorize_container()),
+    "training": _job("training", _gateway_container("training", "ai-circus/training:local", "training-secrets")),
+    "etl-vectorize": _job(
+        "etl-vectorize", _gateway_container("etl-vectorize", "ai-circus/etl-vectorize:local", "etl-vectorize-secrets")
+    ),
 }
 
 
