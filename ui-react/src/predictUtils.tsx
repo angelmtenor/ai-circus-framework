@@ -11,6 +11,12 @@ export function featureLabel(scenario: ScenarioSummary, feature: string): string
   return scenario.feature_schema?.[feature]?.label ?? feature;
 }
 
+/** Whether `column` is a free-text feature (e.g. a review) — tables truncate it
+ * (`data-table-text`, full text on hover) and charts never offer it as an axis. */
+export function isTextFeature(scenario: ScenarioSummary, column: string): boolean {
+  return scenario.feature_schema?.[column]?.type === "text";
+}
+
 /** A fresh record seeded with each feature's default value — the starting point for
  * both the single-record prediction form and the "explore model" what-if form.
  */
@@ -21,8 +27,8 @@ export function initialRecord(featureColumns: string[], featureSchema: Record<st
 }
 
 /** One feature's editable input — a slider+number pair for numeric features, a
- * dropdown for categorical ones. Shared by the single-record prediction form and the
- * "explore model" what-if form.
+ * dropdown for categorical ones, a textarea for free text. Shared by the single-record
+ * prediction form and every what-if form.
  */
 export function FeatureInput({
   feature,
@@ -36,6 +42,26 @@ export function FeatureInput({
   onChange: (value: number | string) => void;
 }) {
   const label = spec.label || feature;
+  if (spec.type === "text") {
+    const text = String(value ?? "");
+    return (
+      <label className="feature-input feature-input--text">
+        <span className="feature-input-label">
+          {label} {spec.info && <InfoButton text={spec.info} />}{" "}
+          <span className="feature-input-range">
+            {text.length}/{spec.max_length}
+          </span>
+        </span>
+        <textarea
+          rows={4}
+          maxLength={spec.max_length}
+          placeholder={spec.placeholder ?? undefined}
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      </label>
+    );
+  }
   if (spec.type === "numeric") {
     return (
       <label className="feature-input">

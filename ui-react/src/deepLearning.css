@@ -172,46 +172,6 @@
   color: var(--dim);
 }
 
-.dl-token-text {
-  font-size: 1.02rem;
-  line-height: 2;
-}
-
-.dl-token {
-  border-radius: 4px;
-  padding: 0.1rem 0.12rem;
-  transition: background 0.3s ease;
-}
-
-.dl-top-words {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin: 0.4rem 0;
-}
-
-.dl-word-chip {
-  border-radius: 999px;
-  padding: 0.15rem 0.55rem;
-  font-size: 0.78rem;
-  border: 1px solid var(--border);
-}
-
-.dl-word-chip small {
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.dl-word-chip--for {
-  background: color-mix(in srgb, var(--red) 18%, transparent);
-  border-color: color-mix(in srgb, var(--red) 45%, transparent);
-}
-
-.dl-word-chip--against {
-  background: color-mix(in srgb, var(--blue) 18%, transparent);
-  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
-}
-
 .dl-swatch {
   display: inline-block;
   width: 0.8rem;

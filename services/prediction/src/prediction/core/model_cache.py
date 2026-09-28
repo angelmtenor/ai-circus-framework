@@ -25,6 +25,8 @@ import joblib
 import pandas as pd
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MODEL_CHALLENGER_EXPLAINER_KEY,
+    MODEL_CHALLENGER_PIPELINE_KEY,
     MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
@@ -89,6 +91,10 @@ class ModelArtifacts:
     metadata: dict[str, Any]
     pipeline_lower: Pipeline | None = None
     pipeline_upper: Pipeline | None = None
+    # The sentence-embedding text challenger (metadata["challenger"]) — only for
+    # free-text scenarios with a model.text_challenger that training could fit.
+    challenger_pipeline: Pipeline | None = None
+    challenger_explainer: Any = None
 
 
 #: Each entry holds a full sklearn pipeline + SHAP explainer (can be multi-MB) — bound
@@ -249,12 +255,22 @@ class ModelCache:
         if metadata.get("has_intervals") and "pipeline_lower" in checksums and "pipeline_upper" in checksums:
             pipeline_lower = _load_checked(store, load_org_id, MODEL_PIPELINE_LOWER_KEY, checksums, "pipeline_lower")
             pipeline_upper = _load_checked(store, load_org_id, MODEL_PIPELINE_UPPER_KEY, checksums, "pipeline_upper")
+        challenger_pipeline = challenger_explainer = None
+        if metadata.get("challenger") and "challenger_pipeline" in checksums and "challenger_explainer" in checksums:
+            challenger_pipeline = _load_checked(
+                store, load_org_id, MODEL_CHALLENGER_PIPELINE_KEY, checksums, "challenger_pipeline"
+            )
+            challenger_explainer = _load_checked(
+                store, load_org_id, MODEL_CHALLENGER_EXPLAINER_KEY, checksums, "challenger_explainer"
+            )
         return ModelArtifacts(
             pipeline=pipeline,
             explainer=explainer,
             metadata=metadata,
             pipeline_lower=pipeline_lower,
             pipeline_upper=pipeline_upper,
+            challenger_pipeline=challenger_pipeline,
+            challenger_explainer=challenger_explainer,
         )
 
     def dataset(self, org_id: str, scenario_slug: str) -> pd.DataFrame:

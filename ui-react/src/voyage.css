@@ -1,3 +1,15 @@
+/* Outcome colours: the positive class is blue (good, e.g. "survived") unless the
+   scenario marks it adverse (e.g. "bad leadership") — then red. See VoyageView.tsx. */
+.voy {
+  --voy-pos: #3f93eb;
+  --voy-neg: #ea4f58;
+}
+
+.voy--adverse {
+  --voy-pos: #ea4f58;
+  --voy-neg: #3f93eb;
+}
+
 /* VoyageView (voyage_explorer ui_extras) — the scene itself has a fixed night palette
    (it is an illustration); everything around it uses the theme's CSS variables. */
 
@@ -221,7 +233,7 @@
   width: 12rem;
   height: 8px;
   border-radius: 4px;
-  background: linear-gradient(90deg, #ea4f58, #7d828c, #3f93eb);
+  background: linear-gradient(90deg, var(--voy-neg), #7d828c, var(--voy-pos));
 }
 
 .voy-legend-dot {
@@ -233,15 +245,15 @@
 }
 
 .voy-legend-dot--pos {
-  background: #3f93eb;
+  background: var(--voy-pos);
 }
 
 .voy-legend-dot--neg {
-  border: 2.5px solid #ea4f58;
+  border: 2.5px solid var(--voy-neg);
 }
 
 .voy-legend-dot--neg.voy-legend-dot--solid {
-  background: #ea4f58;
+  background: var(--voy-neg);
   border: none;
 }
 
@@ -350,11 +362,11 @@
 }
 
 .voy-meter--model .voy-meter-fill {
-  background: linear-gradient(90deg, #7d828c, #3f93eb);
+  background: linear-gradient(90deg, #7d828c, var(--voy-pos));
 }
 
 .voy-meter--real .voy-meter-fill {
-  background: #3f93eb;
+  background: var(--voy-pos);
 }
 
 .voy-person-head {
@@ -377,13 +389,13 @@
 }
 
 .voy-fate--pos {
-  color: #3f93eb;
-  border: 1px solid #3f93eb;
+  color: var(--voy-pos);
+  border: 1px solid var(--voy-pos);
 }
 
 .voy-fate--neg {
-  color: #ea4f58;
-  border: 1px dashed #ea4f58;
+  color: var(--voy-neg);
+  border: 1px dashed var(--voy-neg);
 }
 
 .voy-explain-headline {
@@ -448,11 +460,11 @@
 }
 
 .voy-wf-bar--up {
-  background: #3f93eb;
+  background: var(--voy-pos);
 }
 
 .voy-wf-bar--down {
-  background: #ea4f58;
+  background: var(--voy-neg);
 }
 
 .voy-wf-bar--total {
@@ -508,11 +520,11 @@
 }
 
 .voy-delta--up {
-  color: #3f93eb;
+  color: var(--voy-pos);
 }
 
 .voy-delta--down {
-  color: #ea4f58;
+  color: var(--voy-neg);
 }
 
 @keyframes voy-pulse {
@@ -609,4 +621,18 @@
   .voy-loading-ship {
     animation: none;
   }
+}
+
+/* Text scenarios: a snippet of the review in the tooltip; the challenger button. */
+.voy-tooltip-text {
+  display: block;
+  max-width: 22rem;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: #c9d3e3;
+  white-space: normal;
+}
+
+.voy-compare {
+  margin: 0.4rem 0;
 }

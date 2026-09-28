@@ -21,8 +21,9 @@ from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from assistant import get_env_config
 from assistant.core.agent import ModelUsageCallback, build_agui_agent
@@ -30,6 +31,7 @@ from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
 from assistant.core.prediction_client import PredictionServiceClient
 from assistant.core.prompt_cache import SystemPromptCache
+from assistant.core.rubric import build_rubric_prompt, parse_rubric_response
 from assistant.core.tools import build_prediction_tools
 
 router = APIRouter()
@@ -66,6 +68,38 @@ class MessageOut(BaseModel):
     role: str
     content: Any
     created_at: datetime
+
+
+class RubricCheckIn(BaseModel):
+    """Body for POST /rubric-check/{scenario_slug}: a description of behaviour (the
+    scenario's rubric_check.max_chars is enforced too).
+    """
+
+    text: str = Field(min_length=10, max_length=4000)
+
+
+class RubricBehaviourOut(BaseModel):
+    """One rubric behaviour the description shows, with its quoted evidence."""
+
+    key: str
+    name: str
+    polarity: str  # "positive" | "negative" — from the rubric, not the model
+    evidence: str
+    verified: bool  # the quote really appears in the description
+    strength: str
+    note: str = ""
+
+
+class RubricCheckOut(BaseModel):
+    """The LLM's rubric reading of one description (see core/rubric.py)."""
+
+    verdict: str  # great | mixed | toxic | unclear
+    verdict_label: str
+    balance: int  # -100 (negative) … 100 (positive)
+    summary: str
+    behaviours: list[RubricBehaviourOut]
+    advice: list[str]
+    model: str
 
 
 def _prompt_cache(request: Request) -> SystemPromptCache:
@@ -156,6 +190,55 @@ def model_endpoint(
     """
     model, provider, vision = display
     return ModelResponse(model=model, provider=provider, vision=vision)
+
+
+@router.post("/rubric-check/{scenario_slug}", response_model=RubricCheckOut)
+def rubric_check_endpoint(
+    body: RubricCheckIn,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    llm: ChatOpenAI = Depends(_chat_llm),
+    model_name: str = Depends(_llm_model),
+) -> RubricCheckOut:
+    """Read a description of behaviour against the scenario's `rubric_check` rubric
+    with the active LLM (plain `def`: FastAPI runs the blocking LLM call in its
+    threadpool). 404 when the scenario has no rubric, 422 when the text is too long,
+    502 when the model's answer isn't usable.
+    """
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    rubric = definition.rubric_check
+    if rubric is None:
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no rubric check.")
+    if len(body.text) > rubric.max_chars:
+        raise HTTPException(status_code=422, detail=f"The description is longer than {rubric.max_chars} characters.")
+    # Same per-request copy as the AG-UI route: tenant `user` for llm-gateway's budget
+    # hook, Langfuse metadata for the trace, and temperature 0 for a repeatable reading.
+    llm_for_request = llm.model_copy(
+        update={
+            "temperature": 0,
+            "model_kwargs": {**llm.model_kwargs, "user": identity.org_id},
+            "extra_body": {
+                **(llm.extra_body or {}),
+                "metadata": langfuse_request_metadata(
+                    service="assistant-rubric", org_id=identity.org_id, scenario_slug=definition.slug
+                ),
+            },
+        }
+    )
+    try:
+        reply = llm_for_request.invoke([
+            SystemMessage(content=build_rubric_prompt(rubric)),
+            HumanMessage(content=f"Description to assess:\n<<<\n{body.text}\n>>>"),
+        ])
+    except Exception as exc:  # provider errors come in many shapes (rate limit, auth, timeout)
+        logger.warning("Rubric check LLM call failed for scenario={}: {}", definition.slug, exc)
+        raise HTTPException(status_code=502, detail=f"The language model could not be reached: {exc}") from exc
+    content = reply.content if isinstance(reply.content, str) else str(reply.content)
+    try:
+        result = parse_rubric_response(content, rubric, body.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"The language model's answer was not usable: {exc}") from exc
+    return RubricCheckOut(**result, model=model_name)
 
 
 @router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])

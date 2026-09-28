@@ -49,6 +49,15 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
     if importance:
         ranked = ", ".join(f"{item['feature']} ({item['importance']:.4f})" for item in importance)
         importance_phrase = f" Ranked by global SHAP importance (most to least influential overall): {ranked}."
+    # Free-text features (see training's text_term_importance): the words/phrases
+    # that push predictions up vs down, so "which words matter?" is answered from data.
+    for column, terms in (metadata.get("text_term_importance") or {}).items():
+        up = ", ".join(f"'{t['term']}' ({t['weight']:+.3f})" for t in terms.get("positive", [])[:12])
+        down = ", ".join(f"'{t['term']}' ({t['weight']:+.3f})" for t in terms.get("negative", [])[:12])
+        importance_phrase += (
+            f" '{column}' is free text read by TF-IDF (unigrams + bigrams); the terms that most raise the prediction"
+            f" (mean SHAP where present) are {up or 'none'}, and those that most lower it are {down or 'none'}."
+        )
 
     return (
         f"You are a data analyst assistant for the '{definition.title}' scenario.\n"

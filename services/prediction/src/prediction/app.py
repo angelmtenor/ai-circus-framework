@@ -59,6 +59,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.definitions = definitions
     app.state.model_cache = ModelCache(stores, fallback_org_id=config.SHARED_MODEL_ORG_ID)
+    # llm-gateway embedding clients for text challengers, built on first use (api._gateway_embedder).
+    app.state.embedding_clients = {}
     # Before serving (so readiness only passes once models are warm): never make a demo's
     # first prediction pay for the SeaweedFS download + unpickle. Off the event loop.
     await run_in_threadpool(app.state.model_cache.preload, list(definitions))

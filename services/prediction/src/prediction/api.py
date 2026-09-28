@@ -5,17 +5,28 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Literal
+
+import httpx
 import pandas as pd
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from prediction import get_env_config
 from prediction.core import dataset as dataset_core
 from prediction.core.identity import resolve_identity
 from prediction.core.model_cache import ModelCache
-from prediction.core.predict import MissingFeatureColumnsError
+from prediction.core.predict import (
+    MAX_TEXT_EXPLAIN_RECORDS,
+    ChallengerUnavailableError,
+    MissingFeatureColumnsError,
+    predict_challenger,
+)
 from prediction.core.predict import predict as run_predict
 
 router = APIRouter()
@@ -25,6 +36,9 @@ router = APIRouter()
 # (ai_circus_shared.tabular_ml.MAX_DATASET_ROWS), so a caller can never request more
 # rows than a tenant's dataset could ever actually contain.
 MAX_ROWS = MAX_DATASET_ROWS
+# One text challenger call embeds up to MAX_TEXT_EXPLAIN_RECORDS short texts on the
+# gateway's CPU (~0.6 s each).
+GATEWAY_TIMEOUT_SECONDS = 60.0
 
 
 class PredictRequest(BaseModel):
@@ -34,6 +48,29 @@ class PredictRequest(BaseModel):
     """
 
     records: list[dict[str, object]] = Field(max_length=MAX_ROWS)
+    # Also return, per free-text feature, how its contribution splits over the words
+    # of each record's text — for a person reading one review (at most
+    # MAX_TEXT_EXPLAIN_RECORDS records), not for bulk scoring.
+    explain_text: bool = False
+    # False = probabilities only, no SHAP (empty contributions) — for scoring a whole
+    # dataset at once (e.g. ui-react's Voyage/Office scenes), which explains a person
+    # only when they are clicked.
+    explain: bool = True
+    # "challenger" = the scenario's sentence-embedding text challenger instead of the
+    # deployed model (at most MAX_TEXT_EXPLAIN_RECORDS records: each is embedded live
+    # by llm-gateway) — see ai_circus_shared.scenario_schema.TextChallenger.
+    model: Literal["champion", "challenger"] = "champion"
+
+
+class TokenWeightOut(BaseModel):
+    """One word of a text feature's value and its share of that feature's SHAP
+    contribution (`start`/`end` are character offsets into the submitted text).
+    """
+
+    text: str
+    start: int
+    end: int
+    weight: float
 
 
 class PredictionOut(BaseModel):
@@ -48,6 +85,7 @@ class PredictionOut(BaseModel):
     contributions: dict[str, float]
     prediction_lower: float | None = None
     prediction_upper: float | None = None
+    text_explanations: dict[str, list[TokenWeightOut]] | None = None
 
 
 class PredictResponse(BaseModel):
@@ -103,6 +141,41 @@ class HoldoutEvaluationOut(BaseModel):
     confusion_matrix: dict[str, int]
 
 
+class TextTermOut(BaseModel):
+    """One vocabulary term of a text feature: its mean SHAP value over the training
+    documents containing it, and how many documents that is.
+    """
+
+    term: str
+    weight: float
+    docs: int
+
+
+class TextTermsOut(BaseModel):
+    """A text feature's strongest terms in each direction (see training's
+    text_term_importance()).
+    """
+
+    positive: list[TextTermOut] = []
+    negative: list[TextTermOut] = []
+
+
+class ChallengerCardOut(BaseModel):
+    """The sentence-embedding text challenger, scored on the deployed model's split."""
+
+    name: str
+    label: str
+    embedding_model: str
+    hf_model_id: str
+    embedding_dim: int
+    selection_score: float
+    metrics: dict[str, float] = {}
+    holdout_evaluation: HoldoutEvaluationOut | None = None
+    global_feature_importance: list[FeatureImportanceOut] = []
+    gain_over_deployed: float | None = None
+    would_be_adopted: bool = False
+
+
 class ModelCardOut(BaseModel):
     """Response body for GET /model/{scenario_slug}/card — how the deployed model was
     chosen and how it scores on data it never saw (from training's metadata.json).
@@ -122,6 +195,9 @@ class ModelCardOut(BaseModel):
     global_feature_importance: list[FeatureImportanceOut] = []
     training_rows: int | None = None
     holdout_rows: int | None = None
+    text_columns: list[str] = []
+    text_term_importance: dict[str, TextTermsOut] = {}
+    challenger: ChallengerCardOut | None = None
 
 
 class BreakdownItemOut(BaseModel):
@@ -194,6 +270,7 @@ def healthz() -> dict[str, str]:
 @router.post("/predict/{scenario_slug}", response_model=PredictResponse)
 def predict_endpoint(
     body: PredictRequest,
+    request: Request,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),
@@ -201,12 +278,19 @@ def predict_endpoint(
     """Score one or more records for the caller's tenant; org_id comes from their token."""
     # resolve_identity() already guarantees org_id is set (401s otherwise).
     assert identity.org_id is not None
+    _check_text_values(body, definition)
     artifacts = model_cache.get(identity.org_id, definition.slug)
     records = pd.DataFrame(body.records)
     try:
-        predictions = run_predict(artifacts, records)
+        if body.model == "challenger":
+            embedding_model = (artifacts.metadata.get("challenger") or {}).get("embedding_model", "local-embed")
+            predictions = predict_challenger(artifacts, records, _gateway_embedder(request, embedding_model))
+        else:
+            predictions = run_predict(artifacts, records, explain=body.explain, explain_text=body.explain_text)
     except MissingFeatureColumnsError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ChallengerUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PredictResponse(
         predictions=[
             PredictionOut(
@@ -214,10 +298,61 @@ def predict_endpoint(
                 contributions=p.contributions,
                 prediction_lower=p.prediction_lower,
                 prediction_upper=p.prediction_upper,
+                text_explanations=(
+                    {column: [TokenWeightOut(**t) for t in tokens] for column, tokens in p.text_explanations.items()}
+                    if p.text_explanations is not None
+                    else None
+                ),
             )
             for p in predictions
         ]
     )
+
+
+def _gateway_embedder(request: Request, embedding_model: str) -> Callable[[list[str]], list[list[float]]]:
+    """llm-gateway's `embedding_model` as a texts -> vectors function, one pooled client
+    per model (no start-up probe: a request must fail fast, not wait for the gateway).
+    503 when this instance has no gateway configured.
+    """
+    config = get_env_config()
+    if not config.LLM_GATEWAY_URL or config.LLM_GATEWAY_API_KEY is None:
+        raise HTTPException(status_code=503, detail="The text challenger needs LLM_GATEWAY_URL/LLM_GATEWAY_API_KEY.")
+    clients: dict[str, GatewayEmbeddingProvider] = request.app.state.embedding_clients
+    if embedding_model not in clients:
+        clients[embedding_model] = GatewayEmbeddingProvider(
+            config.LLM_GATEWAY_URL,
+            config.LLM_GATEWAY_API_KEY.get_secret_value(),
+            embedding_model,
+            probe=False,
+            timeout=GATEWAY_TIMEOUT_SECONDS,
+        )
+    provider = clients[embedding_model]
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        try:
+            return provider.encode_documents(texts)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=503, detail=f"llm-gateway embedding failed: {exc}") from exc
+
+    return embed
+
+
+def _check_text_values(body: PredictRequest, definition: ScenarioDefinition) -> None:
+    """422 on a free-text value longer than its schema's `max_length` (TF-IDF + SHAP
+    cost grows with the text), or on `explain_text` for a bulk request.
+    """
+    assert definition.dataset is not None
+    if (body.explain_text or body.model == "challenger") and len(body.records) > MAX_TEXT_EXPLAIN_RECORDS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"explain_text / the challenger support at most {MAX_TEXT_EXPLAIN_RECORDS} records per request.",
+        )
+    for column in definition.dataset.text_columns():
+        max_length = definition.dataset.feature_schema[column].max_length  # type: ignore[union-attr]
+        for record in body.records:
+            value = record.get(column)
+            if value is not None and len(str(value)) > max_length:
+                raise HTTPException(status_code=422, detail=f"{column!r} is longer than {max_length} characters.")
 
 
 @router.get("/dataset/{scenario_slug}/sample", response_model=DatasetSampleOut)
@@ -276,6 +411,11 @@ def model_card_endpoint(
         global_feature_importance=[FeatureImportanceOut(**f) for f in metadata.get("global_feature_importance") or []],
         training_rows=metadata.get("training_rows"),
         holdout_rows=metadata.get("holdout_rows"),
+        text_columns=metadata.get("text_columns") or [],
+        text_term_importance={
+            column: TextTermsOut(**terms) for column, terms in (metadata.get("text_term_importance") or {}).items()
+        },
+        challenger=ChallengerCardOut(**metadata["challenger"]) if metadata.get("challenger") else None,
     )
 
 

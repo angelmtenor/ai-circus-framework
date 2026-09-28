@@ -227,6 +227,53 @@
   background: #3f93eb;
 }
 
+/* positive_is_adverse: the positive class is the bad outcome (e.g. bad leadership). */
+.tut-balance--adverse .tut-balance-neg {
+  background: #3f93eb;
+}
+
+.tut-balance--adverse .tut-balance-pos {
+  background: #ea4f58;
+}
+
+.tut-leaderboard tr.tut-challenger td {
+  background: color-mix(in srgb, var(--dim) 8%, transparent);
+  font-style: normal;
+}
+
+.tut-badge--challenger {
+  color: var(--dim);
+}
+
+.tut-example-text {
+  font-size: 0.86rem;
+}
+
+.tut-example-text .dl-token-text {
+  font-size: 0.86rem;
+  line-height: 1.8;
+  margin: 0.3rem 0;
+}
+
+.tut-example-challenger {
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.tut-terms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.8rem 1.4rem;
+}
+
+.tut-terms-col h4 {
+  margin: 0 0 0.4rem;
+}
+
+.tut-terms-note {
+  grid-column: 1 / -1;
+}
+
 .tut-leaderboard tr.tut-winner td {
   background: var(--accent-bg);
 }
@@ -388,4 +435,13 @@
 .tut-down {
   color: #ea4f58;
   font-weight: 600;
+}
+
+/* positive_is_adverse: pushing toward the positive class is the bad direction. */
+.tut-examples--adverse .tut-up {
+  color: #ea4f58;
+}
+
+.tut-examples--adverse .tut-down {
+  color: #3f93eb;
 }
