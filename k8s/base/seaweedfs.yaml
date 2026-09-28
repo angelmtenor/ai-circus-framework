@@ -27,6 +27,11 @@ spec:
           # -master.volumePreallocate=false: weed server otherwise fallocate()s 1 GiB per volume and
           # grows 7 volumes per S3 bucket (= per scenario) — ~70 GB of empty disk for ~15 MB of data.
           args: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-master.volumePreallocate=false"]
+          # Go's GC otherwise keeps a large upload's buffers: one 200 MB multipart upload (a
+          # packed image-folder dataset) took it from ~150Mi to ~650Mi and the next one was
+          # OOM-killed. A soft limit (~80% of the hard one) makes the GC give memory back first.
+          env:
+            - {name: GOMEMLIMIT, value: "600MiB"}
           ports:
             - {containerPort: 8333, name: s3}
             - {containerPort: 8888, name: filer-console}

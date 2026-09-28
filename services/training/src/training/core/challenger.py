@@ -71,7 +71,9 @@ def load_embedding_cache(store: ObjectStore, org_id: str, challenger: TextChalle
         return {}
     with np.load(io.BytesIO(store.get(org_id, key)), allow_pickle=False) as data:
         if str(data["hf_model_id"]) != challenger.hf_model_id:
-            logger.warning("Embedding cache was built with {}, not {} — ignoring it", data["hf_model_id"], challenger.hf_model_id)
+            logger.warning(
+                "Embedding cache was built with {}, not {} — ignoring it", data["hf_model_id"], challenger.hf_model_id
+            )
             return {}
         return dict(zip((str(h) for h in data["hashes"]), data["vectors"], strict=True))
 
@@ -85,7 +87,8 @@ def embed_texts(
 ) -> np.ndarray:
     """(len(texts), dim) float32 vectors — cached ones reused, the rest from the gateway
     (at most MAX_LIVE_EMBEDDINGS); a few cached ones are re-embedded live to prove the
-    cache matches what prediction will get from the gateway."""
+    cache matches what prediction will get from the gateway.
+    """
     missing = sorted({t for t in texts if text_hash(t) not in cache})
     if len(missing) > MAX_LIVE_EMBEDDINGS or (missing and provider is None):
         raise ChallengerUnavailableError(
@@ -181,6 +184,9 @@ def train_text_challenger(
         "global_feature_importance": importance,
     }
     logger.success(
-        "Text challenger {} + {}: selection score {:.4f}", challenger.label, challenger.estimator, candidate.selection_score
+        "Text challenger {} + {}: selection score {:.4f}",
+        challenger.label,
+        challenger.estimator,
+        candidate.selection_score,
     )
     return ChallengerResult(candidate.pipeline, explainer, metadata)

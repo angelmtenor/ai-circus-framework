@@ -58,13 +58,16 @@ def embed_scenario_texts(
     encoder_factory: EncoderFactory = _sentence_transformer,
 ) -> dict[str, Any]:
     """Embed every distinct text of the scenario's text columns (skipping ones already
-    cached with the same model) and write the merged cache; return a small summary."""
+    cached with the same model) and write the merged cache; return a small summary.
+    """
     assert definition.dataset is not None and definition.model is not None
     challenger = definition.model.text_challenger
     assert challenger is not None
     table = pq.read_table(io.BytesIO(store.get(org_id, NORMALIZED_DATASET_KEY)))
     # etl-tabular already filled missing text with "" — `or ""` just guards older data.
-    texts = sorted({str(t or "") for column in definition.dataset.text_columns() for t in table.column(column).to_pylist()})
+    texts = sorted({
+        str(t or "") for column in definition.dataset.text_columns() for t in table.column(column).to_pylist()
+    })
 
     cache = load_cache(store, org_id, challenger.embedding_model)
     if cache is not None and cache["hf_model_id"] != challenger.hf_model_id:
@@ -73,7 +76,9 @@ def embed_scenario_texts(
     known = dict(zip(cache["hashes"], cache["vectors"], strict=True)) if cache else {}
     missing = [t for t in texts if text_hash(t) not in known]
     if missing:
-        logger.info("Embedding {} texts with {} on {} ({})", len(missing), challenger.hf_model_id, device.kind, device.name)
+        logger.info(
+            "Embedding {} texts with {} on {} ({})", len(missing), challenger.hf_model_id, device.kind, device.name
+        )
         encoder = encoder_factory(challenger.hf_model_id, device.kind)
         # normalize_embeddings=True: exactly what llm-gateway's local-embed handler returns.
         vectors = np.asarray(
@@ -91,4 +96,9 @@ def embed_scenario_texts(
         hf_model_id=np.asarray(challenger.hf_model_id),
     )
     store.put(org_id, text_embedding_cache_key(challenger.embedding_model), buffer.getvalue())
-    return {"texts": len(texts), "embedded": len(missing), "cached": len(hashes), "dimension": len(next(iter(known.values())))}
+    return {
+        "texts": len(texts),
+        "embedded": len(missing),
+        "cached": len(hashes),
+        "dimension": len(next(iter(known.values()))),
+    }

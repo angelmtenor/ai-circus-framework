@@ -1,0 +1,121 @@
+# Seed definition for the "screw_visual_inspection" scenario — the harder of the two
+# `deep_learning` / `task: anomaly_detection` manufacturing scenarios (the other is
+# pcb_visual_inspection). Same model family and code path; only the data differ, which
+# is the point: a free-lying machined part with fine, repetitive thread texture and
+# defects of a few pixels, instead of a fixtured circuit board. Loaded into the registry
+# by services/platform-registry at bootstrap; dl-training and dl-inference also read the
+# `deep_learning` block directly.
+#
+# No image lives in this repo: dl-training downloads the pinned files (manifest SHA-256
+# checked) into the scenario's SeaweedFS bucket on first run (`make dl-data`).
+
+slug: screw_visual_inspection
+kind: deep_learning
+title: "Machined Screw Inspection (CV Anomaly Detection — hard)"
+description: >
+  End-of-line inspection for a turned-parts line: a camera photographs every machined
+  steel screw lying at a random position and angle on the inspection table, and flags any
+  with a damaged thread flank or tip, a scratched head or neck, or a deformed front —
+  after learning only from photos of good screws, the way a real line is set up when
+  defects are rare and never the same twice. Much harder than the PCB line: no fixture
+  aligns the part, the thread is a fine repeating texture in which one chipped flank
+  looks almost normal, and most defects cover a tiny fraction of the photo. Each screw
+  gets a defect heatmap and its closest known-good screws, and a live inspection line
+  shows how many screws the model can pass or scrap on its own and how many still need a
+  human inspector.
+role_required: "scenario:screw_visual_inspection"
+industry: manufacturing_industry
+icon: "🪛"
+
+credits:
+  source: "MVTec AD — MVTec Anomaly Detection dataset, Screw category (MVTec Software GmbH, CC BY-NC-SA 4.0)"
+  url: "https://www.mvtec.com/company/research/datasets/mvtec-ad"
+  note: >
+    Bergmann et al., "MVTec AD — A Comprehensive Real-World Dataset for Unsupervised
+    Anomaly Detection", CVPR 2019 (and IJCV 2021). Screw = 1024×1024 grayscale photos of
+    M-size machined screws in random poses: 320 good for training; 41 good + 119
+    defective for testing (manipulated front, scratched head, scratched neck, thread
+    side, thread top), with pixel-level defect masks — read one PNG per image from the
+    TheoM55/mvtec_anomaly_detection Hub mirror at a pinned commit. Non-commercial licence:
+    demonstration use only. Backbone: facebook/dinov2-with-registers-small (Apache-2.0).
+    Not validated for production use.
+
+chat:
+  context: >
+    A visual anomaly detector for machined screws on an inspection table that learns from
+    good screws only, with patch-level defect heatmaps and the closest known-good screws as
+    evidence. Harder than PCB inspection: random pose, fine thread texture, tiny defects.
+  sample_questions: []
+
+deep_learning:
+  modality: image
+  task: anomaly_detection
+  bucket: "scenario-screw-visual-inspection"
+  source:
+    type: huggingface_image_folder
+    repo: "TheoM55/mvtec_anomaly_detection"
+    revision: "6363bbd8dc8376644074d5a5bc0e62611d59a0c6"
+    folders:
+      train: "images/train/screw"
+      test: "images/test/screw"
+    mask_folders:
+      test: "masks/test/screw"
+    # `good` is the only normal class; every defect-type folder is "Defective".
+    label_map: {good: "0", "*": "1"}
+    # SHA-256 over "<path> <sha256>" of all 599 files (320 + 160 images, 119 masks).
+    manifest_sha256: "e6d41795f39e12b403ddc65c0c7c43228f69ed0eb8a1ca9b40cd3ade42eb6684"
+  # Same frozen backbone as pcb_visual_inspection (see there): the difficulty is in the data.
+  base_model: "facebook/dinov2-with-registers-small"
+  base_model_revision: "0d9846e56b43a21fa46d7f3f5070f0506a5795a9"
+  base_model_params: "22M"
+  input_label: "Top-down photo of a machined screw on the inspection table"
+  target_label: "Inspection result"
+  target_description: "Whether the screw deviates from every good screw seen in training — a chipped or deformed thread, a scratch on the head or neck, a damaged tip, even a defect type never seen before."
+  image_size: 448
+  anomaly:
+    normal_label: "0"
+    top_k_fraction: 0.01
+  training:
+    # GPU: every good training screw (~290) -> ~300k patch features -> 16k-patch coreset.
+    gpu: {batch_size: 16, memory_bank_size: 16384}
+    # CPU: 160 screws and a 4k-patch coreset — a few minutes, noticeably weaker detection.
+    cpu: {batch_size: 4, max_train_samples: 160, memory_bank_size: 4096}
+    val_fraction: 0.1
+    seed: 42
+    # Training data are good screws only: P(defect) is fitted on a stratified 30% of
+    # the labelled test pool; metrics are reported on the untouched 70%.
+    calibration_holdout_fraction: 0.3
+  gallery_size: 112
+  reference_size: 120
+  labels:
+    - {key: "0", label: "Good", description: "Matches the good screws the model learned from — pack it."}
+    - {key: "1", label: "Defective", description: "Deviates from every known-good screw — damaged thread, scratched head or neck, deformed tip."}
+
+# The Inspection Line tab: screws come off the line one by one and are passed,
+# scrapped, or sent to a human inspector when the model is not confident enough.
+ui_extras:
+  kind: triage_board
+  tab_label: "Inspection Line"
+  title: "Live screw inspection line"
+  item_noun: "screw"
+  reviewer_noun: "inspector"
+  critical_kpi_label: "Defects caught"
+  review_lane_label: "Manual inspection"
+  note: "Held-out MVTec AD test screws, replayed. Escapes (defective screws auto-passed) are the costly error — with this harder part, expect some at a low threshold."
+  confidence_threshold: 0.8
+  tick_seconds: 3
+  lanes:
+    - key: pass
+      label: "Pass — pack"
+      description: "Confidently good: goes straight to packing."
+      tone: ok
+      labels: ["0"]
+    - key: reject
+      label: "Reject — scrap"
+      description: "Confidently defective: pulled off the line."
+      tone: critical
+      labels: ["1"]
+
+services:
+  training: dl-training
+  inference: dl-inference

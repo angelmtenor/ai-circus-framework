@@ -647,6 +647,9 @@ class HuggingFaceFilesSource(BaseModel):
     image_field: str | None = None
     mask_field: str | None = None  # image only: per-pixel ground truth (anomaly localization)
     label_field: str
+    # Raw label value (stringified) -> label key, `"*"` = every other value — e.g. to merge a
+    # source's graded classes into two. Empty = the raw values are the label keys.
+    label_map: dict[str, str] = {}
 
     @model_validator(mode="after")
     def _splits_and_checksums(self) -> HuggingFaceFilesSource:
@@ -664,6 +667,39 @@ class HuggingFaceFilesSource(BaseModel):
         return self
 
 
+class HuggingFaceImageFolderSource(BaseModel):
+    """Images stored one file each in a public Hugging Face Hub *dataset* repo, in the
+    class-per-subfolder layout (`<folder>/<class>/<name>.png`, e.g. MVTec AD's
+    `images/train/screw/good/000.png`), at a pinned commit. `folders` names each split's
+    folder; its subfolders are the classes, mapped to label keys by `label_map` (`"*"` =
+    every other subfolder, e.g. all defect types -> "1"). Optional ground-truth defect
+    masks live under `mask_folders` with the same class subfolders, named
+    `<stem><mask_suffix>.<ext>`.
+
+    Hundreds of files can't each carry a digest in YAML: `manifest_sha256` pins the
+    SHA-256 of the sorted, newline-terminated `"<path> <sha256>"` lines of every file used, so one value
+    covers them all (dl-training's core/data.py builds and checks it).
+    """
+
+    type: Literal["huggingface_image_folder"] = "huggingface_image_folder"
+    repo: str
+    revision: str  # full commit sha
+    folders: dict[str, str]  # split name -> folder within the repo
+    mask_folders: dict[str, str] = {}  # split name -> folder of ground-truth masks
+    mask_suffix: str = "_mask"
+    label_map: dict[str, str] = Field(min_length=1)  # class subfolder (or "*") -> label key
+    manifest_sha256: str
+
+    @model_validator(mode="after")
+    def _splits(self) -> HuggingFaceImageFolderSource:
+        if not {"train", "test"} <= set(self.folders):
+            raise ValueError("huggingface_image_folder source needs at least 'train' and 'test' folders.")
+        unknown = set(self.mask_folders) - set(self.folders)
+        if unknown:
+            raise ValueError(f"huggingface_image_folder mask_folders for unknown splits: {sorted(unknown)}.")
+        return self
+
+
 class NpzImagesSource(BaseModel):
     """Raw image data as one public `.npz` archive in the MedMNIST layout
     (`{split}_images` uint8 arrays + `{split}_labels` integer arrays for
@@ -675,7 +711,9 @@ class NpzImagesSource(BaseModel):
     md5: str
 
 
-DlDataSource = Annotated[HuggingFaceFilesSource | NpzImagesSource, Field(discriminator="type")]
+DlDataSource = Annotated[
+    HuggingFaceFilesSource | HuggingFaceImageFolderSource | NpzImagesSource, Field(discriminator="type")
+]
 
 
 class DlLabel(BaseModel):
@@ -790,13 +828,17 @@ class DeepLearningConfig(BaseModel):
             ok = isinstance(source, HuggingFaceFilesSource) and source.text_field is not None
             expected = "a huggingface_files source with text_field"
         else:
-            ok = isinstance(source, NpzImagesSource) or source.image_field is not None
-            expected = "an npz_images source, or huggingface_files with image_field"
+            ok = isinstance(source, NpzImagesSource | HuggingFaceImageFolderSource) or source.image_field is not None
+            expected = "an npz_images or huggingface_image_folder source, or huggingface_files with image_field"
         if not ok:
             raise ValueError(f"modality={self.modality!r} needs {expected}.")
         keys = [label.key for label in self.labels]
         if len(set(keys)) != len(keys):
             raise ValueError("deep_learning.labels keys must be unique.")
+        if isinstance(source, HuggingFaceImageFolderSource | HuggingFaceFilesSource):
+            unknown = set(source.label_map.values()) - set(keys)
+            if unknown:
+                raise ValueError(f"{source.type} label_map values {sorted(unknown)} are not label keys.")
         return self
 
     @model_validator(mode="after")

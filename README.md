@@ -261,7 +261,8 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
 | **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
 | **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |
-| **Pasta Line Visual Inspection (CV Anomaly Detection — hard)** (`pasta_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective tray of elbow macaroni on a textured conveyor — the same detector as the PCB line on a much harder product (random placement, pin-sized cracks and holes), so the **Inspection Line** shows real escapes and a large manual-inspection lane | Amazon VisA — Macaroni2 (Zou et al., ECCV 2022) |
+| **Machined Screw Inspection (CV Anomaly Detection — hard)** (`screw_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective machined screw (thread, head, neck, tip) — the same detector as the PCB line on a much harder part (random pose, fine thread texture, defects a few pixels wide), so the **Inspection Line** shows real escapes and a manual-inspection lane | MVTec AD — Screw (Bergmann et al., CVPR 2019; CC BY-NC-SA 4.0) |
+| **Solar Cell EL Inspection (CV)** (`solar_cell_inspection`) | `deep_learning` — image | Functional vs. defective photovoltaic cell from its electroluminescence image — fine-tuned ConvNeXt V2, occlusion heatmaps, a live **Grading Line** tab; expert labels include "possibly defective" cells, so it is genuinely hard | ELPV — ZAE Bayern (Buerhop-Lutz et al., 2018; CC BY-NC-SA 4.0) |
 
 Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
 each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
@@ -716,20 +717,22 @@ dependency.
 
 ### Deep learning — NLP & computer vision (optional)
 
-Four scenarios are `kind: deep_learning`, all on public data and Hugging Face models. In
+Five scenarios are `kind: deep_learning`, all on public data and Hugging Face models. In
 `healthcare`, two fine-tunes: `thomas-sounack/BioClinical-ModernBERT-base` (150M, 2025 clinical
 encoder) on patient symptom texts and `facebook/convnextv2-nano-22k-224` (15.6M) on PneumoniaMNIST
-chest X-rays. In `manufacturing_industry`, `pcb_visual_inspection` uses the other `deep_learning`
+chest X-rays; the same ConvNeXt V2 is fine-tuned in `manufacturing_industry` on electroluminescence
+images of solar cells (`solar_cell_inspection`, ELPV). There, `pcb_visual_inspection` uses the other `deep_learning`
 task, **`task: anomaly_detection`**: it learns from *good* printed circuit boards only (Amazon
 VisA, PCB1) — a frozen `facebook/dinov2-with-registers-small` (22M) describes every 14×14-px patch,
 a greedy coreset keeps a memory bank of normal patches (PatchCore), and a board's patches are scored
 by their distance to the nearest normal one (AnomalyDINO); backbone, bank and kNN export as one
-ONNX graph whose `anomaly_map` output is the explanation. `pasta_visual_inspection` is the same
-detector on a deliberately harder product (VisA Macaroni2: four pieces dropped at random on a
-textured belt, defects a few pixels wide) — no code of its own, only a YAML with a sharper image
-score (`top_k_fraction`), and an Inspection Line where the model can no longer work alone. No data file is committed: each
+ONNX graph whose `anomaly_map` output is the explanation. `screw_visual_inspection` is the same
+detector on a deliberately harder part (MVTec AD Screw: machined screws in random poses, fine
+thread texture, defects a few pixels wide) — no code of its own, only a YAML, and an Inspection
+Line where the model can no longer work alone. No data file is committed: each
 `scenario.yaml` pins its public source (Hugging Face commit + SHA-256 — JSON Lines text or Parquet
-images — or Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS on first
+images; a Hub folder of one-file-per-image classes + one manifest SHA-256, `huggingface_image_folder`;
+or Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS on first
 run (`make dl-data` does only that).
 
 - **`dl-training`** (one-shot job): device auto-detect — the host/cluster GPU gets each scenario's
@@ -745,8 +748,8 @@ run (`make dl-data` does only that).
   tenant-scoped and entitlement-checked like every other service.
 - **UI**: a generic `DeepLearningView` (Scenario, Texts/Images with click-to-enlarge, Try the
   model, Model insights with learning curves/confusion matrix/calibration/ROC) plus two opt-in
-  `ui_extras` tabs — `triage_board` (text or images: a patient-message board, or the PCB
-  scenario's pass / reject / manual-inspection line) and `reading_room`. Admins see GPU availability, each model's
+  `ui_extras` tabs — `triage_board` (text or images: a patient-message board, or the PCB/screw
+  inspection and solar-cell grading lines' pass / reject / manual-inspection lanes) and `reading_room`. Admins see GPU availability, each model's
   card and an in-cluster **Train** button under **Platform → Deep Learning**. For a GPU inside
   the k3d cluster see [k8s/README.md](k8s/README.md#deep-learning-optional-and-gpus).
 
