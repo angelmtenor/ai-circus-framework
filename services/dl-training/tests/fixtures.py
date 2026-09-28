@@ -22,6 +22,7 @@ from ai_circus_shared.scenario_schema import (
     DlTrainBudget,
     DlTraining,
     HuggingFaceFilesSource,
+    HuggingFaceImageFolderSource,
     NpzImagesSource,
     ScenarioDefinition,
 )
@@ -296,6 +297,73 @@ def anomaly_config() -> DeepLearningConfig:
         gallery_size=8,
         reference_size=6,
     )
+
+
+def image_folder_files(size: int = 48) -> dict[str, bytes]:
+    """An MVTec-AD-like Hub folder: `images/{split}/part/<class>/NNN.png` (train = 16
+    good; test = 8 good + 4 `scratch` + 4 `dent`) and `masks/test/part/<defect>/NNN_mask.png`
+    — plus a stray README and a nested file the loader must skip.
+    """
+    rng = np.random.default_rng(2)
+    files: dict[str, bytes] = {}
+
+    def part(defective: bool) -> tuple[bytes, bytes]:
+        image = rng.integers(0, 40, size=(size, size, 3), dtype=np.uint8)
+        mask = np.zeros((size, size), dtype=np.uint8)
+        if defective:
+            top, left = rng.integers(0, size - 12, size=2)
+            image[top : top + 12, left : left + 12] = 230
+            mask[top : top + 12, left : left + 12] = 255
+        return png(image), png(mask)
+
+    for i in range(16):
+        files[f"images/train/part/good/{i:03d}.png"] = part(False)[0]
+    for i in range(8):
+        files[f"images/test/part/good/{i:03d}.png"] = part(False)[0]
+    for defect in ("scratch", "dent"):
+        for i in range(4):
+            image, mask = part(True)
+            files[f"images/test/part/{defect}/{i:03d}.png"] = image
+            files[f"masks/test/part/{defect}/{i:03d}_mask.png"] = mask
+    files["images/README.md"] = b"not an image"
+    files["images/test/part/good/nested/999.png"] = part(False)[0]
+    return files
+
+
+def image_folder_manifest(files: dict[str, bytes]) -> str:
+    """The manifest digest a scenario.yaml would pin for these files (loader-relevant only)."""
+    from dl_training.core.data import folder_manifest_digest
+
+    used = {k: v for k, v in files.items() if k.endswith(".png") and "/nested/" not in k}
+    return folder_manifest_digest((path, sha256(data)) for path, data in used.items())
+
+
+def image_folder_config() -> DeepLearningConfig:
+    """task=anomaly_detection on a huggingface_image_folder source (image_folder_files())."""
+    base = anomaly_config()
+    source = HuggingFaceImageFolderSource(
+        repo="org/mvtec",
+        revision="def",
+        folders={"train": "images/train/part", "test": "images/test/part"},
+        mask_folders={"test": "masks/test/part"},
+        label_map={"good": "0", "*": "1"},
+        manifest_sha256=image_folder_manifest(image_folder_files()),
+    )
+    return base.model_copy(update={"source": source})
+
+
+def fake_hub(files: dict[str, bytes], calls: list[str] | None = None) -> dict[str, object]:
+    """`download` + `list_files` stand-ins for data.ensure_raw serving `files` as a Hub repo."""
+
+    def list_files(repo: str, revision: str, folder: str) -> list[str]:
+        return [p for p in files if p.startswith(folder.strip("/") + "/")]
+
+    def download(url: str, dest: Path) -> None:
+        if calls is not None:
+            calls.append(url)
+        dest.write_bytes(files[url.split("/resolve/def/", 1)[1]])
+
+    return {"download": download, "list_files": list_files}
 
 
 def tiny_anomaly_task(dl: DeepLearningConfig, *_: object) -> AnomalyTask:

@@ -399,6 +399,7 @@ from ai_circus_shared.scenario_schema import (  # noqa: E402
     DlTrainBudget,
     DlTraining,
     HuggingFaceFilesSource,
+    HuggingFaceImageFolderSource,
     NpzImagesSource,
     ReadingRoomExtra,
     TriageBoardExtra,
@@ -472,7 +473,7 @@ def test_deep_learning_kind_requires_deep_learning_services() -> None:
 
 
 def test_modality_must_match_the_source_type() -> None:
-    with pytest.raises(ValidationError, match="needs an npz_images source, or huggingface_files with image_field"):
+    with pytest.raises(ValidationError, match="npz_images or huggingface_image_folder source"):
         DeepLearningConfig(**{**_dl_config().model_dump(), "modality": "image"})
     with pytest.raises(ValidationError, match="needs a huggingface_files source with text_field"):
         DeepLearningConfig(**{**_dl_config("image").model_dump(), "modality": "text"})
@@ -502,6 +503,41 @@ def test_huggingface_parquet_image_source() -> None:
         _parquet_image_source(format="jsonl")
     with pytest.raises(ValidationError, match="mask_field needs an image_field"):
         HuggingFaceFilesSource(**{**_text_source().model_dump(), "mask_field": "m"})
+    merged = _parquet_image_source(label_map={"3": "a", "*": "b"}).model_dump()
+    assert DeepLearningConfig(**{**_dl_config("image").model_dump(), "source": merged}).source.label_map["*"] == "b"
+    with pytest.raises(ValidationError, match=r"huggingface_files label_map values \['z'\] are not label keys"):
+        DeepLearningConfig(
+            **{**_dl_config("image").model_dump(), "source": _parquet_image_source(label_map={"3": "z"}).model_dump()}
+        )
+
+
+def _image_folder_source(**overrides: object) -> dict[str, object]:
+    fields: dict[str, object] = {
+        "type": "huggingface_image_folder",
+        "repo": "o/d",
+        "revision": "abc",
+        "folders": {"train": "images/train/part", "test": "images/test/part"},
+        "mask_folders": {"test": "masks/test/part"},
+        "label_map": {"good": "a", "*": "b"},
+        "manifest_sha256": "0" * 64,
+    }
+    return {**fields, **overrides}
+
+
+def test_huggingface_image_folder_source() -> None:
+    config = DeepLearningConfig(**{**_dl_config("image").model_dump(), "source": _image_folder_source()})
+    assert isinstance(config.source, HuggingFaceImageFolderSource)
+    assert config.source.mask_suffix == "_mask"
+    with pytest.raises(ValidationError, match="'train' and 'test' folders"):
+        HuggingFaceImageFolderSource(**_image_folder_source(folders={"train": "t"}))  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match=r"mask_folders for unknown splits: \['validation'\]"):
+        HuggingFaceImageFolderSource(**_image_folder_source(mask_folders={"validation": "m"}))  # type: ignore[arg-type]
+    with pytest.raises(ValidationError, match=r"label_map values \['z'\] are not label keys"):
+        DeepLearningConfig(
+            **{**_dl_config("image").model_dump(), "source": _image_folder_source(label_map={"good": "a", "*": "z"})}
+        )
+    with pytest.raises(ValidationError, match="needs a huggingface_files source with text_field"):
+        DeepLearningConfig(**{**_dl_config().model_dump(), "source": _image_folder_source()})
 
 
 def _anomaly_config(**overrides: object) -> DeepLearningConfig:
@@ -633,7 +669,8 @@ def test_repo_deep_learning_scenarios_load() -> None:
         "symptom_triage",
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
-        "pasta_visual_inspection",
+        "screw_visual_inspection",
+        "solar_cell_inspection",
     }
 
 

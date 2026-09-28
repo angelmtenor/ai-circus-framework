@@ -353,6 +353,99 @@ def test_load_parquet_image_dataset_decodes_resizes_and_keeps_masks(tmp_path: Pa
     assert subset.masks is not None and subset.masks[0].any() and not subset.masks[1].any()
 
 
+def test_label_map_merges_raw_source_labels_into_the_scenario_keys(tmp_path: Path) -> None:
+    """e.g. ELPV's four expert grades -> functional / defective: raw 0 -> "1", anything else -> "0"."""
+    from tests.fixtures import anomaly_config, anomaly_parquet_files
+
+    seed_cache(tmp_path, anomaly_parquet_files())
+    dl = anomaly_config()
+    dl = dl.model_copy(update={"source": dl.source.model_copy(update={"label_map": {"0": "1", "*": "0"}})})
+    dataset = data.load_dataset(dl, data.ensure_raw(MemoryStore(), "demo", dl, tmp_path))  # type: ignore[arg-type]
+    assert dataset.test.masks is not None
+    assert (dataset.test.labels == 0).sum() == 8  # the 8 defective parts now carry key "0"
+    assert dataset.train.labels.all()  # every good training part -> "1"
+    assert dataset.test.masks[dataset.test.labels == 0].any(axis=(1, 2)).all()
+
+
+def test_image_folder_source_is_downloaded_packed_verified_and_reused(tmp_path: Path) -> None:
+    from tests.fixtures import fake_hub, image_folder_config, image_folder_files
+
+    files, calls = image_folder_files(), []
+    dl, store = image_folder_config(), MemoryStore()
+    (raw,) = data.raw_files(dl)
+    assert raw.algorithm == data.MANIFEST and raw.name.startswith("image-folder-") and raw.name.endswith(".tar")
+    paths = data.ensure_raw(store, "demo", dl, tmp_path / "a", **fake_hub(files, calls))  # type: ignore[arg-type]
+    assert len(calls) == 16 + 16 + 8  # train + test images + test masks; README / nested skipped
+    assert all("/resolve/def/" in url for url in calls)
+    assert store.exists("demo", raw.object_key)
+    assert data.file_digest(paths[raw.name], data.MANIFEST) == dl.source.manifest_sha256  # type: ignore[union-attr]
+    # A second host with an empty cache gets the packed tar from SeaweedFS, not the Hub.
+    data.ensure_raw(store, "demo", dl, tmp_path / "b", **fake_hub(files, calls))  # type: ignore[arg-type]
+    assert len(calls) == 40
+
+
+def test_image_folder_source_rejects_tampered_files_and_unsafe_paths(tmp_path: Path) -> None:
+    from tests.fixtures import fake_hub, image_folder_config, image_folder_files
+
+    tampered = image_folder_files()
+    tampered["images/test/part/dent/000.png"] = b"swapped"
+    with pytest.raises(data.DataIntegrityError, match="mismatch"):
+        data.ensure_raw(MemoryStore(), "demo", image_folder_config(), tmp_path, **fake_hub(tampered))  # type: ignore[arg-type]
+    assert not any(tmp_path.glob("*.tar"))
+    unsafe = {**image_folder_files(), "images/train/part/../evil.png": b"x"}  # passes the depth filter
+    with pytest.raises(data.DataIntegrityError, match="unsafe file paths"):
+        data.ensure_raw(MemoryStore(), "demo", image_folder_config(), tmp_path, **fake_hub(unsafe))  # type: ignore[arg-type]
+    assert data.archive_manifest_digest(tmp_path / "missing.tar") == ""
+
+
+def test_load_image_folder_dataset_maps_classes_and_matches_masks(tmp_path: Path) -> None:
+    from tests.fixtures import fake_hub, image_folder_config, image_folder_files
+
+    dl = image_folder_config()
+    paths = data.ensure_raw(MemoryStore(), "demo", dl, tmp_path, **fake_hub(image_folder_files()))  # type: ignore[arg-type]
+    dataset = data.load_dataset(dl, paths)
+    assert isinstance(dataset.test.inputs, np.ndarray) and dataset.test.inputs.shape == (16, 32, 32, 3)
+    assert (len(dataset.train), len(dataset.val)) == (12, 4)
+    assert not dataset.train.labels.any() and dataset.test.labels.sum() == 8  # every defect folder -> "1"
+    assert dataset.test.masks is not None and dataset.train.masks is not None and not dataset.train.masks.any()
+    defective = dataset.test.labels == 1
+    assert dataset.test.masks[defective].any(axis=(1, 2)).all()
+    assert not dataset.test.masks[~defective].any()
+
+
+def test_load_image_folder_dataset_rejects_an_unmapped_class_folder(tmp_path: Path) -> None:
+    from tests.fixtures import fake_hub, image_folder_config, image_folder_files
+
+    dl = image_folder_config()
+    source = dl.source.model_copy(update={"label_map": {"good": "0", "scratch": "1"}})
+    dl = dl.model_copy(update={"source": source})
+    paths = data.ensure_raw(MemoryStore(), "demo", dl, tmp_path, **fake_hub(image_folder_files()))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="class folder 'dent' is not in label_map"):
+        data.load_dataset(dl, paths)
+
+
+def test_hub_list_files_follows_pagination(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    pages = {
+        "https://huggingface.co/api/datasets/o/d/tree/rev/images/train?recursive=true": (
+            [{"type": "directory", "path": "images/train/good"}, {"type": "file", "path": "images/train/good/0.png"}],
+            {"Link": '<https://huggingface.co/api/datasets/o/d/tree/rev/images/train?cursor=2>; rel="next"'},
+        ),
+        "https://huggingface.co/api/datasets/o/d/tree/rev/images/train?cursor=2": (
+            [{"type": "file", "path": "images/train/good/1.png"}],
+            {},
+        ),
+    }
+
+    def fake_get(url: str, **_: object) -> httpx.Response:
+        body, headers = pages[url]
+        return httpx.Response(200, json=body, headers=headers, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(data.httpx, "get", fake_get)
+    assert data.hub_list_files("o/d", "rev", "/images/train/") == ["images/train/good/0.png", "images/train/good/1.png"]
+
+
 def test_greedy_coreset_covers_every_cluster() -> None:
     from dl_training.core.anomaly import greedy_coreset
 
