@@ -75,7 +75,9 @@ OPTIONAL_SERVICES: dict[str, OptionalService] = {
             Workload("deployment", "langfuse-worker"),
         ),
         deploy_hint="make k3s-up",
-        stop_effect="LLM calls keep working, but their traces are not recorded while stopped (web + worker + ClickHouse).",
+        stop_effect=(
+            "LLM calls keep working, but their traces are not recorded while stopped (web + worker + ClickHouse)."
+        ),
     ),
     "dl-inference": OptionalService(
         (Workload("deployment", "dl-inference"),),

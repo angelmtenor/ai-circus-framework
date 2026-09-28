@@ -45,7 +45,9 @@ from data_platform_manager.core import k8s_jobs
 _METRICS_GROUP = "metrics.k8s.io"
 _METRICS_VERSION = "v1beta1"
 _NVML_RETRY_SECONDS = 60.0
-NO_CLUSTER_REASON = "Resource metrics need the k3s deployment (Kubernetes metrics-server) — not available in docker-compose."
+NO_CLUSTER_REASON = (
+    "Resource metrics need the k3s deployment (Kubernetes metrics-server) — not available in docker-compose."
+)
 NO_GPU_REASON = (
     "No NVIDIA GPU is visible to data-platform-manager. GPU telemetry needs a GPU cluster "
     "(K3S_GPU — see k8s/README.md), where `make k3s-up` grants this pod read-only GPU access."
@@ -146,7 +148,8 @@ def node_usage() -> list[NodeUsage]:
     config.load_incluster_config()
     core = client.CoreV1Api()
     metrics = cast(
-        "dict[str, Any]", client.CustomObjectsApi().list_cluster_custom_object(_METRICS_GROUP, _METRICS_VERSION, "nodes")
+        "dict[str, Any]",
+        client.CustomObjectsApi().list_cluster_custom_object(_METRICS_GROUP, _METRICS_VERSION, "nodes"),
     )
     usage = {item["metadata"]["name"]: item.get("usage", {}) for item in metrics.get("items", [])}
     nodes = cast("client.V1NodeList", core.list_node())
@@ -199,7 +202,8 @@ def workload_usage() -> list[WorkloadUsage]:
             continue
         cpu, memory = usage_by_pod.get(str(meta.name), (0.0, 0))
         limits = [
-            ((c.resources.limits or {}) if c.resources else {}).get("memory") for c in (pod.spec.containers if pod.spec else [])
+            ((c.resources.limits or {}) if c.resources else {}).get("memory")
+            for c in (pod.spec.containers if pod.spec else [])
         ]
         group = groups.setdefault(label, {"pods": 0, "cpu": 0.0, "memory": 0, "limit": 0})
         group["pods"] += 1
@@ -244,7 +248,7 @@ def _ensure_nvml() -> bool:
         return True
 
 
-def _optional(read: Any, *args: Any) -> Any:  # noqa: ANN401 — NVML's bindings are untyped
+def _optional(read: Any, *args: Any) -> Any:
     try:
         return read(*args)
     except pynvml.NVMLError:
