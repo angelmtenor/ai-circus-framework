@@ -889,3 +889,86 @@ def test_text_challenger_needs_a_text_feature() -> None:
     model = {**titanic.model.model_dump(), "text_challenger": challenger}  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match="text_challenger requires"):
         _with(titanic, model=model)
+
+
+# --- public-sector additions: official-layout multi-model forms, risk_watchlist ---
+
+
+def _repo_scenario(slug: str) -> ScenarioDefinition:
+    from pathlib import Path
+
+    return ScenarioDefinition.load(Path(__file__).parents[3] / f"scenarios/{slug}/scenario.yaml")
+
+
+def test_repo_sede_electronica_is_a_multi_model_official_form() -> None:
+    sede = _repo_scenario("sede_electronica")
+    form = sede.form
+    assert form is not None and form.locale == "es" and form.general_variant == "solicitud_general"
+    assert {v.key for v in form.variants} == set(form.classification_options or [])
+    assert [f.id for f in form.active_fields({"tramite": "devolucion"})][-1] == "di_titular"
+    assert form.variant_for({"tramite": "nope"}) is None
+    assert len(form.active_fields({})) == len(form.fields)
+    assert all(upload.file for upload in form.sample_uploads)
+
+
+def _form(**changes: object) -> dict:  # type: ignore[type-arg]
+    form = _repo_scenario("sede_electronica").form.model_dump()  # type: ignore[union-attr]
+    return {**form, **changes}
+
+
+def test_form_variants_must_be_classification_options_and_need_sections() -> None:
+    from ai_circus_shared.scenario_schema import FormConfig
+
+    form = _form()
+    bad_key = [{**form["variants"][0], "key": "not_an_option"}, *form["variants"][1:]]
+    with pytest.raises(ValidationError, match="unique classification_options"):
+        FormConfig.model_validate({**form, "variants": bad_key})
+    with pytest.raises(ValidationError, match="requires shared `sections`"):
+        FormConfig.model_validate({**form, "sections": []})
+    with pytest.raises(ValidationError, match="general_variant"):
+        FormConfig.model_validate({**form, "general_variant": "missing"})
+
+
+def test_form_fields_need_a_known_section_and_unique_ids_and_boxes() -> None:
+    from ai_circus_shared.scenario_schema import FormConfig
+
+    form = _form()
+    fields = form["fields"]
+    with pytest.raises(ValidationError, match="section"):
+        FormConfig.model_validate({**form, "fields": [*fields[:-1], {**fields[-1], "section": "nowhere"}]})
+    with pytest.raises(ValidationError, match="casilla numbers must be unique"):
+        FormConfig.model_validate({**form, "fields": [*fields[:-1], {**fields[-1], "casilla": "01"}]})
+    variant = form["variants"][1]
+    clash = {**variant, "fields": [*variant["fields"], {**variant["fields"][0], "id": "nif", "casilla": "99"}]}
+    with pytest.raises(ValidationError, match="unique across shared fields and variants"):
+        FormConfig.model_validate({**form, "variants": [form["variants"][0], clash, *form["variants"][2:]]})
+
+
+def test_a_plain_form_cannot_place_fields_in_sections() -> None:
+    from ai_circus_shared.scenario_schema import FormConfig, FormFieldSpec
+
+    with pytest.raises(ValidationError, match="defines no `sections`"):
+        FormConfig(title="t", fields=[FormFieldSpec(id="a", label="A", type="text", section="x")])
+
+
+def test_repo_bank_early_warning_has_a_valid_risk_watchlist() -> None:
+    bank = _repo_scenario("bank_early_warning")
+    assert bank.industry == "public_sector"
+    assert bank.ui_extras is not None and bank.ui_extras.kind == "risk_watchlist"
+    assert bank.model is not None and bank.model.selection_metric == "roc_auc"
+
+
+def test_risk_watchlist_rejects_unknown_columns_bad_tiers_and_overlapping_pillars() -> None:
+    bank = _repo_scenario("bank_early_warning")
+    extras = bank.ui_extras.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="must be a numeric feature"):
+        _with(bank, ui_extras={**extras, "landscape_x": "charter_type"})
+    with pytest.raises(ValidationError, match=r"not dataset\.display_columns"):
+        _with(bank, ui_extras={**extras, "name_column": "cert"})
+    with pytest.raises(ValidationError, match="strictly increase"):
+        _with(bank, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
+    pillars = [*extras["pillars"], {"label": "Again", "features": ["roa_pct"]}]
+    with pytest.raises(ValidationError, match="in two pillars"):
+        _with(bank, ui_extras={**extras, "pillars": pillars})
+    with pytest.raises(ValidationError, match="requires a classification model"):
+        _with(bank, model={**bank.model.model_dump(), "task_type": "regression", "selection_metric": None})  # type: ignore[union-attr]

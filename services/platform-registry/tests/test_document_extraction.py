@@ -86,7 +86,7 @@ def test_extract_document_pdf_with_no_text_layer_falls_back_to_ocr(monkeypatch: 
     monkeypatched — this test verifies the dispatcher's branching, not OCR quality.
     """
     monkeypatch.setattr(de, "convert_from_bytes", lambda data, first_page, last_page: [object()])
-    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda image: "ocr'd page text")
+    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda image, **_kw: "ocr'd page text")
 
     result = de.extract_document("scanned.pdf", _blank_pdf_bytes(page_count=1))
     assert result.kind == "pdf"
@@ -101,7 +101,7 @@ def test_extract_document_image_always_uses_ocr(monkeypatch: pytest.MonkeyPatch)
     """
     from PIL import Image
 
-    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda image: "text from the photo")
+    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda image, **_kw: "text from the photo")
 
     buffer = io.BytesIO()
     Image.new("RGB", (4, 4), color="white").save(buffer, format="PNG")
@@ -132,8 +132,25 @@ def test_pdf_ocr_renders_only_the_scanned_pages_one_at_a_time_and_caps_them(monk
 
     monkeypatch.setattr(de, "PdfReader", _Reader)
     monkeypatch.setattr(de, "convert_from_bytes", fake_convert)
-    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda _image: "scanned text")
+    monkeypatch.setattr(de.pytesseract, "image_to_string", lambda _image, **_kw: "scanned text")
     result = de.extract_document("scan.pdf", b"%PDF")
     assert rendered == [(i, i) for i in range(1, de.MAX_OCR_PAGES + 1)]
     assert result.used_ocr is True
     assert result.truncated is True
+
+
+def test_ocr_reads_spanish_and_english_when_both_are_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    de._ocr_languages.cache_clear()
+    monkeypatch.setattr(de.pytesseract, "get_languages", lambda config="": ["eng", "osd", "spa"])
+    assert de._ocr_languages() == "spa+eng"
+    de._ocr_languages.cache_clear()
+
+
+def test_ocr_falls_back_to_english_without_tesseract(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _missing(config: str = "") -> list[str]:
+        raise de.pytesseract.TesseractNotFoundError()
+
+    de._ocr_languages.cache_clear()
+    monkeypatch.setattr(de.pytesseract, "get_languages", _missing)
+    assert de._ocr_languages() == "eng"
+    de._ocr_languages.cache_clear()

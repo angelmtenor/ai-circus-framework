@@ -228,6 +228,18 @@ reference catalog, and highlighting which fields it just filled in versus what's
 streetlight outage, request an address registration, or apply for a permit, and watch the form
 fill itself in as you type.
 
+A form that declares `sections` renders as an **official, paper-like model** instead: numbered
+section bands, numbered boxes (*casillas*) on a 12-column grid, pen-mark checkboxes, a signature
+line and a box reserved for the Administration. With `variants` it becomes a **family of models**
+— a general request form plus specific ones sharing one identification block — and the assistant
+picks the right model from the RAG catalog. **Sede Electrónica — Official Tax Forms**
+(`sede_electronica`) is that example, in Spanish: upload a (fictional) ID card, census certificate,
+tax notice or bank certificate from the chat's *Sample documents* and the assistant reads it
+(OCR/vision), fills every box it can — saying which document each value came from — and validates
+the DNI/NIE control letter and the IBAN check digits. form-agent prints the same sheet as a PDF: a
+watermarked draft at any time, and after filing, the stamped copy with its filing receipt (registry
+number, verification code, QR and barcode).
+
 <p align="center">
   <img src="docs/screenshots/assisted-form.png" alt="Assisted form workspace — the assistant fills in the Public Service Request Portal form live from conversation" width="850">
 </p>
@@ -258,6 +270,8 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **[Toxic Leadership — NLP + ML Tutorial](docs/scenarios/toxic_leadership.md)** (`toxic_leadership`) | `tabular_ml` — classification with free text, domain `tutorial` | Whether an engineer rated senior management 1–2★, from their review text + job context — a 13-chapter **Tutorial**, **The Office** tab (4,000 reviews in an office tower, word-level SHAP, TF-IDF vs sentence-transformer challenger) and an LLM **Leadership check** · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.87, hold-out 0.886 | Kaggle — Glassdoor Job Reviews (CC BY-SA 4.0) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
+| **Sede Electrónica — Official Tax Forms** (`sede_electronica`) | `assisted_form` — official multi-model layout, domain `public_sector` | N/A — a Spanish-style electronic office (fictional issuer): a general request form + 4 specific models (change of tax address, instalments, refund of undue payments, family situation for withholding); the assistant picks the model, reads uploaded documents, fills the numbered boxes, checks DNI/IBAN and files it with a PDF receipt | Original content (fictional issuer and documents) |
+| **Bank Distress Early Warning** (`bank_early_warning`) | `tabular_ml` — classification, domain `public_sector` | Whether a US bank is closed by the regulator within 24 months, from its 31 Dec 2008 call report (CAMELS ratios) — a **Watchlist** tab: every bank scored into supervisory tiers on a US map and a risk landscape, pillar-level SHAP, a backtest reveal · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.97, hold-out 0.94 | FDIC BankFind Suite (US public domain) |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
 | **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
 | **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |

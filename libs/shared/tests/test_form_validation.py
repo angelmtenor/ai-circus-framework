@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from ai_circus_shared.form_validation import validate_field, validate_submission
-from ai_circus_shared.scenario_schema import FormConfig, FormFieldSpec, RequiredIf
+from ai_circus_shared.form_validation import (
+    es_nif_is_valid,
+    iban_is_valid,
+    is_checked,
+    validate_field,
+    validate_submission,
+)
+from ai_circus_shared.scenario_schema import FormConfig, FormFieldSpec, FormSection, FormVariant, RequiredIf
 
 NAME = FormFieldSpec(id="full_name", label="Full name", type="text", required=True)
 EMAIL = FormFieldSpec(id="email", label="Email", type="email", required=True, validation="email")
@@ -103,3 +109,90 @@ def test_validate_submission_required_if_does_not_trigger_on_other_values() -> N
     errors = validate_submission(form, {"request_type": "b"})
 
     assert errors == {}
+
+
+# --- official-layout forms: checksums, numeric types, checkboxes, variants, locale ---
+
+NIF = FormFieldSpec(id="nif", label="NIF", type="text", required=True, validation="es_nif")
+IBAN = FormFieldSpec(id="iban", label="IBAN", type="text", validation="iban")
+AMOUNT = FormFieldSpec(id="amount", label="Amount", type="currency")
+COUNT = FormFieldSpec(id="count", label="Count", type="number")
+DECLARE = FormFieldSpec(id="declare", label="I declare", type="checkbox", required=True)
+
+
+def test_es_nif_checks_the_dni_and_nie_control_letter() -> None:
+    assert es_nif_is_valid("12345678Z")
+    assert es_nif_is_valid("12345678-z")  # separators and case are normalized
+    assert not es_nif_is_valid("12345678A")
+    assert es_nif_is_valid("X1234567L")  # NIE: X -> 0
+    assert not es_nif_is_valid("X1234567A")
+    assert not es_nif_is_valid("1234567Z")
+    assert validate_field(NIF, "12345678A") is not None
+
+
+def test_iban_checks_the_iso_13616_mod_97_digits() -> None:
+    assert iban_is_valid("ES30 9999 0001 2301 2345 6789")
+    assert iban_is_valid("GB82WEST12345698765432")
+    assert not iban_is_valid("ES3199990001230123456789")
+    assert not iban_is_valid("ES30")
+    assert validate_field(IBAN, "ES3199990001230123456789") is not None
+
+
+def test_numeric_types_accept_plain_decimals_only() -> None:
+    assert validate_field(AMOUNT, "3842.17") is None
+    assert validate_field(AMOUNT, "3842,17") is None
+    assert validate_field(AMOUNT, "3.842,17 €") is not None
+    assert validate_field(AMOUNT, "12.345") is not None  # 3 decimals is not an amount
+    assert validate_field(COUNT, "12") is None
+    assert validate_field(COUNT, "twelve") is not None
+
+
+def test_select_values_must_be_listed_options() -> None:
+    assert validate_field(REQUEST_TYPE, "a") is None
+    assert validate_field(REQUEST_TYPE, "zzz") is not None
+
+
+def test_a_required_checkbox_must_be_literally_true() -> None:
+    form = FormConfig(title="t", fields=[DECLARE])
+    assert validate_submission(form, {"declare": "false"}) == {"declare": "This box must be ticked."}
+    assert validate_submission(form, {}) == {"declare": "This box must be ticked."}
+    assert validate_submission(form, {"declare": "TRUE"}) == {}
+    assert is_checked("true") and not is_checked("yes")
+
+
+def _variant_form() -> FormConfig:
+    return FormConfig(
+        title="t",
+        locale="es",
+        classification_field="kind",
+        classification_options=["general", "refund"],
+        general_variant="general",
+        sections=[FormSection(id="who", title="Who")],
+        fields=[
+            FormFieldSpec(id="kind", label="Kind", type="select", options=["general", "refund"], required=True),
+            FormFieldSpec(id="name", label="Name", type="text", required=True, casilla="01", section="who"),
+        ],
+        variants=[
+            FormVariant(key="general", code="G-1", title="General"),
+            FormVariant(
+                key="refund",
+                code="R-1",
+                title="Refund",
+                sections=[FormSection(id="money", title="Money")],
+                fields=[
+                    FormFieldSpec(
+                        id="amount", label="Amount", type="currency", required=True, casilla="20", section="money"
+                    )
+                ],
+            ),
+        ],
+    )
+
+
+def test_only_the_selected_variants_fields_are_validated_in_the_forms_locale() -> None:
+    form = _variant_form()
+    assert validate_submission(form, {"kind": "general", "name": "Lucía"}) == {}
+    assert validate_submission(form, {"kind": "refund", "name": "Lucía"}) == {"amount": "Casilla obligatoria."}
+    assert validate_submission(form, {"kind": "refund", "name": "Lucía", "amount": "x"}) == {
+        "amount": "Importe no válido (máximo 2 decimales)."
+    }

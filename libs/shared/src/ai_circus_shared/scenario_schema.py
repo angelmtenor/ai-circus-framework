@@ -531,6 +531,61 @@ class VoyageExplorerExtra(BaseModel):
     positive_is_adverse: bool = False
 
 
+class WatchlistTier(BaseModel):
+    """One supervisory tier of a `RiskWatchlistExtra`: every entity whose predicted
+    probability of the (adverse) positive class is >= `min_probability`, up to the
+    next tier's threshold."""
+
+    label: str  # e.g. "Early intervention"
+    min_probability: float = Field(ge=0.0, lt=1.0)
+    description: str | None = None
+
+
+class WatchlistPillar(BaseModel):
+    """A named group of features (e.g. CAMELS' "Capital") whose SHAP contributions the
+    watchlist sums into one axis of an entity's risk profile."""
+
+    label: str
+    features: list[str] = Field(min_length=1)
+
+
+class WatchlistMap(BaseModel):
+    """Where each entity sits on a map — two numeric `display_columns`."""
+
+    lat_column: str
+    lon_column: str
+    scope: Literal["usa", "europe", "world"] = "world"
+
+
+class RiskWatchlistExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario whose
+    rows are *entities under supervision* (banks, suppliers, borrowers) and whose
+    positive class is the adverse outcome: every row is scored, sorted into `tiers`,
+    plotted on a map (`map`) and on a two-ratio "risk landscape" (`landscape_x`/
+    `landscape_y`), and listed in a searchable watchlist. Selecting an entity shows its
+    SHAP drivers rolled up into `pillars` (a radar) next to its ratios' percentile
+    among its peers; the real outcome can be revealed as a backtest. See ui-react's
+    RiskWatchlistView.tsx — the single generic renderer; the wording fields are its only
+    domain vocabulary.
+    """
+
+    kind: Literal["risk_watchlist"] = "risk_watchlist"
+    tab_label: str = "Watchlist"
+    title: str
+    subtitle: str | None = None
+    entity_noun: str = "entity"  # singular, e.g. "bank"
+    name_column: str  # a dataset.display_columns entry
+    detail_columns: list[str] = []  # display_columns shown under the name, e.g. city, state
+    size_feature: str | None = None  # numeric feature sizing each dot (e.g. total assets)
+    landscape_x: str  # numeric feature
+    landscape_y: str  # numeric feature
+    map: WatchlistMap | None = None
+    tiers: list[WatchlistTier] = Field(min_length=2)
+    pillars: list[WatchlistPillar] = []
+    # The real outcome's wording for the backtest reveal, e.g. "Failed 2009-10".
+    outcome_label: str = "Adverse outcome"
+
+
 # A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
 # dataset_preview = the first rows; class_balance = the target's class split;
 # model_card = the training leaderboard + selection protocol; roc_curve /
@@ -616,13 +671,19 @@ class RubricCheckConfig(BaseModel):
 
 
 UiExtras = Annotated[
-    RegionMapExtra | LivePlantExtra | ProcessOptimizerExtra | VoyageExplorerExtra | TriageBoardExtra | ReadingRoomExtra,
+    RegionMapExtra
+    | LivePlantExtra
+    | ProcessOptimizerExtra
+    | VoyageExplorerExtra
+    | RiskWatchlistExtra
+    | TriageBoardExtra
+    | ReadingRoomExtra,
     Field(discriminator="kind"),
 ]
 
 # ui_extras kinds meant for each scenario kind — a tabular renderer given a
 # deep_learning scenario (or vice versa) would have none of the data it needs.
-_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra, VoyageExplorerExtra)
+_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra, VoyageExplorerExtra, RiskWatchlistExtra)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
 
@@ -968,21 +1029,35 @@ class FormFieldSpec(BaseModel):
     """One field in an `assisted_form` scenario's form — drives ui-react's generic
     form renderer the same way `FeatureUI` drives the tabular_ml prediction form.
 
-    `validation` is a small set of generic, reusable primitives (never a
-    country/domain-specific rule baked into shared code) — `pattern`/`min_length`
-    supply the scenario-specific detail as plain data.
+    `validation` is a small set of reusable primitives — `pattern`/`min_length`
+    supply the scenario-specific detail as plain data. The two checksum primitives
+    are published algorithms a scenario opts into per field, never applied
+    implicitly: `iban` (ISO 13616 mod-97, international) and `es_nif` (the Spanish
+    DNI/NIE control letter, mod-23) — an OCR or typing slip in a document number is
+    caught at the form, not days later by a clerk.
+
+    Every value travels as a string: a `checkbox` is "true" when ticked (anything
+    else is unticked), `number`/`currency` are plain decimals ("1234.56", a comma
+    decimal separator is accepted too), `date` is ISO "YYYY-MM-DD".
+
+    `casilla`/`section`/`span` only matter to a form with `sections` (the official,
+    paper-like layout): the printed box number, the section the box sits in, and
+    its width on a 12-column grid.
     """
 
     id: str
     label: str
-    type: Literal["text", "textarea", "email", "tel", "select", "date"]
+    type: Literal["text", "textarea", "email", "tel", "select", "date", "checkbox", "number", "currency"]
     required: bool = False
     required_if: RequiredIf | None = None
     options: list[str] | None = None  # for type="select"
-    validation: Literal["none", "email", "phone", "pattern", "min_length"] = "none"
+    validation: Literal["none", "email", "phone", "pattern", "min_length", "iban", "es_nif"] = "none"
     pattern: str | None = None  # for validation="pattern"
     min_length: int | None = None  # for validation="min_length"
     helper_text: str | None = None
+    casilla: str | None = None  # printed box number, e.g. "01"
+    section: str | None = None  # a FormSection id (required once the form has sections)
+    span: int | None = Field(default=None, ge=1, le=12)  # grid columns; None = the type's default width
 
     @model_validator(mode="after")
     def _validation_params_present(self) -> FormFieldSpec:
@@ -995,6 +1070,47 @@ class FormFieldSpec(BaseModel):
         return self
 
 
+class FormSection(BaseModel):
+    """A numbered band of an official-layout form ("1 · Datos del solicitante").
+
+    Sections are numbered by the renderer in display order, so a specific model's
+    sections continue the numbering of the shared ones. A shared section is drawn
+    `before` the selected variant's own sections (identification, representative) or
+    `after` them (place, date and signature).
+    """
+
+    id: str
+    title: str
+    note: str | None = None  # small print under the band, e.g. "Marque con una X"
+    placement: Literal["before", "after"] = "before"
+
+
+class FormVariant(BaseModel):
+    """One specific model of a multi-model form — selected when the form's
+    `classification_field` holds `key`. Its `fields` exist (and are validated) only
+    while it is selected, on top of the form's shared fields, so the general form
+    and every specific form share one identification block but each prints its own
+    model code, title and boxes.
+    """
+
+    key: str  # one of FormConfig.classification_options
+    code: str  # e.g. "Modelo DC-30"
+    title: str  # e.g. "Declaración de cambio de domicilio fiscal"
+    summary: str | None = None  # one line on when to use it (UI + prompt)
+    sections: list[FormSection] = []
+    fields: list[FormFieldSpec] = []
+
+
+class SampleUpload(BaseModel):
+    """A fictional document a user can drop into the chat with one click (e.g. a
+    specimen ID card) — `file` lives in the scenario's `sample_uploads/` folder and is
+    served, entitlement-checked, by the scenario's form agent."""
+
+    file: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}$")
+    label: str
+    description: str | None = None
+
+
 class FormConfig(BaseModel):
     """Form config for an `assisted_form` scenario.
 
@@ -1003,12 +1119,29 @@ class FormConfig(BaseModel):
     `documents`/`vector_store`, reused as-is from `conversational_rag`) — a scenario
     with no such concept (a plain contact/intake form) simply omits both, and its
     agent runs with no retrieval tool at all.
+
+    A form with `sections` renders as an official, paper-like sheet (numbered bands
+    and boxes); one with `variants` is a family of models — a general one plus
+    specific ones — sharing `fields`, with `general_variant` as the fallback when no
+    specific model fits the request. `locale` picks the language of the validation
+    messages and of the sheet's/PDF's own wording ("Casilla", "Firma"...).
     """
 
     title: str
     fields: list[FormFieldSpec]
     classification_field: str | None = None
     classification_options: list[str] | None = None
+    locale: Literal["en", "es"] = "en"
+    issuer: str | None = None  # e.g. "Agencia Tributaria de Villaclara" (a fictional body)
+    issuer_unit: str | None = None  # e.g. "Sede electrónica · Oficina virtual"
+    code: str | None = None  # model code printed when no variant is selected
+    sections: list[FormSection] = []
+    variants: list[FormVariant] = []
+    general_variant: str | None = None
+    sample_uploads: list[SampleUpload] = []
+    # Shared field ids whose values, joined, name the applicant on the filing receipt
+    # and the signature line (e.g. [nombre, primer_apellido, segundo_apellido, nif]).
+    applicant_fields: list[str] = []
 
     @model_validator(mode="after")
     def _classification_field_is_a_real_field(self) -> FormConfig:
@@ -1019,6 +1152,61 @@ class FormConfig(BaseModel):
         if not self.classification_options:
             raise ValueError("classification_field is set but classification_options is empty.")
         return self
+
+    @model_validator(mode="after")
+    def _variants_and_sections_are_consistent(self) -> FormConfig:
+        """Fail fast on a layout the renderer/validator can't place: a field in no (or
+        an unknown) section, a variant keyed to no classification option, a duplicated
+        field id or box number within one printable model."""
+        if self.variants:
+            if self.classification_field is None or not self.classification_options:
+                raise ValueError("form.variants requires classification_field/classification_options.")
+            keys = [v.key for v in self.variants]
+            if len(keys) != len(set(keys)) or set(keys) - set(self.classification_options):
+                raise ValueError(f"form.variants keys {keys} must be unique classification_options.")
+            if not self.sections:
+                raise ValueError("form.variants requires shared `sections` (the official layout).")
+        if self.general_variant is not None and self.general_variant not in {v.key for v in self.variants}:
+            raise ValueError(f"form.general_variant {self.general_variant!r} is not a variant key.")
+
+        all_ids = [f.id for f in self.fields] + [f.id for v in self.variants for f in v.fields]
+        duplicated = sorted({i for i in all_ids if all_ids.count(i) > 1})
+        if duplicated:
+            raise ValueError(f"form field ids must be unique across shared fields and variants: {duplicated}.")
+
+        shared_sections = {s.id for s in self.sections}
+        for variant in (None, *self.variants):
+            fields = self.fields if variant is None else self.fields + variant.fields
+            allowed = shared_sections | ({s.id for s in variant.sections} if variant else set())
+            where = "form" if variant is None else f"form variant {variant.key!r}"
+            for spec in fields if self.sections else ():
+                # The classification field is drawn as the model switcher, not a box.
+                if spec.id != self.classification_field and spec.section not in allowed:
+                    raise ValueError(
+                        f"{where}: field {spec.id!r} section {spec.section!r} is not one of {sorted(allowed)}."
+                    )
+            boxes = [f.casilla for f in fields if f.casilla is not None]
+            if len(boxes) != len(set(boxes)):
+                raise ValueError(f"{where}: casilla numbers must be unique, got {boxes}.")
+        if not self.sections and any(f.section for f in self.fields):
+            raise ValueError("a form field sets `section` but the form defines no `sections`.")
+        unknown = sorted(set(self.applicant_fields) - {f.id for f in self.fields})
+        if unknown:
+            raise ValueError(f"form.applicant_fields {unknown} are not shared field ids.")
+        return self
+
+    def variant_for(self, values: dict[str, str]) -> FormVariant | None:
+        """The variant the current values select (None: no variants, or none chosen yet)."""
+        if self.classification_field is None:
+            return None
+        key = values.get(self.classification_field, "")
+        return next((v for v in self.variants if v.key == key), None)
+
+    def active_fields(self, values: dict[str, str]) -> list[FormFieldSpec]:
+        """Shared fields plus the selected variant's own — what is validated, printed
+        and submitted for these values."""
+        variant = self.variant_for(values)
+        return self.fields + (variant.fields if variant else [])
 
 
 class FormServices(BaseModel):
@@ -1272,6 +1460,38 @@ class ScenarioDefinition(BaseModel):
             raise ValueError(f"ui_extras.voyage_explorer name_column {extras.name_column!r} is not a display_column.")
         for persona in extras.personas:
             self._check_example(persona, "ui_extras.voyage_explorer persona")
+        return self
+
+    @model_validator(mode="after")
+    def _risk_watchlist_references_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `risk_watchlist` block would plot a column that isn't there
+        (or isn't numeric), roll a feature into two pillars, or leave a probability
+        band with no tier — ui-react's RiskWatchlistView would otherwise draw an
+        empty axis or silently drop part of an entity's explanation."""
+        extras = self.ui_extras
+        if not isinstance(extras, RiskWatchlistExtra) or self.dataset is None:
+            return self
+        if self.model is None or self.model.task_type != "classification":
+            raise ValueError("ui_extras.risk_watchlist requires a classification model (a probability per entity).")
+        where = "ui_extras.risk_watchlist"
+        for feature in (extras.landscape_x, extras.landscape_y, extras.size_feature):
+            if feature is not None:
+                self._feature_of_type(feature, "numeric", where)
+        display = set(self.dataset.display_columns)
+        named = [extras.name_column, *extras.detail_columns]
+        if extras.map is not None:
+            named += [extras.map.lat_column, extras.map.lon_column]
+        unknown = sorted(set(named) - display)
+        if unknown:
+            raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
+        thresholds = [tier.min_probability for tier in extras.tiers]
+        if thresholds[0] != 0.0 or thresholds != sorted(set(thresholds)):
+            raise ValueError(f"{where} tiers must start at 0.0 and strictly increase, got {thresholds}.")
+        pillar_features = [f for pillar in extras.pillars for f in pillar.features]
+        unknown = sorted(set(pillar_features) - set(self.dataset.feature_columns))
+        duplicated = sorted({f for f in pillar_features if pillar_features.count(f) > 1})
+        if unknown or duplicated:
+            raise ValueError(f"{where} pillars: unknown features {unknown}, features in two pillars {duplicated}.")
         return self
 
     @model_validator(mode="after")

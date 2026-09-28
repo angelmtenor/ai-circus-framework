@@ -38,6 +38,7 @@ dependencies = [
     "pydantic-settings>=2.9.1",
     "PyYAML>=6.0.2",
     "qdrant-client>=1.19.0",
+    "reportlab>=4.4",
     "uvicorn[standard]>=0.52.1",
 ]
 

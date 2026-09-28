@@ -1,0 +1,204 @@
+# Seed definition for the "bank_early_warning" scenario — a tabular_ml early-warning
+# system as a bank-resolution authority or supervisor would run it: from one year-end
+# balance sheet, which deposit-taking banks are drifting towards "failing or likely to
+# fail" in the next 24 months, and why — explained pillar by pillar (CAMELS).
+#
+# Real data, US public domain: the FDIC's BankFind Suite — every insured bank's
+# 2008-12-31 call report joined with the FDIC's own list of the banks it closed in
+# 2009-2010 (see scripts/prepare_bank_early_warning_dataset.py and
+# sample_data/README.md). One row per bank, so the train/test split never sees the
+# same bank twice. The label is "closed by the FDIC as a failure" — a proxy for
+# "failing or likely to fail"; assisted mergers count as survivors.
+
+slug: bank_early_warning
+kind: tabular_ml
+title: "Bank Distress Early Warning"
+description: >
+  Which banks will fail in the next two years — and why? 8,196 real US bank balance
+  sheets from the end of 2008, scored into a supervisory watchlist on a map and
+  explained pillar by pillar; then reveal the 304 that the regulator closed in 2009-10.
+role_required: "scenario:bank_early_warning"
+industry: public_sector
+icon: "🏦"
+
+credits:
+  source: "FDIC BankFind Suite (US public domain)"
+  url: "https://api.fdic.gov/banks/docs/"
+  note: "2008-12-31 call reports + FDIC failed-bank list 2009-2010; one row per bank"
+
+chat:
+  context: >
+    An early-warning system for a bank-resolution authority / banking supervisor. A
+    gradient-boosting (or logistic) classifier estimates each deposit-taking bank's
+    probability of being closed as a failure within 24 months, from its year-end 2008
+    call-report ratios, grouped the CAMELS way: Capital (tier-1 leverage, total
+    risk-based capital), Asset quality (noncurrent and past-due loans, charge-offs,
+    foreclosed real estate, reserve coverage), Management (efficiency ratio, asset
+    growth), Earnings (ROA, net interest margin), Liquidity (loans/deposits, brokered
+    and core deposits) and Sensitivity/concentration (construction & land development
+    and commercial real-estate lending). The data is the real US record of the 2008-2010
+    banking crisis (FDIC), used as a laboratory for the questions any resolution
+    authority asks: who is weakening, how early can we tell, which pillar is driving it,
+    and how much time is left to prepare a resolution plan (valuation, buyer search,
+    bail-in or transfer tools) before a bank is declared failing or likely to fail.
+    Be precise about what the model can and cannot say: it ranks risk from one balance
+    sheet, it does not know about liquidity runs, fraud, or supervisory actions; the
+    label is closure by the regulator, and assisted mergers count as survivors.
+  sample_questions:
+    - "Which ratios best separate the banks that failed from those that survived?"
+    - "Why did so many banks with heavy construction lending fail?"
+    - "How early does the model see trouble — is capital a lagging signal?"
+    - "What does a 30% probability mean for a supervisor in practice?"
+    - "How many of the failed banks would a 20% threshold have flagged?"
+    - "Could a bank look well capitalised and still be in the top tier?"
+
+dataset:
+  bucket: "scenario-bank-early-warning"
+  raw_object: "raw/bank_early_warning.csv"
+  seed_file: "sample_data/bank_early_warning.csv"
+  index_col: "cert"
+  target: "failed_24m"
+  protected_features_excluded: []
+  # Who/where each bank is — shown in every dataset view and on the watchlist map,
+  # never a model input (state is left out on purpose: the model reads balance
+  # sheets, not postcodes).
+  display_columns: ["bank_name", "city", "state", "latitude", "longitude"]
+  feature_columns:
+    - tier1_leverage_pct
+    - total_capital_ratio_pct
+    - noncurrent_loans_pct
+    - past_due_30_89_pct
+    - net_chargeoffs_pct
+    - oreo_pct
+    - reserve_coverage_pct
+    - efficiency_ratio_pct
+    - asset_growth_pct
+    - roa_pct
+    - net_interest_margin_pct
+    - loans_to_deposits_pct
+    - brokered_deposits_pct
+    - core_deposits_pct
+    - construction_loans_pct
+    - cre_loans_pct
+    - total_assets_musd
+    - bank_age_years
+    - charter_type
+
+  feature_schema:
+    tier1_leverage_pct:
+      {type: numeric, label: "Tier 1 leverage ratio (%)", min: -12, max: 60, default: 9.4, step: 0.1,
+       info: "Core (tier 1) capital over average total assets — the loss-absorbing cushion. Below 5% a US bank is no longer 'well capitalised'; below 2% (tangible equity) it must be closed within 90 days."}
+    total_capital_ratio_pct:
+      {type: numeric, label: "Total risk-based capital ratio (%)", min: -17, max: 100, default: 14, step: 0.1,
+       info: "Total regulatory capital over risk-weighted assets. 10% is 'well capitalised', 8% the minimum."}
+    noncurrent_loans_pct:
+      {type: numeric, label: "Noncurrent loans (% of loans)", min: 0, max: 100, default: 1.2, step: 0.1,
+       info: "Loans 90+ days past due or no longer accruing interest, as a share of all loans — the classic asset-quality signal."}
+    past_due_30_89_pct:
+      {type: numeric, label: "Loans 30-89 days past due (% of assets)", min: 0, max: 12, default: 0.8, step: 0.05,
+       info: "Early delinquencies — tomorrow's noncurrent loans."}
+    net_chargeoffs_pct:
+      {type: numeric, label: "Net charge-offs (% of loans)", min: -3, max: 40, default: 0.2, step: 0.05,
+       info: "Loans written off in 2008 net of recoveries, as a share of loans — losses already recognised."}
+    oreo_pct:
+      {type: numeric, label: "Foreclosed real estate (% of assets)", min: -0.2, max: 25, default: 0.1, step: 0.05,
+       info: "Other real estate owned: property the bank repossessed and now holds on its balance sheet."}
+    reserve_coverage_pct:
+      {type: numeric, label: "Loan-loss reserve / noncurrent loans (%)", min: 0, max: 500, default: 80, step: 1,
+       info: "How much of the noncurrent loans the allowance for loan losses already covers (capped at 500%; 500 also means 'no noncurrent loans')."}
+    efficiency_ratio_pct:
+      {type: numeric, label: "Efficiency ratio (%)", min: 0, max: 300, default: 71, step: 1,
+       info: "Non-interest expenses over revenue — how much it costs to earn one dollar. Above 100% the bank loses money before any credit loss."}
+    asset_growth_pct:
+      {type: numeric, label: "Asset growth in 2008 (%)", min: -50, max: 200, default: 6, step: 0.5,
+       info: "Year-on-year change in total assets (Dec 2007 to Dec 2008). Very fast growth is a management red flag: it usually means looser lending or hot money."}
+    roa_pct:
+      {type: numeric, label: "Return on assets (%)", min: -20, max: 20, default: 0.6, step: 0.05,
+       info: "Net income over average assets in 2008 — losses eat capital directly."}
+    net_interest_margin_pct:
+      {type: numeric, label: "Net interest margin (%)", min: -1, max: 15, default: 3.8, step: 0.05,
+       info: "Interest earned minus interest paid, over earning assets — the core earning power of a lender."}
+    loans_to_deposits_pct:
+      {type: numeric, label: "Net loans / deposits (%)", min: 0, max: 300, default: 86, step: 1,
+       info: "How much of the deposit base is lent out. Above 100% the bank relies on wholesale or borrowed funding."}
+    brokered_deposits_pct:
+      {type: numeric, label: "Brokered deposits (% of deposits)", min: 0, max: 100, default: 0, step: 0.5,
+       info: "Deposits placed by brokers chasing yield — flighty funding that leaves (or is barred by law) as soon as a bank weakens."}
+    core_deposits_pct:
+      {type: numeric, label: "Core deposits (% of assets)", min: 0, max: 100, default: 65, step: 0.5,
+       info: "Stable, relationship-based deposits — the bank's most reliable funding."}
+    construction_loans_pct:
+      {type: numeric, label: "Construction & land loans (% of assets)", min: 0, max: 75, default: 4.6, step: 0.1,
+       info: "Construction and land-development lending — the epicentre of the 2008-2010 US bank failures."}
+    cre_loans_pct:
+      {type: numeric, label: "Commercial real-estate loans (% of assets)", min: 0, max: 86, default: 14, step: 0.1,
+       info: "Loans secured by nonfarm nonresidential property (offices, retail, hotels)."}
+    total_assets_musd:
+      {type: numeric, label: "Total assets ($M)", min: 0, max: 20000, default: 143, step: 1,
+       info: "Balance-sheet size in millions of US dollars (the median bank held $143M; the largest are far off this slider's range)."}
+    bank_age_years:
+      {type: numeric, label: "Bank age (years)", min: 0, max: 220, default: 78, step: 1,
+       info: "Years since the bank was established. De novo banks (under ~7 years) failed disproportionately often."}
+    charter_type:
+      {type: categorical, label: "Charter type",
+       options: ["State non-member bank", "National bank", "State member bank", "Savings bank", "Savings institution", "Other"],
+       default: "State non-member bank",
+       info: "The institution's charter and primary federal supervisor, as recorded by the FDIC."}
+
+  default_charts:
+    - {type: bar, x: charter_type, y: failed_24m, agg: mean, color_by: charter_type}
+    - {type: scatter, x: tier1_leverage_pct, y: noncurrent_loans_pct, color_by: failed_24m}
+    - {type: histogram, x: construction_loans_pct, color_by: failed_24m}
+    - {type: histogram, x: roa_pct, color_by: failed_24m}
+    - {type: histogram, x: brokered_deposits_pct, color_by: failed_24m}
+    - {type: scatter, x: construction_loans_pct, y: total_capital_ratio_pct, color_by: failed_24m}
+    - {type: heatmap}
+
+model:
+  task_type: classification
+  candidates: ["logistic_regression", "lightgbm_small_data", "lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.005
+  # Only ~3.7% of banks fail: accuracy would reward "nobody fails". ROC AUC ranks by
+  # how well the model orders risk — what a watchlist is.
+  selection_metric: roc_auc
+  cv_folds: 5
+  explainability: shap
+  target_label: "Fails within 24 months"
+  target_description: "Whether the FDIC closed the bank as a failure in 2009-2010 (1) or it survived (0), seen from its 31 Dec 2008 balance sheet."
+  target_value_labels: {"0": "Survived", "1": "Failed"}
+
+ui_extras:
+  kind: risk_watchlist
+  tab_label: "Watchlist"
+  title: "Supervisory watchlist · 31 December 2008"
+  subtitle: >
+    Every dot is a real US bank, scored from its year-end 2008 balance sheet. Colour is
+    the model's probability that it fails within two years; size is its balance sheet.
+    Filter a tier, pick a bank to see which pillar is driving its risk — then reveal
+    what actually happened in 2009-2010.
+  entity_noun: bank
+  name_column: bank_name
+  detail_columns: [city, state]
+  size_feature: total_assets_musd
+  landscape_x: tier1_leverage_pct
+  landscape_y: noncurrent_loans_pct
+  map: {lat_column: latitude, lon_column: longitude, scope: usa}
+  outcome_label: "Failed 2009-10"
+  tiers:
+    - {label: "Sound", min_probability: 0.0, description: "No material weakness — routine off-site supervision."}
+    - {label: "Watch", min_probability: 0.05, description: "One pillar weakening — closer monitoring, request a capital plan."}
+    - {label: "Early intervention", min_probability: 0.2, description: "Several pillars deteriorating — recovery plan, dividend and growth restrictions, on-site review, update the resolution plan."}
+    - {label: "Failing or likely to fail", min_probability: 0.5, description: "Resolution preparation goes live — valuation, data room, buyer search, choice of resolution tool."}
+  pillars:
+    - {label: "Capital", features: [tier1_leverage_pct, total_capital_ratio_pct]}
+    - {label: "Asset quality", features: [noncurrent_loans_pct, past_due_30_89_pct, net_chargeoffs_pct, oreo_pct, reserve_coverage_pct]}
+    - {label: "Management", features: [efficiency_ratio_pct, asset_growth_pct]}
+    - {label: "Earnings", features: [roa_pct, net_interest_margin_pct]}
+    - {label: "Liquidity", features: [loans_to_deposits_pct, brokered_deposits_pct, core_deposits_pct]}
+    - {label: "Concentration", features: [construction_loans_pct, cre_loans_pct]}
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

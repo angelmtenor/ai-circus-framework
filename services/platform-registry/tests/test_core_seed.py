@@ -51,6 +51,8 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "solar_cell_inspection",
         "titanic",
         "toxic_leadership",
+        "bank_early_warning",
+        "sede_electronica",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -232,6 +234,8 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "solar_cell_inspection",
         "titanic",
         "toxic_leadership",
+        "bank_early_warning",
+        "sede_electronica",
     }
 
 
@@ -248,8 +252,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 22
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 22
+    assert session.query(Scenario).count() == 24
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 24
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -318,3 +322,20 @@ def test_seed_scenarios_populates_the_rubric_check_and_text_challenger(session: 
     assert toxic.text_challenger["embedding_model"] == "local-embed"
     titanic = session.get(Scenario, "titanic")
     assert titanic.rubric_check is None and titanic.text_challenger is None
+
+
+def test_seed_scenarios_stores_the_official_form_layout_and_the_watchlist(session: Session) -> None:
+    """The multi-model form (sections, variants, boxes) and the risk_watchlist extra
+    reach the DB intact — ui-react renders both straight from these JSON columns.
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    sede = session.get(Scenario, "sede_electronica")
+    assert sede is not None and sede.form is not None
+    assert sede.form["locale"] == "es"
+    assert [v["code"] for v in sede.form["variants"]][:2] == ["Modelo SG-01", "Modelo DC-30"]
+    assert sede.form["fields"][1]["casilla"] == "01"
+    bank = session.get(Scenario, "bank_early_warning")
+    assert bank is not None and bank.ui_extras is not None
+    assert bank.ui_extras["kind"] == "risk_watchlist"
+    assert bank.industry == "public_sector"
