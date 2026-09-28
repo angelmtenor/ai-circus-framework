@@ -114,6 +114,29 @@ function leftPadForLabels(labels: string[]): number {
   return 26 + maxLabelChars * 5.6;
 }
 
+const LEGEND_SWATCH = 20; // 16-px line sample + 4-px gap before the label
+const LEGEND_GAP = 14;
+const LEGEND_ROW = 12;
+
+/** Legend entries laid out left to right, each as wide as its own label (same per-char
+ * estimate as the y-axis padding), wrapping onto a new row rather than running past the
+ * plot — a fixed pitch let a long label ("routing accuracy (auto-routed)") overprint the
+ * next entry. */
+function legendLayout(labels: string[], x0: number, xMax: number): { x: number; row: number }[] {
+  let x = x0;
+  let row = 0;
+  return labels.map((label) => {
+    const w = LEGEND_SWATCH + label.length * 5.6;
+    if (x > x0 && x + w > xMax) {
+      row += 1;
+      x = x0;
+    }
+    const at = { x, row };
+    x += w + LEGEND_GAP;
+    return at;
+  });
+}
+
 export const CATEGORY_PALETTE = [
   CHART_COLORS.blue,
   CHART_COLORS.purple,
@@ -478,7 +501,6 @@ export function MultiLineChart({
   yFormatter?: (v: number) => string;
 }) {
   const padRight = 16;
-  const padTop = 18;
   const padBottom = 40;
   const allPoints = series.flatMap((s) => s.points);
   if (allPoints.length === 0) return null;
@@ -490,6 +512,14 @@ export function MultiLineChart({
   const yHi = Math.max(...ys) * 1.05 || 1;
   const yTickLabels = niceTicks(yLo, yHi).map(yFormatter);
   const padLeft = leftPadForLabels(yTickLabels);
+  const legend = legendLayout(
+    series.map((s) => s.label),
+    padLeft + 6,
+    width - padRight,
+  );
+  const legendRows = Math.max(0, ...legend.map((l) => l.row)) + 1;
+  // Every extra legend row pushes the plot down, so the legend never sits on the data.
+  const padTop = 18 + (legendRows - 1) * LEGEND_ROW;
   const sx = (v: number) => padLeft + ((v - xLo) / (xHi - xLo || 1)) * (width - padLeft - padRight);
   const sy = (v: number) => height - padBottom - ((v - yLo) / (yHi - yLo || 1)) * (height - padTop - padBottom);
 
@@ -556,7 +586,7 @@ export function MultiLineChart({
       </text>
       <g>
         {series.map((s, i) => (
-          <g key={s.label} transform={`translate(${padLeft + 6 + i * 120}, ${padTop - 8})`}>
+          <g key={s.label} transform={`translate(${legend[i].x}, ${10 + legend[i].row * LEGEND_ROW})`}>
             <line x1={0} x2={16} y1={0} y2={0} stroke={s.color} strokeWidth={2} strokeDasharray={s.dashed ? "5 4" : undefined} />
             <text x={20} y={0} fontSize={9} fill={CHART_COLORS.dim} dominantBaseline="middle">
               {s.label}
