@@ -30,7 +30,12 @@ def _answer(**overrides: Any) -> str:
         "balance": -80,
         "summary": "The leader takes credit and shifts blame.",
         "behaviours": [
-            {"key": "self_promotion", "evidence": "presents our work as his own", "strength": "strong", "note": "credit"},
+            {
+                "key": "self_promotion",
+                "evidence": "presents our work as his own",
+                "strength": "strong",
+                "note": "credit",
+            },
             {"key": "blame", "evidence": "blames the developers", "strength": "clear"},
             {"key": "made_up", "evidence": "x"},
             {"key": "coach", "evidence": "mentors everyone weekly", "strength": "huge"},
@@ -74,14 +79,17 @@ class FakeLLM:
     """Stand-in ChatOpenAI: records the per-request copy and returns a canned answer."""
 
     def __init__(self, content: str) -> None:
+        """Answer every call with `content`."""
         self.content, self.model_kwargs, self.extra_body, self.updates = content, {}, None, None
         self.messages: list[Any] = []
 
     def model_copy(self, update: dict[str, Any]) -> FakeLLM:
+        """Record the per-request overrides; return self."""
         self.updates = update
         return self
 
     def invoke(self, messages: list[Any]) -> SimpleNamespace:
+        """Record the prompt; return the canned answer."""
         self.messages = messages
         return SimpleNamespace(content=self.content)
 
@@ -108,10 +116,13 @@ def test_endpoint_returns_the_structured_reading() -> None:
 
 
 def test_endpoint_guards() -> None:
-    assert _client(FakeLLM("not json")).post(
-        "/rubric-check/toxic_leadership", json={"text": DESCRIPTION}
-    ).status_code == 502
+    assert (
+        _client(FakeLLM("not json")).post("/rubric-check/toxic_leadership", json={"text": DESCRIPTION}).status_code
+        == 502
+    )
     too_long = "x" * (RUBRIC.max_chars + 1)
-    assert _client(FakeLLM(_answer())).post("/rubric-check/toxic_leadership", json={"text": too_long}).status_code == 422
+    assert (
+        _client(FakeLLM(_answer())).post("/rubric-check/toxic_leadership", json={"text": too_long}).status_code == 422
+    )
     churn = ScenarioDefinition.load(REPO / "scenarios/churn/scenario.yaml")
     assert _client(FakeLLM(_answer()), churn).post("/rubric-check/churn", json={"text": DESCRIPTION}).status_code == 404

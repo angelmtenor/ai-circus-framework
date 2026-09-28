@@ -172,6 +172,33 @@ def test_anomaly_detection_scenario_end_to_end(tmp_path: Path) -> None:
     assert logits.shape == (2, 2) and embedding.shape == (2, 16) and anomaly_map.shape == (2, 4, 4)
 
 
+def test_anomaly_detection_on_an_image_folder_source(tmp_path: Path) -> None:
+    """A huggingface_image_folder source (MVTec layout) trains exactly like Parquet: the
+    packed tar is stored under raw/, defect-type folders become one label, masks publish.
+    """
+    from dl_training.core import data
+    from tests.fixtures import fake_hub, image_folder_config, image_folder_files
+
+    dl = image_folder_config()
+    (raw,) = data.raw_files(dl)
+    data.fetch_image_folder(dl.source, tmp_path / raw.name, **fake_hub(image_folder_files()))  # type: ignore[arg-type]
+    store = MemoryStore()
+    manifest = pipeline.train_scenario(
+        scenario(dl),
+        store,  # type: ignore[arg-type]
+        org_id="demo",
+        device=resolve_device("cpu"),
+        cache_dir=tmp_path,
+        task_builder=tiny_task,
+    )
+    assert store.exists("demo", raw.object_key)
+    assert manifest["train_size"] == 12 and manifest["test_size"] == 8
+    assert manifest["evaluation"]["metrics"]["auroc"] >= 0.75
+    samples = json.loads(store.objects[_key(DL_SAMPLES_KEY)])["samples"]
+    assert {s["label"] for s in samples} == {"0", "1"}
+    assert all(s["label"] == "1" for s in samples if s.get("has_mask"))
+
+
 def test_a_failing_digest_stops_the_pipeline_before_training(tmp_path: Path) -> None:
     from dl_training.core.data import DataIntegrityError
 

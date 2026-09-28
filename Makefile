@@ -384,7 +384,7 @@ k3s-portforward-uninstall: ## Remove the port-forward's systemd user service —
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
 # `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,
-# scenarios/pcb_visual_inspection, scenarios/pasta_visual_inspection) fine-tune Hugging Face models — or, for
+# scenarios/solar_cell_inspection, scenarios/pcb_visual_inspection, scenarios/screw_visual_inspection) fine-tune Hugging Face models — or, for
 # `task: anomaly_detection`, build a memory bank from a frozen one: minutes on a GPU,
 # far longer on a CPU — so training only
 # ever runs from these explicit targets (or the admin console's Platform → Deep Learning
@@ -392,9 +392,10 @@ k3s-portforward-uninstall: ## Remove the port-forward's systemd user service —
 # stack's SeaweedFS; the k3s-dl-* targets below deploy the separate dl-inference service.
 
 DL_SCENARIO_NLP ?= symptom_triage
-DL_SCENARIO_CV  ?= chest_xray_pneumonia
-# Comma-separated: both manufacturing inspection scenarios (PCB, and the harder pasta line).
-DL_SCENARIO_ANOMALY ?= pcb_visual_inspection,pasta_visual_inspection
+# Comma-separated: the fine-tuned image classifiers (chest X-ray, solar-cell EL).
+DL_SCENARIO_CV  ?= chest_xray_pneumonia,solar_cell_inspection
+# Comma-separated: both manufacturing anomaly detectors (PCB, and the harder machined screw).
+DL_SCENARIO_ANOMALY ?= pcb_visual_inspection,screw_visual_inspection
 
 dl-gpu-check: ## Report whether this machine has an NVIDIA GPU dl-train-* can use (and what the k3s cluster exposes)
 	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then \
@@ -421,10 +422,10 @@ k3s-text-embeddings: text-embeddings ## text-embeddings, then re-run the trainin
 dl-train-nlp: ## Fine-tune the NLP scenario (BioClinical ModernBERT, symptom triage) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_NLP)"
 
-dl-train-cv: ## Fine-tune the computer-vision scenario (ConvNeXt V2, chest X-ray) on this machine's GPU
+dl-train-cv: ## Fine-tune the computer-vision scenarios (ConvNeXt V2: chest X-ray, solar-cell EL) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_CV)"
 
-dl-train-anomaly: ## Build the CV anomaly detectors (frozen DINOv2 + memory bank; PCB + pasta inspection) on this machine's GPU
+dl-train-anomaly: ## Build the CV anomaly detectors (frozen DINOv2 + memory bank; PCB + screw inspection) on this machine's GPU
 	@./scripts/dl_train_host.sh "$(DL_SCENARIO_ANOMALY)"
 
 # dl-training image's torch build: auto = the CUDA build when the cluster advertises
@@ -453,8 +454,8 @@ k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budg
 k3s-dl-train-nlp: ## In-cluster Job for the NLP scenario (see k3s-dl-train)
 	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_NLP)
 
-k3s-dl-train-cv: ## In-cluster Job for the computer-vision scenario (see k3s-dl-train)
-	@$(MAKE) --no-print-directory k3s-dl-train SCENARIO=$(DL_SCENARIO_CV)
+k3s-dl-train-cv: ## In-cluster Jobs for the computer-vision classifiers, one after the other (see k3s-dl-train)
+	@for s in $$(echo "$(DL_SCENARIO_CV)" | tr ',' ' '); do $(MAKE) --no-print-directory k3s-dl-train SCENARIO=$$s || exit 1; done
 
 k3s-dl-train-anomaly: ## In-cluster Jobs for the CV anomaly-detection scenarios, one after the other (see k3s-dl-train)
 	@for s in $$(echo "$(DL_SCENARIO_ANOMALY)" | tr ',' ' '); do $(MAKE) --no-print-directory k3s-dl-train SCENARIO=$$s || exit 1; done

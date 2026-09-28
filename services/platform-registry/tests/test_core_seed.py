@@ -47,7 +47,8 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "symptom_triage",
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
-        "pasta_visual_inspection",
+        "screw_visual_inspection",
+        "solar_cell_inspection",
         "titanic",
         "toxic_leadership",
     }
@@ -167,11 +168,17 @@ def test_seed_scenarios_populates_deep_learning_scenarios(session: Session) -> N
     assert pcb.target_value_labels == {"0": "Good", "1": "Defective"}
     assert pcb.ui_extras["kind"] == "triage_board"
 
-    pasta = session.get(Scenario, "pasta_visual_inspection")
-    assert pasta.industry == "manufacturing_industry"
-    assert pasta.task_type == "image_anomaly_detection"
-    assert pasta.deep_learning["anomaly"]["top_k_fraction"] < pcb.deep_learning["anomaly"]["top_k_fraction"]
-    assert pasta.ui_extras["item_noun"] == "tray"
+    screw = session.get(Scenario, "screw_visual_inspection")
+    assert screw.industry == "manufacturing_industry"
+    assert screw.task_type == "image_anomaly_detection"
+    assert screw.deep_learning["source"]["type"] == "huggingface_image_folder"
+    assert screw.ui_extras["item_noun"] == "screw"
+
+    solar = session.get(Scenario, "solar_cell_inspection")
+    assert solar.industry == "manufacturing_industry"
+    assert solar.deep_learning["task"] == "classification"
+    assert solar.target_value_labels == {"0": "Functional", "1": "Defective"}
+    assert solar.ui_extras["tab_label"] == "Grading Line"
 
     assert session.get(Scenario, "churn").deep_learning is None
 
@@ -221,7 +228,8 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "symptom_triage",
         "chest_xray_pneumonia",
         "pcb_visual_inspection",
-        "pasta_visual_inspection",
+        "screw_visual_inspection",
+        "solar_cell_inspection",
         "titanic",
         "toxic_leadership",
     }
@@ -240,8 +248,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 21
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 21
+    assert session.query(Scenario).count() == 22
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 22
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

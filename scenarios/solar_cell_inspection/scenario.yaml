@@ -1,0 +1,125 @@
+# Seed definition for the "solar_cell_inspection" scenario — a `deep_learning` computer
+# vision scenario with `task: classification` (supervised fine-tune, the chest X-ray code
+# path) in manufacturing: every class has labelled training data here, unlike the two
+# anomaly-detection inspection lines. Loaded into the registry by
+# services/platform-registry at bootstrap; dl-training and dl-inference also read the
+# `deep_learning` block directly.
+#
+# No image lives in this repo: dl-training downloads the pinned Parquet files (SHA-256
+# checked) into the scenario's SeaweedFS bucket on first run (`make dl-data`).
+
+slug: solar_cell_inspection
+kind: deep_learning
+title: "Solar Cell EL Inspection (CV)"
+description: >
+  Quality control for photovoltaic module production. In an electroluminescence (EL)
+  test the module is powered in the dark and photographed in near-infrared: healthy
+  silicon glows, while micro-cracks, broken fingers and disconnected areas stay dark —
+  the X-ray of solar manufacturing. A ConvNeXt V2 network fine-tuned on expert-graded
+  cells from 44 real mono- and polycrystalline modules classifies each cell as
+  functional or defective. Hard on purpose: many cracks are hairline, polycrystalline
+  grain looks like damage, and the experts themselves rated a quarter of the defective
+  cells only "possibly" defective. Each cell gets a heatmap of the area that drove the
+  decision and its most similar known cells, and a live grading line shows how many cells
+  the model can pass or reject on its own and how many still go to a human.
+role_required: "scenario:solar_cell_inspection"
+industry: manufacturing_industry
+icon: "☀️"
+
+credits:
+  source: "ELPV — Electroluminescence Photovoltaic cells dataset (ZAE Bayern, CC BY-NC-SA 4.0)"
+  url: "https://github.com/zae-bayern/elpv-dataset"
+  note: >
+    Buerhop-Lutz et al., "A Benchmark for Visual Identification of Defective Solar Cells
+    in Electroluminescence Imagery", EU PVSEC 2018; Deitsch et al., Solar Energy 2019.
+    2,624 grayscale 300×300 cells from 44 modules, each rated by experts as functional or
+    possibly / likely / certainly defective (any rating above functional = defective
+    here), read from the mjphayes/elpv-dataset Parquet mirror at a pinned commit (1,846 /
+    266 / 512 stratified split; every image and grade checked pixel-for-pixel against
+    ZAE Bayern's originals — the mirror's MIT tag does not override the dataset's own
+    licence). Non-commercial licence: demonstration use only.
+    Base model: facebook/convnextv2-nano-22k-224 (Apache-2.0). Not validated for
+    production use.
+
+chat:
+  context: >
+    A solar-cell electroluminescence classifier that grades each cell as functional or
+    defective, with occlusion heatmaps and similar known cells to explain each call.
+  sample_questions: []
+
+deep_learning:
+  modality: image
+  bucket: "scenario-solar-cell-inspection"
+  source:
+    type: huggingface_files
+    # Not bardroh/elpv-el-defects: its train/validation "defect" images are altered copies
+    # (none matches an original), a shortcut a model learns perfectly and a test set at chance.
+    repo: "mjphayes/elpv-dataset"
+    revision: "0695021467694a4bd17cba35b8b189e4e634a979"
+    format: parquet
+    files:
+      train: "data/train-00000-of-00001-ecbf73a67917cb14.parquet"
+      validation: "data/validation-00000-of-00001-780082d0db86b1ec.parquet"
+      test: "data/test-00000-of-00001-b18f48ea7eb61f94.parquet"
+    sha256:
+      data/train-00000-of-00001-ecbf73a67917cb14.parquet: "3b75721cee3982e71703abce089f3077c008a3f0407cc6d1cacc02181eb7a5e2"
+      data/validation-00000-of-00001-780082d0db86b1ec.parquet: "208f1b771982732c9d20a5638483dd2f32b1e98d45780793ea4d5842a7848eba"
+      data/test-00000-of-00001-b18f48ea7eb61f94.parquet: "b75577b72553e784b804f229d6bab3ccd6899cf11da2cd1c84c17b7ded6a8cad"
+    image_field: image
+    label_field: label
+    # The mirror's four expert grades (0 certainly / 2 likely / 3 possibly defective,
+    # 1 functional) -> functional vs defective.
+    label_map: {"1": "0", "*": "1"}
+  # Same small modern CNN as chest_xray_pneumonia: convolutional features keep the
+  # occlusion heatmaps crisp on thin cracks, and 15.6M params serve fine from a CPU pod.
+  base_model: "facebook/convnextv2-nano-22k-224"
+  base_model_revision: "755dacbc560ac81ac8eb39249eab691dab85506c"
+  base_model_params: "15.6M"
+  input_label: "Electroluminescence image of one solar cell"
+  target_label: "Cell grade"
+  target_description: "Whether the cell is functional or shows a defect that reduces its output — a crack, broken finger, dark (disconnected) area or other degradation — graded before the module ships."
+  # Near the cells' native 300 px: hairline cracks don't survive a downscale to 224.
+  image_size: 288
+  occlusion_grid: 8
+  quantize: false
+  training:
+    gpu: {epochs: 12, batch_size: 32, learning_rate: 1.0e-4}
+    # CPU: a 600-cell subset for 2 epochs — a working model in a few minutes.
+    cpu: {epochs: 2, batch_size: 16, learning_rate: 2.0e-4, max_train_samples: 600}
+    seed: 42
+    # 57% functional / 43% defective — weight the loss so neither class is ignored.
+    class_weighted_loss: true
+  gallery_size: 512
+  reference_size: 600
+  labels:
+    - {key: "0", label: "Functional", description: "No visible defect — the cell goes into a module."}
+    - {key: "1", label: "Defective", description: "Crack, broken finger, dark/disconnected area or other degradation (any expert rating above functional)."}
+
+# The Grading Line tab: cells come off the EL tester one by one and are passed,
+# rejected, or sent to a human when the model is not confident enough.
+ui_extras:
+  kind: triage_board
+  tab_label: "Grading Line"
+  title: "Live EL grading line"
+  item_noun: "cell"
+  reviewer_noun: "EL inspector"
+  critical_kpi_label: "Defects caught"
+  review_lane_label: "Manual EL review"
+  note: "Held-out ELPV test cells, replayed. Escapes (defective cells passed into a module) are the costly error."
+  confidence_threshold: 0.8
+  tick_seconds: 3
+  lanes:
+    - key: pass
+      label: "Pass — to stringer"
+      description: "Confidently functional: goes on to module assembly."
+      tone: ok
+      labels: ["0"]
+    - key: reject
+      label: "Reject — scrap / B-grade"
+      description: "Confidently defective: pulled before it costs a whole module."
+      tone: critical
+      labels: ["1"]
+
+services:
+  training: dl-training
+  inference: dl-inference
