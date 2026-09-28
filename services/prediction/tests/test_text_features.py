@@ -1,5 +1,6 @@
 """Free-text (`type: text`) features end to end in prediction: a real TF-IDF +
-logistic-regression pipeline, as training builds it for toxic_leadership."""
+logistic-regression pipeline, as training builds it for toxic_leadership.
+"""
 
 from __future__ import annotations
 
@@ -57,7 +58,9 @@ def artifacts() -> ModelArtifacts:
     ])
     pipeline.fit(df[features], df["bad"])
     transformed = pipeline.named_steps["preprocessor"].transform(df[features])
-    explainer = shap.LinearExplainer(pipeline.named_steps["model"], (np.asarray(transformed.mean(axis=0)).ravel(), None))
+    explainer = shap.LinearExplainer(
+        pipeline.named_steps["model"], (np.asarray(transformed.mean(axis=0)).ravel(), None)
+    )
     return ModelArtifacts(
         pipeline=pipeline,
         explainer=explainer,
@@ -180,9 +183,11 @@ def test_explain_false_returns_probabilities_without_shap(artifacts: ModelArtifa
     assert [r.prediction for r in fast] == [r.prediction for r in explained]
     assert all(r.contributions == {} for r in fast)
 
-    body = _client(artifacts).post(
-        "/predict/toxic_leadership", json={"records": records.to_dict(orient="records"), "explain": False}
-    ).json()
+    body = (
+        _client(artifacts)
+        .post("/predict/toxic_leadership", json={"records": records.to_dict(orient="records"), "explain": False})
+        .json()
+    )
     assert body["predictions"][0]["contributions"] == {}
 
 
@@ -191,8 +196,14 @@ def test_explain_false_returns_probabilities_without_shap(artifacts: ModelArtifa
 
 def _embed(texts: list[str]) -> list[list[float]]:
     """Fake gateway: 3-d vectors separating toxic from healthy phrases."""
-    return [[sum(w in t.lower() for w in ("toxic", "lies", "micromanagement", "direction")), sum(
-        w in t.lower() for w in ("supportive", "mentoring", "trust", "transparent")), len(t) / 100] for t in texts]
+    return [
+        [
+            sum(w in t.lower() for w in ("toxic", "lies", "micromanagement", "direction")),
+            sum(w in t.lower() for w in ("supportive", "mentoring", "trust", "transparent")),
+            len(t) / 100,
+        ]
+        for t in texts
+    ]
 
 
 @pytest.fixture(scope="module")
@@ -278,7 +289,9 @@ def test_challenger_endpoint_card_and_missing_challenger(
     card = client.get("/model/toxic_leadership/card").json()
     assert card["challenger"]["label"] == "fake embeddings" and card["challenger"]["would_be_adopted"] is False
 
-    no_challenger = _client(artifacts).post("/predict/toxic_leadership", json={"records": [record], "model": "challenger"})
+    no_challenger = _client(artifacts).post(
+        "/predict/toxic_leadership", json={"records": [record], "model": "challenger"}
+    )
     assert no_challenger.status_code == 404
     bulk = {"records": [record] * 51, "model": "challenger"}
     assert client.post("/predict/toxic_leadership", json=bulk).status_code == 422

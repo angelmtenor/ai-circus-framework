@@ -29,14 +29,20 @@ def _vector(text: str) -> np.ndarray:
     return np.array([toxic, healthy, len(text) / 100, 1.0], dtype=np.float32)
 
 
+TOXIC = ["politics and blame", "lies, micromanagement"]
+GOOD = ["trust", "mentoring"]
+
+
 class FakeProvider:
     """Stand-in for GatewayEmbeddingProvider; `drift` perturbs what it returns."""
 
     def __init__(self, drift: float = 0.0) -> None:
+        """No calls yet; `drift` shifts every vector it returns."""
         self.calls: list[list[str]] = []
         self.drift = drift
 
     def encode_documents(self, texts: list[str]) -> list[list[float]]:
+        """Record the batch and return its (drifted) toy vectors."""
         self.calls.append(list(texts))
         return [(_vector(t) + self.drift * np.array([1.0, -1.0, 0.0, -1.0])).tolist() for t in texts]
 
@@ -45,15 +51,19 @@ class FakeStore:
     """In-memory ObjectStore."""
 
     def __init__(self) -> None:
+        """Empty store."""
         self.objects: dict[tuple[str, str], bytes] = {}
 
     def exists(self, org_id: str, path: str) -> bool:
+        """Whether an object exists."""
         return (org_id, path) in self.objects
 
     def get(self, org_id: str, path: str) -> bytes:
+        """Read an object (KeyError when absent)."""
         return self.objects[org_id, path]
 
     def put(self, org_id: str, path: str, data: bytes) -> str:
+        """Store an object."""
         self.objects[org_id, path] = data
         return path
 
@@ -114,10 +124,7 @@ def test_train_text_challenger_on_the_champions_split() -> None:
     x = pd.DataFrame({
         "pay": rng.integers(1, 6, size=n).astype(float),
         "family": pd.Categorical(rng.choice(["Data", "Software"], size=n)),
-        "Review": [
-            f"{rng.choice(['politics and blame', 'lies, micromanagement']) if t else rng.choice(['trust', 'mentoring'])} {i}"
-            for i, t in enumerate(y)
-        ],
+        "Review": [f"{rng.choice(TOXIC) if t else rng.choice(GOOD)} {i}" for i, t in enumerate(y)],
     })
     store = _store_with_cache(list(x["Review"]))
     train, test = x.index[:192], x.index[192:]

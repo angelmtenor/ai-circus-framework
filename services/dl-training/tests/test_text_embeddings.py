@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
 import pyarrow as pa
@@ -22,12 +23,14 @@ DEVICE = DeviceInfo(kind="cpu", name="test", torch_version="0", cuda_version=Non
 class FakeEncoder:
     """Deterministic 3-d 'embeddings' (text length, vowels, 1), recording each call."""
 
-    calls: list[list[str]] = []
+    calls: ClassVar[list[list[str]]] = []
 
     def __init__(self, model_id: str, device: str) -> None:
+        """Remember which model/device the factory asked for."""
         self.model_id, self.device = model_id, device
 
     def encode(self, texts: list[str], **kwargs: object) -> np.ndarray:
+        """Record the batch and return its fake embeddings."""
         FakeEncoder.calls.append(list(texts))
         assert kwargs["normalize_embeddings"] is True
         return np.array([[len(t), sum(c in "aeiou" for c in t), 1.0] for t in texts])
