@@ -28,8 +28,9 @@ WORKDIR /app
 # tesseract-ocr + poppler-utils back document_extraction.py's OCR fallback for
 # scanned PDF pages / photographed images (pytesseract/pdf2image call out to these
 # binaries) — small apt packages, no ML model weights, unlike a layout-aware OCR
-# stack such as docling.
-RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils \
+# stack such as docling. tesseract-ocr-spa adds Spanish (accents, ñ) for the
+# Spanish-language scenarios' documents.
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # UID 1000 is what every k8s manifest's runAsUser pins. The code/venv below stay

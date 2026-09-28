@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import Annotated, Any
 
 import httpx
 from ag_ui.core import CustomEvent, EventType, RunAgentInput
@@ -22,18 +23,19 @@ from ai_circus_shared.storage import ObjectStore
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 from qdrant_client import QdrantClient
 
 from form_agent import get_env_config
 from form_agent.core.agent import ModelUsageCallback, build_agui_agent, build_catalog_retrieve_tool
 from form_agent.core.identity import resolve_identity
 from form_agent.core.logger import get_logger
+from form_agent.core.pdf import render_form_pdf
 from form_agent.core.prompt import build_form_system_prompt
-from form_agent.core.submissions import submit
+from form_agent.core.submissions import filing_of, load_submission, submit
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -47,10 +49,17 @@ class ModelResponse(BaseModel):
     vision: bool = False
 
 
-class SubmissionIn(BaseModel):
-    """Body for POST /submissions/{scenario_slug} — one value per form field id."""
+# Bounded: the largest form has well under 100 fields; a textarea never needs 4,000 chars.
+FieldValues = Annotated[
+    dict[Annotated[str, StringConstraints(max_length=64)], Annotated[str, StringConstraints(max_length=4000)]],
+    Field(max_length=200),
+]
 
-    fields: dict[str, str]
+
+class SubmissionIn(BaseModel):
+    """Body for POST /submissions/{scenario_slug} (and the draft PDF) — one value per form field id."""
+
+    fields: FieldValues
 
 
 class SubmissionOut(BaseModel):
@@ -403,8 +412,70 @@ def submit_endpoint(
     client-side validation is only for instant feedback before this call.
     """
     assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
-    case_number, errors = submit(store, identity.org_id, definition, body.fields)
+    case_number, errors = submit(store, identity.org_id, definition, body.fields, submitted_by=identity.subject)
     if errors:
         raise HTTPException(status_code=422, detail={"errors": errors})
     assert case_number is not None
     return SubmissionOut(case_number=case_number)
+
+
+def _pdf_response(pdf: bytes, filename: str) -> Response:
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"', "Cache-Control": "no-store"},
+    )
+
+
+@router.post("/forms/{scenario_slug}/pdf")
+def draft_pdf_endpoint(
+    scenario_slug: str,
+    body: SubmissionIn,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> Response:
+    """The form as filled so far, printed as a watermarked draft PDF — never persisted,
+    and never validated (a half-filled draft is the point).
+    """
+    assert definition.form is not None  # guaranteed by kind="assisted_form" filter
+    return _pdf_response(render_form_pdf(definition.form, body.fields), f"borrador-{scenario_slug}.pdf")
+
+
+@router.get("/submissions/{scenario_slug}/{case_number}/pdf")
+def submission_pdf_endpoint(
+    scenario_slug: str,
+    case_number: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ObjectStore = Depends(_store),
+) -> Response:
+    """The filed copy of one of this caller's own submissions: registry stamp,
+    signature line and filing-receipt page — 404 for an unknown case number, or one
+    another user (or tenant) filed.
+    """
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    assert definition.form is not None
+    payload = load_submission(store, identity.org_id, definition.slug, case_number, identity.subject)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    pdf = render_form_pdf(definition.form, payload["fields"], filing_of(payload))
+    return _pdf_response(pdf, f"{case_number}.pdf")
+
+
+@router.get("/samples/{scenario_slug}/{filename}")
+def sample_upload_endpoint(
+    scenario_slug: str,
+    filename: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> FileResponse:
+    """One of the scenario's fictional sample documents (`form.sample_uploads`) — only
+    files the scenario lists are served, from its own `sample_uploads/` folder.
+    """
+    assert definition.form is not None
+    if filename not in {upload.file for upload in definition.form.sample_uploads}:
+        raise HTTPException(status_code=404, detail="Sample document not found.")
+    path = Path(get_env_config().SCENARIOS_DIR) / definition.slug / "sample_uploads" / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Sample document not found.")
+    return FileResponse(path, filename=filename, headers={"Cache-Control": "private, max-age=3600"})

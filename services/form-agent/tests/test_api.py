@@ -18,7 +18,7 @@ from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import Base as ConversationsBase
 from ai_circus_shared.conversations import Conversation, ConversationStore
 from ai_circus_shared.entitlements import PlatformRegistryClient
-from ai_circus_shared.scenario_schema import ChatConfig, FormConfig, FormFieldSpec, VectorStoreConfig
+from ai_circus_shared.scenario_schema import ChatConfig, FormConfig, FormFieldSpec, SampleUpload, VectorStoreConfig
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -117,6 +117,14 @@ class FakeObjectStore:
         self.puts.append((tenant_org_id, path, data))
         return f"tenant-{tenant_org_id}/{path}"
 
+    def exists(self, tenant_org_id: str, path: str) -> bool:
+        """Whether an earlier put wrote this tenant's key."""
+        return any(org == tenant_org_id and key == path for org, key, _ in self.puts)
+
+    def get(self, tenant_org_id: str, path: str) -> bytes:
+        """The last bytes put under this tenant's key."""
+        return next(data for org, key, data in reversed(self.puts) if org == tenant_org_id and key == path)
+
 
 def _fake_definition(*, classification: bool) -> SimpleNamespace:
     form = FormConfig(
@@ -132,6 +140,7 @@ def _fake_definition(*, classification: bool) -> SimpleNamespace:
         ),
         classification_field="request_type" if classification else None,
         classification_options=["a"] if classification else None,
+        sample_uploads=[SampleUpload(file="id_card.png", label="ID card")],
     )
     return SimpleNamespace(
         slug="service_request",
@@ -144,7 +153,11 @@ def _fake_definition(*, classification: bool) -> SimpleNamespace:
 
 
 def _client_with(
-    llm: FakeToolCallingModel, *, classification: bool = False, store: FakeObjectStore | None = None
+    llm: FakeToolCallingModel,
+    *,
+    classification: bool = False,
+    store: FakeObjectStore | None = None,
+    subject: str = "user-1",
 ) -> TestClient:
     app = FastAPI()
     app.include_router(router)
@@ -154,7 +167,7 @@ def _client_with(
     )
 
     app.dependency_overrides[resolve_identity] = lambda: Identity(
-        subject="user-1", org_id="org-1", roles=frozenset({"scenario:service_request"})
+        subject=subject, org_id="org-1", roles=frozenset({"scenario:service_request"})
     )
     app.dependency_overrides[_scenario_definition] = lambda: _fake_definition(classification=classification)
     app.dependency_overrides[_qdrant] = lambda: SimpleNamespace(
@@ -312,6 +325,64 @@ def test_submit_returns_422_with_field_errors_when_invalid() -> None:
     assert response.status_code == 422
     assert response.json()["detail"]["errors"] == {"email": "This field is required."}
     assert store.puts == []
+
+
+def test_submit_rejects_an_oversized_body() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    response = client.post("/submissions/service_request", json={"fields": {"full_name": "x" * 5000}})
+
+    assert response.status_code == 422
+
+
+def test_draft_pdf_prints_whatever_is_filled_without_validating_or_persisting() -> None:
+    store = FakeObjectStore()
+    client = _client_with(FakeToolCallingModel(responses=[]), store=store)
+
+    response = client.post("/forms/service_request/pdf", json={"fields": {"full_name": "Jane Doe"}})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+    assert store.puts == []
+
+
+def test_filed_pdf_is_served_only_to_the_user_who_submitted_it() -> None:
+    store = FakeObjectStore()
+    owner = _client_with(FakeToolCallingModel(responses=[]), store=store)
+    case = owner.post(
+        "/submissions/service_request", json={"fields": {"full_name": "Jane Doe", "email": "jane@example.com"}}
+    ).json()["case_number"]
+
+    response = owner.get(f"/submissions/service_request/{case}/pdf")
+    stranger = _client_with(FakeToolCallingModel(responses=[]), store=store, subject="user-2")
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
+    assert f'filename="{case}.pdf"' in response.headers["content-disposition"]
+    assert stranger.get(f"/submissions/service_request/{case}/pdf").status_code == 404
+
+
+def test_filed_pdf_404s_for_an_unknown_or_malformed_case_number() -> None:
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    assert client.get("/submissions/service_request/SERVICE_REQUEST-0000ABCD/pdf").status_code == 404
+    assert client.get("/submissions/service_request/..%2Fsecrets/pdf").status_code == 404
+
+
+def test_sample_upload_serves_only_files_the_scenario_lists(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    folder = tmp_path / "service_request" / "sample_uploads"
+    folder.mkdir(parents=True)
+    (folder / "id_card.png").write_bytes(b"\x89PNG fake")
+    (folder / "other.png").write_bytes(b"\x89PNG other")
+    monkeypatch.setattr(api_module, "get_env_config", lambda: SimpleNamespace(SCENARIOS_DIR=str(tmp_path)))
+    client = _client_with(FakeToolCallingModel(responses=[]))
+
+    listed = client.get("/samples/service_request/id_card.png")
+
+    assert listed.status_code == 200
+    assert listed.content == b"\x89PNG fake"
+    assert client.get("/samples/service_request/other.png").status_code == 404
 
 
 class _FakeLlmEnvConfig:

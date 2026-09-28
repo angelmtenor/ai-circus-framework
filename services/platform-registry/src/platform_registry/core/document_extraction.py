@@ -10,6 +10,7 @@ apt packages, no ML weights) rather than a heavier layout-aware OCR stack like
 
 from __future__ import annotations
 
+import functools
 import io
 from dataclasses import dataclass
 from typing import Literal
@@ -101,13 +102,27 @@ def _extract_docx(data: bytes) -> ExtractedDocument:
     return ExtractedDocument(kind="docx", text=text, truncated=truncated)
 
 
+@functools.cache
+def _ocr_languages() -> str:
+    """Tesseract languages to read with: Spanish (the Dockerfile's `tesseract-ocr-spa`,
+    for the Spanish-language scenarios' ID cards and certificates — accents, ñ, º)
+    plus English, whichever of the two are installed. Reading English text with both
+    loaded costs nothing in accuracy; reading Spanish with English alone drops accents.
+    """
+    try:
+        installed = set(pytesseract.get_languages(config=""))
+    except (pytesseract.TesseractNotFoundError, pytesseract.TesseractError, OSError):
+        return "eng"
+    return "+".join(lang for lang in ("spa", "eng") if lang in installed) or "eng"
+
+
 def _ocr_image_bytes(data: bytes) -> str:
     from PIL import Image
 
     # pytesseract.image_to_string's return type is overloaded on `output_type`
     # (defaults to plain str) — str() pins the type for the type checker without
     # changing behavior.
-    return str(pytesseract.image_to_string(Image.open(io.BytesIO(data))))
+    return str(pytesseract.image_to_string(Image.open(io.BytesIO(data)), lang=_ocr_languages()))
 
 
 def _extract_image(data: bytes) -> ExtractedDocument:
@@ -133,7 +148,7 @@ def _extract_pdf(data: bytes) -> ExtractedDocument:
     # at one page image no matter how long the PDF is.
     for index in ocr_pages[:MAX_OCR_PAGES]:
         (image,) = convert_from_bytes(data, first_page=index + 1, last_page=index + 1)
-        page_texts[index] = str(pytesseract.image_to_string(image))
+        page_texts[index] = str(pytesseract.image_to_string(image, lang=_ocr_languages()))
         used_ocr = True
 
     text, truncated = _cap("\n\n".join(t for t in page_texts if t))

@@ -9,7 +9,7 @@ function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): 
   return zodToJsonSchemaImpl(schema as never, options as never) as Record<string, unknown>;
 }
 import { AttachButton } from "./AttachButton";
-import { chatModel, extractDocument, type ChatModel } from "./apiClient";
+import { chatModel, extractDocument, type ChatModel, type SampleUpload } from "./apiClient";
 import { config } from "./config";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
@@ -171,7 +171,11 @@ function messageImages(content: unknown): { mimeType: string; value: string }[] 
 // rag-agent's retrieve_docs delimits each chunk as `<retrieved_document source="file">`
 // (see its build_retrieve_tool — the XML form is the indirect-prompt-injection guard);
 // the older `[Source: file]` marker is still accepted for any agent that emits it.
-const SOURCE_TAG = /<retrieved_document\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
+// form-agent's retrieve_catalog marks its chunks `<catalog_entry source="file">` the same way.
+const SOURCE_TAG = /<(?:retrieved_document|catalog_entry)\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
+// The synthetic answer answerUnansweredFrontendToolCalls (below) writes for a frontend
+// tool — not a retrieval, so it must not turn the badge into "answered directly".
+const FRONTEND_TOOL_ANSWER = "Displayed to the user.";
 
 /** Best-effort: retrieve_docs' tool result content embeds per-chunk source markers
  * (see rag-agent's build_retrieve_tool) — extracted here rather than carried as a
@@ -180,7 +184,9 @@ const SOURCE_TAG = /<retrieved_document\s+source="([^"]+)">|\[Source:\s*([^\]]+)
  * vs. an empty array if retrieve_docs ran but found nothing — same distinction the
  * old REST response made. */
 function extractSources(messages: AguiMessage[]): string[] | null {
-  const toolResults = messages.filter((m): m is AguiMessage & { role: "tool"; content: string } => m.role === "tool");
+  const toolResults = messages.filter(
+    (m): m is AguiMessage & { role: "tool"; content: string } => m.role === "tool" && m.content !== FRONTEND_TOOL_ANSWER,
+  );
   if (toolResults.length === 0) return null;
   const sources = new Set<string>();
   for (const m of toolResults) {
@@ -227,7 +233,7 @@ function answerUnansweredFrontendToolCalls(
           // Malformed tool-call arguments shouldn't break history bookkeeping below.
         }
       }
-      agent.addMessage({ id: randomUUID(), role: "tool", toolCallId: call.id, content: "Displayed to the user." });
+      agent.addMessage({ id: randomUUID(), role: "tool", toolCallId: call.id, content: FRONTEND_TOOL_ANSWER });
     }
   }
 }
@@ -258,6 +264,8 @@ export function ChatPanel({
   initialMessages,
   conversationReady = true,
   onRunFinished,
+  sampleUploads = [],
+  onLoadSample,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -292,6 +300,11 @@ export function ChatPanel({
   // been auto-derived from this turn's first message (see
   // ai_circus_shared.conversations.ConversationStore.append_messages).
   onRunFinished?: () => void;
+  // Fictional documents offered as one-click attachments (assisted_form's
+  // `form.sample_uploads`) — `onLoadSample` fetches one as a File, which then goes
+  // through exactly the same attach path (vision block or OCR) as a real upload.
+  sampleUploads?: SampleUpload[];
+  onLoadSample?: (file: string) => Promise<File>;
 }) {
   const { copilotkit } = useCopilotKit();
   const [messages, setMessages] = useState<AguiMessage[]>(initialMessages ?? agent.messages);
@@ -336,6 +349,19 @@ export function ChatPanel({
   // just the files chosen in one dialog; excess beyond the cap is silently dropped.
   function handleAttach(files: File[]) {
     setPendingFiles((prev) => [...prev, ...files].slice(0, MAX_ATTACHMENTS));
+  }
+
+  const [loadingSample, setLoadingSample] = useState<string | null>(null);
+  async function attachSample(upload: SampleUpload) {
+    if (!onLoadSample || loadingSample) return;
+    setLoadingSample(upload.file);
+    try {
+      handleAttach([await onLoadSample(upload.file)]);
+    } catch (error) {
+      agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
+    } finally {
+      setLoadingSample(null);
+    }
   }
 
   useEffect(() => {
@@ -410,8 +436,13 @@ export function ChatPanel({
   // placeholder from the agent's own multi-step loop (e.g. the turn where it only
   // decided to call a tool, before the tool result and final reply arrived) — not
   // a real reply to show as its own empty bubble.
+  // Likewise a turn whose only tool calls are backend ones (retrieve_docs,
+  // retrieve_catalog…) has nothing to draw — the Sources line below covers them.
+  const renderable = new Set((copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name));
   const visible = messages.filter(
-    (m) => m.role === "user" || (m.role === "assistant" && (m.content || (m.toolCalls && m.toolCalls.length > 0))),
+    (m) =>
+      m.role === "user" ||
+      (m.role === "assistant" && (m.content || (m.toolCalls ?? []).some((call) => renderable.has(call.function.name)))),
   );
 
   return (
@@ -509,6 +540,27 @@ export function ChatPanel({
               {question}
             </button>
           ))}
+        </div>
+      )}
+      {sampleUploads.length > 0 && onLoadSample && (
+        <div className="chat-sample-docs" aria-label="Sample documents">
+          <span className="chat-sample-docs-label">Sample documents</span>
+          {sampleUploads.map((upload) => {
+            const attached = pendingFiles.some((f) => f.name === upload.file);
+            return (
+              <button
+                key={upload.file}
+                type="button"
+                className={`chat-sample-doc${attached ? " chat-sample-doc--attached" : ""}`}
+                title={upload.description ?? upload.file}
+                onClick={() => attachSample(upload)}
+                disabled={sending || attached || loadingSample !== null || pendingFiles.length >= MAX_ATTACHMENTS}
+              >
+                <span aria-hidden="true">{/\.(png|jpe?g|webp)$/i.test(upload.file) ? "🪪" : "📄"}</span>
+                {loadingSample === upload.file ? "…" : upload.label}
+              </button>
+            );
+          })}
         </div>
       )}
       {pendingFiles.length > 0 && (

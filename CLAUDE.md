@@ -80,6 +80,10 @@ mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `T
 `process_optimizer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
+An `assisted_form` whose `form` has `sections` renders as an official paper sheet
+(`OfficialFormSheet.tsx`: numbered boxes/`casilla`, `variants` = general + specific models chosen by
+the classification field, `locale` for messages); form-agent prints the same YAML as PDF
+(`core/pdf.py`, reportlab: draft + filed copy with receipt) and serves `form.sample_uploads`.
 A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
 SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
 `explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a

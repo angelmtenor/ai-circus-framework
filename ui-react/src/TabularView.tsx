@@ -19,6 +19,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
 // Only the scenarios that opt in (today: titanic) ever load these two — own chunks, so
 // no other workspace pays for the ship illustration or the tutorial widgets.
 const VoyageView = lazy(() => import("./VoyageView").then((m) => ({ default: m.VoyageView })));
+const RiskWatchlistView = lazy(() => import("./RiskWatchlistView").then((m) => ({ default: m.RiskWatchlistView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
@@ -31,10 +32,12 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   live_plant: { icon: "factory", label: "Live Plant" },
   process_optimizer: { icon: "sparkle", label: "Optimizer" },
   voyage_explorer: { icon: "ship", label: "Voyage" },
+  risk_watchlist: { icon: "shield", label: "Watchlist" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
-  return extras.kind === "voyage_explorer" ? extras.tab_label : EXTRA_TABS[extras.kind]?.label;
+  if (extras.kind === "voyage_explorer" || extras.kind === "risk_watchlist") return extras.tab_label;
+  return EXTRA_TABS[extras.kind]?.label;
 }
 
 function extraTabIcon(extras: UiExtras, fallback: IconName): IconName {
@@ -148,6 +151,7 @@ function TabularViewContent({
           <TutorialView scenario={scenario} accessToken={accessToken} onOpenExtra={extraTab ? () => setTab("extra") : undefined} />
         )}
         {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "risk_watchlist" && <RiskWatchlistView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (

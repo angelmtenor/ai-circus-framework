@@ -69,8 +69,8 @@ def test_prompt_describes_every_field_with_its_requirement() -> None:
 
     prompt = build_form_system_prompt(_definition(form))
 
-    assert "id='full_name'" in prompt
-    assert "always required" in prompt
+    assert '- full_name "Full name": text*' in prompt  # * = always required (see the legend)
+    assert "then * if always required" in prompt
     assert "required only if 'request_type' is one of ['streetlight_outage']" in prompt
     assert "update_form_fields" in prompt
 
@@ -109,3 +109,20 @@ def test_prompt_grounds_in_chat_context_and_form_title() -> None:
 
     assert "Custom Portal Title" in prompt
     assert "A generic local-government service desk." in prompt
+
+
+def test_prompt_describes_a_model_family_with_boxes_formats_and_the_general_fallback() -> None:
+    from pathlib import Path
+
+    sede = ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/sede_electronica/scenario.yaml")
+    prompt = build_form_system_prompt(sede)
+
+    assert "family of official models" in prompt
+    assert "tramite='cambio_domicilio' -> Modelo DC-30" in prompt
+    assert "the GENERAL model" in prompt and "set it to 'solicitud_general'" in prompt
+    assert '- nif [box 01] "NIF / NIE": text*' in prompt and "control letter is checked" in prompt
+    assert "YYYY-MM-DD" in prompt and "dot decimal" in prompt and "'true' to tick it" in prompt
+    assert "`source`" in prompt
+    # The 52 provinces are listed once; the second province field points back to the first.
+    assert prompt.count("Santa Cruz de Tenerife") == 1
+    assert "options as 'provincia'" in prompt

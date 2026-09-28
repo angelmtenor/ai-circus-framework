@@ -1,0 +1,302 @@
+# Seed definition for the "sede_electronica" scenario — an assisted_form example in
+# the style of a Spanish tax agency's electronic office: a family of official,
+# paper-like models (numbered sections and boxes / "casillas") that share one
+# identification block — a general request form plus four specific models. The
+# assistant picks the right model from a catalog of procedures (RAG), reads the
+# documents the user uploads (ID card, census certificate, tax notice, bank
+# certificate) and fills the boxes; form-agent validates, registers and prints the
+# filled PDF with its filing receipt ("justificante").
+#
+# The issuing body, its models (SG-01, DC-30, AF-10, DI-20, SF-45) and every sample
+# document are FICTIONAL — modelled on how Spanish forms look and work, not copies of
+# any real agency's forms. The sample person uses the classic test values: DNI
+# 12345678Z and a bank code (9999) that belongs to no bank.
+
+slug: sede_electronica
+kind: assisted_form
+title: "Sede Electrónica — Official Tax Forms"
+description: >
+  A Spanish-style electronic office: describe your procedure or upload your documents,
+  and the assistant picks the right official model, reads your ID and certificates,
+  fills every numbered box, checks DNI and IBAN, and files it with a PDF receipt.
+role_required: "scenario:sede_electronica"
+industry: public_sector
+icon: "🧾"
+
+chat:
+  context: >
+    La sede electrónica (ficticia) de la Agencia Tributaria de Villaclara. Los
+    ciudadanos presentan solicitudes mediante modelos oficiales: una solicitud general
+    (SG-01) para cualquier escrito sin modelo propio, y modelos específicos para el
+    cambio de domicilio fiscal (DC-30), el aplazamiento o fraccionamiento de deudas
+    (AF-10), la devolución de ingresos indebidos (DI-20) y la comunicación de la
+    situación personal y familiar al pagador (SF-45). Responde en el idioma del
+    usuario (por defecto, español), con el tono claro y cercano de un buen funcionario
+    de atención al contribuyente: explica qué modelo corresponde y por qué, qué
+    casillas faltan y qué documentación conviene aportar. Si el usuario adjunta
+    documentos (DNI, certificado de empadronamiento, notificación de liquidación,
+    certificado bancario, justificantes de pago), extrae de ellos todos los datos que
+    sirvan para el formulario, di de qué documento sale cada dato y avisa de cualquier
+    discrepancia (por ejemplo, un nombre o un DNI distinto del que ha escrito). Nunca
+    inventes un NIF, un IBAN, un importe ni una fecha. Las fechas van en formato
+    AAAA-MM-DD, los importes como número con punto decimal (3842.17), las casillas de
+    verificación como "true". Es una demostración: ningún trámite tiene efectos reales.
+  sample_questions:
+    - "Me he mudado a Villaclara y tengo que cambiar mi domicilio fiscal."
+    - "Me ha llegado una liquidación de 3.842 € y no puedo pagarla de una vez."
+    - "Pagué dos veces el mismo recibo: ¿cómo pido que me lo devuelvan?"
+    - "He tenido un hijo y quiero que mi empresa me retenga menos."
+    - "Quiero pedir una copia de mi expediente."
+    - "¿Qué documentos necesito para aplazar una deuda?"
+
+form:
+  title: "Sede electrónica · Presentación de solicitudes"
+  locale: es
+  issuer: "Agencia Tributaria de Villaclara"
+  issuer_unit: "Sede electrónica · Administración de demostración, sin validez oficial"
+  code: "SG-01 · DC-30 · AF-10 · DI-20 · SF-45"
+  classification_field: tramite
+  classification_options:
+    - solicitud_general
+    - cambio_domicilio
+    - aplazamiento
+    - devolucion
+    - situacion_familiar
+  general_variant: solicitud_general
+  applicant_fields: [nombre, primer_apellido, segundo_apellido, nif]
+
+  sample_uploads:
+    - {file: "dni_lucia_fernandez.png", label: "DNI (ficticio)", description: "Documento de identidad de muestra, anverso y reverso"}
+    - {file: "certificado_empadronamiento.pdf", label: "Certificado de empadronamiento", description: "Alta en el padrón de Villaclara (Sevilla)"}
+    - {file: "notificacion_liquidacion.pdf", label: "Notificación de liquidación", description: "IRPF 2025 · 3.842,17 € a ingresar"}
+    - {file: "justificantes_pago_duplicado.pdf", label: "Justificantes de pago (duplicado)", description: "El mismo recibo del IBI pagado dos veces"}
+    - {file: "certificado_titularidad_bancaria.pdf", label: "Certificado de titularidad bancaria", description: "IBAN de una cuenta a nombre de la solicitante"}
+
+  sections:
+    - {id: solicitante, title: "Identificación del solicitante", placement: before}
+    - {id: representante, title: "Representante", note: "Cumplimente este apartado solo si actúa mediante representante.", placement: before}
+    - {id: notificacion, title: "Medio de notificación", placement: before}
+    - {id: documentacion, title: "Documentación que se aporta", placement: after}
+    - {id: firma, title: "Lugar, fecha y firma", placement: after}
+
+  fields:
+    - id: tramite
+      label: "Modelo / trámite"
+      type: select
+      required: true
+      options: [solicitud_general, cambio_domicilio, aplazamiento, devolucion, situacion_familiar]
+      helper_text: "El asistente elige el modelo según lo que necesite; puede cambiarlo en las pestañas."
+
+    # 1 · Identificación del solicitante
+    - {id: nif, label: "NIF / NIE", type: text, required: true, validation: es_nif, casilla: "01", section: solicitante, span: 3,
+       helper_text: "8 cifras y letra (DNI) o X/Y/Z, 7 cifras y letra (NIE)."}
+    - {id: primer_apellido, label: "Primer apellido", type: text, required: true, casilla: "02", section: solicitante, span: 3}
+    - {id: segundo_apellido, label: "Segundo apellido", type: text, casilla: "03", section: solicitante, span: 3}
+    - {id: nombre, label: "Nombre", type: text, required: true, casilla: "04", section: solicitante, span: 3}
+    - {id: fecha_nacimiento, label: "Fecha de nacimiento", type: date, casilla: "05", section: solicitante, span: 3}
+    - {id: telefono, label: "Teléfono", type: tel, required: true, validation: phone, casilla: "06", section: solicitante, span: 3}
+    - {id: email, label: "Correo electrónico", type: email, required: true, validation: email, casilla: "07", section: solicitante, span: 6}
+    - {id: domicilio, label: "Domicilio (vía, número, piso, puerta)", type: text, required: true, casilla: "08", section: solicitante, span: 12}
+    - {id: codigo_postal, label: "Código postal", type: text, required: true, validation: pattern, pattern: "^(0[1-9]|[1-4][0-9]|5[0-2])[0-9]{3}$",
+       helper_text: "5 cifras (01000-52999).", casilla: "09", section: solicitante, span: 2}
+    - {id: municipio, label: "Municipio", type: text, required: true, casilla: "10", section: solicitante, span: 5}
+    - id: provincia
+      label: "Provincia"
+      type: select
+      required: true
+      casilla: "11"
+      section: solicitante
+      span: 5
+      options: &provincias
+        ["A Coruña", "Álava", "Albacete", "Alicante", "Almería", "Asturias", "Ávila", "Badajoz", "Barcelona",
+         "Bizkaia", "Burgos", "Cáceres", "Cádiz", "Cantabria", "Castellón", "Ceuta", "Ciudad Real", "Córdoba",
+         "Cuenca", "Gipuzkoa", "Girona", "Granada", "Guadalajara", "Huelva", "Huesca", "Illes Balears", "Jaén",
+         "La Rioja", "Las Palmas", "León", "Lleida", "Lugo", "Madrid", "Málaga", "Melilla", "Murcia", "Navarra",
+         "Ourense", "Palencia", "Pontevedra", "Salamanca", "Santa Cruz de Tenerife", "Segovia", "Sevilla", "Soria",
+         "Tarragona", "Teruel", "Toledo", "Valencia", "Valladolid", "Zamora", "Zaragoza"]
+
+    # 2 · Representante
+    - {id: rep_nif, label: "NIF / NIE del representante", type: text, validation: es_nif, casilla: "12", section: representante, span: 3}
+    - {id: rep_nombre, label: "Apellidos y nombre o razón social", type: text, casilla: "13", section: representante, span: 6}
+    - {id: rep_acreditada, label: "Representación acreditada", type: checkbox, casilla: "14", section: representante, span: 3}
+
+    # 3 · Medio de notificación
+    - id: medio_notificacion
+      label: "Deseo ser notificado por"
+      type: select
+      required: true
+      casilla: "15"
+      section: notificacion
+      span: 8
+      options: ["Medios electrónicos (sede electrónica)", "Correo postal al domicilio indicado"]
+    - {id: aviso_sms, label: "Aviso de notificación por SMS", type: checkbox, casilla: "16", section: notificacion, span: 4}
+
+    # · Documentación que se aporta
+    - {id: documentacion, label: "Relación de documentos aportados", type: textarea, casilla: "90", section: documentacion, span: 12,
+       helper_text: "Uno por línea, p. ej. «DNI (anverso y reverso)»."}
+
+    # · Lugar, fecha y firma
+    - {id: lugar, label: "Lugar", type: text, required: true, casilla: "91", section: firma, span: 4}
+    - {id: fecha_firma, label: "Fecha", type: date, required: true, casilla: "92", section: firma, span: 3}
+    - {id: declaracion, label: "Declaro bajo mi responsabilidad que son ciertos los datos consignados", type: checkbox, required: true,
+       casilla: "93", section: firma, span: 5}
+
+  variants:
+    # ── SG-01 · Solicitud general ─────────────────────────────────────────────
+    - key: solicitud_general
+      code: "Modelo SG-01"
+      title: "Solicitud general"
+      summary: "Cualquier escrito, solicitud o comunicación que no tenga un modelo específico (copias de expedientes, quejas, información, alegaciones…)."
+      sections:
+        - {id: sg_expone, title: "Expone"}
+        - {id: sg_solicita, title: "Solicita"}
+        - {id: sg_destino, title: "Órgano al que se dirige"}
+      fields:
+        - {id: expone, label: "Hechos y razones", type: textarea, required: true, validation: min_length, min_length: 30,
+           casilla: "20", section: sg_expone, span: 12}
+        - {id: solicita, label: "Petición concreta", type: textarea, required: true, validation: min_length, min_length: 15,
+           casilla: "21", section: sg_solicita, span: 12}
+        - id: organo_destino
+          label: "Unidad"
+          type: select
+          required: true
+          casilla: "22"
+          section: sg_destino
+          span: 12
+          options: ["Gestión Tributaria", "Recaudación", "Inspección", "Atención al Contribuyente", "Registro General"]
+
+    # ── DC-30 · Cambio de domicilio fiscal ────────────────────────────────────
+    - key: cambio_domicilio
+      code: "Modelo DC-30"
+      title: "Declaración de cambio de domicilio fiscal"
+      summary: "Comunicar un nuevo domicilio fiscal (plazo: 3 meses desde el traslado). El domicilio anterior es el del apartado de identificación."
+      sections:
+        - {id: dc_nuevo, title: "Nuevo domicilio fiscal", note: "El domicilio anterior es el consignado en el apartado de identificación."}
+      fields:
+        - {id: dc_tipo_via, label: "Tipo de vía", type: select, required: true, casilla: "30", section: dc_nuevo, span: 3,
+           options: ["Calle", "Avenida", "Plaza", "Paseo", "Camino", "Carretera", "Ronda", "Travesía", "Urbanización"]}
+        - {id: dc_nombre_via, label: "Nombre de la vía", type: text, required: true, casilla: "31", section: dc_nuevo, span: 6}
+        - {id: dc_numero, label: "Número", type: text, required: true, casilla: "32", section: dc_nuevo, span: 3}
+        - {id: dc_piso_puerta, label: "Escalera / piso / puerta", type: text, casilla: "33", section: dc_nuevo, span: 3}
+        - {id: dc_codigo_postal, label: "Código postal", type: text, required: true, validation: pattern,
+           pattern: "^(0[1-9]|[1-4][0-9]|5[0-2])[0-9]{3}$", helper_text: "5 cifras (01000-52999).", casilla: "34", section: dc_nuevo, span: 3}
+        - {id: dc_municipio, label: "Municipio", type: text, required: true, casilla: "35", section: dc_nuevo, span: 6}
+        - {id: dc_provincia, label: "Provincia", type: select, required: true, casilla: "36", section: dc_nuevo, span: 4, options: *provincias}
+        - {id: dc_fecha_efecto, label: "Fecha del traslado", type: date, required: true, casilla: "37", section: dc_nuevo, span: 4}
+        - {id: dc_motivo, label: "Motivo", type: select, required: true, casilla: "38", section: dc_nuevo, span: 4,
+           options: ["Traslado de la residencia habitual", "Traslado de la actividad económica", "Corrección de datos erróneos"]}
+
+    # ── AF-10 · Aplazamiento / fraccionamiento ────────────────────────────────
+    - key: aplazamiento
+      code: "Modelo AF-10"
+      title: "Solicitud de aplazamiento o fraccionamiento de deudas"
+      summary: "Pagar una deuda tributaria más tarde o en plazos, por dificultades económicas transitorias."
+      sections:
+        - {id: af_deuda, title: "Deuda cuyo aplazamiento se solicita"}
+        - {id: af_propuesta, title: "Propuesta de pago"}
+        - {id: af_garantia, title: "Domiciliación y garantía"}
+      fields:
+        - {id: af_liquidacion, label: "Nº de liquidación", type: text, required: true, validation: pattern, pattern: "^[A-Z0-9]{10,20}$",
+           helper_text: "Entre 10 y 20 letras mayúsculas o cifras, sin espacios.", casilla: "40", section: af_deuda, span: 4}
+        - {id: af_concepto, label: "Concepto", type: text, required: true, casilla: "41", section: af_deuda, span: 5}
+        - {id: af_importe, label: "Importe total (€)", type: currency, required: true, casilla: "42", section: af_deuda, span: 3}
+        - {id: af_fin_voluntario, label: "Fin del periodo voluntario", type: date, required: true, casilla: "43", section: af_deuda, span: 4}
+        - {id: af_modalidad, label: "Modalidad", type: select, required: true, casilla: "44", section: af_propuesta, span: 5,
+           options: ["Aplazamiento (pago único diferido)", "Fraccionamiento (pago en plazos)"]}
+        - {id: af_plazos, label: "Nº de plazos", type: number, required: true, casilla: "45", section: af_propuesta, span: 2}
+        - {id: af_periodicidad, label: "Periodicidad", type: select, casilla: "46", section: af_propuesta, span: 2,
+           options: ["Mensual", "Trimestral"],
+           required_if: {field: af_modalidad, in_values: ["Fraccionamiento (pago en plazos)"]}}
+        - {id: af_primer_pago, label: "Fecha del primer pago", type: date, required: true, casilla: "47", section: af_propuesta, span: 3}
+        - {id: af_motivo, label: "Dificultades económico-financieras que motivan la solicitud", type: textarea, required: true,
+           validation: min_length, min_length: 20, casilla: "48", section: af_propuesta, span: 12}
+        - {id: af_iban, label: "IBAN de domiciliación", type: text, required: true, validation: iban, casilla: "49", section: af_garantia, span: 8,
+           helper_text: "ES + 22 cifras; se comprueban los dígitos de control."}
+        - {id: af_dispensa_garantia, label: "Solicito dispensa de garantía (deuda de hasta 50.000 €)", type: checkbox, casilla: "50",
+           section: af_garantia, span: 4}
+
+    # ── DI-20 · Devolución de ingresos indebidos ──────────────────────────────
+    - key: devolucion
+      code: "Modelo DI-20"
+      title: "Solicitud de devolución de ingresos indebidos"
+      summary: "Recuperar un pago duplicado, excesivo o de una deuda anulada (plazo: 4 años desde el ingreso)."
+      sections:
+        - {id: di_ingreso, title: "Ingreso indebido"}
+        - {id: di_cuenta, title: "Cuenta para la devolución"}
+      fields:
+        - {id: di_referencia, label: "Nº de justificante del ingreso", type: text, required: true, casilla: "60", section: di_ingreso, span: 5}
+        - {id: di_fecha_ingreso, label: "Fecha del ingreso", type: date, required: true, casilla: "61", section: di_ingreso, span: 3}
+        - {id: di_importe_ingresado, label: "Importe ingresado (€)", type: currency, required: true, casilla: "62", section: di_ingreso, span: 4}
+        - {id: di_importe_solicitado, label: "Importe cuya devolución solicita (€)", type: currency, required: true, casilla: "63",
+           section: di_ingreso, span: 4}
+        - {id: di_motivo, label: "Motivo", type: select, required: true, casilla: "64", section: di_ingreso, span: 8,
+           options: ["Pago duplicado", "Pago en exceso sobre la cuota", "Deuda anulada o prescrita", "Error material en el ingreso"]}
+        - {id: di_hechos, label: "Hechos y fundamentos", type: textarea, required: true, validation: min_length, min_length: 20,
+           casilla: "65", section: di_ingreso, span: 12}
+        - {id: di_iban, label: "IBAN", type: text, required: true, validation: iban, casilla: "66", section: di_cuenta, span: 8,
+           helper_text: "ES + 22 cifras; se comprueban los dígitos de control."}
+        - {id: di_titular, label: "El solicitante es titular de la cuenta", type: checkbox, required: true, casilla: "67",
+           section: di_cuenta, span: 4}
+
+    # ── SF-45 · Situación personal y familiar ─────────────────────────────────
+    - key: situacion_familiar
+      code: "Modelo SF-45"
+      title: "Comunicación de la situación personal y familiar al pagador"
+      summary: "Para que la empresa o el pagador calcule bien la retención: hijos, cónyuge a cargo, discapacidad, movilidad, pensiones."
+      sections:
+        - {id: sf_pagador, title: "Pagador"}
+        - {id: sf_situacion, title: "Situación familiar", note: "Marque con una X la situación que corresponda."}
+        - {id: sf_discapacidad, title: "Discapacidad y movilidad geográfica"}
+        - {id: sf_descendientes, title: "Hijos y otros descendientes menores de 25 años"}
+        - {id: sf_pagos, title: "Pensiones, anualidades y vivienda"}
+      fields:
+        - {id: sf_pagador_nif, label: "NIF del pagador", type: text, required: true, validation: pattern,
+           pattern: "^[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J]$", helper_text: "NIF de entidad: letra, 7 cifras y control.",
+           casilla: "70", section: sf_pagador, span: 3}
+        - {id: sf_pagador_nombre, label: "Razón social del pagador", type: text, required: true, casilla: "71", section: sf_pagador, span: 9}
+        - {id: sf_situacion_1, label: "1 · Monoparental con hijos a cargo", type: checkbox, casilla: "72", section: sf_situacion, span: 4}
+        - {id: sf_situacion_2, label: "2 · Cónyuge a cargo (rentas < 1.500 €)", type: checkbox, casilla: "73", section: sf_situacion, span: 4}
+        - {id: sf_situacion_3, label: "3 · Otras situaciones", type: checkbox, casilla: "74", section: sf_situacion, span: 4}
+        - {id: sf_conyuge_nif, label: "NIF del cónyuge (situación 2)", type: text, validation: es_nif, casilla: "75", section: sf_situacion,
+           span: 4, required_if: {field: sf_situacion_2, in_values: ["true"]}}
+        - {id: sf_discapacidad, label: "Grado de discapacidad", type: select, required: true, casilla: "76", section: sf_discapacidad, span: 6,
+           options: ["Sin discapacidad", "Igual o superior al 33% e inferior al 65%", "Igual o superior al 65%"]}
+        - {id: sf_ayuda_terceros, label: "Necesita ayuda de terceras personas o tiene movilidad reducida", type: checkbox, casilla: "77",
+           section: sf_discapacidad, span: 6}
+        - {id: sf_movilidad, label: "Ha trasladado su residencia para aceptar un puesto de trabajo", type: checkbox, casilla: "78",
+           section: sf_discapacidad, span: 6}
+        - {id: sf_fecha_traslado, label: "Fecha del traslado", type: date, casilla: "79", section: sf_discapacidad, span: 6,
+           required_if: {field: sf_movilidad, in_values: ["true"]}}
+        - {id: sf_num_descendientes, label: "Número de descendientes", type: number, casilla: "80", section: sf_descendientes, span: 3}
+        - {id: sf_desc1_anio, label: "Año de nacimiento · 1º", type: number, casilla: "81", section: sf_descendientes, span: 3}
+        - {id: sf_desc2_anio, label: "Año de nacimiento · 2º", type: number, casilla: "82", section: sf_descendientes, span: 3}
+        - {id: sf_desc3_anio, label: "Año de nacimiento · 3º", type: number, casilla: "83", section: sf_descendientes, span: 3}
+        - {id: sf_desc_entero, label: "Los descendientes conviven únicamente con el perceptor (cómputo por entero)", type: checkbox,
+           casilla: "84", section: sf_descendientes, span: 12}
+        - {id: sf_pension_compensatoria, label: "Pensión compensatoria al cónyuge (€/año)", type: currency, casilla: "85",
+           section: sf_pagos, span: 4}
+        - {id: sf_anualidades_alimentos, label: "Anualidades por alimentos a hijos (€/año)", type: currency, casilla: "86",
+           section: sf_pagos, span: 4}
+        - {id: sf_prestamo_vivienda, label: "Préstamo para vivienda habitual anterior a 2013", type: checkbox, casilla: "87",
+           section: sf_pagos, span: 4}
+
+documents:
+  bucket: "scenario-sede-electronica"
+  raw_prefix: "raw/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 900
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+
+vector_store:
+  backend: qdrant
+  # One collection per tenant: "{collection_prefix}__{tenant_org_id}"
+  collection_prefix: "sede_electronica"
+  top_k: 3
+
+services:
+  etl: etl-vectorize
+  agent: form-agent

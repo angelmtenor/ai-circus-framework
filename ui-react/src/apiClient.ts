@@ -47,11 +47,13 @@ export type ChartSpec = {
 };
 
 // Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's FormFieldSpec/
-// FormConfig — drives ui-react's generic assisted_form renderer (see FormPanel.tsx).
-// `validation` is a small, reusable set of primitives; scenario-specific detail
-// (e.g. an ID number's format) is plain data (`pattern`), never new UI code.
-export type FormFieldType = "text" | "textarea" | "email" | "tel" | "select" | "date";
-export type FormFieldValidation = "none" | "email" | "phone" | "pattern" | "min_length";
+// FormConfig — drives ui-react's generic assisted_form renderers (FormPanel.tsx for a
+// plain form, OfficialFormSheet.tsx for one with `sections`). `validation` is a small,
+// reusable set of primitives; scenario-specific detail (e.g. an ID number's format) is
+// plain data (`pattern`), never new UI code. Every value is a string: a checkbox is
+// "true" when ticked, amounts are plain decimals, dates ISO.
+export type FormFieldType = "text" | "textarea" | "email" | "tel" | "select" | "date" | "checkbox" | "number" | "currency";
+export type FormFieldValidation = "none" | "email" | "phone" | "pattern" | "min_length" | "iban" | "es_nif";
 export type RequiredIf = { field: string; in_values: string[] };
 export type FormFieldSpec = {
   id: string;
@@ -64,12 +66,34 @@ export type FormFieldSpec = {
   pattern?: string | null;
   min_length?: number | null;
   helper_text?: string | null;
+  casilla?: string | null;
+  section?: string | null;
+  span?: number | null;
 };
+export type FormSection = { id: string; title: string; note?: string | null; placement: "before" | "after" };
+export type FormVariant = {
+  key: string;
+  code: string;
+  title: string;
+  summary?: string | null;
+  sections: FormSection[];
+  fields: FormFieldSpec[];
+};
+export type SampleUpload = { file: string; label: string; description?: string | null };
 export type FormConfig = {
   title: string;
   fields: FormFieldSpec[];
   classification_field?: string | null;
   classification_options?: string[] | null;
+  locale?: "en" | "es";
+  issuer?: string | null;
+  issuer_unit?: string | null;
+  code?: string | null;
+  sections?: FormSection[];
+  variants?: FormVariant[];
+  general_variant?: string | null;
+  sample_uploads?: SampleUpload[];
+  applicant_fields?: string[];
 };
 
 // Mirrors libs/shared/src/ai_circus_shared/scenario_schema.py's RegionMapExtra/
@@ -191,11 +215,31 @@ export type VoyageExplorerExtra = {
   // The positive class is the bad outcome (red), e.g. "bad leadership".
   positive_is_adverse?: boolean;
 };
+// Mirrors scenario_schema.RiskWatchlistExtra — see RiskWatchlistView.tsx.
+export type WatchlistTier = { label: string; min_probability: number; description?: string | null };
+export type WatchlistPillar = { label: string; features: string[] };
+export type RiskWatchlistExtra = {
+  kind: "risk_watchlist";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  entity_noun: string;
+  name_column: string;
+  detail_columns: string[];
+  size_feature?: string | null;
+  landscape_x: string;
+  landscape_y: string;
+  map?: { lat_column: string; lon_column: string; scope: "usa" | "europe" | "world" } | null;
+  tiers: WatchlistTier[];
+  pillars: WatchlistPillar[];
+  outcome_label: string;
+};
 export type UiExtras =
   | RegionMapExtra
   | LivePlantExtra
   | ProcessOptimizerExtra
   | VoyageExplorerExtra
+  | RiskWatchlistExtra
   | TriageBoardExtra
   | ReadingRoomExtra;
 
@@ -789,6 +833,53 @@ export async function submitForm(
     return body.detail;
   }
   return asJson<{ case_number: string }>(response);
+}
+
+async function asBlob(response: Response): Promise<Blob> {
+  if (!response.ok) throw new Error(`Request failed: ${response.status} ${await response.text()}`);
+  return response.blob();
+}
+
+/** The form as filled so far, as a watermarked draft PDF (never persisted). */
+export async function draftFormPdf(
+  baseUrl: string,
+  scenarioSlug: string,
+  fields: Record<string, string>,
+  accessToken: string | null,
+): Promise<Blob> {
+  const response = await fetch(`${baseUrl}/forms/${scenarioSlug}/pdf`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ fields }),
+  });
+  return asBlob(response);
+}
+
+/** The filed copy of one of the caller's own submissions — stamp, signature, receipt page. */
+export async function submissionPdf(
+  baseUrl: string,
+  scenarioSlug: string,
+  caseNumber: string,
+  accessToken: string | null,
+): Promise<Blob> {
+  const response = await fetch(`${baseUrl}/submissions/${scenarioSlug}/${encodeURIComponent(caseNumber)}/pdf`, {
+    headers: headers(accessToken),
+  });
+  return asBlob(response);
+}
+
+/** One of the scenario's fictional sample documents, as a File ready to attach to the chat. */
+export async function sampleUpload(
+  baseUrl: string,
+  scenarioSlug: string,
+  filename: string,
+  accessToken: string | null,
+): Promise<File> {
+  const response = await fetch(`${baseUrl}/samples/${scenarioSlug}/${encodeURIComponent(filename)}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  const blob = await asBlob(response);
+  return new File([blob], filename, { type: blob.type || "application/octet-stream" });
 }
 
 /**

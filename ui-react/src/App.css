@@ -2270,11 +2270,108 @@ select:focus {
 
 .form-update-chip {
   display: inline-flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 100%;
   font-size: 0.8rem;
   color: var(--accent-2);
   border: 1px solid var(--accent-border);
-  border-radius: 999px;
-  padding: 0.3rem 0.75rem;
+  border-radius: 12px;
+  padding: 0.4rem 0.75rem 0.5rem;
+  background: var(--accent-bg);
+}
+
+.form-update-chip-source {
+  color: var(--amber);
+}
+
+.form-update-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.form-update-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+}
+
+.form-update-chip-item b {
+  font: 700 0.68rem var(--mono);
+  color: var(--accent);
+}
+
+/* The official (paper) layout wants the wider column. */
+.assisted-form-workspace--official {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 0.85fr);
+}
+
+@media (max-width: 1100px) {
+  .assisted-form-workspace--official {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .assisted-form-workspace--official .of-desk {
+    height: auto;
+  }
+}
+
+/* One-click fictional documents above the chat input (ChatPanel's sampleUploads). */
+.chat-sample-docs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  gap: 0.35rem;
+}
+
+.chat-sample-docs-label {
+  flex: 0 0 100%;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-right: 0.2rem;
+}
+
+.chat-sample-doc {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.chat-sample-doc:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.chat-sample-doc:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.chat-sample-doc--attached {
+  border-style: solid;
+  border-color: var(--green);
+  opacity: 0.7;
 }
 
 /* ── Region map tab (RegionMapView.tsx) ───────────────────────────────────────── */
