@@ -47,8 +47,8 @@ A night cutaway of a four-funnel liner: decks A–G, lifeboats on the boat deck,
 rooms, steam from the three working funnels, the ship's lights reflected on a flat-calm sea,
 and the iceberg dead ahead. All 891 passengers are aboard, berthed where their class slept:
 1st class high up amidships, 2nd class aft, and 3rd class (steerage) on the lowest decks at the
-bow and stern. They are scored and SHAP-explained by the deployed model in one batched
-`/predict` call.
+bow and stern. They are scored by the deployed model in one batched `/predict` call
+(probabilities only, about 2.5 s); a passenger is SHAP-explained when you click them.
 
 <p align="center"><img src="../screenshots/titanic/voyage-tab.png" alt="The Voyage tab: headline figures (891 aboard, 38% survived, model average 38%, cross-validated ROC AUC 0.885), colour-mode switch, passenger search and the ship" width="850"></p>
 
@@ -258,9 +258,10 @@ happened to share every feature.
 
 **Footprint.** Titanic adds no pods or services. The model and its SHAP explainer are about
 350 KB, preloaded by `prediction` at start-up like every other model. Both tabs are lazy-loaded
-chunks (Voyage ~8 KB and Tutorial ~5 KB gzipped, plus their CSS), so no other scenario downloads
-them. The Voyage tab scores and explains all 891 passengers in one batched call (about 7 s the
-first time) and caches the result for the session, so re-opening it is instant. The survival
+chunks (Voyage ~13 KB gzipped — it also carries `toxic_leadership`'s office scene — and Tutorial
+~6 KB, plus their CSS), so no other scenario downloads them. The Voyage tab scores all 891
+passengers in one batched call without SHAP (about 2.5 s), explains a passenger when clicked, and
+caches both for the session, so re-opening it is instant. The survival
 colours (#3f93eb / #ea4f58, grey midpoint) were validated for colour-vision deficiency and
 contrast against the scene's night sky.
 
@@ -300,8 +301,10 @@ A tutorial is a YAML file:
    `ui_extras` tab that suits the story.
 4. Restart `platform-registry` (it seeds scenarios), then run `make k3s-pipeline`.
 
-Good candidates from the same notebook collection are *Student Admissions* and *House Prices*.
-The new **Society & Ethics** domain is ready for fairness-oriented datasets.
+The second tutorial, [Toxic Leadership](toxic_leadership.md), follows exactly this recipe and adds
+free text (`type: text` features), a transformer challenger and an LLM rubric check. Good
+candidates from the same notebook collection are *Student Admissions* and *House Prices*. The
+**Society & Ethics** domain is ready for fairness-oriented datasets.
 
 ## Credits
 
