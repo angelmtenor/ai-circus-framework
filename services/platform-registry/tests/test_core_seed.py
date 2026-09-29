@@ -53,6 +53,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "toxic_leadership",
         "bank_early_warning",
         "enron_fraud_network",
+        "global_health_shipments",
         "sede_electronica",
     }
     churn = session.get(Scenario, "churn")
@@ -237,6 +238,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "toxic_leadership",
         "bank_early_warning",
         "enron_fraud_network",
+        "global_health_shipments",
         "sede_electronica",
     }
 
@@ -254,8 +256,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 25
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 25
+    assert session.query(Scenario).count() == 26
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 26
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
