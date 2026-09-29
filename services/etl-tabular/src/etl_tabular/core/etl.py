@@ -15,9 +15,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from ai_circus_shared.network_graph import parse_graph, restrict_to_rows
 from ai_circus_shared.scenario_schema import TabularDataset
 from ai_circus_shared.storage import ObjectStore
-from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS, NORMALIZED_DATASET_KEY
+from ai_circus_shared.tabular_ml import GRAPH_KEY, MAX_DATASET_ROWS, NORMALIZED_DATASET_KEY
 
 from etl_tabular.core.logger import get_logger
 
@@ -112,9 +113,38 @@ def save_normalized(store: ObjectStore, org_id: str, df: pd.DataFrame) -> str:
     return key
 
 
+def process_graph(store: ObjectStore, org_id: str, dataset: TabularDataset, scenario_dir: Path, rows: pd.Index) -> str:
+    """The scenario's network (`dataset.graph`), bootstrapped like the dataset (tracked
+    seed file -> the tenant's raw object, once), validated against the shared contract
+    and restricted to the rows that survived `clean()`; return the output object key.
+
+    Raises:
+        pydantic.ValidationError: the raw graph breaks the contract (unknown node in an
+            edge, too many nodes, ...) — nothing is written.
+    """
+    graph_config = dataset.graph
+    assert graph_config is not None
+    if not store.exists(org_id, graph_config.raw_object):
+        seed_path = scenario_dir / graph_config.seed_file
+        logger.warning(
+            "No raw graph found for org={} at {} — bootstrapping from tracked seed file {} (demo convenience).",
+            org_id,
+            graph_config.raw_object,
+            seed_path,
+        )
+        store.put(org_id, graph_config.raw_object, seed_path.read_bytes())
+    graph = restrict_to_rows(parse_graph(store.get(org_id, graph_config.raw_object)), rows)
+    key = store.put(org_id, GRAPH_KEY, graph.model_dump_json(exclude_none=True).encode())
+    logger.success("Saved graph for org={} to {}: {} nodes, {} edges", org_id, key, len(graph.nodes), len(graph.edges))
+    return key
+
+
 def run_etl(store: ObjectStore, org_id: str, dataset: TabularDataset, scenario_dir: Path) -> str:
     """Run the full extract -> transform -> load pipeline; return the output object key."""
     ensure_raw_dataset(store, org_id, dataset, scenario_dir)
     df = load_raw(store, org_id, dataset)
     df = clean(df, dataset)
-    return save_normalized(store, org_id, df)
+    key = save_normalized(store, org_id, df)
+    if dataset.graph is not None:
+        process_graph(store, org_id, dataset, scenario_dir, df.index)
+    return key

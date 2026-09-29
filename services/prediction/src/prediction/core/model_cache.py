@@ -23,6 +23,7 @@ from typing import Any
 
 import joblib
 import pandas as pd
+from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
     MODEL_CHALLENGER_EXPLAINER_KEY,
@@ -30,6 +31,7 @@ from ai_circus_shared.tabular_ml import (
     MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
+    MODEL_OUT_OF_FOLD_KEY,
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
@@ -66,15 +68,22 @@ class ModelNotTrainedError(ModelUnavailableError):
     """
 
 
-def _load_checked(store: ObjectStore, org_id: str, key: str, checksums: dict[str, str], artifact_name: str) -> Any:
-    """Download, checksum-verify, then joblib.load() one model artifact."""
+def _download_checked(
+    store: ObjectStore, org_id: str, key: str, checksums: dict[str, str], artifact_name: str
+) -> bytes:
+    """Download one model artifact and verify it against the metadata's checksum."""
     data = store.get(org_id, key)
     expected = checksums.get(artifact_name)
     if expected is None or artifact_checksum(data) != expected:
         raise CorruptArtifactError(
             f"Checksum mismatch for {artifact_name!r} (org={org_id}, key={key}) — refusing to load it."
         )
-    return joblib.load(io.BytesIO(data))
+    return data
+
+
+def _load_checked(store: ObjectStore, org_id: str, key: str, checksums: dict[str, str], artifact_name: str) -> Any:
+    """Download, checksum-verify, then joblib.load() one model artifact."""
+    return joblib.load(io.BytesIO(_download_checked(store, org_id, key, checksums, artifact_name)))
 
 
 @dataclass(frozen=True)
@@ -95,6 +104,9 @@ class ModelArtifacts:
     # free-text scenarios with a model.text_challenger that training could fit.
     challenger_pipeline: Pipeline | None = None
     challenger_explainer: Any = None
+    # `model.out_of_fold_scores` scenarios: every row's cross-fitted probability and
+    # SHAP contributions (see training.core.training.out_of_fold_scores).
+    out_of_fold: dict[str, Any] | None = None
 
 
 #: Each entry holds a full sklearn pipeline + SHAP explainer (can be multi-MB) — bound
@@ -140,6 +152,7 @@ class ModelCache:
         # (requesting org, scenario) -> org whose artifacts it is served; see _source_org.
         self._sources: dict[tuple[str, str], str] = {}
         self._datasets: dict[tuple[str, str], tuple[pd.DataFrame, float]] = {}
+        self._graphs: dict[tuple[str, str], tuple[NetworkGraph, float]] = {}
 
     def _lock_for(self, key: tuple[str, str]) -> threading.Lock:
         """Return the same Lock instance for a given key across concurrent callers."""
@@ -263,6 +276,11 @@ class ModelCache:
             challenger_explainer = _load_checked(
                 store, load_org_id, MODEL_CHALLENGER_EXPLAINER_KEY, checksums, "challenger_explainer"
             )
+        out_of_fold = None
+        if "out_of_fold" in checksums:
+            out_of_fold = json.loads(
+                _download_checked(store, load_org_id, MODEL_OUT_OF_FOLD_KEY, checksums, "out_of_fold")
+            )
         return ModelArtifacts(
             pipeline=pipeline,
             explainer=explainer,
@@ -271,6 +289,7 @@ class ModelCache:
             pipeline_upper=pipeline_upper,
             challenger_pipeline=challenger_pipeline,
             challenger_explainer=challenger_explainer,
+            out_of_fold=out_of_fold,
         )
 
     def dataset(self, org_id: str, scenario_slug: str) -> pd.DataFrame:
@@ -294,3 +313,22 @@ class ModelCache:
                 self._datasets.pop(min(self._datasets, key=lambda k: self._datasets[k][1]))
             self._datasets[requester] = (df, now + DATASET_TTL_SECONDS)
         return df
+
+    def graph(self, org_id: str, scenario_slug: str) -> NetworkGraph:
+        """The tenant's processed network (`dataset.graph`), cached like `dataset()` —
+        bounded to MAX_CACHED_DATASETS entries, each for DATASET_TTL_SECONDS.
+        """
+        requester = (org_id, scenario_slug)
+        now = time.monotonic()
+        with self._cache_guard:
+            cached = self._graphs.get(requester)
+            if cached is not None and cached[1] > now:
+                return cached[0]
+        from prediction.core.dataset import load_graph  # dataset.py imports this module
+
+        graph = load_graph(self._stores[scenario_slug], org_id, self.fallback_org_id)
+        with self._cache_guard:
+            if len(self._graphs) >= MAX_CACHED_DATASETS:
+                self._graphs.pop(min(self._graphs, key=lambda k: self._graphs[k][1]))
+            self._graphs[requester] = (graph, now + DATASET_TTL_SECONDS)
+        return graph

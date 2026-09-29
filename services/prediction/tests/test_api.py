@@ -209,3 +209,94 @@ def test_model_card_tolerates_metadata_from_before_the_model_card() -> None:
 
     assert body["model_name"] == "lightgbm"
     assert body["candidates"] == [] and body["holdout_evaluation"] is None
+
+
+def _graph_app(
+    definition: SimpleNamespace, artifacts: ModelArtifacts | None = None, graph: object = None
+) -> tuple[TestClient, list[str]]:
+    """A TestClient serving `definition`, whose cache returns `artifacts` / `graph` and records graph() calls."""
+    from fastapi import FastAPI
+
+    calls: list[str] = []
+
+    class GraphModelCache(ModelCache):
+        def __init__(self) -> None:
+            pass
+
+        def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
+            assert artifacts is not None
+            return artifacts
+
+        def graph(self, org_id: str, scenario_slug: str) -> object:  # type: ignore[override]
+            calls.append(org_id)
+            return graph
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="org-1", roles=frozenset())
+    app.dependency_overrides[_scenario_definition] = lambda: definition
+    cache = GraphModelCache()
+    app.dependency_overrides[_model_cache] = lambda: cache
+    return TestClient(app), calls
+
+
+def test_graph_endpoint_serves_the_tenants_graph() -> None:
+    from ai_circus_shared.network_graph import NetworkGraph
+
+    graph = NetworkGraph.model_validate({
+        "nodes": [{"id": "A", "kind": "row"}, {"id": "e", "kind": "entity", "label": "LJM"}],
+        "edges": [{"source": "A", "target": "e", "kind": "role"}],
+    })
+    definition = SimpleNamespace(slug="enron", dataset=SimpleNamespace(graph=SimpleNamespace(seed_file="g.json")))
+    client, calls = _graph_app(definition, graph=graph)
+
+    body = client.get("/graph/enron").json()
+
+    assert calls == ["org-1"]
+    assert body["nodes"][1] == {"id": "e", "kind": "entity", "label": "LJM"}  # None fields left out
+    assert body["edges"] == [{"source": "A", "target": "e", "kind": "role", "weight": 1.0, "series": {}}]
+
+
+def test_graph_endpoint_404s_for_a_scenario_without_a_graph() -> None:
+    client, calls = _graph_app(SimpleNamespace(slug="churn", dataset=SimpleNamespace(graph=None)))
+    response = client.get("/graph/churn")
+    assert response.status_code == 404 and calls == []
+
+
+def test_graph_endpoint_checks_the_entitlement_before_touching_the_graph() -> None:
+    from fastapi import HTTPException
+
+    client, calls = _graph_app(SimpleNamespace(slug="enron", dataset=SimpleNamespace(graph=SimpleNamespace())))
+
+    def deny() -> Identity:
+        raise HTTPException(status_code=403, detail="not entitled")
+
+    client.app.dependency_overrides[resolve_identity] = deny  # type: ignore[attr-defined]
+    assert client.get("/graph/enron").status_code == 403
+    assert calls == []
+
+
+def test_out_of_fold_endpoint_serves_every_rows_cross_fitted_score() -> None:
+    scores = {
+        "model_name": "lightgbm_small_data",
+        "folds": 5,
+        "roc_auc": 0.81,
+        "rows": {"LAY KENNETH L": {"probability": 0.61, "fold": 2, "contributions": {"num__salary": 0.05}}},
+    }
+    artifacts = ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata={}, out_of_fold=scores)
+    client, _ = _graph_app(SimpleNamespace(slug="enron"), artifacts=artifacts)
+
+    body = client.get("/model/enron/out-of-fold").json()
+
+    assert body == {
+        "model_name": "lightgbm_small_data",
+        "folds": 5,
+        "roc_auc": 0.81,
+        "rows": [{"id": "LAY KENNETH L", "probability": 0.61, "fold": 2, "contributions": {"num__salary": 0.05}}],
+    }
+
+
+def test_out_of_fold_endpoint_404s_when_the_model_has_none() -> None:
+    artifacts = ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata={})
+    client, _ = _graph_app(SimpleNamespace(slug="churn"), artifacts=artifacts)
+    assert client.get("/model/churn/out-of-fold").status_code == 404

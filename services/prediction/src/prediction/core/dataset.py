@@ -19,8 +19,9 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from ai_circus_shared.network_graph import NetworkGraph, parse_graph
 from ai_circus_shared.storage import ObjectStore
-from ai_circus_shared.tabular_ml import NORMALIZED_DATASET_KEY, original_feature
+from ai_circus_shared.tabular_ml import GRAPH_KEY, NORMALIZED_DATASET_KEY, original_feature
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -70,6 +71,26 @@ def load_normalized(store: ObjectStore, org_id: str, fallback_org_id: str) -> pd
             "has `etl-tabular` run for this scenario?)."
         )
     return pd.read_parquet(io.BytesIO(store.get(load_org_id, NORMALIZED_DATASET_KEY)))
+
+
+class GraphNotAvailableError(ModelUnavailableError):
+    """Raised when a scenario declares a `dataset.graph` but neither the tenant's own
+    org nor the shared fallback org has the processed graph yet (etl-tabular hasn't run
+    since the scenario gained one) — a 503 like DatasetNotAvailableError, not a 500.
+    """
+
+
+def load_graph(store: ObjectStore, org_id: str, fallback_org_id: str) -> NetworkGraph:
+    """Load the tenant's processed network (own copy, else the fallback org's —
+    mirroring load_normalized), validated against the shared contract.
+    """
+    for load_org_id in (org_id, fallback_org_id):
+        if store.exists(load_org_id, GRAPH_KEY):
+            return parse_graph(store.get(load_org_id, GRAPH_KEY))
+    raise GraphNotAvailableError(
+        f"No processed graph for org={org_id!r} (fallback org={fallback_org_id!r} also has none — "
+        "has `etl-tabular` run since this scenario declared a dataset.graph?)."
+    )
 
 
 @dataclass(frozen=True)

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
-from ai_circus_shared.scenario_schema import TabularDataset
-from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
+from ai_circus_shared.network_graph import NetworkGraph
+from ai_circus_shared.scenario_schema import TabularDataset, TabularGraph
+from ai_circus_shared.tabular_ml import GRAPH_KEY, MAX_DATASET_ROWS
+from pydantic import ValidationError
 
-from etl_tabular.core.etl import clean, ensure_raw_dataset, load_raw, run_etl, save_normalized
+from etl_tabular.core.etl import clean, ensure_raw_dataset, load_raw, process_graph, run_etl, save_normalized
 
 DATASET = TabularDataset(
     bucket="scenario-churn",
@@ -277,3 +280,69 @@ def test_clean_keeps_text_features_as_trimmed_truncated_strings(scenario_dir: Pa
     save_normalized(store, "acme", cleaned)  # type: ignore[arg-type]
     round_trip = pd.read_parquet(io.BytesIO(store.get("acme", "processed/normalized.parquet")))
     assert list(round_trip["Review"]) == ["Great manage", ""]
+
+
+# --- dataset.graph ---------------------------------------------------------------
+
+GRAPH_DATASET = DATASET.model_copy(
+    update={"graph": TabularGraph(seed_file="sample_data/g.json", raw_object="raw/g.json")}
+)
+GRAPH = {
+    "periods": ["2001-01"],
+    "nodes": [
+        {"id": "1", "kind": "row"},
+        {"id": "2", "kind": "row"},
+        {"id": "3", "kind": "row"},  # not in SAMPLE_CSV: etl drops it with its edges
+        {"id": "ctx-1", "kind": "context"},
+        {"id": "ljm", "kind": "entity", "label": "LJM"},
+    ],
+    "edges": [
+        {"source": "1", "target": "2", "kind": "email", "weight": 4, "series": {"2001-01": 4}},
+        {"source": "3", "target": "ctx-1", "kind": "email", "weight": 3},
+        {"source": "3", "target": "ljm", "kind": "role", "label": "partner"},
+    ],
+}
+
+
+@pytest.fixture
+def graph_scenario_dir(scenario_dir: Path) -> Path:
+    (scenario_dir / "sample_data" / "g.json").write_text(json.dumps(GRAPH))
+    return scenario_dir
+
+
+def test_run_etl_writes_the_graph_restricted_to_the_cleaned_rows(graph_scenario_dir: Path) -> None:
+    store = FakeObjectStore()
+
+    run_etl(store, "org-1", GRAPH_DATASET, graph_scenario_dir)
+
+    graph = NetworkGraph.model_validate_json(store.get("org-1", GRAPH_KEY))
+    assert [n.id for n in graph.nodes] == ["1", "2", "ljm"]  # row 3 gone; ctx-1 orphaned; entity kept
+    assert [(e.source, e.target) for e in graph.edges] == [("1", "2")]
+    assert store.exists("org-1", "raw/g.json")
+
+
+def test_process_graph_never_overwrites_the_tenants_raw_graph(graph_scenario_dir: Path) -> None:
+    store = FakeObjectStore()
+    own = {"nodes": [{"id": "1", "kind": "row"}], "edges": []}
+    store.put("org-1", "raw/g.json", json.dumps(own).encode())
+
+    process_graph(store, "org-1", GRAPH_DATASET, graph_scenario_dir, pd.Index([1, 2]))
+
+    assert json.loads(store.get("org-1", "raw/g.json")) == own
+    assert [n.id for n in NetworkGraph.model_validate_json(store.get("org-1", GRAPH_KEY)).nodes] == ["1"]
+
+
+def test_run_etl_without_a_graph_writes_none(scenario_dir: Path) -> None:
+    store = FakeObjectStore()
+    run_etl(store, "org-1", DATASET, scenario_dir)
+    assert not store.exists("org-1", GRAPH_KEY)
+
+
+def test_an_invalid_graph_fails_loudly_and_writes_nothing(scenario_dir: Path) -> None:
+    (scenario_dir / "sample_data" / "g.json").write_text(
+        json.dumps({"nodes": [], "edges": [{"source": "x", "target": "y", "kind": "e"}]})
+    )
+    store = FakeObjectStore()
+    with pytest.raises(ValidationError, match="unknown node"):
+        run_etl(store, "org-1", GRAPH_DATASET, scenario_dir)
+    assert not store.exists("org-1", GRAPH_KEY)
