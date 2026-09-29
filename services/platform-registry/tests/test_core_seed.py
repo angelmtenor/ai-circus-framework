@@ -52,6 +52,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "titanic",
         "toxic_leadership",
         "bank_early_warning",
+        "enron_fraud_network",
         "sede_electronica",
     }
     churn = session.get(Scenario, "churn")
@@ -235,6 +236,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "titanic",
         "toxic_leadership",
         "bank_early_warning",
+        "enron_fraud_network",
         "sede_electronica",
     }
 
@@ -252,8 +254,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 24
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 24
+    assert session.query(Scenario).count() == 25
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 25
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -339,3 +341,24 @@ def test_seed_scenarios_stores_the_official_form_layout_and_the_watchlist(sessio
     assert bank is not None and bank.ui_extras is not None
     assert bank.ui_extras["kind"] == "risk_watchlist"
     assert bank.industry == "public_sector"
+
+
+def test_seed_scenarios_stores_the_network_explorer_as_plain_json(session: Session) -> None:
+    """The network_explorer extra (tiers, pillars, dated events) reaches the DB as JSON —
+    event dates stay strings — and the scenario stays admin-only (not a demo tenant's).
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    enron = session.get(Scenario, "enron_fraud_network")
+    assert enron is not None and enron.ui_extras is not None
+    assert enron.ui_extras["kind"] == "network_explorer"
+    assert enron.industry == "public_sector"
+    assert all(isinstance(event["date"], str) for event in enron.ui_extras["events"])
+    assert enron.ui_extras["flag_from_tier"] == "Review"
+    assert (
+        session
+        .query(Entitlement)
+        .filter_by(org_id=ENGINEERING_DEMO_ORG_ID, scenario_slug="enron_fraud_network")
+        .count()
+        == 0
+    )
