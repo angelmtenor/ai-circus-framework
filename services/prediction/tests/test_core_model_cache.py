@@ -11,6 +11,7 @@ from ai_circus_shared.tabular_ml import (
     MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
+    MODEL_OUT_OF_FOLD_KEY,
     MODEL_PIPELINE_KEY,
     artifact_checksum,
 )
@@ -292,3 +293,53 @@ def test_preload_warms_every_trained_scenario_and_skips_the_rest(stores: dict[st
     assert len(stores["churn"].get_calls) == calls_after_preload
     with pytest.raises(ModelNotTrainedError):  # still lazily retried on a real request
         cache.get("org-1", "untrained")
+
+
+def test_get_loads_checksum_verified_out_of_fold_scores(stores: dict[str, FakeObjectStore]) -> None:
+    """A model trained with model.out_of_fold_scores carries them; a tampered file is refused."""
+    store = stores["churn"]
+    scores = {
+        "model_name": "lightgbm",
+        "folds": 5,
+        "roc_auc": 0.8,
+        "rows": {"1": {"probability": 0.3, "fold": 0, "contributions": {}}},
+    }
+    data = json.dumps(scores).encode()
+    store.put("org-1", MODEL_OUT_OF_FOLD_KEY, data)
+    metadata = json.loads(store.objects["org-1", MODEL_METADATA_KEY])
+    metadata[MODEL_CHECKSUMS_METADATA_FIELD]["out_of_fold"] = artifact_checksum(data)
+    store.put("org-1", MODEL_METADATA_KEY, json.dumps(metadata).encode())
+
+    assert ModelCache(stores, fallback_org_id="org-1").get("org-1", "churn").out_of_fold == scores
+    assert ModelCache(stores, fallback_org_id="org-1").get("org-1", "mpm").out_of_fold is None
+
+    store.put("org-1", MODEL_OUT_OF_FOLD_KEY, b"{}")
+    with pytest.raises(CorruptArtifactError, match="out_of_fold"):
+        ModelCache(stores, fallback_org_id="org-1").get("org-1", "churn")
+
+
+def test_graph_is_cached_per_requester_until_its_ttl_expires(
+    stores: dict[str, FakeObjectStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from prediction.core import dataset as dataset_module
+    from prediction.core import model_cache as model_cache_module
+
+    loads: list[str] = []
+
+    def fake_load(_store: object, org_id: str, _fallback: str) -> str:
+        loads.append(org_id)
+        return f"graph-{len(loads)}"
+
+    now = [1000.0]
+    monkeypatch.setattr(dataset_module, "load_graph", fake_load)
+    monkeypatch.setattr(model_cache_module.time, "monotonic", lambda: now[0])
+    cache = ModelCache(stores, fallback_org_id="org-1")
+
+    assert cache.graph("org-1", "churn") == "graph-1"
+    assert cache.graph("org-1", "churn") == "graph-1"
+    assert cache.graph("org-2", "churn") == "graph-2"  # keyed per requester
+    now[0] += model_cache_module.DATASET_TTL_SECONDS + 1
+    assert cache.graph("org-1", "churn") == "graph-3"
+    for i in range(model_cache_module.MAX_CACHED_DATASETS + 3):
+        cache.graph(f"org-{i + 10}", "churn")
+    assert len(cache._graphs) <= model_cache_module.MAX_CACHED_DATASETS

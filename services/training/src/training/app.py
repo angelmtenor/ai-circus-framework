@@ -18,6 +18,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import joblib
 import pandas as pd
@@ -25,11 +26,13 @@ from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MAX_OUT_OF_FOLD_ROWS,
     MODEL_CHALLENGER_EXPLAINER_KEY,
     MODEL_CHALLENGER_PIPELINE_KEY,
     MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
+    MODEL_OUT_OF_FOLD_KEY,
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
@@ -49,6 +52,7 @@ from training.core.training import (
     fit_quantile_pipelines,
     global_shap_importance,
     holdout_evaluation,
+    out_of_fold_scores,
     select_best_candidate,
     split_features,
     text_term_importance,
@@ -120,6 +124,19 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     # pyrefly: ignore [bad-argument-type]
     evaluation = holdout_evaluation(best.pipeline, x_test, y_test) if model.task_type == "classification" else None
 
+    # Before the refit: every row scored by a model that never saw it (opt-in).
+    out_of_fold = _out_of_fold(
+        slug,
+        definition,
+        best.name,
+        x,
+        # pyrefly: ignore [bad-argument-type]
+        y,
+        numeric_features,
+        categorical_features,
+        text_features,
+    )
+
     # Refit the selected model on the full dataset for the final artifact.
     best.pipeline.fit(x, y)
     explainer = build_explainer(best.pipeline, x)
@@ -137,6 +154,11 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     explainer_bytes = _dump(explainer)
     store.put(config.ORG_ID, MODEL_EXPLAINER_KEY, explainer_bytes)
     checksums["explainer"] = artifact_checksum(explainer_bytes)
+
+    if out_of_fold is not None:
+        out_of_fold_bytes = json.dumps(out_of_fold).encode()
+        store.put(config.ORG_ID, MODEL_OUT_OF_FOLD_KEY, out_of_fold_bytes)
+        checksums["out_of_fold"] = artifact_checksum(out_of_fold_bytes)
 
     has_intervals = definition.model.task_type == "regression"
     if has_intervals:
@@ -220,6 +242,12 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         # The sentence-embedding challenger's model card (None when not configured or
         # not trainable this run — see _train_challenger).
         "challenger": challenger.metadata if challenger is not None else None,
+        # Cross-fitted scores of every row (MODEL_OUT_OF_FOLD_KEY) — their summary only.
+        "out_of_fold": (
+            {k: out_of_fold[k] for k in ("model_name", "folds", "roc_auc")} | {"rows": len(out_of_fold["rows"])}
+            if out_of_fold is not None
+            else None
+        ),
         "target": definition.dataset.target,
         "has_intervals": has_intervals,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
@@ -240,6 +268,38 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     )
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
+
+
+def _out_of_fold(
+    slug: str,
+    definition: ScenarioDefinition,
+    model_name: str,
+    x: pd.DataFrame,
+    y: pd.Series,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    text_features: list[str],
+) -> dict[str, Any] | None:
+    """`model.out_of_fold_scores`' cross-fitted scores, or None when not configured —
+    or not possible (too many rows, or a class smaller than the number of folds).
+    """
+    assert definition.model is not None
+    if not definition.model.out_of_fold_scores:
+        return None
+    folds = definition.model.cv_folds or 5
+    if len(x) > MAX_OUT_OF_FOLD_ROWS or int(y.value_counts().min()) < folds:
+        logger.warning(
+            "Skipping out-of-fold scores for scenario={}: {} rows (max {}), smallest class {} (< {} folds?)",
+            slug,
+            len(x),
+            MAX_OUT_OF_FOLD_ROWS,
+            int(y.value_counts().min()),
+            folds,
+        )
+        return None
+    scores = out_of_fold_scores(model_name, x, y, numeric_features, categorical_features, folds, text_features)
+    logger.success("Out-of-fold scores for scenario={}: {} rows, ROC AUC {}", slug, len(x), scores["roc_auc"])
+    return scores
 
 
 def _train_challenger(

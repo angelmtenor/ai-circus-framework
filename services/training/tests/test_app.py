@@ -16,10 +16,13 @@ import pandas as pd
 import pytest
 from ai_circus_shared.scenario_schema import TabularDataset, TabularModel
 from ai_circus_shared.tabular_ml import (
+    MODEL_CHECKSUMS_METADATA_FIELD,
     MODEL_EXPLAINER_KEY,
     MODEL_METADATA_KEY,
+    MODEL_OUT_OF_FOLD_KEY,
     MODEL_PIPELINE_KEY,
     NORMALIZED_DATASET_KEY,
+    artifact_checksum,
 )
 from pydantic import BaseModel, ValidationError
 
@@ -47,6 +50,9 @@ class FakeLogger:
     def exception(self, *args: object) -> None:
         """Record exception log calls."""
         self.exception_messages.append(args)
+
+    def warning(self, *args: object) -> None:
+        """Accept warning log calls."""
 
 
 class FakeEnvConfig:
@@ -333,3 +339,52 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert exc_info.value.code == 1
     assert fake_logger.error_messages
+
+
+def _run_main(monkeypatch: pytest.MonkeyPatch, definition: object, df: pd.DataFrame) -> FakeObjectStore:
+    store = FakeObjectStore()
+    buffer = io.BytesIO()
+    df.to_parquet(buffer)
+    store.put("demo", NORMALIZED_DATASET_KEY, buffer.getvalue())
+    monkeypatch.setattr(app, "logger", FakeLogger())
+    monkeypatch.setattr(app, "configure_logger", lambda: None)
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": definition})
+    monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
+    app.main()
+    return store
+
+
+def test_main_writes_checksummed_out_of_fold_scores_when_asked(
+    monkeypatch: pytest.MonkeyPatch, fake_definition: object
+) -> None:
+    fake_definition.model = fake_definition.model.model_copy(update={"out_of_fold_scores": True, "cv_folds": 3})  # type: ignore[attr-defined]
+    df = _synthetic_normalized_dataset()
+
+    store = _run_main(monkeypatch, fake_definition, df)
+
+    data = store.objects["demo", MODEL_OUT_OF_FOLD_KEY]
+    metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
+    assert metadata[MODEL_CHECKSUMS_METADATA_FIELD]["out_of_fold"] == artifact_checksum(data)
+    assert metadata["out_of_fold"] == {
+        "model_name": "lightgbm",
+        "folds": 3,
+        "roc_auc": json.loads(data)["roc_auc"],
+        "rows": len(df),
+    }
+    assert len(json.loads(data)["rows"]) == len(df)
+
+
+def test_main_skips_out_of_fold_scores_when_a_class_is_smaller_than_the_folds(
+    monkeypatch: pytest.MonkeyPatch, fake_definition: object
+) -> None:
+    fake_definition.model = fake_definition.model.model_copy(update={"out_of_fold_scores": True})  # type: ignore[attr-defined]
+    df = _synthetic_normalized_dataset()
+    df["target"] = 0
+    df.loc[df.index[:4], "target"] = 1  # 4 positives: enough to train, fewer than the 5 folds
+    df.loc[df.index[:4], "numeric_feature"] = 5.0
+
+    store = _run_main(monkeypatch, fake_definition, df)
+
+    assert ("demo", MODEL_OUT_OF_FOLD_KEY) not in store.objects
+    assert json.loads(store.objects["demo", MODEL_METADATA_KEY])["out_of_fold"] is None

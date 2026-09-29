@@ -12,6 +12,7 @@ import httpx
 import pandas as pd
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
+from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -198,6 +199,28 @@ class ModelCardOut(BaseModel):
     text_columns: list[str] = []
     text_term_importance: dict[str, TextTermsOut] = {}
     challenger: ChallengerCardOut | None = None
+
+
+class OutOfFoldRowOut(BaseModel):
+    """One row's cross-fitted score: `probability` and SHAP `contributions` (same format
+    as /predict) from the fold model that never saw this row's label.
+    """
+
+    id: str
+    probability: float
+    fold: int
+    contributions: dict[str, float]
+
+
+class OutOfFoldOut(BaseModel):
+    """Response body for GET /model/{scenario_slug}/out-of-fold (see
+    scenario_schema.TabularModel.out_of_fold_scores).
+    """
+
+    model_name: str
+    folds: int
+    roc_auc: float | None = None
+    rows: list[OutOfFoldRowOut]
 
 
 class BreakdownItemOut(BaseModel):
@@ -417,6 +440,45 @@ def model_card_endpoint(
         },
         challenger=ChallengerCardOut(**metadata["challenger"]) if metadata.get("challenger") else None,
     )
+
+
+@router.get("/model/{scenario_slug}/out-of-fold", response_model=OutOfFoldOut)
+def out_of_fold_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> OutOfFoldOut:
+    """Every row of the caller's dataset scored and explained by a model that never saw
+    that row's label — for views that show scores next to real outcomes. 404 unless the
+    scenario opts in (`model.out_of_fold_scores`) and its model was trained with it.
+    """
+    assert identity.org_id is not None
+    out_of_fold = model_cache.get(identity.org_id, definition.slug).out_of_fold
+    if out_of_fold is None:
+        raise HTTPException(status_code=404, detail=f"No out-of-fold scores for scenario {definition.slug!r}.")
+    return OutOfFoldOut(
+        model_name=out_of_fold["model_name"],
+        folds=out_of_fold["folds"],
+        roc_auc=out_of_fold.get("roc_auc"),
+        rows=[OutOfFoldRowOut(id=row_id, **row) for row_id, row in out_of_fold["rows"].items()],
+    )
+
+
+@router.get("/graph/{scenario_slug}", response_model=NetworkGraph, response_model_exclude_none=True)
+def graph_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> NetworkGraph:
+    """The caller's scenario network (`dataset.graph`: rows, curated entities, context
+    nodes and their edges), restricted by etl-tabular to the rows of the dataset. 404
+    when the scenario declares none.
+    """
+    assert identity.org_id is not None
+    assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
+    if definition.dataset.graph is None:
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no graph.")
+    return model_cache.graph(identity.org_id, definition.slug)
 
 
 @router.get("/dataset/{scenario_slug}/evaluation", response_model=DatasetEvaluationOut)

@@ -7,13 +7,20 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from ai_circus_shared.tabular_ml import NORMALIZED_DATASET_KEY
+from ai_circus_shared.tabular_ml import GRAPH_KEY, NORMALIZED_DATASET_KEY
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from prediction.core.dataset import DatasetNotAvailableError, evaluate, load_normalized, sample_rows
+from prediction.core.dataset import (
+    DatasetNotAvailableError,
+    GraphNotAvailableError,
+    evaluate,
+    load_graph,
+    load_normalized,
+    sample_rows,
+)
 from prediction.core.model_cache import ModelArtifacts
 
 
@@ -166,3 +173,22 @@ def test_sample_rows_tolerates_a_dataset_without_the_display_column() -> None:
     df = pd.DataFrame({"Age": [30]}, index=pd.Index(["a"], name="row_id"))
     sample = sample_rows(df, ["Age"], 10, id_column="row_id", display_columns=["Name"])
     assert sample.columns == ["row_id", "Age"]
+
+
+GRAPH_BYTES = (
+    b'{"nodes": [{"id": "A", "kind": "row"}, {"id": "B", "kind": "row"}],'
+    b' "edges": [{"source": "A", "target": "B", "kind": "email", "weight": 3}]}'
+)
+
+
+def test_load_graph_prefers_the_tenants_own_then_the_fallback_orgs_graph() -> None:
+    store = FakeObjectStore()
+    store.objects["fallback-org", GRAPH_KEY] = GRAPH_BYTES
+    assert [n.id for n in load_graph(store, "org-1", fallback_org_id="fallback-org").nodes] == ["A", "B"]  # type: ignore[arg-type]
+    store.objects["org-1", GRAPH_KEY] = b'{"nodes": [{"id": "own", "kind": "row"}]}'
+    assert [n.id for n in load_graph(store, "org-1", fallback_org_id="fallback-org").nodes] == ["own"]  # type: ignore[arg-type]
+
+
+def test_load_graph_raises_a_503_error_when_nobody_has_one() -> None:
+    with pytest.raises(GraphNotAvailableError, match="etl-tabular"):
+        load_graph(FakeObjectStore(), "org-1", fallback_org_id="fallback-org")  # type: ignore[arg-type]

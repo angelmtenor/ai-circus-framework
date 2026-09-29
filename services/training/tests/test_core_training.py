@@ -14,6 +14,7 @@ from training.core.training import (
     build_pipeline,
     global_shap_importance,
     holdout_evaluation,
+    out_of_fold_scores,
     select_best_candidate,
     split_features,
     text_term_importance,
@@ -463,3 +464,32 @@ def test_global_shap_importance_works_for_a_linear_model(synthetic_data: tuple) 
     result = global_shap_importance(pipeline, explainer, x_train, ["numeric_feature", "category_feature"])
 
     assert result[0]["feature"] == "numeric_feature"
+
+
+# --- out-of-fold (cross-fitted) scores ---------------------------------------------
+
+
+@pytest.mark.parametrize("model", ["logistic_regression", "lightgbm_small_data"])
+def test_out_of_fold_scores_score_and_explain_every_row_exactly_once(synthetic_data: tuple, model: str) -> None:
+    x_train, x_test, y_train, y_test = synthetic_data
+    x, y = pd.concat([x_train, x_test]), pd.concat([y_train, y_test])
+
+    scores = out_of_fold_scores(model, x, y, ["numeric_feature"], ["category_feature"], folds=4)
+
+    assert scores["model_name"] == model and scores["folds"] == 4
+    assert set(scores["rows"]) == {str(i) for i in x.index}
+    assert {row["fold"] for row in scores["rows"].values()} == {0, 1, 2, 3}
+    assert all(0.0 <= row["probability"] <= 1.0 for row in scores["rows"].values())
+    first = next(iter(scores["rows"].values()))
+    assert set(first["contributions"]) == {"num__numeric_feature", "cat__category_feature_A", "cat__category_feature_B"}
+    assert scores["roc_auc"] > 0.9  # the synthetic target is (almost) separable
+
+
+def test_out_of_fold_scores_roll_text_terms_up_to_their_column(synthetic_text_data: tuple) -> None:
+    x, y = synthetic_text_data
+
+    scores = out_of_fold_scores("lightgbm_small_data", x, y, ["pay"], ["family"], folds=3, text_features=["Review"])
+
+    contributions = next(iter(scores["rows"].values()))["contributions"]
+    assert "Review" in contributions
+    assert not any(key.startswith("text_Review") for key in contributions)

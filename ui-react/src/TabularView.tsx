@@ -20,6 +20,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
 // no other workspace pays for the ship illustration or the tutorial widgets.
 const VoyageView = lazy(() => import("./VoyageView").then((m) => ({ default: m.VoyageView })));
 const RiskWatchlistView = lazy(() => import("./RiskWatchlistView").then((m) => ({ default: m.RiskWatchlistView })));
+const NetworkExplorerView = lazy(() => import("./NetworkExplorerView").then((m) => ({ default: m.NetworkExplorerView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
@@ -33,10 +34,11 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   process_optimizer: { icon: "sparkle", label: "Optimizer" },
   voyage_explorer: { icon: "ship", label: "Voyage" },
   risk_watchlist: { icon: "shield", label: "Watchlist" },
+  network_explorer: { icon: "network", label: "Network" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
-  if (extras.kind === "voyage_explorer" || extras.kind === "risk_watchlist") return extras.tab_label;
+  if (extras.kind === "voyage_explorer" || extras.kind === "risk_watchlist" || extras.kind === "network_explorer") return extras.tab_label;
   return EXTRA_TABS[extras.kind]?.label;
 }
 
@@ -152,6 +154,7 @@ function TabularViewContent({
         )}
         {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "risk_watchlist" && <RiskWatchlistView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "network_explorer" && <NetworkExplorerView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (

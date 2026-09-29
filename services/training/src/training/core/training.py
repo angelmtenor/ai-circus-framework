@@ -421,6 +421,57 @@ def shap_matrix(explainer: shap.Explainer, x_transformed: Any) -> np.ndarray:
     return np.vstack(chunks)
 
 
+def out_of_fold_scores(
+    estimator_name: str,
+    x: pd.DataFrame,
+    y: pd.Series,
+    numeric_features: list[str],
+    categorical_features: list[str],
+    folds: int,
+    text_features: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Every row's probability and SHAP contributions from a copy of the selected
+    model trained on the *other* folds only (stratified k-fold cross-fitting over the
+    whole dataset) — what the model says about someone whose label it never saw.
+
+    The deployed model is refit on every row, so on a small dataset its scores of those
+    same rows are close to memorised (every positive near 1); these are the honest
+    ones to show next to the real outcome. Contributions use prediction's format
+    (transformed column -> value; a text feature's terms summed into one entry), so
+    ui-react explains them exactly like a live /predict response.
+    """
+    splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=0)
+    rows: dict[str, dict[str, Any]] = {}
+    probabilities = np.zeros(len(x))
+    for fold, (train_index, test_index) in enumerate(splitter.split(x, y)):
+        estimator = CANDIDATE_ESTIMATORS["classification"][estimator_name]()
+        pipeline = build_pipeline(numeric_features, categorical_features, estimator, text_features)
+        pipeline.fit(x.iloc[train_index], y.iloc[train_index])
+        explainer = build_explainer(pipeline, x.iloc[train_index])
+        held_out = x.iloc[test_index]
+        proba = pipeline.predict_proba(held_out)[:, 1]
+        probabilities[test_index] = proba
+        values = shap_matrix(explainer, pipeline.named_steps["preprocessor"].transform(held_out))
+        names = transformed_feature_names(pipeline)
+        groups: dict[str, list[int]] = {}
+        for j, name in enumerate(names):
+            column = original_feature(name, list(x.columns), text_features)
+            groups.setdefault(column if column in text_features else name, []).append(j)
+        for i, row_id in enumerate(held_out.index):
+            rows[str(row_id)] = {
+                "probability": round(float(proba[i]), 4),
+                "fold": fold,
+                "contributions": {key: round(float(values[i, idx].sum()), 4) for key, idx in groups.items()},
+            }
+    positive = y == sorted(y.unique())[-1]
+    return {
+        "model_name": estimator_name,
+        "folds": folds,
+        "roc_auc": round(float(roc_auc_score(positive, probabilities)), 4) if positive.nunique() == 2 else None,
+        "rows": rows,
+    }
+
+
 def global_shap_importance(
     pipeline: Pipeline,
     explainer: shap.Explainer,
