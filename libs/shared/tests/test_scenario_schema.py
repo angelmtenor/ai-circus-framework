@@ -1056,3 +1056,99 @@ def test_dataset_graph_paths_must_be_relative_json_and_distinct() -> None:
     dataset = enron.dataset.model_dump()  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match="must differ"):
         _with(enron, dataset={**dataset, "raw_object": "raw/enron_network.json"})
+
+
+# --- logistics showpieces: dispatch_tower (supply_chain) + shipment_globe ---
+
+
+def test_repo_supply_chain_has_a_valid_dispatch_tower() -> None:
+    supply = _repo_scenario("supply_chain")
+    assert supply.industry == "logistics"
+    extras = supply.ui_extras
+    assert extras is not None and extras.kind == "dispatch_tower"
+    assert {hub.key for hub in extras.hubs} == set(supply.dataset.feature_schema["ShippingOrigin"].options)  # type: ignore[union-attr]
+
+
+def test_dispatch_tower_rejects_unknown_hubs_non_numeric_offsets_and_bad_choices() -> None:
+    supply = _repo_scenario("supply_chain")
+    extras = supply.ui_extras.model_dump()  # type: ignore[union-attr]
+    model = supply.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="requires a regression model"):
+        _with(supply, model={**model, "task_type": "classification"})
+    with pytest.raises(ValidationError, match="must be distinct"):
+        _with(supply, ui_extras={**extras, "hubs": [*extras["hubs"], {"key": "Boston", "lat": 42.4, "lon": -71.1}]})
+    with pytest.raises(ValidationError, match="must be distinct"):
+        _with(supply, ui_extras={**extras, "hubs": [extras["hubs"][0], extras["hubs"][0]]})
+    with pytest.raises(ValidationError, match="must be a numeric feature"):
+        _with(supply, ui_extras={**extras, "offset_x_feature": "Carrier"})
+    with pytest.raises(ValidationError, match="must be a categorical feature"):
+        _with(supply, ui_extras={**extras, "choice_features": ["YShippingDistance"]})
+    with pytest.raises(ValidationError, match="must all be different"):
+        _with(supply, ui_extras={**extras, "choice_features": ["ShippingOrigin"]})
+    with pytest.raises(ValidationError, match="choice_icons"):
+        _with(supply, ui_extras={**extras, "choice_icons": {"Teleport": "bolt"}})
+    with pytest.raises(ValidationError, match="at most 2"):
+        _with(supply, ui_extras={**extras, "choice_features": ["Carrier", "ShippingPriority", "InBulkOrder"]})
+
+
+def test_repo_global_health_shipments_has_a_valid_shipment_globe() -> None:
+    health = _repo_scenario("global_health_shipments")
+    assert health.industry == "logistics"
+    assert health.model is not None and health.model.selection_metric == "roc_auc"
+    extras = health.ui_extras
+    assert extras is not None and extras.kind == "shipment_globe"
+    assert [lever.feature for lever in extras.levers] == ["shipment_mode", "fulfill_via", "planned_lead_days"]
+
+
+def test_repo_global_health_shipments_csv_has_every_column_and_no_gaps() -> None:
+    """etl-tabular's clean() silently drops any row with a missing value — the shipped
+    CSV must have none, and every display/feature column the scenario names."""
+    import csv
+    from pathlib import Path
+
+    health = _repo_scenario("global_health_shipments")
+    assert health.dataset is not None
+    path = Path(__file__).parents[3] / "scenarios/global_health_shipments" / health.dataset.seed_file
+    with path.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    columns = [
+        health.dataset.index_col,
+        *health.dataset.display_columns,
+        *health.dataset.feature_columns,
+        health.dataset.target,
+    ]
+    assert len(rows) > 9000
+    assert all(row[c] not in ("", None) for row in rows for c in columns)
+    for feature, spec in health.dataset.feature_schema.items():
+        if spec.type == "categorical":
+            assert {row[feature] for row in rows} <= set(spec.options), feature
+
+
+def test_shipment_globe_rejects_unknown_columns_levers_and_tiers() -> None:
+    health = _repo_scenario("global_health_shipments")
+    extras = health.ui_extras.model_dump()  # type: ignore[union-attr]
+    model = health.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="requires a classification model"):
+        _with(health, model={**model, "task_type": "regression", "selection_metric": None, "out_of_fold_scores": False})
+    with pytest.raises(ValidationError, match=r"requires model\.out_of_fold_scores"):
+        _with(health, model={**model, "out_of_fold_scores": False})
+    with pytest.raises(ValidationError, match=r"not dataset\.display_columns"):
+        _with(health, ui_extras={**extras, "origin_lat_column": "planned_lead_days"})
+    with pytest.raises(ValidationError, match="must be a categorical feature"):
+        _with(health, ui_extras={**extras, "mode_feature": "planned_lead_days"})
+    with pytest.raises(ValidationError, match="mode_icons"):
+        _with(health, ui_extras={**extras, "mode_icons": {"Rocket": "plane"}})
+    with pytest.raises(ValidationError, match="strictly increase"):
+        _with(health, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
+    with pytest.raises(ValidationError, match="flag_from_tier"):
+        _with(health, ui_extras={**extras, "flag_from_tier": "Nope"})
+    with pytest.raises(ValidationError, match=r"not among dataset\.feature_columns"):
+        _with(health, ui_extras={**extras, "levers": [{"feature": "vendor"}]})
+    with pytest.raises(ValidationError, match="not a numeric feature"):
+        _with(health, ui_extras={**extras, "levers": [{"feature": "shipment_mode", "deltas": [1]}]})
+    with pytest.raises(ValidationError, match="needs deltas"):
+        _with(health, ui_extras={**extras, "levers": [{"feature": "planned_lead_days"}]})
+    with pytest.raises(ValidationError, match="not feature options"):
+        _with(health, ui_extras={**extras, "levers": [{"feature": "shipment_mode", "options": ["Rocket"]}]})
+    with pytest.raises(ValidationError, match="non-zero"):
+        _with(health, ui_extras={**extras, "levers": [{"feature": "planned_lead_days", "deltas": [0, 30]}]})

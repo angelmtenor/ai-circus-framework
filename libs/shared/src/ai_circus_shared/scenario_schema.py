@@ -247,12 +247,13 @@ class TabularModel(BaseModel):
     target_value_labels: dict[str, str] | None = None
     # Free-text scenarios only — see TextChallenger.
     text_challenger: TextChallenger | None = None
-    # Small classification datasets only (<= tabular_ml.MAX_OUT_OF_FOLD_ROWS rows): also
-    # score and SHAP-explain every row with a copy of the selected model that never saw
-    # that row's label (k-fold cross-fitting, k = cv_folds or 5), served by prediction's
-    # GET /model/{slug}/out-of-fold. The deployed model is refit on every row, so on a
-    # few hundred rows its own scores of those rows are close to memorised — a view that
-    # reveals the real outcome next to the scores (network_explorer) must use these.
+    # Classification only: also score every row with a copy of the selected model that
+    # never saw that row's label (k-fold cross-fitting, k = cv_folds or 5), served by
+    # prediction's GET /model/{slug}/out-of-fold — with SHAP contributions per row up to
+    # tabular_ml.MAX_OUT_OF_FOLD_EXPLAINED_ROWS rows, probabilities only above. The
+    # deployed model is refit on every row, so its own scores of those rows are
+    # optimistic (on a few hundred rows, close to memorised) — a view that reveals the
+    # real outcome next to the scores (network_explorer, shipment_globe) must use these.
     out_of_fold_scores: bool = False
 
     @model_validator(mode="after")
@@ -670,6 +671,114 @@ class NetworkExplorerExtra(BaseModel):
     disclaimer: str | None = None
 
 
+class DispatchHub(BaseModel):
+    """One origin hub of a `DispatchTowerExtra` network — an option of its
+    `hub_feature`, pinned on the map at a real place."""
+
+    key: str  # one of hub_feature's categorical `options`
+    label: str | None = None  # display name; defaults to `key`
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class DispatchTowerExtra(BaseModel):
+    """Opt-in 5th workspace tab for a *regression* `tabular_ml` scenario that predicts
+    how long a shipment takes (an ETA) from where it leaves (`hub_feature`), where it
+    goes — an east-west / north-south offset from that hub (`offset_x_feature`,
+    `offset_y_feature`) — and what the shipper chooses (`choice_features`, e.g. carrier
+    and service level). Three linked views, all scored by the scenario's own
+    `/predict/{slug}`: a network map of the hubs with their real shipments in flight;
+    an "ETA landscape" around the selected hub (a `grid_size`² grid of destinations
+    scored at once and drawn as filled isochrones); and, for a destination the user
+    pins, a race of every combination of the choices (their cartesian product), each
+    with its 90% prediction interval — the fastest option and the safest promise date.
+    Every other feature is shared context the user sets once. See ui-react's
+    DispatchTowerView.tsx — the single generic renderer; the wording fields are its
+    only domain vocabulary.
+    """
+
+    kind: Literal["dispatch_tower"] = "dispatch_tower"
+    tab_label: str = "Dispatch Tower"
+    title: str
+    subtitle: str | None = None
+    shipment_noun: str = "shipment"  # singular
+    hub_feature: str  # a categorical feature_columns entry, e.g. "ShippingOrigin"
+    hubs: list[DispatchHub] = Field(min_length=1)
+    # Map of the hubs: `usa` draws the contiguous states (Albers), `world` the globe.
+    map_scope: Literal["usa", "world"] = "usa"
+    offset_x_feature: str  # numeric, east (+) / west (-) of the hub
+    offset_y_feature: str  # numeric, north (+) / south (-) of the hub
+    offset_units: str = "units"  # display only, e.g. "grid units"
+    # Categorical features the shipper picks — the race runs every combination of
+    # their options (at most 2 features, so the race stays readable).
+    choice_features: list[str] = Field(min_length=1, max_length=2)
+    # Optional glyph hint per option of a choice feature (e.g. Air -> plane) — ui-react
+    # draws a generic parcel for anything unlisted.
+    choice_icons: dict[str, Literal["plane", "truck", "van", "ship", "bolt", "rail"]] = {}
+    grid_size: int = Field(default=33, ge=9, le=61)
+
+
+class ShipmentLever(BaseModel):
+    """One re-planning option a `ShipmentGlobeExtra` offers for a selected shipment:
+    a categorical feature switched to each of `options` (default: all of its options),
+    or a numeric one shifted by each of `deltas` — every alternative scored live."""
+
+    feature: str
+    label: str | None = None  # e.g. "Ship by" / "Plan earlier"
+    options: list[str] | None = None
+    deltas: list[float] | None = None
+    delta_units: str = ""  # display only, e.g. "days"
+
+    @model_validator(mode="after")
+    def _options_or_deltas(self) -> ShipmentLever:
+        if self.options is not None and self.deltas is not None:
+            raise ValueError(f"lever {self.feature!r}: set options (categorical) or deltas (numeric), not both.")
+        if self.deltas is not None and (not self.deltas or 0 in self.deltas):
+            raise ValueError(f"lever {self.feature!r}: deltas must be non-empty and non-zero.")
+        return self
+
+
+class ShipmentGlobeExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario whose
+    rows are *shipments* from an origin to a destination (coordinates in
+    `display_columns`) and whose positive class is the adverse outcome (late, lost,
+    damaged): every row is scored out-of-fold (`model.out_of_fold_scores`) and drawn as
+    an arc on a rotating globe, coloured by risk tier and replayed month by month along
+    `date_column`, next to a departures board of the shipments in the replay window.
+    Selecting a shipment explains it and re-plans it with the deployed model (SHAP;
+    every `levers` alternative scored live, best first); the real outcome can be
+    revealed as a backtest. See ui-react's ShipmentGlobeView.tsx —
+    the single generic renderer; the wording fields are its only domain vocabulary.
+    """
+
+    kind: Literal["shipment_globe"] = "shipment_globe"
+    tab_label: str = "Globe"
+    title: str
+    subtitle: str | None = None
+    shipment_noun: str = "shipment"  # singular
+    name_column: str  # a display_column naming the shipment (e.g. the item shipped)
+    detail_columns: list[str] = []  # display_columns shown under the name
+    origin_lat_column: str
+    origin_lon_column: str
+    origin_label_column: str  # display_column, e.g. the origin city
+    destination_lat_column: str
+    destination_lon_column: str
+    destination_label_column: str  # a display_column or categorical feature, e.g. the country
+    date_column: str  # display_column, "YYYY-MM-DD" — the replay timeline
+    mode_feature: str | None = None  # categorical feature drawn as each arc's vehicle
+    mode_icons: dict[str, Literal["plane", "truck", "van", "ship", "rail"]] = {}
+    size_feature: str | None = None  # numeric feature weighting each arc (e.g. value)
+    tiers: list[WatchlistTier] = Field(min_length=2)
+    # The tier (label) from which a shipment counts as "flagged" — None = the top tier.
+    flag_from_tier: str | None = None
+    levers: list[ShipmentLever] = []
+    outcome_label: str = "Adverse outcome"
+    # Display column quantifying the real outcome, shown on reveal (e.g. days late).
+    outcome_detail_column: str | None = None
+    outcome_detail_units: str = ""
+    disclaimer: str | None = None
+
+
 # A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
 # dataset_preview = the first rows; class_balance = the target's class split;
 # model_card = the training leaderboard + selection protocol; roc_curve /
@@ -761,6 +870,8 @@ UiExtras = Annotated[
     | VoyageExplorerExtra
     | RiskWatchlistExtra
     | NetworkExplorerExtra
+    | DispatchTowerExtra
+    | ShipmentGlobeExtra
     | TriageBoardExtra
     | ReadingRoomExtra,
     Field(discriminator="kind"),
@@ -775,6 +886,8 @@ _TABULAR_UI_EXTRAS = (
     VoyageExplorerExtra,
     RiskWatchlistExtra,
     NetworkExplorerExtra,
+    DispatchTowerExtra,
+    ShipmentGlobeExtra,
 )
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
@@ -1620,6 +1733,107 @@ class ScenarioDefinition(BaseModel):
         self._check_tiers_and_pillars(extras.tiers, extras.pillars, where)
         if extras.flag_from_tier is not None and extras.flag_from_tier not in {t.label for t in extras.tiers}:
             raise ValueError(f"{where} flag_from_tier {extras.flag_from_tier!r} is not one of the tiers' labels.")
+        return self
+
+    @model_validator(mode="after")
+    def _dispatch_tower_references_real_features(self) -> ScenarioDefinition:
+        """Fail fast if a `dispatch_tower` block would pin a hub the model has never
+        seen, move a destination along a feature that isn't numeric, or race a choice
+        that isn't a categorical feature — ui-react's DispatchTowerView would otherwise
+        score records the model can't read or draw an empty race."""
+        extras = self.ui_extras
+        if not isinstance(extras, DispatchTowerExtra) or self.dataset is None:
+            return self
+        where = "ui_extras.dispatch_tower"
+        if self.model is None or self.model.task_type != "regression":
+            raise ValueError(f"{where} requires a regression model (a predicted duration per shipment).")
+        self._feature_of_type(extras.hub_feature, "categorical", f"{where} hub_feature")
+        self._feature_of_type(extras.offset_x_feature, "numeric", f"{where} offset_x_feature")
+        self._feature_of_type(extras.offset_y_feature, "numeric", f"{where} offset_y_feature")
+        for feature in extras.choice_features:
+            self._feature_of_type(feature, "categorical", f"{where} choice_features")
+        named = [extras.hub_feature, extras.offset_x_feature, extras.offset_y_feature, *extras.choice_features]
+        if len(named) != len(set(named)):
+            raise ValueError(f"{where}: hub, offset and choice features must all be different features.")
+        hub_spec = self.dataset.feature_schema[extras.hub_feature]
+        assert isinstance(hub_spec, CategoricalFeatureUI)
+        hub_keys = [hub.key for hub in extras.hubs]
+        if len(hub_keys) != len(set(hub_keys)) or not set(hub_keys) <= set(hub_spec.options):
+            raise ValueError(
+                f"{where} hubs {hub_keys} must be distinct {extras.hub_feature!r} options {hub_spec.options}."
+            )
+        choice_options = {
+            option
+            for feature in extras.choice_features
+            for option in getattr(self.dataset.feature_schema[feature], "options", [])
+        }
+        unknown_icons = sorted(set(extras.choice_icons) - choice_options)
+        if unknown_icons:
+            raise ValueError(f"{where} choice_icons {unknown_icons} are not options of the choice features.")
+        return self
+
+    @model_validator(mode="after")
+    def _shipment_globe_references_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `shipment_globe` block would draw an arc from a column that
+        isn't there, re-plan a feature the model doesn't read (or with an option it has
+        never seen), or leave a probability band with no tier."""
+        extras = self.ui_extras
+        if not isinstance(extras, ShipmentGlobeExtra) or self.dataset is None:
+            return self
+        where = "ui_extras.shipment_globe"
+        if self.model is None or self.model.task_type != "classification":
+            raise ValueError(f"{where} requires a classification model (a probability per shipment).")
+        if not self.model.out_of_fold_scores:
+            raise ValueError(
+                f"{where} requires model.out_of_fold_scores: it reveals every row's real outcome next to its "
+                "score, which is only honest for scores from models that never saw that row."
+            )
+        display = set(self.dataset.display_columns)
+        named = [
+            extras.name_column,
+            *extras.detail_columns,
+            extras.origin_lat_column,
+            extras.origin_lon_column,
+            extras.origin_label_column,
+            extras.destination_lat_column,
+            extras.destination_lon_column,
+            extras.date_column,
+        ]
+        if extras.outcome_detail_column is not None:
+            named.append(extras.outcome_detail_column)
+        unknown = sorted(set(named) - display)
+        if unknown:
+            raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
+        if extras.destination_label_column not in display | set(self.dataset.feature_columns):
+            raise ValueError(f"{where} destination_label_column {extras.destination_label_column!r} is not a column.")
+        if extras.mode_feature is not None:
+            self._feature_of_type(extras.mode_feature, "categorical", f"{where} mode_feature")
+            mode_spec = self.dataset.feature_schema[extras.mode_feature]
+            assert isinstance(mode_spec, CategoricalFeatureUI)
+            unknown_icons = sorted(set(extras.mode_icons) - set(mode_spec.options))
+            if unknown_icons:
+                raise ValueError(f"{where} mode_icons {unknown_icons} are not {extras.mode_feature!r} options.")
+        elif extras.mode_icons:
+            raise ValueError(f"{where} mode_icons needs a mode_feature.")
+        if extras.size_feature is not None:
+            self._feature_of_type(extras.size_feature, "numeric", f"{where} size_feature")
+        self._check_tiers_and_pillars(extras.tiers, [], where)
+        if extras.flag_from_tier is not None and extras.flag_from_tier not in {t.label for t in extras.tiers}:
+            raise ValueError(f"{where} flag_from_tier {extras.flag_from_tier!r} is not one of the tiers' labels.")
+        for lever in extras.levers:
+            spec = self.dataset.feature_schema.get(lever.feature)
+            if spec is None:
+                raise ValueError(f"{where} lever {lever.feature!r} is not among dataset.feature_columns.")
+            if lever.deltas is not None and spec.type != "numeric":
+                raise ValueError(f"{where} lever {lever.feature!r} has deltas but is not a numeric feature.")
+            if lever.deltas is None and not isinstance(spec, CategoricalFeatureUI):
+                raise ValueError(f"{where} lever {lever.feature!r} needs deltas (it is not categorical).")
+            if lever.options is not None and isinstance(spec, CategoricalFeatureUI):
+                unknown_options = sorted(set(lever.options) - set(spec.options))
+                if unknown_options:
+                    raise ValueError(
+                        f"{where} lever {lever.feature!r} options {unknown_options} are not feature options."
+                    )
         return self
 
     @model_validator(mode="after")
