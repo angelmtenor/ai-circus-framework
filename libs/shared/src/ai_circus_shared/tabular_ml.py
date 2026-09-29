@@ -15,6 +15,9 @@ NORMALIZED_DATASET_KEY = "processed/normalized.parquet"
 # etl_tabular.core.etl.clean()), so training/evaluation/SHAP can never see more than
 # this regardless of how big the raw uploaded/seed CSV is.
 MAX_DATASET_ROWS = 30000
+# Optional per-scenario network (`dataset.graph`, see network_graph.py) — written by
+# etl-tabular next to the normalized dataset, restricted to the rows that survived.
+GRAPH_KEY = "processed/graph.json"
 MODEL_PIPELINE_KEY = "model/pipeline.joblib"
 MODEL_EXPLAINER_KEY = "model/explainer.joblib"
 MODEL_METADATA_KEY = "model/metadata.json"
@@ -27,6 +30,14 @@ MODEL_PIPELINE_UPPER_KEY = "model/pipeline_upper.joblib"
 # trained next to the deployed one (see scenario_schema.TextChallenger).
 MODEL_CHALLENGER_PIPELINE_KEY = "model/challenger_pipeline.joblib"
 MODEL_CHALLENGER_EXPLAINER_KEY = "model/challenger_explainer.joblib"
+
+# `model.out_of_fold_scores` scenarios: every row's cross-fitted probability + SHAP
+# contributions (JSON, see training.core.training.out_of_fold_scores) — what the model
+# says about each row when that row's own label was never in its training data.
+MODEL_OUT_OF_FOLD_KEY = "model/out_of_fold.json"
+# Cross-fitting refits the selected model once per fold and explains every row — a
+# small-data feature (the rows it serves are all sent to the browser at once).
+MAX_OUT_OF_FOLD_ROWS = 5000
 
 # Key under which MODEL_METADATA_KEY's JSON stores each artifact's checksum (see
 # artifact_checksum below) — training writes it, prediction's model_cache verifies it

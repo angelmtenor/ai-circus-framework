@@ -234,14 +234,64 @@ export type RiskWatchlistExtra = {
   pillars: WatchlistPillar[];
   outcome_label: string;
 };
+// Mirrors scenario_schema.NetworkExplorerExtra — see NetworkExplorerView.tsx.
+export type NetworkEvent = { date: string; label: string; description?: string | null; url?: string | null };
+export type NetworkExplorerExtra = {
+  kind: "network_explorer";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  entity_noun: string;
+  name_column: string;
+  detail_columns: string[];
+  size_feature?: string | null;
+  tiers: WatchlistTier[];
+  pillars: WatchlistPillar[];
+  facts: string[];
+  outcome_label: string;
+  flag_from_tier?: string | null;
+  flow_edge_kind: string;
+  link_noun: string;
+  group_label: string;
+  entity_label: string;
+  context_label: string;
+  events: NetworkEvent[];
+  disclaimer?: string | null;
+};
 export type UiExtras =
   | RegionMapExtra
   | LivePlantExtra
   | ProcessOptimizerExtra
   | VoyageExplorerExtra
   | RiskWatchlistExtra
+  | NetworkExplorerExtra
   | TriageBoardExtra
   | ReadingRoomExtra;
+
+// Mirrors ai_circus_shared.network_graph.NetworkGraph — prediction's GET /graph/{slug}.
+export type GraphNode = {
+  id: string;
+  kind: "row" | "entity" | "context";
+  label?: string;
+  type?: string;
+  description?: string;
+  citation?: string;
+  group?: string;
+};
+export type GraphEdge = {
+  source: string;
+  target: string;
+  kind: string;
+  weight: number;
+  label?: string;
+  citation?: string;
+  series: Record<string, number>;
+};
+export type NetworkGraph = { version: 1; periods: string[]; nodes: GraphNode[]; edges: GraphEdge[] };
+
+// prediction's GET /model/{slug}/out-of-fold — every row scored by a model that never saw it.
+export type OutOfFoldRow = { id: string; probability: number; fold: number; contributions: Record<string, number> };
+export type OutOfFoldScores = { model_name: string; folds: number; roc_auc: number | null; rows: OutOfFoldRow[] };
 
 // Mirrors scenario_schema.py's TutorialConfig — drives TutorialView.tsx.
 export type TutorialWidget =
@@ -604,6 +654,16 @@ export async function datasetSample(
 
 export async function modelCard(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ModelCard> {
   const response = await fetch(`${baseUrl}/model/${scenarioSlug}/card`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+export async function networkGraph(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<NetworkGraph> {
+  const response = await fetch(`${baseUrl}/graph/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+export async function outOfFoldScores(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<OutOfFoldScores> {
+  const response = await fetch(`${baseUrl}/model/${scenarioSlug}/out-of-fold`, { headers: headers(accessToken) });
   return asJson(response);
 }
 

@@ -5,6 +5,7 @@ import { config } from "./config";
 import { PlotlyChart } from "./PlotlyChart";
 import type { PlotlyDatum, PlotlyLayout } from "./plotly";
 import { explainByFeature, featureLabel, type Record_ } from "./predictUtils";
+import { RISK_RAMP, surfaceMode, TIER_GLYPHS } from "./riskPalette";
 import { useTheme } from "./useTheme";
 import "./riskWatchlist.css";
 
@@ -26,11 +27,8 @@ import "./riskWatchlist.css";
  * glyph and label. Pillar bars use the blue↔red diverging pair.
  */
 
-const RAMP = {
-  dark: { base: "#465266", tiers: ["#9b3039", "#dd4a52", "#ff9a8f"], up: "#e66767", down: "#3987e5", ring: "#f3fbff" },
-  light: { base: "#aab4c3", tiers: ["#f08c8c", "#d9434a", "#9e1b24"], up: "#e34948", down: "#2a78d6", ring: "#0b1f33" },
-};
-const GLYPHS = ["●", "▲", "◆", "✖"];
+const RAMP = RISK_RAMP;
+const GLYPHS = TIER_GLYPHS;
 const TABLE_PAGE = 120;
 
 type Entity = {
@@ -140,7 +138,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
   const extras = scenario.ui_extras as RiskWatchlistExtra;
   const { theme } = useTheme();
   const bg = theme.cssVars["--bg"] ?? "#05070f";
-  const mode: "dark" | "light" = parseInt(bg.slice(1, 3), 16) < 0x80 ? "dark" : "light";
+  const mode = surfaceMode(bg);
   const colors = RAMP[mode];
   const tierColor = useCallback((tier: number) => (tier === 0 ? colors.base : colors.tiers[Math.min(tier - 1, 2)]), [colors]);
   const noun = extras.entity_noun;

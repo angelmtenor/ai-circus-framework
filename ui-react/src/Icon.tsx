@@ -32,6 +32,8 @@ const PATHS: Record<string, string> = {
   cap: "M2 9l10-5 10 5-10 5L2 9Zm4 2.2V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.8M22 9v6",
   building: "M4 21V4.5L14 3v18M14 8h6v13M2 21h20M7 7h1m3 0h1M7 10.5h1m3 0h1M7 14h1m3 0h1M17 12h1m-1 3.5h1M8 21v-3h3v3",
   shield: "M12 3l8 3v5.5c0 4.9-3.4 8.4-8 9.5-4.6-1.1-8-4.6-8-9.5V6l8-3Zm-3.5 9.5 2.5 2.5 4.5-5",
+  network:
+    "M6 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm12 3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM9 21.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM8.2 6.2l7.6 1.9M7 7.3l1.4 9.3M16.6 10.3l-6.1 7",
 };
 
 export type IconName = keyof typeof PATHS;

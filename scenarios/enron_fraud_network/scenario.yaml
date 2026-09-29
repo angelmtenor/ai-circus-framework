@@ -1,0 +1,269 @@
+# Seed definition for the "enron_fraud_network" scenario — link analysis for a
+# financial-crime investigation unit, on the public record of the Enron collapse: from
+# what 143 Enron insiders were paid and how they e-mailed each other, which profiles
+# resemble those of the 18 persons of interest — and why — drawn as the company's real
+# e-mail network together with the off-balance-sheet vehicles the Powers Report
+# documented.
+#
+# Real, public data (see scripts/prepare_enron_fraud_network_dataset.py and
+# sample_data/README.md): the court schedule of payments to insiders (ud120 dataset),
+# the FERC/CMU e-mail corpus (headers only, aggregated to monthly counts; colleagues
+# outside the pay table are anonymised) and the Powers Report (every entity relation is
+# quote-checked against it and cites its page). The label is the canonical ud120 list
+# of persons of interest — people indicted, who settled with the SEC or who testified
+# in exchange for immunity — which is not a list of convictions.
+
+slug: enron_fraud_network
+kind: tabular_ml
+title: "Enron: Follow the Network"
+description: >
+  Link analysis on the real Enron record: 143 insiders' pay and 250,000 e-mails turned
+  into an interactive network with the partnerships behind the scandal. Which profiles
+  resemble the 18 persons of interest, and why — then replay 1999-2002 and reveal the
+  answer.
+role_required: "scenario:enron_fraud_network"
+industry: public_sector
+icon: "🕸️"
+
+credits:
+  source: "Enron insider-pay schedule (ud120) · FERC/CMU Enron e-mail corpus · Powers Report (2002)"
+  url: "https://www.cs.cmu.edu/~enron/"
+  note: "Persons of interest: indicted, settled with the SEC or testified for immunity (USA Today, 2005) — not a list of convictions"
+
+chat:
+  context: >
+    A link-analysis workbench for a financial-crime investigation unit (a securities
+    regulator, a supervisor or a prosecutor's forensic team), built on the public record
+    of the Enron collapse (2001). One row per Enron insider (143 people from the court
+    schedule of payments to insiders): what they were paid in cash and stock, plus
+    label-free measures of their place in the company's real e-mail network (1999-2002,
+    headers only): how many colleagues they corresponded with both ways, PageRank and
+    betweenness percentiles among ~4,400 internal addresses, how clustered their
+    contacts are, and how much of their e-mail fell in the Aug-Dec 2001 crisis or
+    outside office hours. A classifier (logistic regression or small-data LightGBM,
+    chosen by cross-validated ROC AUC) scores how closely each profile resembles those
+    of the 18 persons of interest (POIs); the Network tab shows every person scored by a
+    model that never saw their own label (5-fold cross-fitting), next to the
+    partnerships documented by the Powers Report (LJM1, LJM2, Chewco, JEDI, the Raptors,
+    Southampton Place) and the auditor.
+    Guardrails — follow them strictly. A score is resemblance to a pay-and-e-mail
+    profile, nothing more: never state or imply that anyone committed a crime, and never
+    call anyone a suspect or fraudster. "Person of interest" means indicted, settled
+    with the SEC (usually without admitting wrongdoing) or testified in exchange for
+    immunity; it is not a conviction (some charges were dismissed, one conviction was
+    vacated on the defendant's death). A high score for someone who was never charged is
+    a model false positive to be explained, not evidence. Only cite relations shipped
+    with the scenario (Powers Report pages, the court schedule) and do not speculate
+    about named people beyond them.
+    Be precise about the limits: 143 rows and 18 positives, so the hold-out holds ~4
+    POIs and its AUC swings wildly — quote the cross-validated AUC with its spread; the
+    e-mail corpus holds the mailboxes FERC collected, so e-mail volume, the crisis share
+    and even "having an e-mail trail" partly reflect that collection (every POI has
+    some trail; 32 others, mostly non-employee directors, have none); ud120's classic
+    "e-mails with POIs" counts were dropped because they are computed from the label.
+    Pay alone carries most of the signal (cross-validated AUC ~0.82); the network adds
+    a second, label-free view (~0.73 on its own).
+  sample_questions:
+    - "What separates the persons of interest from everyone else?"
+    - "How much does the e-mail network add over pay alone?"
+    - "Why is a high score not an accusation?"
+    - "Who were the required reviewers of the LJM transactions?"
+    - "What happened to e-mail volume around October 2001?"
+    - "How reliable is a hold-out with only four positives?"
+
+dataset:
+  bucket: "scenario-enron-fraud-network"
+  raw_object: "raw/enron_fraud_network.csv"
+  seed_file: "sample_data/enron_fraud_network.csv"
+  index_col: "person_id"
+  target: "poi"
+  protected_features_excluded: []
+  # Who each person is — shown in every view, never a model input.
+  display_columns: ["name", "role"]
+  # The network the Network tab draws: every person, the curated partnerships and
+  # gatekeepers, anonymised colleagues who connect them, monthly e-mail counts per tie.
+  graph:
+    seed_file: "sample_data/enron_network.json"
+    raw_object: "raw/enron_network.json"
+  feature_columns:
+    - salary
+    - bonus
+    - long_term_incentive
+    - deferred_income
+    - deferral_payments
+    - loan_advances
+    - other
+    - expenses
+    - director_fees
+    - total_payments
+    - exercised_stock_options
+    - restricted_stock
+    - restricted_stock_deferred
+    - total_stock_value
+    - bonus_to_salary
+    - exercised_share
+    - stock_to_cash
+    - emails_sent
+    - emails_received
+    - distinct_contacts
+    - pagerank_pctl
+    - betweenness_pctl
+    - clustering
+    - crisis_activity_share
+    - after_hours_share
+
+  feature_schema:
+    salary:
+      {type: numeric, label: "Salary ($)", min: 0, max: 1200000, default: 210000, step: 1000,
+       info: "Base salary paid in the period covered by the court's schedule of payments to insiders. A dash in the schedule (no payment) is 0."}
+    bonus:
+      {type: numeric, label: "Bonus ($)", min: 0, max: 8000000, default: 300000, step: 10000,
+       info: "Annual cash incentive."}
+    long_term_incentive:
+      {type: numeric, label: "Long-term incentive ($)", min: 0, max: 5200000, default: 0, step: 10000,
+       info: "Cash from multi-year incentive programmes tied to 'long-term success'."}
+    deferred_income:
+      {type: numeric, label: "Deferred income ($)", min: -3600000, max: 0, default: 0, step: 10000,
+       info: "Salary and incentives voluntarily deferred (recorded as a negative payment)."}
+    deferral_payments:
+      {type: numeric, label: "Deferral payments ($)", min: 0, max: 6500000, default: 0, step: 10000,
+       info: "Distributions from deferred-compensation plans — e.g. on leaving, or in-service withdrawals."}
+    loan_advances:
+      {type: numeric, label: "Loan advances ($)", min: 0, max: 82000000, default: 0, step: 100000,
+       info: "Company loans to the insider, excluding repayments. Only three people had any — the Chairman's reached $81.5M (repaid with stock)."}
+    other:
+      {type: numeric, label: "Other payments ($)", min: 0, max: 10400000, default: 900, step: 1000,
+       info: "Severance, consulting, relocation, tax advances, international-assignment allowances and similar."}
+    expenses:
+      {type: numeric, label: "Expense reimbursements ($)", min: 0, max: 230000, default: 22000, step: 500,
+       info: "Business expenses reimbursed (may include consulting fees)."}
+    director_fees:
+      {type: numeric, label: "Director fees ($)", min: 0, max: 130000, default: 0, step: 500,
+       info: "Cash or stock paid to non-employee directors for board service."}
+    total_payments:
+      {type: numeric, label: "Total payments ($)", min: 0, max: 104000000, default: 920000, step: 10000,
+       info: "Sum of every payment above — what the insider received in cash."}
+    exercised_stock_options:
+      {type: numeric, label: "Exercised stock options ($)", min: 0, max: 35000000, default: 610000, step: 10000,
+       info: "Gain on stock options exercised (market value above the exercise price on the day) — cashing out."}
+    restricted_stock:
+      {type: numeric, label: "Restricted stock ($)", min: 0, max: 15000000, default: 360000, step: 10000,
+       info: "Value of restricted shares released when they vested."}
+    restricted_stock_deferred:
+      {type: numeric, label: "Restricted stock deferred ($)", min: -2700000, max: 0, default: 0, step: 10000,
+       info: "Restricted stock whose release was voluntarily deferred (a negative entry)."}
+    total_stock_value:
+      {type: numeric, label: "Total stock value ($)", min: 0, max: 50000000, default: 990000, step: 10000,
+       info: "Exercised options + restricted stock − deferred restricted stock."}
+    bonus_to_salary:
+      {type: numeric, label: "Bonus ÷ salary", min: 0, max: 20, default: 1.2, step: 0.1,
+       info: "How many salaries the bonus was worth (0 without a salary; capped at 20)."}
+    exercised_share:
+      {type: numeric, label: "Share of stock value cashed out", min: 0, max: 1, default: 0.63, step: 0.01,
+       info: "Exercised options as a share of total stock value — 1 means everything came from exercising options."}
+    stock_to_cash:
+      {type: numeric, label: "Stock value ÷ cash payments", min: 0, max: 200, default: 0.55, step: 0.05,
+       info: "How stock-heavy the insider's pay was (capped at 200)."}
+    emails_sent:
+      {type: numeric, label: "E-mails sent", min: 0, max: 4000, default: 9, step: 1,
+       info: "Distinct messages sent 1999-2002 in the FERC/CMU corpus. Depends heavily on whether FERC collected the person's own mailbox."}
+    emails_received:
+      {type: numeric, label: "E-mails received", min: 0, max: 6500, default: 160, step: 1,
+       info: "Distinct messages received (to or cc) 1999-2002, found in any collected mailbox."}
+    distinct_contacts:
+      {type: numeric, label: "Two-way contacts", min: 0, max: 300, default: 7, step: 1,
+       info: "Internal colleagues the person e-mailed and heard back from — ties, not one-way mailings (broadcasts to more than 50 people excluded)."}
+    pagerank_pctl:
+      {type: numeric, label: "PageRank percentile", min: 0, max: 100, default: 65, step: 0.5,
+       info: "Percentile among ~4,400 internal addresses of the company-wide two-way e-mail network: how much of the network's attention flows to this person (0 = not in it). Label-free."}
+    betweenness_pctl:
+      {type: numeric, label: "Betweenness percentile", min: 0, max: 100, default: 65, step: 0.5,
+       info: "Percentile of how often the person sits on the shortest path between two colleagues — a broker between groups. Label-free."}
+    clustering:
+      {type: numeric, label: "Contact clustering", min: 0, max: 1, default: 0.13, step: 0.01,
+       info: "How much the person's contacts also e-mail each other (1 = a closed circle, 0 = contacts who never talk to each other)."}
+    crisis_activity_share:
+      {type: numeric, label: "Crisis-period share", min: 0, max: 1, default: 0, step: 0.01,
+       info: "Share of the person's sent e-mail dated August-December 2001, when the collapse unfolded. Partly reflects which mailboxes were collected and how long they were kept."}
+    after_hours_share:
+      {type: numeric, label: "After-hours share", min: 0, max: 1, default: 0.2, step: 0.01,
+       info: "Share of sent e-mail written before 7:00, after 20:00 or at weekends (Houston time)."}
+
+  default_charts:
+    - {type: scatter, x: total_payments, y: total_stock_value, color_by: poi}
+    - {type: scatter, x: pagerank_pctl, y: betweenness_pctl, color_by: poi}
+    - {type: histogram, x: exercised_share, color_by: poi}
+    - {type: histogram, x: distinct_contacts, color_by: poi}
+    - {type: scatter, x: bonus, y: exercised_stock_options, color_by: poi}
+    - {type: heatmap}
+
+model:
+  task_type: classification
+  candidates: ["logistic_regression", "lightgbm_small_data"]
+  accuracy_gain_threshold_for_complexity: 0.01
+  # 18 positives in 143: accuracy would reward "nobody". ROC AUC ranks how well the
+  # model orders profiles; 5-fold CV on the training split keeps the comparison sane.
+  selection_metric: roc_auc
+  cv_folds: 5
+  # The Network tab reveals the real outcome next to every score — only honest for
+  # scores from models that never saw that person's label.
+  out_of_fold_scores: true
+  explainability: shap
+  target_label: "Person of interest"
+  target_description: "Whether the person is one of the 18 persons of interest of the public Enron record (indicted, settled with the SEC or testified for immunity) — not a conviction."
+  target_value_labels: {"0": "Not a person of interest", "1": "Person of interest"}
+
+ui_extras:
+  kind: network_explorer
+  tab_label: "Network"
+  title: "Follow the network · Enron 1999-2002"
+  subtitle: >
+    Every glowing node is a real Enron insider, coloured by how closely their pay and
+    e-mail profile resembles the persons of interest — scored by a model that never saw
+    their own label. Lines are two-way e-mail ties; hexagons are the partnerships and
+    gatekeepers of the Powers Report. Pick a person, trace a path, replay the months to
+    the bankruptcy — then reveal the public record.
+  entity_noun: person
+  name_column: name
+  detail_columns: [role]
+  size_feature: total_payments
+  facts: [total_payments, total_stock_value, exercised_share, distinct_contacts, pagerank_pctl, betweenness_pctl, crisis_activity_share]
+  outcome_label: "Person of interest (charged, settled or immunity)"
+  flag_from_tier: "Review"
+  flow_edge_kind: email
+  link_noun: "e-mails"
+  group_label: "Community"
+  entity_label: "entity"
+  context_label: "unscored colleague"
+  tiers:
+    - {label: "Background", min_probability: 0.0, description: "Profile unlike the persons of interest."}
+    - {label: "Elevated", min_probability: 0.15, description: "Some resemblance — worth a look in context."}
+    - {label: "Review", min_probability: 0.35, description: "Strong resemblance — an analyst should review the profile and its links."}
+    - {label: "Priority", min_probability: 0.6, description: "Very close to the persons-of-interest profile — review first."}
+  pillars:
+    - {label: "Cash pay", features: [salary, bonus, long_term_incentive, deferred_income, deferral_payments, loan_advances, other, expenses, director_fees, total_payments, bonus_to_salary]}
+    - {label: "Stock cash-out", features: [exercised_stock_options, restricted_stock, restricted_stock_deferred, total_stock_value, exercised_share, stock_to_cash]}
+    - {label: "Network position", features: [distinct_contacts, pagerank_pctl, betweenness_pctl, clustering]}
+    - {label: "E-mail activity", features: [emails_sent, emails_received, crisis_activity_share, after_hours_share]}
+  events:
+    - {date: "2001-02-12", label: "Skilling becomes CEO", description: "Jeffrey Skilling succeeds Kenneth Lay as chief executive; Lay remains Chairman."}
+    - {date: "2001-08-14", label: "Skilling resigns", description: "Skilling resigns after six months as CEO; Lay reassumes the position."}
+    - {date: "2001-08", label: "Watkins letter", description: "Shortly after the resignation, Sherron Watkins sends Lay an anonymous letter warning about Enron's accounting (Powers Report, section VII.C)."}
+    - {date: "2001-10-16", label: "Q3 charges", description: "Enron announces a $544 million after-tax charge and a $1.2 billion reduction in shareholders' equity, both related to LJM2 transactions."}
+    - {date: "2001-10-22", label: "SEC inquiry", description: "Enron discloses the SEC's request for information about the LJM2 related-party transactions."}
+    - {date: "2001-10-24", label: "CFO replaced", description: "Enron announces that its CFO will take a leave of absence and be replaced."}
+    - {date: "2001-11-08", label: "Restatement", description: "Enron announces it will restate its 1997-2001 financial statements because of accounting errors involving LJM1 and Chewco."}
+    - {date: "2001-12-02", label: "Chapter 11", description: "Enron files for bankruptcy protection — then the largest in US history."}
+    - {date: "2002-02-01", label: "Powers Report", description: "The Board's Special Investigative Committee delivers its report on the related-party partnerships.", url: "https://www.sec.gov/Archives/edgar/data/0001024401/000090951802000089/big.txt"}
+  disclaimer: >
+    Research demo on public records. A score measures resemblance to the pay-and-e-mail
+    profile of 18 persons of interest; it is not evidence of wrongdoing. Persons of
+    interest include people who settled without admitting wrongdoing or testified under
+    immunity — not all were convicted. A high score for anyone else is a model false
+    positive.
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant
