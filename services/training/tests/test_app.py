@@ -375,6 +375,20 @@ def test_main_writes_checksummed_out_of_fold_scores_when_asked(
     assert len(json.loads(data)["rows"]) == len(df)
 
 
+def test_main_writes_probability_only_out_of_fold_scores_above_the_explained_row_cap(
+    monkeypatch: pytest.MonkeyPatch, fake_definition: object
+) -> None:
+    fake_definition.model = fake_definition.model.model_copy(update={"out_of_fold_scores": True, "cv_folds": 3})  # type: ignore[attr-defined]
+    df = _synthetic_normalized_dataset()
+    monkeypatch.setattr(app, "MAX_OUT_OF_FOLD_EXPLAINED_ROWS", len(df) - 1)
+
+    store = _run_main(monkeypatch, fake_definition, df)
+
+    data = json.loads(store.objects["demo", MODEL_OUT_OF_FOLD_KEY])
+    assert data["explained"] is False and len(data["rows"]) == len(df)
+    assert all(row["contributions"] == {} for row in data["rows"].values())
+
+
 def test_main_skips_out_of_fold_scores_when_a_class_is_smaller_than_the_folds(
     monkeypatch: pytest.MonkeyPatch, fake_definition: object
 ) -> None:

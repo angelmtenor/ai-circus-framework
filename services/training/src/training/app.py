@@ -26,6 +26,7 @@ from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
+    MAX_OUT_OF_FOLD_EXPLAINED_ROWS,
     MAX_OUT_OF_FOLD_ROWS,
     MODEL_CHALLENGER_EXPLAINER_KEY,
     MODEL_CHALLENGER_PIPELINE_KEY,
@@ -297,8 +298,17 @@ def _out_of_fold(
             folds,
         )
         return None
-    scores = out_of_fold_scores(model_name, x, y, numeric_features, categorical_features, folds, text_features)
-    logger.success("Out-of-fold scores for scenario={}: {} rows, ROC AUC {}", slug, len(x), scores["roc_auc"])
+    explain = len(x) <= MAX_OUT_OF_FOLD_EXPLAINED_ROWS
+    scores = out_of_fold_scores(
+        model_name, x, y, numeric_features, categorical_features, folds, text_features, explain=explain
+    )
+    logger.success(
+        "Out-of-fold scores for scenario={}: {} rows, ROC AUC {}{}",
+        slug,
+        len(x),
+        scores["roc_auc"],
+        "" if explain else " (probabilities only)",
+    )
     return scores
 
 

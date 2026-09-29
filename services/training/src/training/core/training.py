@@ -429,6 +429,7 @@ def out_of_fold_scores(
     categorical_features: list[str],
     folds: int,
     text_features: Sequence[str] = (),
+    explain: bool = True,
 ) -> dict[str, Any]:
     """Every row's probability and SHAP contributions from a copy of the selected
     model trained on the *other* folds only (stratified k-fold cross-fitting over the
@@ -438,7 +439,8 @@ def out_of_fold_scores(
     same rows are close to memorised (every positive near 1); these are the honest
     ones to show next to the real outcome. Contributions use prediction's format
     (transformed column -> value; a text feature's terms summed into one entry), so
-    ui-react explains them exactly like a live /predict response.
+    ui-react explains them exactly like a live /predict response. `explain=False`
+    (large datasets) skips SHAP: every row's contributions are empty.
     """
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=0)
     rows: dict[str, dict[str, Any]] = {}
@@ -447,16 +449,17 @@ def out_of_fold_scores(
         estimator = CANDIDATE_ESTIMATORS["classification"][estimator_name]()
         pipeline = build_pipeline(numeric_features, categorical_features, estimator, text_features)
         pipeline.fit(x.iloc[train_index], y.iloc[train_index])
-        explainer = build_explainer(pipeline, x.iloc[train_index])
         held_out = x.iloc[test_index]
         proba = pipeline.predict_proba(held_out)[:, 1]
         probabilities[test_index] = proba
-        values = shap_matrix(explainer, pipeline.named_steps["preprocessor"].transform(held_out))
-        names = transformed_feature_names(pipeline)
         groups: dict[str, list[int]] = {}
-        for j, name in enumerate(names):
-            column = original_feature(name, list(x.columns), text_features)
-            groups.setdefault(column if column in text_features else name, []).append(j)
+        values = np.empty((len(held_out), 0))
+        if explain:
+            explainer = build_explainer(pipeline, x.iloc[train_index])
+            values = shap_matrix(explainer, pipeline.named_steps["preprocessor"].transform(held_out))
+            for j, name in enumerate(transformed_feature_names(pipeline)):
+                column = original_feature(name, list(x.columns), text_features)
+                groups.setdefault(column if column in text_features else name, []).append(j)
         for i, row_id in enumerate(held_out.index):
             rows[str(row_id)] = {
                 "probability": round(float(proba[i]), 4),
@@ -467,6 +470,7 @@ def out_of_fold_scores(
     return {
         "model_name": estimator_name,
         "folds": folds,
+        "explained": explain,
         "roc_auc": round(float(roc_auc_score(positive, probabilities)), 4) if positive.nunique() == 2 else None,
         "rows": rows,
     }

@@ -291,9 +291,28 @@ def test_out_of_fold_endpoint_serves_every_rows_cross_fitted_score() -> None:
     assert body == {
         "model_name": "lightgbm_small_data",
         "folds": 5,
+        "explained": True,
         "roc_auc": 0.81,
         "rows": [{"id": "LAY KENNETH L", "probability": 0.61, "fold": 2, "contributions": {"num__salary": 0.05}}],
     }
+
+
+def test_out_of_fold_endpoint_flags_probability_only_scores() -> None:
+    """A large dataset's cross-fitted scores carry no SHAP — the response says so."""
+    scores = {
+        "model_name": "lightgbm",
+        "folds": 5,
+        "explained": False,
+        "roc_auc": 0.9,
+        "rows": {"42": {"probability": 0.3, "fold": 1, "contributions": {}}},
+    }
+    artifacts = ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata={}, out_of_fold=scores)
+    client, _ = _graph_app(SimpleNamespace(slug="shipments"), artifacts=artifacts)
+
+    body = client.get("/model/shipments/out-of-fold").json()
+
+    assert body["explained"] is False
+    assert body["rows"] == [{"id": "42", "probability": 0.3, "fold": 1, "contributions": {}}]
 
 
 def test_out_of_fold_endpoint_404s_when_the_model_has_none() -> None:
