@@ -99,6 +99,22 @@ class ChartSpec(BaseModel):
     agg: Literal["count", "sum", "mean", "min", "max"] = "count"
 
 
+class TabularGraph(BaseModel):
+    """A network shipped next to the rows (see network_graph.py for the file format):
+    `seed_file` is the tracked JSON under the scenario directory, bootstrapped by
+    etl-tabular into the tenant's `raw_object` like the dataset itself."""
+
+    seed_file: str
+    raw_object: str
+
+    @model_validator(mode="after")
+    def _json_paths_inside_the_scenario(self) -> TabularGraph:
+        for path in (self.seed_file, self.raw_object):
+            if not path.endswith(".json") or ".." in path.split("/") or path.startswith("/"):
+                raise ValueError(f"dataset.graph path {path!r} must be a relative .json path without '..'.")
+        return self
+
+
 class TabularDataset(BaseModel):
     """Dataset config for a `tabular_ml` scenario."""
 
@@ -119,6 +135,15 @@ class TabularDataset(BaseModel):
     # the normalized dataset so the UI can show *who* a row is — never a model input
     # (training reads `feature_columns` only). Must be non-null in the raw data.
     display_columns: list[str] = []
+    # Optional network between rows (and curated entities) — drawn by the
+    # `network_explorer` extra tab; the model itself only ever reads feature_columns.
+    graph: TabularGraph | None = None
+
+    @model_validator(mode="after")
+    def _graph_has_its_own_raw_object(self) -> TabularDataset:
+        if self.graph is not None and self.graph.raw_object == self.raw_object:
+            raise ValueError("dataset.graph.raw_object must differ from dataset.raw_object.")
+        return self
 
     @model_validator(mode="after")
     def _display_columns_are_not_model_inputs(self) -> TabularDataset:
@@ -222,11 +247,20 @@ class TabularModel(BaseModel):
     target_value_labels: dict[str, str] | None = None
     # Free-text scenarios only — see TextChallenger.
     text_challenger: TextChallenger | None = None
+    # Small classification datasets only (<= tabular_ml.MAX_OUT_OF_FOLD_ROWS rows): also
+    # score and SHAP-explain every row with a copy of the selected model that never saw
+    # that row's label (k-fold cross-fitting, k = cv_folds or 5), served by prediction's
+    # GET /model/{slug}/out-of-fold. The deployed model is refit on every row, so on a
+    # few hundred rows its own scores of those rows are close to memorised — a view that
+    # reveals the real outcome next to the scores (network_explorer) must use these.
+    out_of_fold_scores: bool = False
 
     @model_validator(mode="after")
     def _selection_settings_match_task(self) -> TabularModel:
         if self.cv_folds == 1:
             raise ValueError("model.cv_folds must be 0 (single hold-out) or >= 2.")
+        if self.out_of_fold_scores and self.task_type != "classification":
+            raise ValueError("model.out_of_fold_scores is only available for classification.")
         allowed = {"classification": {"accuracy", "roc_auc"}, "regression": {"r2"}}[self.task_type]
         if self.selection_metric is not None and self.selection_metric not in allowed:
             raise ValueError(f"model.selection_metric {self.selection_metric!r} is not valid for {self.task_type}.")
@@ -586,6 +620,56 @@ class RiskWatchlistExtra(BaseModel):
     outcome_label: str = "Adverse outcome"
 
 
+class NetworkEvent(BaseModel):
+    """A dated milestone pinned on the network explorer's timeline."""
+
+    # "YYYY-MM" or "YYYY-MM-DD" — a string, not a date: platform-registry stores
+    # ui_extras as JSON (model_dump(), not mode="json").
+    date: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?$")
+    label: str = Field(max_length=80)
+    description: str | None = None
+    url: str | None = None  # a public source for the event
+
+
+class NetworkExplorerExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario that
+    ships a network (`dataset.graph`): every row is scored and drawn as a node of an
+    interactive force-directed graph — coloured by risk tier, sized by `size_feature` —
+    together with the graph's curated entities and unscored context nodes. Edges of
+    `flow_edge_kind` carry a per-period `series` the timeline replays (with `events`
+    pinned on it); every other edge kind is drawn as a relation. Selecting a node
+    explains it (SHAP rolled into `pillars`), lists its strongest links and the
+    percentile of its `facts` among its peers; the real outcome can be revealed as a
+    backtest. See ui-react's NetworkExplorerView.tsx — the single generic renderer; the
+    wording fields are its only domain vocabulary.
+    """
+
+    kind: Literal["network_explorer"] = "network_explorer"
+    tab_label: str = "Network"
+    title: str
+    subtitle: str | None = None
+    entity_noun: str = "person"  # singular, what a row is
+    name_column: str  # a dataset.display_columns entry
+    detail_columns: list[str] = []  # display_columns shown under the name, e.g. role
+    size_feature: str | None = None  # numeric feature sizing each row's node
+    tiers: list[WatchlistTier] = Field(min_length=2)
+    pillars: list[WatchlistPillar] = []
+    # Numeric features listed in the dossier with their percentile among all rows.
+    facts: list[str] = []
+    outcome_label: str = "Adverse outcome"
+    # The tier (label) from which a row counts as "flagged" in the backtest reveal —
+    # None = the top tier only.
+    flag_from_tier: str | None = None
+    flow_edge_kind: str = "email"  # the graph edge kind with a per-period series
+    link_noun: str = "links"  # plural wording of one flow edge's weight, e.g. "e-mails"
+    group_label: str = "Community"  # wording of the graph nodes' `group`
+    entity_label: str = "entity"  # wording of the graph's curated `entity` nodes
+    context_label: str = "unscored contact"  # wording of its `context` nodes
+    events: list[NetworkEvent] = Field(default=[], max_length=30)
+    # Shown on the tab — e.g. what a high score does and does not mean.
+    disclaimer: str | None = None
+
+
 # A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
 # dataset_preview = the first rows; class_balance = the target's class split;
 # model_card = the training leaderboard + selection protocol; roc_curve /
@@ -676,6 +760,7 @@ UiExtras = Annotated[
     | ProcessOptimizerExtra
     | VoyageExplorerExtra
     | RiskWatchlistExtra
+    | NetworkExplorerExtra
     | TriageBoardExtra
     | ReadingRoomExtra,
     Field(discriminator="kind"),
@@ -683,7 +768,14 @@ UiExtras = Annotated[
 
 # ui_extras kinds meant for each scenario kind — a tabular renderer given a
 # deep_learning scenario (or vice versa) would have none of the data it needs.
-_TABULAR_UI_EXTRAS = (RegionMapExtra, LivePlantExtra, ProcessOptimizerExtra, VoyageExplorerExtra, RiskWatchlistExtra)
+_TABULAR_UI_EXTRAS = (
+    RegionMapExtra,
+    LivePlantExtra,
+    ProcessOptimizerExtra,
+    VoyageExplorerExtra,
+    RiskWatchlistExtra,
+    NetworkExplorerExtra,
+)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
 
@@ -1484,14 +1576,50 @@ class ScenarioDefinition(BaseModel):
         unknown = sorted(set(named) - display)
         if unknown:
             raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
-        thresholds = [tier.min_probability for tier in extras.tiers]
+        self._check_tiers_and_pillars(extras.tiers, extras.pillars, where)
+        return self
+
+    def _check_tiers_and_pillars(self, tiers: list[WatchlistTier], pillars: list[WatchlistPillar], where: str) -> None:
+        """Tiers must cover every probability (start at 0, strictly increase); a
+        pillar may only roll up real features, each into one pillar."""
+        assert self.dataset is not None
+        thresholds = [tier.min_probability for tier in tiers]
         if thresholds[0] != 0.0 or thresholds != sorted(set(thresholds)):
             raise ValueError(f"{where} tiers must start at 0.0 and strictly increase, got {thresholds}.")
-        pillar_features = [f for pillar in extras.pillars for f in pillar.features]
+        pillar_features = [f for pillar in pillars for f in pillar.features]
         unknown = sorted(set(pillar_features) - set(self.dataset.feature_columns))
         duplicated = sorted({f for f in pillar_features if pillar_features.count(f) > 1})
         if unknown or duplicated:
             raise ValueError(f"{where} pillars: unknown features {unknown}, features in two pillars {duplicated}.")
+
+    @model_validator(mode="after")
+    def _network_explorer_has_a_graph_and_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `network_explorer` block has no network to draw, names a
+        column that isn't there (or isn't numeric), or leaves a probability band with
+        no tier — ui-react's NetworkExplorerView would otherwise render an empty stage
+        or silently drop part of a node's explanation."""
+        extras = self.ui_extras
+        if not isinstance(extras, NetworkExplorerExtra) or self.dataset is None:
+            return self
+        where = "ui_extras.network_explorer"
+        if self.dataset.graph is None:
+            raise ValueError(f"{where} requires a `dataset.graph` (the network to draw).")
+        if self.model is None or self.model.task_type != "classification":
+            raise ValueError(f"{where} requires a classification model (a probability per node).")
+        if not self.model.out_of_fold_scores:
+            raise ValueError(
+                f"{where} requires model.out_of_fold_scores: it reveals every row's real outcome next to its "
+                "score, which is only honest for scores from models that never saw that row."
+            )
+        for feature in (extras.size_feature, *extras.facts):
+            if feature is not None:
+                self._feature_of_type(feature, "numeric", where)
+        unknown = sorted({extras.name_column, *extras.detail_columns} - set(self.dataset.display_columns))
+        if unknown:
+            raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
+        self._check_tiers_and_pillars(extras.tiers, extras.pillars, where)
+        if extras.flag_from_tier is not None and extras.flag_from_tier not in {t.label for t in extras.tiers}:
+            raise ValueError(f"{where} flag_from_tier {extras.flag_from_tier!r} is not one of the tiers' labels.")
         return self
 
     @model_validator(mode="after")

@@ -972,3 +972,87 @@ def test_risk_watchlist_rejects_unknown_columns_bad_tiers_and_overlapping_pillar
         _with(bank, ui_extras={**extras, "pillars": pillars})
     with pytest.raises(ValidationError, match="requires a classification model"):
         _with(bank, model={**bank.model.model_dump(), "task_type": "regression", "selection_metric": None})  # type: ignore[union-attr]
+
+
+# --- enron_fraud_network: dataset.graph + network_explorer + out-of-fold scores ---
+
+
+def test_repo_enron_fraud_network_has_a_valid_network_explorer() -> None:
+    enron = _repo_scenario("enron_fraud_network")
+    assert enron.industry == "public_sector"
+    assert enron.ui_extras is not None and enron.ui_extras.kind == "network_explorer"
+    assert enron.dataset is not None and enron.dataset.graph is not None
+    assert enron.model is not None and enron.model.out_of_fold_scores and enron.model.selection_metric == "roc_auc"
+
+
+def test_repo_enron_graph_matches_its_dataset() -> None:
+    """The shipped graph parses, names exactly the dataset's people, and the CSV has no
+    missing value (etl-tabular's clean() would silently drop that row)."""
+    import csv
+    from pathlib import Path
+
+    from ai_circus_shared.network_graph import parse_graph
+
+    enron = _repo_scenario("enron_fraud_network")
+    assert enron.dataset is not None and enron.dataset.graph is not None
+    scenario_dir = Path(__file__).parents[3] / "scenarios/enron_fraud_network"
+    graph = parse_graph((scenario_dir / enron.dataset.graph.seed_file).read_bytes())
+    with (scenario_dir / enron.dataset.seed_file).open() as handle:
+        rows = list(csv.DictReader(handle))
+    columns = [
+        enron.dataset.index_col,
+        *enron.dataset.display_columns,
+        *enron.dataset.feature_columns,
+        enron.dataset.target,
+    ]
+    assert all(row[c] not in ("", None) for row in rows for c in columns)
+    assert {n.id for n in graph.nodes if n.kind == "row"} == {row[enron.dataset.index_col] for row in rows}
+    extras = enron.ui_extras
+    assert extras is not None and extras.kind == "network_explorer"
+    assert extras.flow_edge_kind in {e.kind for e in graph.edges}
+    assert all(e.citation for e in graph.edges if e.kind == "role")
+    assert all(n.label == "Unscored colleague" for n in graph.nodes if n.kind == "context")
+
+
+def test_network_explorer_requires_a_graph_out_of_fold_scores_and_real_columns() -> None:
+    enron = _repo_scenario("enron_fraud_network")
+    extras = enron.ui_extras.model_dump()  # type: ignore[union-attr]
+    dataset = enron.dataset.model_dump()  # type: ignore[union-attr]
+    model = enron.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match=r"requires a `dataset\.graph`"):
+        _with(enron, dataset={**dataset, "graph": None})
+    with pytest.raises(ValidationError, match=r"requires model\.out_of_fold_scores"):
+        _with(enron, model={**model, "out_of_fold_scores": False})
+    with pytest.raises(ValidationError, match=r"not dataset\.display_columns"):
+        _with(enron, ui_extras={**extras, "detail_columns": ["salary"]})
+    with pytest.raises(ValidationError, match=r"not among dataset\.feature_columns"):
+        _with(enron, ui_extras={**extras, "facts": ["name"]})
+    with pytest.raises(ValidationError, match="strictly increase"):
+        _with(enron, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
+    with pytest.raises(ValidationError, match="in two pillars"):
+        _with(enron, ui_extras={**extras, "pillars": [*extras["pillars"], {"label": "x", "features": ["salary"]}]})
+    with pytest.raises(ValidationError, match="flag_from_tier"):
+        _with(enron, ui_extras={**extras, "flag_from_tier": "Nope"})
+    with pytest.raises(ValidationError, match="pattern"):
+        _with(enron, ui_extras={**extras, "events": [{"date": "2001-13-01", "label": "x"}]})
+
+
+def test_out_of_fold_scores_are_classification_only() -> None:
+    from ai_circus_shared.scenario_schema import TabularModel
+
+    base = {"task_type": "regression", "candidates": ["lightgbm"], "accuracy_gain_threshold_for_complexity": 0.01}
+    with pytest.raises(ValidationError, match="only available for classification"):
+        TabularModel(**base, target_label="y", out_of_fold_scores=True)  # type: ignore[arg-type]
+
+
+def test_dataset_graph_paths_must_be_relative_json_and_distinct() -> None:
+    from ai_circus_shared.scenario_schema import TabularGraph
+
+    TabularGraph(seed_file="sample_data/g.json", raw_object="raw/g.json")
+    for bad in ("../g.json", "/abs/g.json", "sample_data/g.csv"):
+        with pytest.raises(ValidationError, match=r"relative \.json path"):
+            TabularGraph(seed_file=bad, raw_object="raw/g.json")
+    enron = _repo_scenario("enron_fraud_network")
+    dataset = enron.dataset.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="must differ"):
+        _with(enron, dataset={**dataset, "raw_object": "raw/enron_network.json"})
