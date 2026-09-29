@@ -77,7 +77,7 @@ one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, `risk_watchlist`, `network_explorer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 An `assisted_form` whose `form` has `sections` renders as an official paper sheet
@@ -97,10 +97,11 @@ per-period `series`): etl-tabular validates it and restricts it to the cleaned r
 (`processed/graph.json`), prediction serves it at `GET /graph/{slug}` (same entitlement,
 fallback-org and TTL cache as the dataset sample) and the `network_explorer` tab draws it
 (canvas + d3-force, `networkScene.ts`). Graph position reaches the model only as ordinary
-numeric features computed offline. `model.out_of_fold_scores` (small classification datasets)
+numeric features computed offline. `model.out_of_fold_scores` (classification only)
 makes training cross-fit every row's probability + SHAP with the selected model — served at
-`GET /model/{slug}/out-of-fold` — because the deployed model is refit on every row and its own
-scores of them are near-memorised; `network_explorer` requires it (it reveals real outcomes).
+`GET /model/{slug}/out-of-fold` (per-row SHAP up to 5,000 rows, probabilities only above) — because
+the deployed model is refit on every row and its own scores of them are optimistic; `network_explorer`
+and `shipment_globe` require it (they reveal real outcomes).
 
 **Tenancy & entitlements.** `platform-registry` owns tenants/scenarios/entitlements in Postgres;
 every other service calls its entitlement check (`ai_circus_shared.auth.resolve_caller_identity`,
