@@ -77,7 +77,7 @@ one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+`process_optimizer`, `risk_watchlist`, `network_explorer`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 An `assisted_form` whose `form` has `sections` renders as an official paper sheet
@@ -91,6 +91,16 @@ scenario may add a `model.text_challenger` (sentence embeddings from llm-gateway
 cached from the host GPU — the cluster's CPU embedder is ~0.6 s/text; served as `/predict`
 `model: "challenger"`, never auto-promoted) and a `rubric_check` (assistant `POST /rubric-check`: the
 active LLM reads a *description of behaviour* against a YAML rubric — never judges named people).
+A tabular scenario may ship a network next to its rows (`dataset.graph`, contract
+`ai_circus_shared.network_graph.NetworkGraph`: `row`/`entity`/`context` nodes, typed edges with
+per-period `series`): etl-tabular validates it and restricts it to the cleaned rows
+(`processed/graph.json`), prediction serves it at `GET /graph/{slug}` (same entitlement,
+fallback-org and TTL cache as the dataset sample) and the `network_explorer` tab draws it
+(canvas + d3-force, `networkScene.ts`). Graph position reaches the model only as ordinary
+numeric features computed offline. `model.out_of_fold_scores` (small classification datasets)
+makes training cross-fit every row's probability + SHAP with the selected model — served at
+`GET /model/{slug}/out-of-fold` — because the deployed model is refit on every row and its own
+scores of them are near-memorised; `network_explorer` requires it (it reveals real outcomes).
 
 **Tenancy & entitlements.** `platform-registry` owns tenants/scenarios/entitlements in Postgres;
 every other service calls its entitlement check (`ai_circus_shared.auth.resolve_caller_identity`,
