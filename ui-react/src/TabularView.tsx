@@ -16,11 +16,13 @@ import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
-// Only the scenarios that opt in (today: titanic) ever load these two — own chunks, so
-// no other workspace pays for the ship illustration or the tutorial widgets.
+// Only the scenarios that opt in ever load these — own chunks, so no other workspace
+// pays for the ship illustration, the globe/map geometry or the tutorial widgets.
 const VoyageView = lazy(() => import("./VoyageView").then((m) => ({ default: m.VoyageView })));
 const RiskWatchlistView = lazy(() => import("./RiskWatchlistView").then((m) => ({ default: m.RiskWatchlistView })));
 const NetworkExplorerView = lazy(() => import("./NetworkExplorerView").then((m) => ({ default: m.NetworkExplorerView })));
+const DispatchTowerView = lazy(() => import("./DispatchTowerView").then((m) => ({ default: m.DispatchTowerView })));
+const ShipmentGlobeView = lazy(() => import("./ShipmentGlobeView").then((m) => ({ default: m.ShipmentGlobeView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
@@ -35,10 +37,12 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   voyage_explorer: { icon: "ship", label: "Voyage" },
   risk_watchlist: { icon: "shield", label: "Watchlist" },
   network_explorer: { icon: "network", label: "Network" },
+  dispatch_tower: { icon: "radar", label: "Dispatch Tower" },
+  shipment_globe: { icon: "globe", label: "Globe" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
-  if (extras.kind === "voyage_explorer" || extras.kind === "risk_watchlist" || extras.kind === "network_explorer") return extras.tab_label;
+  if ("tab_label" in extras) return extras.tab_label;
   return EXTRA_TABS[extras.kind]?.label;
 }
 
@@ -155,6 +159,8 @@ function TabularViewContent({
         {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "risk_watchlist" && <RiskWatchlistView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "network_explorer" && <NetworkExplorerView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "dispatch_tower" && <DispatchTowerView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "shipment_globe" && <ShipmentGlobeView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (
