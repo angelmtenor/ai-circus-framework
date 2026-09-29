@@ -16,7 +16,9 @@ kind: tabular_ml
 title: "Supply Chain Shipping ETA"
 description: >
   Predicts a shipment's actual delivery time (in days) from carrier, distance,
-  order type, origin, and priority — logistics ETA estimation.
+  order type, origin, and priority — logistics ETA estimation. The Dispatch Tower
+  maps the eight hubs, draws each hub's ETA landscape and races every carrier and
+  service level to a destination you pin.
 role_required: "scenario:supply_chain"
 industry: logistics
 icon: "🚚"
@@ -37,6 +39,8 @@ chat:
     - "Does shipping priority actually reduce delivery time?"
     - "Which carrier tends to deliver fastest?"
     - "Does a bulk order take longer to ship than a single-item order?"
+    - "Which origin hub delivers fastest, and why?"
+    - "What delivery date should we promise for an Express shipment from Seattle?"
 
 dataset:
   bucket: "scenario-supply-chain"
@@ -98,6 +102,39 @@ model:
   target_units: "days"
   target_label: "Actual shipping time"
   target_description: "How many days the shipment actually took to arrive."
+
+# The Dispatch Tower tab (ui-react's DispatchTowerView.tsx): the 8 origin hubs on a
+# US map, each hub's "ETA landscape" (a grid of destinations around it scored in one
+# /predict call and drawn as isochrones) and a race of every carrier x priority to a
+# pinned destination, with its 90% prediction interval. The dataset's distances are
+# an east-west / north-south offset from the origin in synthetic grid units — the
+# landscape is drawn in those units around the hub, never as real geography.
+ui_extras:
+  kind: dispatch_tower
+  tab_label: "Dispatch Tower"
+  title: "Dispatch Tower · every carrier, every hub, one promise date"
+  subtitle: >
+    Pick a hub to see how long the model expects a shipment to take to any
+    destination around it, pin a destination, and race every carrier and service
+    level there — the fastest option and the delivery date you can safely promise.
+  shipment_noun: shipment
+  hub_feature: ShippingOrigin
+  map_scope: usa
+  hubs:
+    - {key: "Seattle", lat: 47.61, lon: -122.33}
+    - {key: "San Francisco", lat: 37.77, lon: -122.42}
+    - {key: "Las Vegas", lat: 36.17, lon: -115.14}
+    - {key: "Salt Lake City", lat: 40.76, lon: -111.89}
+    - {key: "Houston", lat: 29.76, lon: -95.37}
+    - {key: "Chicago", lat: 41.88, lon: -87.63}
+    - {key: "Atlanta", lat: 33.75, lon: -84.39}
+    - {key: "New York City", label: "New York", lat: 40.71, lon: -74.01}
+  offset_x_feature: XShippingDistance
+  offset_y_feature: YShippingDistance
+  offset_units: "grid units"
+  choice_features: [Carrier, ShippingPriority]
+  choice_icons: {Air: plane, Express: bolt, Ground: truck, Standard: van}
+  grid_size: 33
 
 services:
   etl: etl-tabular

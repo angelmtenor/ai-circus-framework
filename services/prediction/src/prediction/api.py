@@ -219,6 +219,9 @@ class OutOfFoldOut(BaseModel):
 
     model_name: str
     folds: int
+    # False for large datasets: every row's `contributions` is empty (probabilities only,
+    # see tabular_ml.MAX_OUT_OF_FOLD_EXPLAINED_ROWS).
+    explained: bool = True
     roc_auc: float | None = None
     rows: list[OutOfFoldRowOut]
 
@@ -459,6 +462,7 @@ def out_of_fold_endpoint(
     return OutOfFoldOut(
         model_name=out_of_fold["model_name"],
         folds=out_of_fold["folds"],
+        explained=out_of_fold.get("explained", True),
         roc_auc=out_of_fold.get("roc_auc"),
         rows=[OutOfFoldRowOut(id=row_id, **row) for row_id, row in out_of_fold["rows"].items()],
     )

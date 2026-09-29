@@ -35,9 +35,12 @@ MODEL_CHALLENGER_EXPLAINER_KEY = "model/challenger_explainer.joblib"
 # contributions (JSON, see training.core.training.out_of_fold_scores) — what the model
 # says about each row when that row's own label was never in its training data.
 MODEL_OUT_OF_FOLD_KEY = "model/out_of_fold.json"
-# Cross-fitting refits the selected model once per fold and explains every row — a
-# small-data feature (the rows it serves are all sent to the browser at once).
-MAX_OUT_OF_FOLD_ROWS = 5000
+# Cross-fitting refits the selected model once per fold — any dataset etl-tabular keeps
+# qualifies. Every row is also SHAP-explained only up to MAX_OUT_OF_FOLD_EXPLAINED_ROWS
+# (the rows are all sent to the browser at once: ~80 contributions per row would make a
+# large dataset's payload tens of MB); above it, rows carry the probability alone.
+MAX_OUT_OF_FOLD_ROWS = MAX_DATASET_ROWS
+MAX_OUT_OF_FOLD_EXPLAINED_ROWS = 5000
 
 # Key under which MODEL_METADATA_KEY's JSON stores each artifact's checksum (see
 # artifact_checksum below) — training writes it, prediction's model_cache verifies it

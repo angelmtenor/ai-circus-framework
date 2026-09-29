@@ -258,6 +258,59 @@ export type NetworkExplorerExtra = {
   events: NetworkEvent[];
   disclaimer?: string | null;
 };
+// Mirrors scenario_schema.py's DispatchTowerExtra — drives DispatchTowerView.tsx.
+export type VehicleGlyph = "plane" | "truck" | "van" | "ship" | "bolt" | "rail";
+export type DispatchHub = { key: string; label?: string | null; lat: number; lon: number };
+export type DispatchTowerExtra = {
+  kind: "dispatch_tower";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  shipment_noun: string;
+  hub_feature: string;
+  hubs: DispatchHub[];
+  map_scope: "usa" | "world";
+  offset_x_feature: string;
+  offset_y_feature: string;
+  offset_units: string;
+  choice_features: string[];
+  choice_icons: Record<string, VehicleGlyph>;
+  grid_size: number;
+};
+// Mirrors scenario_schema.py's ShipmentGlobeExtra — drives ShipmentGlobeView.tsx.
+export type ShipmentLever = {
+  feature: string;
+  label?: string | null;
+  options?: string[] | null;
+  deltas?: number[] | null;
+  delta_units: string;
+};
+export type ShipmentGlobeExtra = {
+  kind: "shipment_globe";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  shipment_noun: string;
+  name_column: string;
+  detail_columns: string[];
+  origin_lat_column: string;
+  origin_lon_column: string;
+  origin_label_column: string;
+  destination_lat_column: string;
+  destination_lon_column: string;
+  destination_label_column: string;
+  date_column: string;
+  mode_feature?: string | null;
+  mode_icons: Record<string, VehicleGlyph>;
+  size_feature?: string | null;
+  tiers: WatchlistTier[];
+  flag_from_tier?: string | null;
+  levers: ShipmentLever[];
+  outcome_label: string;
+  outcome_detail_column?: string | null;
+  outcome_detail_units: string;
+  disclaimer?: string | null;
+};
 export type UiExtras =
   | RegionMapExtra
   | LivePlantExtra
@@ -265,6 +318,8 @@ export type UiExtras =
   | VoyageExplorerExtra
   | RiskWatchlistExtra
   | NetworkExplorerExtra
+  | DispatchTowerExtra
+  | ShipmentGlobeExtra
   | TriageBoardExtra
   | ReadingRoomExtra;
 
@@ -291,7 +346,8 @@ export type NetworkGraph = { version: 1; periods: string[]; nodes: GraphNode[]; 
 
 // prediction's GET /model/{slug}/out-of-fold — every row scored by a model that never saw it.
 export type OutOfFoldRow = { id: string; probability: number; fold: number; contributions: Record<string, number> };
-export type OutOfFoldScores = { model_name: string; folds: number; roc_auc: number | null; rows: OutOfFoldRow[] };
+// `explained: false` (large datasets): probabilities only, every row's contributions empty.
+export type OutOfFoldScores = { model_name: string; folds: number; explained?: boolean; roc_auc: number | null; rows: OutOfFoldRow[] };
 
 // Mirrors scenario_schema.py's TutorialConfig — drives TutorialView.tsx.
 export type TutorialWidget =
