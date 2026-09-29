@@ -1,0 +1,221 @@
+# Seed definition for the "global_health_shipments" scenario — loaded into the
+# `platform` Postgres schema by services/platform-registry at bootstrap; etl-tabular,
+# training and prediction also read it as build-time config (see supply_chain's note).
+#
+# A logistics *classification* scenario on real public data: 9,949 line items of the
+# PEPFAR Supply Chain Management System (SCMS, 2006-2015) — HIV/AIDS medicines and
+# test kits shipped to 42 countries — labelled with whether each was delivered after
+# its scheduled date. Built by scripts/prepare_global_health_shipments_dataset.py
+# (pinned, checksum-verified source; see sample_data/README.md).
+
+slug: global_health_shipments
+kind: tabular_ml
+title: "Global Health Shipments · Late Delivery Risk"
+description: >
+  Which life-saving shipments will arrive late — and what would get them there on
+  time? 9,949 real deliveries of HIV/AIDS medicines and test kits to 42 countries
+  (USAID's SCMS programme, 2006-2015), scored for late-delivery risk on a live globe;
+  re-plan any shipment by mode, route or lead time, then reveal what actually happened.
+role_required: "scenario:global_health_shipments"
+industry: logistics
+icon: "🌍"
+
+credits:
+  source: "USAID Supply Chain Shipment Pricing Data — SCMS delivery history (US public domain)"
+  url: "https://catalog.data.gov/dataset/supply-chain-shipment-pricing-data"
+  note: "PEPFAR/SCMS line items 2006-2015; fetched from pinned mirrors of the data.usaid.gov export (dataset a3rc-nmf6), SHA-256 verified"
+
+chat:
+  context: >
+    A late-delivery risk model for a global health supply chain: USAID's PEPFAR Supply
+    Chain Management System (SCMS), which procured and shipped antiretroviral (ARV)
+    medicines and HIV test kits to national programmes in 42 countries between 2006
+    and 2015. A classifier estimates, when a shipment is planned, the probability that
+    it reaches the client after its scheduled delivery date — from the destination,
+    the fulfilment route (direct drop from the manufacturer's vendor vs. from one of
+    SCMS's regional distribution centres), the shipment mode (air, air charter, truck,
+    ocean), the goods (product group, adult/pediatric, dosage form, quantity, value,
+    prices), how many line items travel together, the planned lead time and the
+    scheduled year and month. 11.9% of line items arrived late (median 12 days). A late
+    ARV shipment can mean a stock-out at a clinic, so the point is to act early: pick
+    the riskiest planned shipments, and test what would reduce their risk — a faster
+    mode, a different route, or planning earlier. Be precise about what the model can
+    and cannot say: it learns from the programme's own history (patterns shift from
+    year to year), it knows nothing about customs, strikes, weather or stock levels,
+    and the scheduled date is the one on record, which may have been revised. Every
+    what-if is the model's estimate, not a guarantee.
+  sample_questions:
+    - "Which shipment mode is most often late, and does that hold after accounting for destination?"
+    - "Does a regional distribution centre make deliveries more or less reliable?"
+    - "Why were 2010 and 2011 such bad years for late deliveries?"
+    - "How much does planning earlier reduce the risk of a late delivery?"
+    - "Which countries are hardest to deliver to on time?"
+    - "How good is the model at ranking the shipments that end up late?"
+
+dataset:
+  bucket: "scenario-global-health-shipments"
+  raw_object: "raw/global_health_shipments.csv"
+  seed_file: "sample_data/global_health_shipments.csv"
+  index_col: "shipment_id"
+  target: "delivered_late"
+  protected_features_excluded: []
+  # What the globe and the departures board show — never model inputs. days_late and
+  # delivered_date are the outcome itself: shown only when the user reveals it.
+  display_columns:
+    - item_description
+    - vendor
+    - manufacturing_site
+    - origin_city
+    - origin_country
+    - origin_lat
+    - origin_lon
+    - destination_lat
+    - destination_lon
+    - scheduled_date
+    - delivered_date
+    - days_late
+  feature_columns:
+    - destination_country
+    - fulfill_via
+    - shipment_mode
+    - product_group
+    - sub_classification
+    - dosage_form
+    - first_line
+    - line_item_quantity
+    - line_item_value_usd
+    - pack_price_usd
+    - unit_price_usd
+    - lines_in_shipment
+    - planned_lead_days
+    - lead_time_basis
+    - scheduled_year
+    - scheduled_month
+
+  feature_schema:
+    destination_country:
+      {type: categorical, label: "Destination country",
+       options: ["South Africa", "Nigeria", "Côte d'Ivoire", "Uganda", "Vietnam", "Haiti", "Mozambique", "Zambia", "Zimbabwe",
+                 "Tanzania", "Rwanda", "Congo, DRC", "Guyana", "Ethiopia", "South Sudan", "Kenya", "Burundi", "Namibia",
+                 "Cameroon", "Botswana", "Ghana", "Dominican Republic", "Sudan", "Swaziland", "Mali", "Pakistan", "Guatemala",
+                 "Malawi", "Benin", "Lebanon", "Libya", "Angola", "Liberia", "Lesotho", "Sierra Leone", "Senegal", "Togo",
+                 "Afghanistan", "Kazakhstan", "Burkina Faso", "Guinea", "Belize"],
+       default: "Nigeria",
+       info: "The country whose national programme receives the shipment (names as recorded by SCMS)."}
+    fulfill_via:
+      {type: categorical, label: "Fulfilment route", options: ["Direct Drop", "From RDC"], default: "From RDC",
+       info: "Direct Drop: shipped straight from the vendor to the country. From RDC: picked from stock held at one of SCMS's regional distribution centres."}
+    shipment_mode:
+      {type: categorical, label: "Shipment mode", options: ["Air", "Air Charter", "Truck", "Ocean"], default: "Air",
+       info: "How the goods travel to the destination — scheduled air freight, a chartered aircraft, road, or sea."}
+    product_group:
+      {type: categorical, label: "Product group", options: ["ARV", "HRDT", "ANTM", "ACT", "MRDT"], default: "ARV",
+       info: "ARV = antiretroviral medicines; HRDT = HIV rapid diagnostic tests; ANTM = antimalarials; ACT = artemisinin combination therapy; MRDT = malaria rapid tests."}
+    sub_classification:
+      {type: categorical, label: "Sub-classification", options: ["Adult", "Pediatric", "HIV test", "HIV test - Ancillary", "Malaria", "ACT"], default: "Adult",
+       info: "Adult or pediatric formulation, HIV test kit or its ancillary supplies, antimalarials."}
+    dosage_form:
+      {type: categorical, label: "Dosage form", options: ["Tablet", "Test kit", "Oral liquid", "Capsule", "Chewable tablet", "Injection"], default: "Tablet",
+       info: "The physical form, grouped from 17 recorded forms — liquids and test kits are bulkier and some need temperature control."}
+    first_line:
+      {type: categorical, label: "First-line regimen", options: ["Yes", "No"], default: "Yes",
+       info: "Whether the medicine is part of a first-line treatment regimen (the most widely used, highest-volume products)."}
+    line_item_quantity:
+      {type: numeric, label: "Quantity (packs)", min: 1, max: 200000, default: 3000, step: 100,
+       info: "Number of packs on the line item (the largest orders go beyond this slider's range)."}
+    line_item_value_usd:
+      {type: numeric, label: "Line value (USD)", min: 0, max: 1600000, default: 30000, step: 1000,
+       info: "Commodity value of the line item in US dollars."}
+    pack_price_usd:
+      {type: numeric, label: "Pack price (USD)", min: 0, max: 140, default: 9, step: 0.5,
+       info: "Price per pack — cheap generics vs. branded or diagnostic products."}
+    unit_price_usd:
+      {type: numeric, label: "Unit price (USD)", min: 0, max: 5, default: 0.16, step: 0.01,
+       info: "Price per tablet, capsule or test."}
+    lines_in_shipment:
+      {type: numeric, label: "Line items in the shipment", min: 1, max: 30, default: 1, step: 1,
+       info: "How many line items travel together under the same shipping document — consolidated shipments wait for every item."}
+    planned_lead_days:
+      {type: numeric, label: "Planned lead time (days)", min: -60, max: 420, default: 166, step: 1,
+       info: "Days from the price quote first sent to the client (or the purchase order to the vendor) to the scheduled delivery date — how much time the plan allowed."}
+    lead_time_basis:
+      {type: categorical, label: "Lead time measured from", options: ["Quote to client", "Order to vendor", "Not recorded"], default: "Quote to client",
+       info: "Which planning date the lead time counts from. 'Not recorded' (mostly the programme's early pre-quote years) uses the median of its fulfilment route."}
+    scheduled_year:
+      {type: numeric, label: "Scheduled year", min: 2006, max: 2015, default: 2013, step: 1,
+       info: "The year of the scheduled delivery — the programme's performance shifted from year to year."}
+    scheduled_month:
+      {type: numeric, label: "Scheduled month", min: 1, max: 12, default: 6, step: 1,
+       info: "Month of the scheduled delivery (1 = January) — year-end and holiday seasons congest freight."}
+
+  default_charts:
+    - {type: bar, x: shipment_mode, y: delivered_late, agg: mean, color_by: shipment_mode}
+    - {type: bar, x: fulfill_via, y: delivered_late, agg: mean, color_by: fulfill_via}
+    - {type: bar, x: scheduled_year, y: delivered_late, agg: mean}
+    - {type: histogram, x: planned_lead_days, color_by: delivered_late}
+    - {type: bar, x: destination_country, y: delivered_late, agg: mean}
+    - {type: heatmap}
+
+model:
+  task_type: classification
+  candidates: ["logistic_regression", "lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.005
+  selection_metric: roc_auc
+  cv_folds: 5
+  explainability: shap
+  target_label: "Delivered late"
+  target_description: "Whether the line item reached the client after its scheduled delivery date (1) or on/before it (0), seen when the shipment is planned."
+  target_value_labels: {"0": "On time", "1": "Late"}
+  # The globe reveals every shipment's real outcome next to its score — so its scores
+  # are cross-fitted (each from a model that never saw that shipment), not the refit
+  # deployed model's in-sample ones. Probabilities only at this size (no per-row SHAP).
+  out_of_fold_scores: true
+
+# The globe tab (ui-react's ShipmentGlobeView.tsx): every shipment an arc from its
+# manufacturing site to the destination's capital, coloured by late-delivery risk and
+# replayed month by month along the scheduled date, next to a departures board.
+ui_extras:
+  kind: shipment_globe
+  tab_label: "Lifeline Globe"
+  title: "Lifeline · a decade of HIV medicine shipments"
+  subtitle: >
+    Every arc is a real line item on its way from the factory to a national programme,
+    coloured by the model's late-delivery risk. Replay 2006-2015, pick a shipment to
+    see why it is at risk and what would get it there on time — then reveal which ones
+    actually arrived late.
+  shipment_noun: shipment
+  name_column: item_description
+  detail_columns: [vendor]
+  origin_lat_column: origin_lat
+  origin_lon_column: origin_lon
+  origin_label_column: origin_city
+  destination_lat_column: destination_lat
+  destination_lon_column: destination_lon
+  destination_label_column: destination_country
+  date_column: scheduled_date
+  mode_feature: shipment_mode
+  mode_icons: {Air: plane, "Air Charter": plane, Truck: truck, Ocean: ship}
+  size_feature: line_item_value_usd
+  outcome_label: "Arrived late"
+  outcome_detail_column: days_late
+  outcome_detail_units: "days late"
+  flag_from_tier: "Expedite review"
+  tiers:
+    - {label: "On track", min_probability: 0.0, description: "Routine follow-up."}
+    - {label: "Watch", min_probability: 0.15, description: "Confirm the vendor's ready date and the booking."}
+    - {label: "Expedite review", min_probability: 0.35, description: "Review the plan now — faster mode, another route, or warn the country programme to check its buffer stock."}
+    - {label: "Critical", min_probability: 0.6, description: "Likely late — escalate, expedite, and prepare an emergency order from the nearest stock."}
+  levers:
+    - {feature: shipment_mode, label: "Ship by"}
+    - {feature: fulfill_via, label: "Fulfil"}
+    - {feature: planned_lead_days, label: "Plan earlier", deltas: [14, 30, 60], delta_units: "days"}
+  disclaimer: >
+    Scores are the model's estimate from the programme's own history, seen when the
+    shipment is planned. They rank risk; they are not a forecast of any single delivery,
+    and a what-if is not a guarantee.
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

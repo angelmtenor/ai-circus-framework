@@ -485,6 +485,25 @@ def test_out_of_fold_scores_score_and_explain_every_row_exactly_once(synthetic_d
     assert scores["roc_auc"] > 0.9  # the synthetic target is (almost) separable
 
 
+def test_out_of_fold_scores_without_explain_keep_the_same_probabilities(synthetic_data: tuple) -> None:
+    """Large datasets skip SHAP (explain=False): same cross-fitted probabilities, no
+    contributions — the payload stays a probability per row.
+    """
+    x_train, x_test, y_train, y_test = synthetic_data
+    x, y = pd.concat([x_train, x_test]), pd.concat([y_train, y_test])
+    args = ("lightgbm_small_data", x, y, ["numeric_feature"], ["category_feature"])
+
+    explained = out_of_fold_scores(*args, folds=4)
+    bare = out_of_fold_scores(*args, folds=4, explain=False)
+
+    assert explained["explained"] is True and bare["explained"] is False
+    assert all(row["contributions"] == {} for row in bare["rows"].values())
+    assert {k: r["probability"] for k, r in bare["rows"].items()} == {
+        k: r["probability"] for k, r in explained["rows"].items()
+    }
+    assert bare["roc_auc"] == explained["roc_auc"]
+
+
 def test_out_of_fold_scores_roll_text_terms_up_to_their_column(synthetic_text_data: tuple) -> None:
     x, y = synthetic_text_data
 
