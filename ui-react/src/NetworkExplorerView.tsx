@@ -22,8 +22,11 @@ import {
   pct,
   percentileOf,
   plural,
+  mergeFlowKinds,
   periodLabel,
   periodOf,
+  periodTicks,
+  periodUnit,
   relations,
   type RowInput,
   searchNodes,
@@ -82,12 +85,13 @@ export function loadNetworkCached(scenario: ScenarioSummary, extras: NetworkExpl
 async function loadNetwork(scenario: ScenarioSummary, extras: NetworkExplorerExtra, accessToken: string | null): Promise<Loaded> {
   const features = scenario.feature_columns ?? [];
   const url = config.predictionUrl;
-  const [sample, graph, card, oof] = await Promise.all([
+  const [sample, rawGraph, card, oof] = await Promise.all([
     datasetSample(url, scenario.slug, 30000, accessToken),
     networkGraph(url, scenario.slug, accessToken),
     modelCard(url, scenario.slug, accessToken).catch(() => null),
     outOfFoldScores(url, scenario.slug, accessToken).catch(() => null),
   ]);
+  const graph = extras.flow_edge_kinds?.length ? mergeFlowKinds(rawGraph, extras.flow_edge_kinds, extras.flow_edge_kind, extras.flow_kind_labels ?? {}) : rawGraph;
   const records: Record_[] = sample.rows.map((row) => Object.fromEntries(features.map((f) => [f, row[f] as number | string])));
   const ids = sample.rows.map((row, i) => (sample.id_column ? String(row[sample.id_column]) : String(i + 1)));
   const oofById = new Map((oof?.rows ?? []).map((r) => [r.id, r]));
@@ -100,6 +104,7 @@ async function loadNetwork(scenario: ScenarioSummary, extras: NetworkExplorerExt
     probabilities = response.predictions.map((p) => p.prediction);
   }
   const target = scenario.target ?? "";
+  const drawn = extras.graph_rows_only ? new Set(graph.nodes.filter((n) => n.kind === "row").map((n) => n.id)) : null;
   const rows: RowInput[] = sample.rows.map((row, i) => ({
     id: ids[i],
     name: String(row[extras.name_column] ?? ids[i]),
@@ -109,11 +114,12 @@ async function loadNetwork(scenario: ScenarioSummary, extras: NetworkExplorerExt
       display: row,
       probability: probabilities[i],
       tier: tierOf(probabilities[i], extras.tiers),
-      actual: Number(row[target]) === 1 ? 1 : 0,
+      actual: (Number(row[target]) === 1 ? 1 : 0) as 0 | 1,
       size: extras.size_feature ? Number(row[extras.size_feature]) || 0 : 0,
-      contributions: useOof ? oofById.get(ids[i])!.contributions : null,
+      // `explained: false` (large datasets): probabilities only — the dossier asks /predict for SHAP.
+      contributions: useOof && oof?.explained !== false ? oofById.get(ids[i])!.contributions : null,
     },
-  }));
+  })).filter((r) => !drawn || drawn.has(r.id));
   const net = buildNetwork(graph, rows, extras);
   const sorted: Record<string, number[]> = {};
   for (const f of features) {
@@ -374,10 +380,10 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
           return next;
         });
       },
-      reducedMotion ? 1100 : 720,
+      extras.replay_tick_ms ? (reducedMotion ? extras.replay_tick_ms * 2.5 : extras.replay_tick_ms) : reducedMotion ? 1100 : 720,
     );
     return () => window.clearInterval(timer);
-  }, [playing, periods.length, reducedMotion]);
+  }, [playing, periods.length, reducedMotion, extras.replay_tick_ms]);
 
   useEffect(() => {
     if (!playing || period === null) return;
@@ -567,7 +573,7 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
         <label className="nx-switch" title="Show the real outcome as rings: solid = flagged, dashed = missed">
           <input type="checkbox" checked={revealed} onChange={(e) => setRevealAt(e.target.checked ? performance.now() : null)} />
           <span className="nx-switch-track" />
-          Reveal the public record
+          Reveal the {extras.record_label ?? "public record"}
         </label>
 
         <div className="nx-zoom" role="group" aria-label="Zoom">
@@ -608,7 +614,7 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
         })}
         {revealed && test ? (
           <div className="nx-backtest">
-            <b>{test.tp}</b> of <b>{test.positives}</b> persons on the public record scored <em>{extras.tiers[flagTier].label}</em> or above (solid rings);{" "}
+            <b>{test.tp}</b> of <b>{test.positives}</b> {extras.entity_noun === "person" ? "persons" : plural(extras.entity_noun)} on the {extras.record_label ?? "public record"} scored <em>{extras.tiers[flagTier].label}</em> or above (solid rings);{" "}
             <b>{test.fn}</b> were missed (dashed). <b>{test.fp}</b> flagged {plural(noun)} were never on it — model false positives, not accusations. Precision{" "}
             <b>{test.flagged ? pct(test.tp / test.flagged) : "—"}</b> vs a base rate of {pct(test.positives / Math.max(1, net.rows.length))}
             {test.flagged && test.positives ? ` (${(test.tp / test.flagged / (test.positives / net.rows.length)).toFixed(1)}× lift)` : ""}.
@@ -616,7 +622,7 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
           </div>
         ) : (
           <div className="nx-backtest nx-backtest--hint">
-            Judge the model first — then reveal the public record ({extras.outcome_label.toLowerCase()}).
+            Judge the model first — then reveal the {extras.record_label ?? "public record"} ({extras.outcome_label.toLowerCase()}).
           </div>
         )}
       </div>
@@ -1009,7 +1015,7 @@ function Dossier({
       </p>
       {revealed && (
         <p className={`nx-outcome${row.actual ? " nx-outcome--on" : ""}`}>
-          {row.actual ? `◯ ${extras.outcome_label}` : `Not on the public record (${scenario.target_value_labels?.["0"] ?? "negative"})`}
+          {row.actual ? `◯ ${extras.outcome_label}` : `Not on the ${extras.record_label ?? "public record"} (${scenario.target_value_labels?.["0"] ?? "negative"})`}
         </p>
       )}
 
@@ -1063,7 +1069,7 @@ function Dossier({
               </div>
             );
           })}
-          <p className="nx-key">Track = percentile among all {plural(extras.entity_noun)}{revealed ? " · ◆ median of those on the public record" : ""}</p>
+          <p className="nx-key">Track = percentile among all {plural(extras.entity_noun)}{revealed ? ` · ◆ median of those on the ${extras.record_label ?? "public record"}` : ""}</p>
         </section>
       )}
 
@@ -1202,25 +1208,26 @@ export function Timeline({
   const area = `M ${x(0)} 70 ` + series.map((v, i) => `L ${x(i)} ${y(v)}`).join(" ") + ` L ${x(n - 1)} 70 Z`;
   const line = series.map((v, i) => `${i ? "L" : "M"} ${x(i)} ${y(v)}`).join(" ");
   const hot = overlay ? `M ${x(0)} 70 ` + Array.from(overlay).map((v, i) => `L ${x(i)} ${y(v)}`).join(" ") + ` L ${x(n - 1)} 70 Z` : null;
-  const years = net.periods.map((p, i) => [p, i] as const).filter(([p]) => p.endsWith("-01"));
+  const ticks = periodTicks(net.periods);
+  const unit = periodUnit(net.periods);
   const current = period ?? n - 1;
   const events = extras.events.map((e, i) => ({ ...e, i, at: periodOf(net.periods, e.date) })).filter((e) => e.at >= 0);
   return (
     <div className="nx-timeline">
       <div className="nx-timeline-controls">
-        <button type="button" className="nx-play" onClick={onTogglePlay} aria-label={playing ? "Pause the replay" : "Replay month by month"}>
+        <button type="button" className="nx-play" onClick={onTogglePlay} aria-label={playing ? "Pause the replay" : `Replay ${unit} by ${unit}`}>
           {playing ? "❚❚" : "▶"}
         </button>
         <div className="nx-timeline-now">
-          <b>{period === null ? "All months" : periodLabel(net.periods[period])}</b>
+          <b>{period === null ? `All ${unit}s` : periodLabel(net.periods[period])}</b>
           <span className="nx-muted">
             {period === null
-              ? `${periodLabel(net.periods[0])} – ${periodLabel(net.periods[n - 1])} · ${caption ?? `${extras.link_noun} per month`}`
-              : `${Math.round(series[period]).toLocaleString()} ${extras.link_noun} this month`}
+              ? `${periodLabel(net.periods[0])} – ${periodLabel(net.periods[n - 1])} · ${caption ?? `${extras.link_noun} per ${unit}`}`
+              : `${Math.round(series[period]).toLocaleString()} ${extras.link_noun} this ${unit}`}
           </span>
         </div>
         <button type="button" className={`nx-all${period === null ? " nx-all--on" : ""}`} onClick={() => onPeriod(null)}>
-          All months
+          All {unit}s
         </button>
       </div>
       <div className="nx-timeline-chart">
@@ -1261,15 +1268,15 @@ export function Timeline({
           max={n - 1}
           step={1}
           value={current}
-          aria-label="Replay month"
+          aria-label={`Replay ${unit}`}
           aria-valuetext={periodLabel(net.periods[current])}
           onChange={(e) => onPeriod(Number(e.target.value))}
         />
       </div>
       <div className="nx-years" aria-hidden>
-        {years.map(([p, i]) => (
-          <span key={p} style={{ left: `${((i + 0.5) / n) * 100}%` }}>
-            {p.slice(0, 4)}
+        {ticks.map((t) => (
+          <span key={t.index} style={{ left: `${((t.index + 0.5) / n) * 100}%` }}>
+            {t.label}
           </span>
         ))}
       </div>

@@ -53,6 +53,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "toxic_leadership",
         "bank_early_warning",
         "enron_fraud_network",
+        "aml_money_trail",
         "global_health_shipments",
         "sede_electronica",
     }
@@ -238,6 +239,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "toxic_leadership",
         "bank_early_warning",
         "enron_fraud_network",
+        "aml_money_trail",
         "global_health_shipments",
         "sede_electronica",
     }
@@ -256,8 +258,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 26
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 26
+    assert session.query(Scenario).count() == 27
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 27
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -362,5 +364,23 @@ def test_seed_scenarios_stores_the_network_explorer_as_plain_json(session: Sessi
         .query(Entitlement)
         .filter_by(org_id=ENGINEERING_DEMO_ORG_ID, scenario_slug="enron_fraud_network")
         .count()
+        == 0
+    )
+
+
+def test_seed_scenarios_stores_the_money_trail_as_plain_json(session: Session) -> None:
+    """The money_trail extra (flows, countries, tiers, pillars) reaches the DB as JSON and
+    the scenario stays admin-only (not a demo tenant's).
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    aml = session.get(Scenario, "aml_money_trail")
+    assert aml is not None and aml.ui_extras is not None
+    assert aml.ui_extras["kind"] == "money_trail"
+    assert aml.industry == "banking_finance"
+    assert {flow["kind"] for flow in aml.ui_extras["flows"]} >= {"ach", "wire", "cheque"}
+    assert aml.ui_extras["flag_from_tier"] == "Review"
+    assert (
+        session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID, scenario_slug="aml_money_trail").count()
         == 0
     )

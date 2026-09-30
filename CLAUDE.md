@@ -77,7 +77,7 @@ one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 An `assisted_form` whose `form` has `sections` renders as an official paper sheet
@@ -101,8 +101,12 @@ ego stage, routes to targets, live-scored hypothetical individuals via `ui_extra
 numeric features computed offline. `model.out_of_fold_scores` (classification only)
 makes training cross-fit every row's probability + SHAP with the selected model — served at
 `GET /model/{slug}/out-of-fold` (per-row SHAP up to 5,000 rows, probabilities only above) — because
-the deployed model is refit on every row and its own scores of them are optimistic; `network_explorer`
-and `shipment_globe` require it (they reveal real outcomes).
+the deployed model is refit on every row and its own scores of them are optimistic; `network_explorer`,
+`shipment_globe` and `money_trail` require it (they reveal real outcomes). `money_trail`
+(`aml_money_trail`, IBM AMLworld) reads a graph whose entities are banks, holders are
+rows/context and flow edges carry an *hourly* `series` (`YYYY-MM-DDTHH` periods): a world map
+replaying the payments hour by hour, with a per-typology reveal — plus a second, *Network graph* view
+that feeds the same network to `network_explorer`'s renderer (`networkExplorerExtras()`).
 
 **Tenancy & entitlements.** `platform-registry` owns tenants/scenarios/entitlements in Postgres;
 every other service calls its entitlement check (`ai_circus_shared.auth.resolve_caller_identity`,

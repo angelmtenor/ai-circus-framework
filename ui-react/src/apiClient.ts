@@ -259,6 +259,16 @@ export type NetworkExplorerExtra = {
   events: NetworkEvent[];
   tie_features?: NetworkTieFeatures | null;
   disclaimer?: string | null;
+  // Client-side only (never in a scenario.yaml): MoneyTrailView derives a network_explorer
+  // config from its own extras to offer the same scored network as a graph. Several edge
+  // kinds carry the flow (merged per pair into `flow_edge_kind`, labelled by
+  // `flow_kind_labels`), only the rows the graph draws are listed, and an hourly replay
+  // ticks faster than a monthly one.
+  flow_edge_kinds?: string[] | null;
+  flow_kind_labels?: Record<string, string> | null;
+  graph_rows_only?: boolean | null;
+  replay_tick_ms?: number | null;
+  record_label?: string | null; // what the reveal shows, default "public record"
 };
 // Mirrors scenario_schema.py's DispatchTowerExtra — drives DispatchTowerView.tsx.
 export type VehicleGlyph = "plane" | "truck" | "van" | "ship" | "bolt" | "rail";
@@ -313,6 +323,31 @@ export type ShipmentGlobeExtra = {
   outcome_detail_units: string;
   disclaimer?: string | null;
 };
+// Mirrors scenario_schema.py's MoneyTrailExtra — drives MoneyTrailView.tsx.
+export type MoneyTrailExtra = {
+  kind: "money_trail";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  entity_noun: string;
+  name_column: string;
+  detail_columns: string[];
+  holder_type_feature: string;
+  person_types: string[];
+  size_feature?: string | null;
+  flows: { kind: string; label: string }[];
+  holding_edge_kind: string;
+  countries: { key: string; lat: number; lon: number }[];
+  amount_units: string;
+  tiers: WatchlistTier[];
+  pillars: WatchlistPillar[];
+  facts: string[];
+  outcome_label: string;
+  flag_from_tier?: string | null;
+  outcome_detail_column?: string | null;
+  case_column?: string | null;
+  disclaimer?: string | null;
+};
 export type UiExtras =
   | RegionMapExtra
   | LivePlantExtra
@@ -322,6 +357,7 @@ export type UiExtras =
   | NetworkExplorerExtra
   | DispatchTowerExtra
   | ShipmentGlobeExtra
+  | MoneyTrailExtra
   | TriageBoardExtra
   | ReadingRoomExtra;
 
