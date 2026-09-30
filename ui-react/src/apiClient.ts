@@ -236,6 +236,7 @@ export type RiskWatchlistExtra = {
 };
 // Mirrors scenario_schema.NetworkExplorerExtra — see NetworkExplorerView.tsx.
 export type NetworkEvent = { date: string; label: string; description?: string | null; url?: string | null };
+export type NetworkTieFeatures = { contacts?: string | null; sent?: string | null; received?: string | null; clustering?: string | null; centrality?: string | null };
 export type NetworkExplorerExtra = {
   kind: "network_explorer";
   tab_label: string;
@@ -256,6 +257,7 @@ export type NetworkExplorerExtra = {
   entity_label: string;
   context_label: string;
   events: NetworkEvent[];
+  tie_features?: NetworkTieFeatures | null;
   disclaimer?: string | null;
 };
 // Mirrors scenario_schema.py's DispatchTowerExtra — drives DispatchTowerView.tsx.

@@ -20,7 +20,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
 // pays for the ship illustration, the globe/map geometry or the tutorial widgets.
 const VoyageView = lazy(() => import("./VoyageView").then((m) => ({ default: m.VoyageView })));
 const RiskWatchlistView = lazy(() => import("./RiskWatchlistView").then((m) => ({ default: m.RiskWatchlistView })));
-const NetworkExplorerView = lazy(() => import("./NetworkExplorerView").then((m) => ({ default: m.NetworkExplorerView })));
+const NetworkTab = lazy(() => import("./NetworkTab").then((m) => ({ default: m.NetworkTab })));
 const DispatchTowerView = lazy(() => import("./DispatchTowerView").then((m) => ({ default: m.DispatchTowerView })));
 const ShipmentGlobeView = lazy(() => import("./ShipmentGlobeView").then((m) => ({ default: m.ShipmentGlobeView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
@@ -158,7 +158,7 @@ function TabularViewContent({
         )}
         {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "risk_watchlist" && <RiskWatchlistView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "network_explorer" && <NetworkExplorerView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "network_explorer" && <NetworkTab scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "dispatch_tower" && <DispatchTowerView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "shipment_globe" && <ShipmentGlobeView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
