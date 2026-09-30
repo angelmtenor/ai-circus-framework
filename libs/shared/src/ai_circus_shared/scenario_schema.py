@@ -632,6 +632,20 @@ class NetworkEvent(BaseModel):
     url: str | None = None  # a public source for the event
 
 
+class NetworkTieFeatures(BaseModel):
+    """Which numeric features of a `network_explorer` scenario are *made of* a row's
+    ties — the Investigate view lets an analyst invent a new individual, pick who they
+    would be connected to, and scores them with the deployed model; these features
+    are then derived from those ties instead of asked for. Every field is optional
+    (a feature left out is simply set by hand) and names a numeric feature column."""
+
+    contacts: str | None = None  # how many distinct two-way contacts
+    sent: str | None = None  # flow volume the row sent (the picked volumes, half each way)
+    received: str | None = None  # flow volume the row received
+    clustering: str | None = None  # share of the contacts that are also tied to each other (0-1)
+    centrality: str | None = None  # 0-100 percentile, estimated as the volume-weighted mean of the contacts' own
+
+
 class NetworkExplorerExtra(BaseModel):
     """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario that
     ships a network (`dataset.graph`): every row is scored and drawn as a node of an
@@ -667,6 +681,8 @@ class NetworkExplorerExtra(BaseModel):
     entity_label: str = "entity"  # wording of the graph's curated `entity` nodes
     context_label: str = "unscored contact"  # wording of its `context` nodes
     events: list[NetworkEvent] = Field(default=[], max_length=30)
+    # Enables "new individual" in the Investigate view: which features come from ties.
+    tie_features: NetworkTieFeatures | None = None
     # Shown on the tab — e.g. what a high score does and does not mean.
     disclaimer: str | None = None
 
@@ -1724,7 +1740,8 @@ class ScenarioDefinition(BaseModel):
                 f"{where} requires model.out_of_fold_scores: it reveals every row's real outcome next to its "
                 "score, which is only honest for scores from models that never saw that row."
             )
-        for feature in (extras.size_feature, *extras.facts):
+        tie_features = [] if extras.tie_features is None else list(extras.tie_features.model_dump().values())
+        for feature in (extras.size_feature, *extras.facts, *tie_features):
             if feature is not None:
                 self._feature_of_type(feature, "numeric", where)
         unknown = sorted({extras.name_column, *extras.detail_columns} - set(self.dataset.display_columns))

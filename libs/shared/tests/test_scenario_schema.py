@@ -981,6 +981,7 @@ def test_repo_enron_fraud_network_has_a_valid_network_explorer() -> None:
     enron = _repo_scenario("enron_fraud_network")
     assert enron.industry == "public_sector"
     assert enron.ui_extras is not None and enron.ui_extras.kind == "network_explorer"
+    assert enron.ui_extras.tie_features is not None and enron.ui_extras.tie_features.contacts == "distinct_contacts"
     assert enron.dataset is not None and enron.dataset.graph is not None
     assert enron.model is not None and enron.model.out_of_fold_scores and enron.model.selection_metric == "roc_auc"
 
@@ -1027,6 +1028,8 @@ def test_network_explorer_requires_a_graph_out_of_fold_scores_and_real_columns()
         _with(enron, ui_extras={**extras, "detail_columns": ["salary"]})
     with pytest.raises(ValidationError, match=r"not among dataset\.feature_columns"):
         _with(enron, ui_extras={**extras, "facts": ["name"]})
+    with pytest.raises(ValidationError, match=r"not among dataset\.feature_columns"):
+        _with(enron, ui_extras={**extras, "tie_features": {"contacts": "name"}})
     with pytest.raises(ValidationError, match="strictly increase"):
         _with(enron, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
     with pytest.raises(ValidationError, match="in two pillars"):

@@ -1,0 +1,321 @@
+/* NetworkInvestigatorView.tsx — the Investigate workspace. It reuses the network
+   tab's panels (networkExplorer.css); this file only adds what is new. */
+
+.ni-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.ni-workspaces {
+  align-self: flex-start;
+}
+.ni-workspaces button {
+  padding: 0.45rem 1rem;
+}
+.nx-investigate {
+  border-color: var(--accent) !important;
+  color: var(--text-h) !important;
+}
+
+.ni-btn {
+  padding: 0.48rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ni-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+.ni-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ni-btn--new {
+  border-color: var(--accent);
+  color: var(--text-h);
+}
+.ni-btn--on {
+  background: var(--accent-bg, var(--panel-3));
+}
+
+.ni-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+.nx-chip--on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.ni-stage canvas {
+  cursor: default;
+}
+.ni-ring {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 2px solid var(--text-h);
+  box-sizing: border-box;
+}
+
+.ni-name {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.1rem 0;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-h);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+.ni-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.ni-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.ni-from select {
+  max-width: 11rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+/* exposure */
+.ni-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+.ni-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.ni-card b {
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: var(--text-h);
+}
+.ni-card span {
+  font-size: 0.72rem;
+  color: var(--dim);
+  line-height: 1.3;
+}
+.ni-card em {
+  font-style: normal;
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* routes */
+.ni-routes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.ni-routes button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.38rem 0.55rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+.ni-routes button:hover {
+  border-color: var(--border-strong);
+}
+.ni-routes .ni-route--on {
+  border-color: #33c7ff;
+  box-shadow: 0 0 0 1px #33c7ff, 0 6px 18px -10px #33c7ff;
+}
+.ni-route-name {
+  flex: 1;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.ni-route-hops {
+  font-size: 0.72rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.ni-route-via {
+  display: block;
+  padding: 0.1rem 0.6rem 0.25rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+/* selected tie */
+.ni-selected-name {
+  margin: 0;
+}
+.ni-actions {
+  margin-top: 0.3rem;
+}
+.ni-cite {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+.ni-poi {
+  color: var(--text-h);
+  font-weight: 700;
+}
+.ni-dir {
+  display: block;
+  grid-column: 1 / -1;
+  height: 3px;
+  margin-top: 0.15rem;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.ni-dir i {
+  display: block;
+  height: 100%;
+}
+.ni-tiechart svg {
+  display: block;
+  width: 100%;
+  height: 80px;
+}
+.ni-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1px;
+}
+.ni-cursor {
+  fill: color-mix(in srgb, var(--text-h) 12%, transparent);
+}
+.nx-area-hot {
+  fill: color-mix(in srgb, #e5484d 45%, transparent);
+}
+
+/* new individual */
+.ni-contact-search {
+  max-width: none;
+  margin-bottom: 0.4rem;
+}
+.ni-contacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.ni-contacts li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 6.5rem 2.2rem auto;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.ni-contact-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-h);
+}
+.ni-contact-volume {
+  text-align: right;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.ni-contacts button {
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.ni-pillar {
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.35rem 0.6rem;
+  background: var(--panel-2);
+}
+.ni-pillar summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+.ni-auto {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.3rem 0;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.ni-auto b {
+  color: var(--text-h);
+}
+.ni-auto em {
+  font-style: normal;
+  font-size: 0.68rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--text);
+}
+.ni-auto button,
+.ni-reset {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.ni-feature {
+  position: relative;
+}
+.ni-reset {
+  margin: 0 0 0.3rem;
+}
+.ni-note {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 1000px) {
+  .ni-contacts li {
+    grid-template-columns: auto minmax(0, 1fr) 5rem 2rem auto;
+  }
+}
