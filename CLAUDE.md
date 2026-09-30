@@ -96,7 +96,8 @@ A tabular scenario may ship a network next to its rows (`dataset.graph`, contrac
 per-period `series`): etl-tabular validates it and restricts it to the cleaned rows
 (`processed/graph.json`), prediction serves it at `GET /graph/{slug}` (same entitlement,
 fallback-org and TTL cache as the dataset sample) and the `network_explorer` tab draws it
-(canvas + d3-force, `networkScene.ts`). Graph position reaches the model only as ordinary
+(canvas + d3-force, `networkScene.ts`; `NetworkTab.tsx` adds a person-centred *Investigate* workspace —
+ego stage, routes to targets, live-scored hypothetical individuals via `ui_extras.tie_features`). Graph position reaches the model only as ordinary
 numeric features computed offline. `model.out_of_fold_scores` (classification only)
 makes training cross-fit every row's probability + SHAP with the selected model — served at
 `GET /model/{slug}/out-of-fold` (per-row SHAP up to 5,000 rows, probabilities only above) — because
