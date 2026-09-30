@@ -1155,3 +1155,73 @@ def test_shipment_globe_rejects_unknown_columns_levers_and_tiers() -> None:
         _with(health, ui_extras={**extras, "levers": [{"feature": "shipment_mode", "options": ["Rocket"]}]})
     with pytest.raises(ValidationError, match="non-zero"):
         _with(health, ui_extras={**extras, "levers": [{"feature": "planned_lead_days", "deltas": [0, 30]}]})
+
+
+# --- aml_money_trail: money_trail over a bank-consortium network ---
+
+
+def test_repo_aml_money_trail_has_a_valid_money_trail() -> None:
+    aml = _repo_scenario("aml_money_trail")
+    assert aml.industry == "banking_finance"
+    extras = aml.ui_extras
+    assert extras is not None and extras.kind == "money_trail"
+    assert extras.holder_type_feature == "holder_type" and extras.person_types == ["Individual", "Sole proprietorship"]
+    assert aml.dataset is not None and aml.dataset.graph is not None
+    assert aml.model is not None and aml.model.out_of_fold_scores and aml.model.selection_metric == "roc_auc"
+
+
+def test_repo_aml_graph_matches_its_dataset() -> None:
+    """The shipped graph parses (hourly periods included), names only holders of the
+    dataset as rows, keeps every flow kind and country the tab declares, and the CSV has
+    no missing value (etl-tabular's clean() would silently drop that row)."""
+    import csv
+    from pathlib import Path
+
+    from ai_circus_shared.network_graph import parse_graph
+
+    aml = _repo_scenario("aml_money_trail")
+    assert aml.dataset is not None and aml.dataset.graph is not None
+    scenario_dir = Path(__file__).parents[3] / "scenarios/aml_money_trail"
+    graph = parse_graph((scenario_dir / aml.dataset.graph.seed_file).read_bytes())
+    with (scenario_dir / aml.dataset.seed_file).open() as handle:
+        rows = list(csv.DictReader(handle))
+    columns = [aml.dataset.index_col, *aml.dataset.display_columns, *aml.dataset.feature_columns, aml.dataset.target]
+    assert all(row[c] not in ("", None) for row in rows for c in columns)
+    ids = {row[aml.dataset.index_col] for row in rows}
+    assert {n.id for n in graph.nodes if n.kind == "row"} <= ids
+    extras = aml.ui_extras
+    assert extras is not None and extras.kind == "money_trail"
+    assert len(graph.periods) == 240 and graph.periods[0] == "2022-09-01T00"
+    countries = {c.key for c in extras.countries}
+    assert {n.group for n in graph.nodes if n.group} <= countries
+    assert {n.type for n in graph.nodes if n.kind == "entity"} <= countries
+    flow_kinds = {flow.kind for flow in extras.flows}
+    assert {e.kind for e in graph.edges} <= flow_kinds | {extras.holding_edge_kind}
+    assert all(e.series for e in graph.edges if e.kind in flow_kinds)
+
+
+def test_money_trail_requires_a_graph_out_of_fold_scores_and_real_columns() -> None:
+    aml = _repo_scenario("aml_money_trail")
+    extras = aml.ui_extras.model_dump()  # type: ignore[union-attr]
+    dataset = aml.dataset.model_dump()  # type: ignore[union-attr]
+    model = aml.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match=r"requires a `dataset\.graph`"):
+        _with(aml, dataset={**dataset, "graph": None})
+    with pytest.raises(ValidationError, match=r"requires model\.out_of_fold_scores"):
+        _with(aml, model={**model, "out_of_fold_scores": False})
+    with pytest.raises(ValidationError, match="must be a categorical feature"):
+        _with(aml, ui_extras={**extras, "holder_type_feature": "accounts"})
+    with pytest.raises(ValidationError, match="person_types"):
+        _with(aml, ui_extras={**extras, "person_types": ["Robot"]})
+    with pytest.raises(ValidationError, match=r"not dataset\.display_columns"):
+        _with(aml, ui_extras={**extras, "case_column": "usd_out"})
+    with pytest.raises(ValidationError, match="must be distinct"):
+        _with(aml, ui_extras={**extras, "flows": [extras["flows"][0], extras["flows"][0]]})
+    with pytest.raises(ValidationError, match="must be distinct"):
+        _with(aml, ui_extras={**extras, "countries": [extras["countries"][0], extras["countries"][0]]})
+    with pytest.raises(ValidationError, match="must be a numeric feature"):
+        _with(aml, ui_extras={**extras, "facts": ["holder_type"]})
+    with pytest.raises(ValidationError, match="strictly increase"):
+        _with(aml, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
+    with pytest.raises(ValidationError, match="flag_from_tier"):
+        _with(aml, ui_extras={**extras, "flag_from_tier": "Nope"})
