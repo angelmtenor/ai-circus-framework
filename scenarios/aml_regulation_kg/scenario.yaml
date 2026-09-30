@@ -1,0 +1,88 @@
+# Seed definition for the "aml_regulation_kg" scenario — GraphRAG over EU AML law.
+# Loaded into the `platform` Postgres schema by services/platform-registry at bootstrap.
+#
+# The knowledge-graph sibling of aml_money_trail: where that scenario's graph is made of
+# *entities* (banks, account holders, payments), this one's is made of *concepts* typed
+# by a small ontology — who is obliged, what they must (not) do, when, towards which
+# authority, within which limit — extracted once from 18 articles of the AMLR by
+# scripts/prepare_aml_regulation_kg.py (every relation keeps its article and a verbatim
+# quote) and committed. rag-agent answers through graph retrieval (HippoRAG 2-style:
+# seed concepts linked by embedding, then Personalized PageRank over the graph) and the
+# UI lights up the subgraph each answer used.
+
+slug: aml_regulation_kg
+kind: conversational_rag
+title: "AML Rulebook Knowledge Graph"
+description: >
+  GraphRAG over the EU Anti-Money Laundering Regulation (EU) 2024/1624: a knowledge graph
+  of obliged entities, obligations, triggers, authorities, records and limits, extracted
+  from 18 articles with a citation and a verbatim quote on every relation. Ask what a bank
+  must do when something looks suspicious and watch the graph light up the path it used.
+role_required: "scenario:aml_regulation_kg"
+industry: banking_finance
+icon: "⚖️"
+
+credits:
+  source: "Regulation (EU) 2024/1624 (AMLR) · EUR-Lex, © European Union"
+  url: "https://eur-lex.europa.eu/eli/reg/2024/1624/oj/eng"
+  note: >
+    18 of its 90 articles, unmodified (reuse authorised, Decision 2011/833/EU). The knowledge
+    graph is a machine extraction checked for verbatim quotes — a study aid, not legal advice.
+
+chat:
+  context: >
+    The EU Anti-Money Laundering Regulation (EU) 2024/1624 ("AMLR") as it applies to banks
+    and other obliged entities: who is an obliged entity, customer due diligence and when it
+    applies, ongoing monitoring, enhanced due diligence and high-risk third countries,
+    politically exposed persons and their family members, beneficial ownership, reporting
+    suspicions to the FIU, refraining from suspicious transactions, the prohibition of
+    disclosure (tipping-off), record retention, anonymous accounts and the cash payment limit.
+  sample_questions:
+    - "A customer's transfers look like laundering. What must the bank do, towards whom, and how fast?"
+    - "When does a bank have to apply enhanced due diligence?"
+    - "What changes when the customer is a politically exposed person — and for how long after they leave office?"
+    - "How long must customer due diligence records be kept?"
+    - "Can the bank tell the customer it has filed a suspicious transaction report?"
+
+documents:
+  bucket: "scenario-aml-regulation-kg"
+  raw_prefix: "raw/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 800
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+  knowledge_graph:
+    seed_file: "knowledge_graph.json"
+    max_triples: 30
+    max_passages: 2
+    hops: 2
+
+vector_store:
+  backend: qdrant
+  collection_prefix: "aml_regulation_kg"
+  top_k: 5
+
+ui_extras:
+  kind: knowledge_graph
+  title: "AMLR knowledge graph"
+  subtitle: "Concepts and obligations of Regulation (EU) 2024/1624 — every link cites its article"
+  # Colour = role (actor / action / condition / document), glyph = class.
+  classes:
+    - {key: ObligedEntity, label: "Obliged entity", role: actor, shape: hexagon}
+    - {key: Party, label: "Party", role: actor, shape: diamond}
+    - {key: Authority, label: "Authority", role: actor, shape: square}
+    - {key: Obligation, label: "Obligation", role: action, shape: circle}
+    - {key: Trigger, label: "Trigger", role: condition, shape: triangle}
+    - {key: Limit, label: "Limit", role: condition, shape: pill}
+    - {key: Record, label: "Record", role: condition, shape: square}
+    - {key: Article, label: "Article", role: document, shape: square}
+  disclaimer: >
+    Machine-extracted from the regulation's text; each relation quotes the article it comes
+    from. Not legal advice — read the cited article.
+
+services:
+  etl: etl-vectorize
+  agent: rag-agent

@@ -1,0 +1,13 @@
+# AMLR Article 79 — Anonymous accounts and bearer shares and bearer share warrants
+
+_Regulation (EU) 2024/1624 of the European Parliament and of the Council of 31 May 2024 (AMLR), OJ L, 2024/1624, 19.6.2024. Source: EUR-Lex — © European Union, reuse authorised (Decision 2011/833/EU)._
+
+1. Credit institutions, financial institutions and crypto-asset service providers shall be prohibited from keeping anonymous bank and payment accounts, anonymous passbooks, anonymous safe-deposit boxes or anonymous crypto-asset accounts as well as any account otherwise allowing for the anonymisation of the customer account holder or the anonymisation or increased obfuscation of transactions, including through anonymity-enhancing coins.
+
+Owners and beneficiaries of existing anonymous bank or payment accounts, anonymous passbooks, anonymous safe-deposit boxes held by credit institutions or financial institutions, or crypto-asset accounts shall be subject to customer due diligence measures before those accounts, passbooks, or deposit boxes are used in any way.
+
+2. Credit institutions and financial institutions acting as acquirers within the meaning of Article 2, point (1), of Regulation (EU) 2015/751 of the European Parliament and of the Council (46) shall not accept payments carried out with anonymous prepaid cards issued in third countries, unless otherwise provided for in the regulatory technical standards adopted by the Commission in accordance with Article 28 of this Regulation on the basis of a proven low risk.
+
+3. Companies shall be prohibited from issuing bearer shares, and shall convert all existing bearer shares into registered shares, shall immobilise them within the meaning of Article 2(1), point (3), of Regulation (EU) No 909/2014, or deposit them with a financial institution by 10 July 2029. However, companies with securities listed on a regulated market or whose shares are issued as intermediated securities either through immobilisation within the meaning of Article 2(1), point (3), of that Regulation or through a direct issuance in dematerialised form within the meaning of Article 2(1), point (4), of that Regulation shall be permitted to issue new and maintain existing bearer shares. For existing bearer shares that are not converted, immobilised or deposited by 10 July 2029, all voting rights and rights to distribution attached to those shares shall be automatically suspended until their conversion, immobilisation or deposit. All such shares not converted, immobilised or deposited by 10 July 2030 shall be cancelled, leading to a share capital decrease of the corresponding amount.
+
+Companies shall be prohibited from issuing bearer share warrants that are not in intermediated form.

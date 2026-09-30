@@ -243,6 +243,8 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   get_predictions_vs_actuals: "Fetching predictions vs. actuals…",
   predict_records: "Running the model…",
   retrieve_docs: "Searching documents…",
+  graph_search: "Walking the knowledge graph…",
+  graph_path: "Tracing a path through the knowledge graph…",
   render_chart: "Drawing chart…",
   render_table: "Building table…",
 };

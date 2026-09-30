@@ -69,6 +69,10 @@ class FakeObjectStore:
         """Retrieve previously stored bytes."""
         return self._objects[org_id][path]
 
+    def exists(self, org_id: str, path: str) -> bool:
+        """Whether a tenant-scoped path holds an object."""
+        return path in self._objects.get(org_id, {})
+
     def list(self, org_id: str, prefix: str = "") -> list[str]:
         """List keys under a tenant/prefix."""
         return [k for k in self._objects.get(org_id, {}) if k.startswith(prefix)]
@@ -303,3 +307,134 @@ def test_run_vectorize_is_isolated_per_tenant(scenario_dir: Path) -> None:
     assert "docs_rag__org-1" in qdrant.collections
     assert "docs_rag__org-2" in qdrant.collections
     assert qdrant.collections["docs_rag__org-1"] is not qdrant.collections["docs_rag__org-2"]
+
+
+KNOWLEDGE_GRAPH = {
+    "nodes": [
+        {"id": "oe", "kind": "entity", "label": "Obliged entity", "type": "ObligedEntity"},
+        {
+            "id": "report",
+            "kind": "entity",
+            "label": "Report suspicion",
+            "type": "Obligation",
+            "description": "Tell the FIU.",
+        },
+        {"id": "art69", "kind": "entity", "label": "Art. 69", "type": "Article", "citation": "doc1.md"},
+    ],
+    "edges": [
+        {
+            "source": "oe",
+            "target": "report",
+            "kind": "must_perform",
+            "label": "must perform",
+            "citation": "AMLR Art. 69(1)",
+            "evidence": "shall report",
+        },
+        {"source": "report", "target": "art69", "kind": "cited_in"},
+    ],
+}
+
+
+def _kg_documents() -> DocumentsConfig:
+    from ai_circus_shared.scenario_schema import KnowledgeGraphConfig
+
+    return DOCUMENTS.model_copy(update={"knowledge_graph": KnowledgeGraphConfig(seed_file="kg.json")})
+
+
+def test_run_vectorize_bootstraps_and_indexes_the_knowledge_graph_per_tenant(scenario_dir: Path) -> None:
+    """A knowledge-graph scenario's graph lands in the tenant's bucket and every node and
+    relation becomes one point of the tenant's kg collection, with rebuildable payloads.
+    """
+    import json
+
+    (scenario_dir / "kg.json").write_text(json.dumps(KNOWLEDGE_GRAPH))
+    store = FakeObjectStore()
+    qdrant = FakeQdrantClient()
+
+    run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", _kg_documents(), VECTOR_STORE, scenario_dir)
+    run_vectorize(store, qdrant, FakeEmbeddingModel(), "org-1", _kg_documents(), VECTOR_STORE, scenario_dir)
+
+    assert store.exists("org-1", "kg/graph.json")
+    points = qdrant.collections["docs_rag_kg__org-1"]
+    assert len(points) == 5  # 3 nodes + 2 relations, not duplicated by the re-run
+    payloads = [p.payload for p in points]
+    assert {
+        "element": "edge",
+        "source": "oe",
+        "target": "report",
+        "kind": "must_perform",
+        "citation": "AMLR Art. 69(1)",
+        "evidence": "shall report",
+    } in payloads
+    assert next(p for p in payloads if p.get("id") == "art69")["citation"] == "doc1.md"
+    assert "docs_rag_kg__org-2" not in qdrant.collections
+
+
+def test_ensure_knowledge_graph_keeps_a_tenants_own_graph_and_rejects_an_invalid_seed(scenario_dir: Path) -> None:
+    """An existing tenant graph is never overwritten; a broken seed never reaches the bucket."""
+    import json
+
+    from etl_vectorize.core.vectorize import ensure_knowledge_graph
+
+    (scenario_dir / "kg.json").write_text(json.dumps(KNOWLEDGE_GRAPH))
+    store = FakeObjectStore()
+    store.put("org-1", "kg/graph.json", b"tenant's own")
+    ensure_knowledge_graph(store, "org-1", _kg_documents(), scenario_dir)
+    assert store.get("org-1", "kg/graph.json") == b"tenant's own"
+
+    (scenario_dir / "kg.json").write_text('{"nodes": [{"id": "x", "kind": "entity"}]}')  # entity without label
+    with pytest.raises(ValueError, match="label"):
+        ensure_knowledge_graph(store, "org-2", _kg_documents(), scenario_dir)
+    assert not store.exists("org-2", "kg/graph.json")
+
+
+def test_synonym_pairs_link_rewordings_of_one_class_but_never_numbers_or_documents() -> None:
+    """HippoRAG 2's synonymy edges: near-identical same-class concepts are linked (the
+    edge vector is the mean of its ends); numbers, other classes and documents are not.
+    """
+    from ai_circus_shared.network_graph import NetworkGraph
+
+    from etl_vectorize.core.vectorize import synonym_pairs
+
+    graph = NetworkGraph.model_validate({
+        "nodes": [
+            {"id": "a", "kind": "entity", "label": "Report suspicion to FIU", "type": "Obligation"},
+            {"id": "b", "kind": "entity", "label": "Report suspicious transactions to FIU", "type": "Obligation"},
+            {"id": "c", "kind": "entity", "label": "FIU", "type": "Authority"},
+            {"id": "y1", "kind": "entity", "label": "5 years", "type": "Limit"},
+            {"id": "y2", "kind": "entity", "label": "1 year", "type": "Limit"},
+            {"id": "doc", "kind": "entity", "label": "Art. 69", "type": "Article", "citation": "x.md"},
+        ],
+        "edges": [{"source": "a", "target": "doc", "kind": "cited_in"}],
+    })
+    same = [1.0, 0.0]
+    vectors = {"a": same, "b": [0.99, 0.05], "c": same, "y1": same, "y2": same, "doc": same}
+
+    pairs = synonym_pairs(graph, vectors)
+
+    assert [(a, b) for a, b, _ in pairs] == [("a", "b")]
+    assert pairs[0][2] == [0.995, 0.025]
+
+
+def test_ensure_knowledge_graph_follows_a_changed_seed_but_adopts_or_keeps_the_rest(scenario_dir: Path) -> None:
+    """A seed-bootstrapped graph is replaced when the seed changes (no manual clean-up);
+    a pre-marker copy identical to the seed is adopted; a tenant's own graph stays.
+    """
+    import json
+
+    from etl_vectorize.core.vectorize import KNOWLEDGE_GRAPH_SEED_MARKER, ensure_knowledge_graph
+
+    seed = scenario_dir / "kg.json"
+    seed.write_text(json.dumps(KNOWLEDGE_GRAPH))
+    store = FakeObjectStore()
+    ensure_knowledge_graph(store, "org-1", _kg_documents(), scenario_dir)
+    assert store.get("org-1", "kg/graph.json") == seed.read_bytes()
+
+    changed = {**KNOWLEDGE_GRAPH, "nodes": [*KNOWLEDGE_GRAPH["nodes"], {"id": "x", "kind": "entity", "label": "X"}]}
+    seed.write_text(json.dumps(changed))
+    ensure_knowledge_graph(store, "org-1", _kg_documents(), scenario_dir)
+    assert store.get("org-1", "kg/graph.json") == seed.read_bytes()
+
+    store.put("org-2", "kg/graph.json", seed.read_bytes())  # bootstrapped before the marker existed
+    ensure_knowledge_graph(store, "org-2", _kg_documents(), scenario_dir)
+    assert store.exists("org-2", KNOWLEDGE_GRAPH_SEED_MARKER)

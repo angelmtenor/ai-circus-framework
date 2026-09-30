@@ -54,6 +54,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "bank_early_warning",
         "enron_fraud_network",
         "aml_money_trail",
+        "aml_regulation_kg",
         "global_health_shipments",
         "sede_electronica",
     }
@@ -240,6 +241,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "bank_early_warning",
         "enron_fraud_network",
         "aml_money_trail",
+        "aml_regulation_kg",
         "global_health_shipments",
         "sede_electronica",
     }
@@ -258,8 +260,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 27
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 27
+    assert session.query(Scenario).count() == 28
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 28
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

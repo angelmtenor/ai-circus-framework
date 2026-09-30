@@ -348,6 +348,19 @@ export type MoneyTrailExtra = {
   case_column?: string | null;
   disclaimer?: string | null;
 };
+// Mirrors scenario_schema.py's KnowledgeGraphExtra — drives KnowledgeGraphView.tsx.
+export type KnowledgeGraphRole = "actor" | "action" | "condition" | "document";
+export type KnowledgeGraphShape = "circle" | "square" | "diamond" | "triangle" | "hexagon" | "pill";
+export type KnowledgeGraphExtra = {
+  kind: "knowledge_graph";
+  title: string;
+  subtitle?: string | null;
+  classes: { key: string; label: string; role: KnowledgeGraphRole; shape: KnowledgeGraphShape }[];
+  disclaimer?: string | null;
+};
+// rag-agent's `knowledge_graph_trace` AG-UI custom event: what one answer retrieved.
+export type KnowledgeGraphTrace = { seeds: string[]; nodes: string[]; edges: [string, string, string][] };
+
 export type UiExtras =
   | RegionMapExtra
   | LivePlantExtra
@@ -359,7 +372,8 @@ export type UiExtras =
   | ShipmentGlobeExtra
   | MoneyTrailExtra
   | TriageBoardExtra
-  | ReadingRoomExtra;
+  | ReadingRoomExtra
+  | KnowledgeGraphExtra;
 
 // Mirrors ai_circus_shared.network_graph.NetworkGraph — prediction's GET /graph/{slug}.
 export type GraphNode = {
@@ -378,6 +392,7 @@ export type GraphEdge = {
   weight: number;
   label?: string;
   citation?: string;
+  evidence?: string; // a verbatim quote of the cited source (knowledge graphs)
   series: Record<string, number>;
 };
 export type NetworkGraph = { version: 1; periods: string[]; nodes: GraphNode[]; edges: GraphEdge[] };
@@ -753,6 +768,12 @@ export async function modelCard(baseUrl: string, scenarioSlug: string, accessTok
 
 export async function networkGraph(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<NetworkGraph> {
   const response = await fetch(`${baseUrl}/graph/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+// rag-agent's GET /knowledge-graph/{slug} — the tenant's knowledge graph (documents.knowledge_graph).
+export async function knowledgeGraph(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<NetworkGraph> {
+  const response = await fetch(`${baseUrl}/knowledge-graph/${scenarioSlug}`, { headers: headers(accessToken) });
   return asJson(response);
 }
 

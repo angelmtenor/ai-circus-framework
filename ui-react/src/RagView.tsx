@@ -1,12 +1,15 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { ChatModel, ScenarioSummary } from "./apiClient";
+import type { ChatModel, KnowledgeGraphTrace, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
+
+// Canvas + d3-force: loaded only for a scenario that ships a knowledge graph.
+const KnowledgeGraphView = lazy(() => import("./KnowledgeGraphView"));
 
 /**
  * conversational_rag workspace — a full-page ChatGPT-style window grounded in the
@@ -56,6 +59,38 @@ function RagViewContent({
 }) {
   useChatGenerativeUiActions();
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
+  const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
+
+  // rag-agent reports the subgraph each answer used as a `knowledge_graph_trace`
+  // custom event (see its api.py); switching conversations clears the highlight.
+  useEffect(() => {
+    setTrace(null);
+    if (!graphExtras) return;
+    const { unsubscribe } = agent.subscribe({
+      onCustomEvent: ({ event }) => {
+        if (event.name === "knowledge_graph_trace") setTrace(event.value as KnowledgeGraphTrace);
+      },
+    });
+    return unsubscribe;
+  }, [agent, graphExtras]);
+
+  const chat = (
+    <div className="panel-card panel-card--chat panel-card--chat-full">
+      <ChatPanel
+        agent={agent}
+        baseUrl={config.ragAgentUrl}
+        scenarioSlug={scenario.slug}
+        sampleQuestions={scenario.sample_questions}
+        accessToken={accessToken}
+        variant="full"
+        onModel={onModel}
+        initialMessages={conversation.initialMessages}
+        conversationReady={conversation.ready}
+        onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
+      />
+    </div>
+  );
 
   return (
     <div className="workspace workspace--rag">
@@ -85,20 +120,16 @@ function RagViewContent({
             <p>{scenario.description}</p>
           </div>
         </div>
-        <div className="panel-card panel-card--chat panel-card--chat-full">
-          <ChatPanel
-            agent={agent}
-            baseUrl={config.ragAgentUrl}
-            scenarioSlug={scenario.slug}
-            sampleQuestions={scenario.sample_questions}
-            accessToken={accessToken}
-            variant="full"
-            onModel={onModel}
-            initialMessages={conversation.initialMessages}
-            conversationReady={conversation.ready}
-            onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
-          />
-        </div>
+        {graphExtras ? (
+          <div className="rag-split">
+            {chat}
+            <Suspense fallback={<div className="kg-panel panel-card">Loading the knowledge graph…</div>}>
+              <KnowledgeGraphView scenarioSlug={scenario.slug} extras={graphExtras} accessToken={accessToken} trace={trace} />
+            </Suspense>
+          </div>
+        ) : (
+          chat
+        )}
       </div>
     </div>
   );
