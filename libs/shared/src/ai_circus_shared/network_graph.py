@@ -17,8 +17,8 @@ Three kinds of node:
   employee who relays e-mails) — anonymised by the prepare script.
 
 Edges are directed (`source` → `target`) and typed by `kind`. An edge may carry a
-`series`: its weight per period (e.g. e-mails per month), keyed by `periods`, so the
-UI can replay the network over time.
+`series`: its weight per period (e.g. e-mails per month, or dollars per hour), keyed by
+`periods`, so the UI can replay the network over time.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ MAX_SERIES_POINTS = 400_000
 MAX_GRAPH_BYTES = 8_000_000
 
 NodeKind = Literal["row", "entity", "context"]
-_PERIOD = r"^\d{4}(-\d{2}(-\d{2})?)?$"  # "2001", "2001-10" or "2001-10-16"
+_PERIOD = r"^\d{4}(-\d{2}(-\d{2}(T\d{2})?)?)?$"  # "2001", "2001-10", "2001-10-16" or "2022-09-03T14"
 
 
 class GraphNode(BaseModel):

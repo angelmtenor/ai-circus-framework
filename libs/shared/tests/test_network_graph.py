@@ -99,3 +99,15 @@ def test_restrict_to_rows_compares_ids_as_strings() -> None:
         }
     )
     assert len(restrict_to_rows(graph, [1, 2]).edges) == 1
+
+
+def test_periods_may_be_hourly() -> None:
+    doc = _doc(
+        periods=["2022-09-01T00", "2022-09-01T01", "2022-09-02"],
+        edges=[{"source": "A", "target": "B", "kind": "ach", "series": {"2022-09-01T01": 1250.5}}],
+    )
+    assert NetworkGraph.model_validate(doc).edges[0].series == {"2022-09-01T01": 1250.5}
+    with pytest.raises(ValidationError, match="pattern"):
+        NetworkGraph.model_validate(_doc(periods=["2022-09-01T24:00"]))
+    with pytest.raises(ValidationError, match="strictly increase"):
+        NetworkGraph.model_validate(_doc(periods=["2022-09-01T05", "2022-09-01T05"]))

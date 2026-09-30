@@ -795,6 +795,65 @@ class ShipmentGlobeExtra(BaseModel):
     disclaimer: str | None = None
 
 
+class MoneyTrailCountry(BaseModel):
+    """Where one country's banks sit on a `money_trail` world map: `key` is the value of
+    the graph nodes' `group` (and of a bank's `type`) that belongs to it."""
+
+    key: str
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
+class MoneyTrailFlow(BaseModel):
+    """One payment format of a `money_trail`: the graph edge `kind` that carries it."""
+
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+    label: str  # e.g. "ACH transfer"
+
+
+class MoneyTrailExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario whose
+    rows are *account holders* (people and legal entities) of a set of banks and whose
+    positive class is involvement in laundering. It reads the scenario's network
+    (`dataset.graph`): entity nodes are banks (`type` = country), row/context nodes are
+    holders (`group` = country), `holding_edge_kind` edges tie a holder to its banks, and
+    each of `flows` is an edge kind whose per-period `series` (the amount moved) the tab
+    replays hour by hour as money hopping between banks on a world map. Every row is
+    scored out-of-fold (`model.out_of_fold_scores`); selecting a holder opens a case board
+    of its flows and a dossier (SHAP rolled into `pillars`, `facts` as percentiles), and
+    the real outcome can be revealed — with, per `outcome_detail_column`, the typology of
+    the laundering scheme it belongs to. See ui-react's MoneyTrailView.tsx — the single
+    generic renderer; the wording fields are its only domain vocabulary.
+    """
+
+    kind: Literal["money_trail"] = "money_trail"
+    tab_label: str = "Money Trail"
+    title: str
+    subtitle: str | None = None
+    entity_noun: str = "holder"  # singular, what a row is
+    name_column: str  # a dataset.display_columns entry
+    detail_columns: list[str] = []  # display_columns shown under the name, e.g. home bank
+    # A categorical feature: which holders are natural persons (drawn as a person, the
+    # rest as a company) — `person_types` are its options that are.
+    holder_type_feature: str
+    person_types: list[str] = []
+    size_feature: str | None = None  # numeric feature sizing each holder's node
+    flows: list[MoneyTrailFlow] = Field(min_length=1)
+    holding_edge_kind: str = "holds"
+    countries: list[MoneyTrailCountry] = Field(min_length=1)
+    amount_units: str = "USD"  # display only
+    tiers: list[WatchlistTier] = Field(min_length=2)
+    pillars: list[WatchlistPillar] = []
+    facts: list[str] = []  # numeric features listed in the dossier with their percentile
+    outcome_label: str = "Adverse outcome"
+    flag_from_tier: str | None = None  # None = the top tier only
+    # display_column naming the scheme a positive row belongs to (shown on reveal, and
+    # the typology gallery groups by it) / the case it belongs to (its members are linked).
+    outcome_detail_column: str | None = None
+    case_column: str | None = None
+    disclaimer: str | None = None
+
+
 # A live, data-backed block a tutorial step can embed (see ui-react's TutorialView.tsx):
 # dataset_preview = the first rows; class_balance = the target's class split;
 # model_card = the training leaderboard + selection protocol; roc_curve /
@@ -888,6 +947,7 @@ UiExtras = Annotated[
     | NetworkExplorerExtra
     | DispatchTowerExtra
     | ShipmentGlobeExtra
+    | MoneyTrailExtra
     | TriageBoardExtra
     | ReadingRoomExtra,
     Field(discriminator="kind"),
@@ -904,6 +964,7 @@ _TABULAR_UI_EXTRAS = (
     NetworkExplorerExtra,
     DispatchTowerExtra,
     ShipmentGlobeExtra,
+    MoneyTrailExtra,
 )
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 
@@ -1787,6 +1848,49 @@ class ScenarioDefinition(BaseModel):
         unknown_icons = sorted(set(extras.choice_icons) - choice_options)
         if unknown_icons:
             raise ValueError(f"{where} choice_icons {unknown_icons} are not options of the choice features.")
+        return self
+
+    @model_validator(mode="after")
+    def _money_trail_references_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `money_trail` block has no network to draw, names a column that
+        isn't there, treats a non-option as a person type, or repeats a payment format or
+        country — ui-react's MoneyTrailView would otherwise render an empty map."""
+        extras = self.ui_extras
+        if not isinstance(extras, MoneyTrailExtra) or self.dataset is None:
+            return self
+        where = "ui_extras.money_trail"
+        if self.dataset.graph is None:
+            raise ValueError(f"{where} requires a `dataset.graph` (the flows to replay).")
+        if self.model is None or self.model.task_type != "classification":
+            raise ValueError(f"{where} requires a classification model (a probability per holder).")
+        if not self.model.out_of_fold_scores:
+            raise ValueError(
+                f"{where} requires model.out_of_fold_scores: it reveals every row's real outcome next to its "
+                "score, which is only honest for scores from models that never saw that row."
+            )
+        self._feature_of_type(extras.holder_type_feature, "categorical", f"{where} holder_type_feature")
+        type_spec = self.dataset.feature_schema[extras.holder_type_feature]
+        assert isinstance(type_spec, CategoricalFeatureUI)
+        unknown_types = sorted(set(extras.person_types) - set(type_spec.options))
+        if unknown_types:
+            raise ValueError(f"{where} person_types {unknown_types} are not {extras.holder_type_feature!r} options.")
+        for feature in (extras.size_feature, *extras.facts):
+            if feature is not None:
+                self._feature_of_type(feature, "numeric", where)
+        named = {extras.name_column, *extras.detail_columns}
+        named |= {c for c in (extras.outcome_detail_column, extras.case_column) if c is not None}
+        unknown = sorted(named - set(self.dataset.display_columns))
+        if unknown:
+            raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
+        kinds = [flow.kind for flow in extras.flows]
+        countries = [country.key for country in extras.countries]
+        if len(kinds) != len(set(kinds)) or extras.holding_edge_kind in kinds:
+            raise ValueError(f"{where} flows {kinds} must be distinct and differ from the holding edge kind.")
+        if len(countries) != len(set(countries)):
+            raise ValueError(f"{where} countries {countries} must be distinct.")
+        self._check_tiers_and_pillars(extras.tiers, extras.pillars, where)
+        if extras.flag_from_tier is not None and extras.flag_from_tier not in {t.label for t in extras.tiers}:
+            raise ValueError(f"{where} flag_from_tier {extras.flag_from_tier!r} is not one of the tiers' labels.")
         return self
 
     @model_validator(mode="after")
