@@ -245,6 +245,9 @@ ui_extras:
     - {label: "Stock cash-out", features: [exercised_stock_options, restricted_stock, restricted_stock_deferred, total_stock_value, exercised_share, stock_to_cash]}
     - {label: "Network position", features: [distinct_contacts, pagerank_pctl, betweenness_pctl, clustering]}
     - {label: "E-mail activity", features: [emails_sent, emails_received, crisis_activity_share, after_hours_share]}
+  # The Investigate view's "new individual": these features are derived from the ties
+  # an analyst picks (the rest of the profile is set by hand).
+  tie_features: {contacts: distinct_contacts, sent: emails_sent, received: emails_received, clustering: clustering, centrality: pagerank_pctl}
   events:
     - {date: "2001-02-12", label: "Skilling becomes CEO", description: "Jeffrey Skilling succeeds Kenneth Lay as chief executive; Lay remains Chairman."}
     - {date: "2001-08-14", label: "Skilling resigns", description: "Skilling resigns after six months as CEO; Lay reassumes the position."}
