@@ -33,6 +33,7 @@ from qdrant_client import QdrantClient
 
 from rag_agent import get_env_config
 from rag_agent.api import router
+from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.logger import configure_logger, get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +69,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.definitions = definitions
     app.state.embedder = embedder
     app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
+    # Knowledge graphs (documents.knowledge_graph scenarios), loaded per tenant on first
+    # use and TTL-cached — data, a few hundred points, not a model to warm up.
+    app.state.graph_cache = KnowledgeGraphCache()
     # One ChatOpenAI client per model_name, built lazily by api._llm() as requests pick
     # different models from platform-registry's live Settings picker — not a single
     # client built here, since which model to use can now change without a restart.
