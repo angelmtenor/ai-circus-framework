@@ -782,7 +782,7 @@ def test_tutorial_validates_chart_columns_and_examples() -> None:
 def test_tutorial_is_tabular_ml_only() -> None:
     titanic = _titanic()
     with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
-        _with(titanic, kind="conversational_rag")
+        _with(titanic, kind="conversational_rag", ui_extras=None)  # a tabular tab fails first otherwise
 
 
 # --- free-text features (toxic_leadership) ---
@@ -1225,3 +1225,38 @@ def test_money_trail_requires_a_graph_out_of_fold_scores_and_real_columns() -> N
         _with(aml, ui_extras={**extras, "tiers": list(reversed(extras["tiers"]))})
     with pytest.raises(ValidationError, match="flag_from_tier"):
         _with(aml, ui_extras={**extras, "flag_from_tier": "Nope"})
+
+
+def test_repo_aml_regulation_kg_ships_a_valid_cited_knowledge_graph() -> None:
+    """The committed graph parses, every relation cites an AMLR article and quotes it,
+    every document node names a real seed document, and the panel is enabled."""
+    from pathlib import Path
+
+    from ai_circus_shared.network_graph import parse_graph
+    from ai_circus_shared.scenario_schema import KnowledgeGraphExtra
+
+    kg = _repo_scenario("aml_regulation_kg")
+    assert kg.documents is not None and kg.documents.knowledge_graph is not None
+    assert isinstance(kg.ui_extras, KnowledgeGraphExtra)
+    scenario_dir = Path(__file__).parents[3] / "scenarios/aml_regulation_kg"
+    graph = parse_graph((scenario_dir / kg.documents.knowledge_graph.seed_file).read_bytes())
+    relations = [e for e in graph.edges if e.kind != "cited_in"]
+    assert len(relations) >= 50
+    assert all(e.citation and e.citation.startswith("AMLR Art. ") and e.evidence for e in relations)
+    documents = {n.citation for n in graph.nodes if n.type == "Article"}
+    assert documents and all((scenario_dir / "sample_docs" / d).is_file() for d in documents)  # type: ignore[operator]
+    assert {c.key for c in kg.ui_extras.classes} >= {n.type for n in graph.nodes}
+
+
+def test_knowledge_graph_panel_is_rag_only_and_needs_a_graph() -> None:
+    from ai_circus_shared.scenario_schema import KnowledgeGraphExtra, kg_collection_name
+
+    kg = _repo_scenario("aml_regulation_kg")
+    raw = kg.model_dump()
+    raw["documents"]["knowledge_graph"] = None
+    with pytest.raises(ValidationError, match=r"requires documents\.knowledge_graph"):
+        ScenarioDefinition.model_validate(raw)
+    with pytest.raises(ValidationError, match="not available for kind='tabular_ml'"):
+        _ui_extras_scenario(KnowledgeGraphExtra(title="x"))  # type: ignore[arg-type]
+    assert kg.vector_store is not None
+    assert kg_collection_name(kg.vector_store, "org-1") == "aml_regulation_kg_kg__org-1"

@@ -66,6 +66,9 @@ class GraphEdge(BaseModel):
     weight: float = Field(default=1.0, ge=0.0)
     label: str | None = Field(default=None, max_length=200)
     citation: str | None = Field(default=None, max_length=500)
+    # A verbatim quote from the cited source backing this edge (knowledge graphs
+    # extracted from text, e.g. `aml_regulation_kg` — see its prepare script).
+    evidence: str | None = Field(default=None, max_length=1000)
     series: dict[str, Annotated[float, Field(ge=0.0)]] = {}  # period -> weight in that period (sparse)
 
 
