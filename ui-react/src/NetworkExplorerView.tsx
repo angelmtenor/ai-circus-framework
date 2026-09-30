@@ -52,9 +52,9 @@ import "./networkExplorer.css";
  * wording fields are the only domain vocabulary here; the stage is networkScene.ts.
  */
 
-type ScoreSource = "out_of_fold" | "deployed";
+export type ScoreSource = "out_of_fold" | "deployed";
 
-type Loaded = {
+export type Loaded = {
   net: Network;
   card: ModelCard | null;
   source: ScoreSource;
@@ -64,10 +64,20 @@ type Loaded = {
   truncated: boolean;
 };
 
-type Detail = { base: number; items: { feature: string; value: number }[]; scale: ShapScale };
+export type Detail = { base: number; items: { feature: string; value: number }[]; scale: ShapScale };
 
 const CACHE = new Map<string, Promise<Loaded>>();
 const MAX_CACHED = 8;
+
+/** One load per scenario+caller, shared by the map and the Investigate view. */
+export function loadNetworkCached(scenario: ScenarioSummary, extras: NetworkExplorerExtra, accessToken: string | null): { key: string; promise: Promise<Loaded>; drop: () => void } {
+  const key = `${scenario.slug}|${accessToken ?? ""}`;
+  if (!CACHE.has(key)) {
+    if (CACHE.size >= MAX_CACHED) CACHE.delete(CACHE.keys().next().value!);
+    CACHE.set(key, loadNetwork(scenario, extras, accessToken));
+  }
+  return { key, promise: CACHE.get(key)!, drop: () => CACHE.delete(key) };
+}
 
 async function loadNetwork(scenario: ScenarioSummary, extras: NetworkExplorerExtra, accessToken: string | null): Promise<Loaded> {
   const features = scenario.feature_columns ?? [];
@@ -138,14 +148,14 @@ function logit(p: number): number {
   return Math.log(q / (1 - q));
 }
 
-function explain(features: string[], probability: number, contributions: Record<string, number>, scale: ShapScale): Detail {
+export function explain(features: string[], probability: number, contributions: Record<string, number>, scale: ShapScale): Detail {
   const byFeature = explainByFeature(features, probability, contributions);
   const sum = byFeature.items.reduce((s, i) => s + i.value, 0);
   const base = scale === "probability" ? byFeature.base : 1 / (1 + Math.exp(-(logit(probability) - sum)));
   return { base, items: byFeature.items, scale };
 }
 
-function Track({ p, marker, markerTitle }: { p: number; marker?: number | null; markerTitle?: string }) {
+export function Track({ p, marker, markerTitle }: { p: number; marker?: number | null; markerTitle?: string }) {
   return (
     <span className="nx-track" aria-hidden>
       {marker !== null && marker !== undefined && <span className="nx-track-marker" style={{ left: `${marker * 100}%` }} title={markerTitle} />}
@@ -154,7 +164,7 @@ function Track({ p, marker, markerTitle }: { p: number; marker?: number | null; 
   );
 }
 
-export function NetworkExplorerView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { scenario: ScenarioSummary; accessToken: string | null; onInvestigate?: (id: string) => void }) {
   const extras = scenario.ui_extras as NetworkExplorerExtra;
   const { theme } = useTheme();
   const surface = surfaceMode(theme.cssVars["--bg"]);
@@ -205,16 +215,12 @@ export function NetworkExplorerView({ scenario, accessToken }: { scenario: Scena
 
   // ── data ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const key = `${scenario.slug}|${accessToken ?? ""}`;
-    if (!CACHE.has(key)) {
-      if (CACHE.size >= MAX_CACHED) CACHE.delete(CACHE.keys().next().value!);
-      CACHE.set(key, loadNetwork(scenario, extras, accessToken));
-    }
+    const { promise, drop } = loadNetworkCached(scenario, extras, accessToken);
     let cancelled = false;
-    CACHE.get(key)!
+    promise
       .then((data) => !cancelled && setLoaded(data))
       .catch((e: Error) => {
-        CACHE.delete(key);
+        drop();
         if (!cancelled) setError(e.message);
       });
     return () => {
@@ -743,6 +749,7 @@ export function NetworkExplorerView({ scenario, accessToken }: { scenario: Scena
               positiveMedian={positiveMedian}
               onPick={select}
               onClose={() => setSelectedId(null)}
+              onInvestigate={onInvestigate && selected.kind === "row" ? () => onInvestigate(selected.id) : undefined}
               onTrace={() => {
                 setPathEnds(null);
                 setPathFrom(selected.id);
@@ -864,6 +871,7 @@ function Dossier({
   onPick,
   onClose,
   onTrace,
+  onInvestigate,
 }: {
   scenario: ScenarioSummary;
   extras: NetworkExplorerExtra;
@@ -884,6 +892,7 @@ function Dossier({
   onPick: (id: string) => void;
   onClose: () => void;
   onTrace: () => void;
+  onInvestigate?: () => void;
 }) {
   const ramp = RISK_RAMP[surface];
   const palette = NETWORK_PALETTE[surface];
@@ -900,6 +909,11 @@ function Dossier({
         </p>
       )}
       <div className="nx-dossier-actions">
+        {onInvestigate && (
+          <button type="button" className="nx-investigate" onClick={onInvestigate}>
+            Investigate ›
+          </button>
+        )}
         {node.kind !== "context" && (
           <button type="button" onClick={onTrace}>
             Trace a path from here
@@ -1155,13 +1169,16 @@ function PathPanel({
 
 // ── the timeline ───────────────────────────────────────────────────────────
 
-function Timeline({
+export function Timeline({
   net,
   extras,
   period,
   playing,
   onPeriod,
   onTogglePlay,
+  totals,
+  overlay,
+  caption,
 }: {
   net: Network;
   extras: NetworkExplorerExtra;
@@ -1169,15 +1186,22 @@ function Timeline({
   playing: boolean;
   onPeriod: (p: number | null) => void;
   onTogglePlay: () => void;
+  // The Investigate view plots one subject's own monthly volume (and, over it, the
+  // part exchanged with targets) instead of the whole network's.
+  totals?: ArrayLike<number>;
+  overlay?: ArrayLike<number>;
+  caption?: string;
 }) {
   const n = net.periods.length;
+  const series = Array.from(totals ?? net.periodTotals);
   const [openEvent, setOpenEvent] = useState<number | null>(null);
   if (n < 2) return null;
-  const max = Math.max(1, ...net.periodTotals);
+  const max = Math.max(1, ...series);
   const x = (i: number) => ((i + 0.5) / n) * 1000;
   const y = (v: number) => 70 - (v / max) * 62;
-  const area = `M ${x(0)} 70 ` + net.periodTotals.map((v, i) => `L ${x(i)} ${y(v)}`).join(" ") + ` L ${x(n - 1)} 70 Z`;
-  const line = net.periodTotals.map((v, i) => `${i ? "L" : "M"} ${x(i)} ${y(v)}`).join(" ");
+  const area = `M ${x(0)} 70 ` + series.map((v, i) => `L ${x(i)} ${y(v)}`).join(" ") + ` L ${x(n - 1)} 70 Z`;
+  const line = series.map((v, i) => `${i ? "L" : "M"} ${x(i)} ${y(v)}`).join(" ");
+  const hot = overlay ? `M ${x(0)} 70 ` + Array.from(overlay).map((v, i) => `L ${x(i)} ${y(v)}`).join(" ") + ` L ${x(n - 1)} 70 Z` : null;
   const years = net.periods.map((p, i) => [p, i] as const).filter(([p]) => p.endsWith("-01"));
   const current = period ?? n - 1;
   const events = extras.events.map((e, i) => ({ ...e, i, at: periodOf(net.periods, e.date) })).filter((e) => e.at >= 0);
@@ -1191,8 +1215,8 @@ function Timeline({
           <b>{period === null ? "All months" : periodLabel(net.periods[period])}</b>
           <span className="nx-muted">
             {period === null
-              ? `${periodLabel(net.periods[0])} – ${periodLabel(net.periods[n - 1])} · ${extras.link_noun} per month`
-              : `${Math.round(net.periodTotals[period]).toLocaleString()} ${extras.link_noun} this month`}
+              ? `${periodLabel(net.periods[0])} – ${periodLabel(net.periods[n - 1])} · ${caption ?? `${extras.link_noun} per month`}`
+              : `${Math.round(series[period]).toLocaleString()} ${extras.link_noun} this month`}
           </span>
         </div>
         <button type="button" className={`nx-all${period === null ? " nx-all--on" : ""}`} onClick={() => onPeriod(null)}>
@@ -1202,6 +1226,7 @@ function Timeline({
       <div className="nx-timeline-chart">
         <svg viewBox="0 0 1000 72" preserveAspectRatio="none" aria-hidden>
           <path d={area} className="nx-area" />
+          {hot && <path d={hot} className="nx-area-hot" />}
           <path d={line} className="nx-area-line" vectorEffect="non-scaling-stroke" />
           {period !== null && <rect x={x(0) - 500 / n} y={0} width={x(current) + 500 / n - (x(0) - 500 / n)} height={72} className="nx-area-past" />}
           {period !== null && <line x1={x(current)} x2={x(current)} y1={0} y2={72} className="nx-playhead" vectorEffect="non-scaling-stroke" />}
