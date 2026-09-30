@@ -1,0 +1,325 @@
+# Seed definition for the "aml_money_trail" scenario — transaction monitoring for an
+# inter-bank consortium: from ten days of payments between people and companies, which
+# account holders behave like the ones a money-laundering scheme runs through, and why —
+# drawn as money hopping between banks on a world map, then compared with the truth.
+#
+# Synthetic but faithful data: IBM's AMLworld generator ("Transactions for Anti Money
+# Laundering", HI-Small; Altman et al., NeurIPS 2023, CDLA-Sharing-1.0) simulates a world
+# of individuals, companies and banks, injects laundering schemes and tracks the illicit
+# funds through every hop, so each transfer is labelled. See
+# scripts/prepare_aml_money_trail_dataset.py and sample_data/README.md. Every name is the
+# generator's own ("Corporation #33520", "Spain Bank #439") — no real person or company.
+
+slug: aml_money_trail
+kind: tabular_ml
+title: "Follow the Money"
+description: >
+  Ten days of payments between 12,253 people and companies at 13 banks in 13 countries,
+  replayed hour by hour on a world map. Which holders behave like the ones laundering
+  runs through — fan-outs, stacks, cycles — and why? Then reveal the schemes the
+  generator planted.
+role_required: "scenario:aml_money_trail"
+industry: banking_finance
+icon: "💸"
+
+credits:
+  source: "IBM Transactions for Anti Money Laundering (AMLworld, HI-Small) · Altman et al., NeurIPS 2023"
+  url: "https://arxiv.org/abs/2306.16424"
+  note: "Synthetic data, CDLA-Sharing-1.0 — every person, company and bank is simulated"
+
+chat:
+  context: >
+    A transaction-monitoring workbench for a consortium of 13 member banks (one per
+    country: United States, Japan, China, India, Germany, United Kingdom, Switzerland,
+    Finland, Australia, France, Mexico, Canada, Israel) that pool what they see to spot
+    money laundering. The data is IBM's synthetic AMLworld "HI-Small": a simulated world
+    of individuals, companies and 30,000 banks whose generator injects laundering
+    schemes and follows the illicit funds through every hop. Nothing in it is real —
+    every holder is a generated "Corporation #…", "Sole Proprietorship #…", "Partnership
+    #…" or "Individual #…" and every bank a generated one. One row per account holder
+    (12,253 with an account at a member bank; most are sole proprietorships,
+    partnerships and corporations, only 22 are natural persons in the generator's own
+    sense); its behaviour features are built from the 568,000 transfers between distinct
+    holders that touch a member bank on 1-10 September 2022 — activity and value in USD,
+    how much of what comes in goes straight back out and how fast (pass-through, dwell
+    time), fan-in / fan-out, reciprocity, payment-format mix, cross-border share, night
+    activity, PageRank and return cycles. The label is involvement in at least one
+    laundering transfer the consortium can see: a holder who received laundered money
+    unwittingly counts. A classifier (logistic regression or LightGBM, chosen by
+    cross-validated ROC AUC) scores each holder; the Money Trail tab shows every holder
+    scored by a model that never saw their own label (5-fold cross-fitting), the payments
+    as hourly flows between banks, and — on reveal — the laundering typology (fan-out,
+    fan-in, cycle, bipartite, scatter-gather, gather-scatter, stack, random) each holder
+    belongs to.
+    Guardrails — follow them strictly. A score is resemblance to the behaviour of
+    holders involved in laundering, nothing more: never state or imply that a holder
+    committed a crime; a high score is a case for an analyst to review, not a
+    conclusion. Be precise about the limits: the world is synthetic, and its
+    laundering has generator artefacts a real one would not (about 87% of laundering
+    transfers go by ACH against 12% of all transfers, laundering never changes
+    currency, and the schemes follow eight textbook shapes), so quote the AUC as a
+    property of this simulation, not as what a real bank would achieve: LightGBM
+    reaches a cross-validated ROC AUC of about 0.83-0.84 (0.841 out-of-fold; spread
+    ±0.015) and about 0.81 without the payment-format mix, on a 3.7% base rate (PR AUC ~0.31, an ~8x lift).
+    Behaviour alone (dwell time, fan-in/fan-out, pass-through) is worth ~0.76 and
+    network position alone ~0.65. The consortium
+    only sees transfers that touch a member bank: 440 more holders launder only
+    through transfers it cannot see and are labelled as clean, and laundering chains
+    disappear from its view whenever they cross a non-member bank. About 3.7% of
+    holders are positive, so the deployed model's probabilities are small (a 20% score
+    is already a strong outlier) and the review tiers are set from the out-of-fold
+    scores, not from 50%: Elevated from 3% (19% of those are involved), Review from
+    10% (462 holders, 34% involved, 35% of all positives) and Priority from 30% (167
+    holders, 54% involved). Transfers dated after 10 September were dropped: the
+    generator's tail is 59% laundering and would leak the label through timing.
+  sample_questions:
+    - "What separates the laundering holders from everyone else?"
+    - "Why does a fan-out look different from a stack?"
+    - "How much does the payment format explain — and why is that a warning sign?"
+    - "What does a 20% probability mean when only 3.7% of holders are positive?"
+    - "Which typologies does the model miss, and why?"
+    - "What can a consortium of banks not see?"
+
+dataset:
+  bucket: "scenario-aml-money-trail"
+  raw_object: "raw/aml_money_trail.csv"
+  seed_file: "sample_data/aml_money_trail.csv"
+  index_col: "holder_id"
+  target: "laundering"
+  protected_features_excluded: []
+  # Who each holder is and, for the reveal only, which scheme it belongs to — never model inputs.
+  display_columns: ["name", "home_bank", "home_country", "typology", "attempt_id"]
+  # The case slice the Money Trail tab draws: ~1,000 holders (every scheme typology),
+  # the consortium's banks, holders outside it, and per-hour dollars per payment format.
+  graph:
+    seed_file: "sample_data/aml_money_trail_network.json"
+    raw_object: "raw/aml_money_trail_network.json"
+  feature_columns:
+    - holder_type
+    - accounts
+    - banks
+    - countries
+    - transfers_out
+    - transfers_in
+    - usd_out
+    - usd_in
+    - largest_transfer_usd
+    - pass_through
+    - dwell_hours
+    - counterparties_out
+    - counterparties_in
+    - max_daily_fan_out
+    - max_daily_fan_in
+    - reciprocity
+    - ach_share
+    - wire_share
+    - cash_share
+    - cheque_share
+    - card_share
+    - bitcoin_share
+    - cross_border_share
+    - currencies
+    - night_share
+    - peak_day_share
+    - pagerank_pctl
+    - return_cycles
+
+  feature_schema:
+    holder_type:
+      {type: categorical, label: "Holder type", options: ["Individual", "Sole proprietorship", "Corporation", "Partnership"], default: "Corporation",
+       info: "What kind of party holds the accounts, as the generator labels it. Individuals and sole proprietorships are natural persons; corporations and partnerships are legal entities."}
+    accounts:
+      {type: numeric, label: "Accounts", min: 1, max: 300, default: 2, step: 1,
+       info: "Bank accounts the holder owns, at any bank (a few large companies own thousands)."}
+    banks:
+      {type: numeric, label: "Banks", min: 1, max: 150, default: 2, step: 1,
+       info: "Distinct banks those accounts are spread over."}
+    countries:
+      {type: numeric, label: "Countries", min: 1, max: 15, default: 1, step: 1,
+       info: "Distinct countries of those banks (crypto exchanges count as one)."}
+    transfers_out:
+      {type: numeric, label: "Transfers sent", min: 0, max: 400, default: 15, step: 1,
+       info: "Payments sent to other holders in the ten days, among those touching a member bank. Moves between the holder's own accounts are left out."}
+    transfers_in:
+      {type: numeric, label: "Transfers received", min: 0, max: 250, default: 18, step: 1,
+       info: "Payments received from other holders in the ten days."}
+    usd_out:
+      {type: numeric, label: "Sent (USD)", min: 0, max: 400000000, default: 36000, step: 1000,
+       info: "Value sent, in US dollars (each currency at the median rate implied by the dataset's own cross-currency transfers). Heavily skewed: the largest holders move billions."}
+    usd_in:
+      {type: numeric, label: "Received (USD)", min: 0, max: 400000000, default: 38000, step: 1000,
+       info: "Value received, in US dollars."}
+    largest_transfer_usd:
+      {type: numeric, label: "Largest transfer (USD)", min: 0, max: 300000000, default: 37000, step: 1000,
+       info: "The biggest single payment the holder sent or received."}
+    pass_through:
+      {type: numeric, label: "Pass-through ratio", min: 0, max: 1, default: 0.02, step: 0.01,
+       info: "The smaller of value in and value out over the larger: 0 = money only goes one way, 1 = everything that comes in goes back out — the signature of a layering account."}
+    dwell_hours:
+      {type: numeric, label: "Dwell time (h)", min: -1, max: 150, default: 4, step: 0.5,
+       info: "Median hours between a payment arriving and the holder's next payment going out. -1 means money that arrived never moved on within the ten days."}
+    counterparties_out:
+      {type: numeric, label: "Payees", min: 0, max: 60, default: 2, step: 1,
+       info: "Distinct holders paid."}
+    counterparties_in:
+      {type: numeric, label: "Payers", min: 0, max: 35, default: 2, step: 1,
+       info: "Distinct holders received from."}
+    max_daily_fan_out:
+      {type: numeric, label: "Peak daily payees", min: 0, max: 30, default: 2, step: 1,
+       info: "The most distinct holders paid on any single day — a burst of payees is a fan-out (or the second half of a scatter-gather)."}
+    max_daily_fan_in:
+      {type: numeric, label: "Peak daily payers", min: 0, max: 25, default: 2, step: 1,
+       info: "The most distinct holders received from on any single day — a burst of payers is a fan-in."}
+    reciprocity:
+      {type: numeric, label: "Reciprocity", min: 0, max: 1, default: 0, step: 0.05,
+       info: "Share of the holder's counterparties that both paid it and were paid by it."}
+    ach_share:
+      {type: numeric, label: "ACH share", min: 0, max: 1, default: 0.08, step: 0.01,
+       info: "Share of the holder's transfers made by ACH. In this simulation 87% of laundering goes by ACH against 12% of all transfers — a generator artefact a real bank would not see."}
+    wire_share:
+      {type: numeric, label: "Wire share", min: 0, max: 1, default: 0, step: 0.01,
+       info: "Share of transfers made by wire."}
+    cash_share:
+      {type: numeric, label: "Cash share", min: 0, max: 1, default: 0.04, step: 0.01,
+       info: "Share of transfers made in cash."}
+    cheque_share:
+      {type: numeric, label: "Cheque share", min: 0, max: 1, default: 0.43, step: 0.01,
+       info: "Share of transfers made by cheque."}
+    card_share:
+      {type: numeric, label: "Credit card share", min: 0, max: 1, default: 0.28, step: 0.01,
+       info: "Share of transfers made by credit card."}
+    bitcoin_share:
+      {type: numeric, label: "Bitcoin share", min: 0, max: 1, default: 0, step: 0.01,
+       info: "Share of transfers made in Bitcoin (0.1% of holders use it at all)."}
+    cross_border_share:
+      {type: numeric, label: "Cross-border share", min: 0, max: 1, default: 0.6, step: 0.01,
+       info: "Share of transfers whose payer's and payee's banks are in different countries."}
+    currencies:
+      {type: numeric, label: "Currencies", min: 0, max: 8, default: 1, step: 1,
+       info: "Distinct currencies the holder's transfers were made in."}
+    night_share:
+      {type: numeric, label: "Night share", min: 0, max: 1, default: 0.26, step: 0.01,
+       info: "Share of transfers timestamped between midnight and 6:00."}
+    peak_day_share:
+      {type: numeric, label: "Peak-day share", min: 0, max: 1, default: 0.39, step: 0.01,
+       info: "Share of the holder's value that moved on its single busiest day — 1 means everything happened in one day."}
+    pagerank_pctl:
+      {type: numeric, label: "PageRank percentile", min: 0, max: 100, default: 75, step: 0.5,
+       info: "Percentile of how much of the payment network's flow leads to the holder (over every visible holder, weighted by log value). Label-free."}
+    return_cycles:
+      {type: numeric, label: "Return cycles", min: 0, max: 50, default: 0, step: 1,
+       info: "Number of three-hop loops (A pays B pays C pays A) the holder sits on, capped at 50 — money that comes back to where it started."}
+
+  default_charts:
+    - {type: bar, x: holder_type, y: laundering, agg: mean, color_by: holder_type}
+    - {type: scatter, x: counterparties_in, y: counterparties_out, color_by: laundering}
+    - {type: histogram, x: pass_through, color_by: laundering}
+    - {type: histogram, x: max_daily_fan_out, color_by: laundering}
+    - {type: scatter, x: pagerank_pctl, y: usd_out, color_by: laundering}
+    - {type: histogram, x: ach_share, color_by: laundering}
+    - {type: heatmap}
+
+model:
+  task_type: classification
+  candidates: ["logistic_regression", "lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.005
+  # ~3.7% positives: accuracy would reward "nobody". ROC AUC ranks how well the model
+  # orders holders; 5-fold CV on the training split keeps the comparison sane.
+  selection_metric: roc_auc
+  cv_folds: 5
+  # The Money Trail tab reveals the real outcome next to every score — only honest for
+  # scores from models that never saw that holder's label (probabilities only at 12k rows).
+  out_of_fold_scores: true
+  explainability: shap
+  target_label: "Involved in laundering"
+  target_description: "Whether the holder sent or received at least one laundering transfer that touches a member bank during 1-10 September 2022 (simulated) — involvement, not guilt."
+  target_value_labels: {"0": "Not involved", "1": "Involved in laundering"}
+
+ui_extras:
+  kind: money_trail
+  tab_label: "Money Trail"
+  title: "Follow the money · ten days at 13 banks"
+  subtitle: >
+    Every glowing dot is an account holder — a person or a company — coloured by how
+    closely its behaviour resembles the holders laundering runs through, scored by a
+    model that never saw its own label. Watch ten days of payments hop between banks
+    hour by hour, follow one holder's flows, then reveal the schemes the generator planted.
+  entity_noun: holder
+  name_column: name
+  detail_columns: [home_bank, home_country]
+  holder_type_feature: holder_type
+  person_types: ["Individual", "Sole proprietorship"]
+  size_feature: usd_out
+  flows:
+    - {kind: ach, label: "ACH transfer"}
+    - {kind: wire, label: "Wire"}
+    - {kind: cheque, label: "Cheque"}
+    - {kind: credit_card, label: "Credit card"}
+    - {kind: cash, label: "Cash"}
+    - {kind: bitcoin, label: "Bitcoin"}
+  holding_edge_kind: holds
+  amount_units: "USD"
+  countries:
+    - {key: "United States", lat: 39.0, lon: -98.0}
+    - {key: "Germany", lat: 50.1, lon: 8.7}
+    - {key: "Switzerland", lat: 47.4, lon: 8.5}
+    - {key: "China", lat: 31.2, lon: 121.5}
+    - {key: "France", lat: 48.9, lon: 2.35}
+    - {key: "India", lat: 19.1, lon: 72.9}
+    - {key: "Israel", lat: 32.1, lon: 34.8}
+    - {key: "United Kingdom", lat: 51.5, lon: -0.1}
+    - {key: "Italy", lat: 45.5, lon: 9.2}
+    - {key: "Japan", lat: 35.7, lon: 139.7}
+    - {key: "Spain", lat: 40.4, lon: -3.7}
+    - {key: "Australia", lat: -33.9, lon: 151.2}
+    - {key: "Canada", lat: 43.7, lon: -79.4}
+    - {key: "Russia", lat: 55.8, lon: 37.6}
+    - {key: "Mexico", lat: 19.4, lon: -99.1}
+    - {key: "Saudi Arabia", lat: 24.7, lon: 46.7}
+    - {key: "Netherlands", lat: 52.4, lon: 4.9}
+    - {key: "Brazil", lat: -23.5, lon: -46.6}
+    - {key: "Belgium", lat: 50.8, lon: 4.4}
+    - {key: "Austria", lat: 48.2, lon: 16.4}
+    - {key: "Greece", lat: 37.98, lon: 23.7}
+    - {key: "Portugal", lat: 38.7, lon: -9.1}
+    - {key: "Ireland", lat: 53.3, lon: -6.3}
+    - {key: "Finland", lat: 60.2, lon: 24.9}
+    - {key: "Slovakia", lat: 48.1, lon: 17.1}
+    - {key: "Croatia", lat: 45.8, lon: 16.0}
+    - {key: "Lithuania", lat: 54.7, lon: 25.3}
+    - {key: "Slovenia", lat: 46.05, lon: 14.5}
+    - {key: "Estonia", lat: 59.4, lon: 24.75}
+    - {key: "Latvia", lat: 56.95, lon: 24.1}
+    - {key: "Cyprus", lat: 35.2, lon: 33.4}
+    - {key: "Malta", lat: 35.9, lon: 14.5}
+    - {key: "Luxembourg", lat: 49.6, lon: 6.1}
+    - {key: "Crypto exchanges", lat: -60.0, lon: -30.0}
+  outcome_label: "Involved in laundering"
+  outcome_detail_column: typology
+  case_column: attempt_id
+  flag_from_tier: "Review"
+  facts: [usd_out, usd_in, counterparties_out, counterparties_in, max_daily_fan_out, max_daily_fan_in, pass_through, dwell_hours, pagerank_pctl, return_cycles, cross_border_share]
+  tiers:
+    - {label: "Background", min_probability: 0.0, description: "Behaviour unlike the holders laundering runs through."}
+    - {label: "Elevated", min_probability: 0.03, description: "Some resemblance — worth a look in context."}
+    - {label: "Review", min_probability: 0.10, description: "Strong resemblance — an analyst should review the holder and its flows."}
+    - {label: "Priority", min_probability: 0.3, description: "Very close to the laundering profile — review first."}
+  pillars:
+    - {label: "Profile", features: [holder_type, accounts, banks, countries]}
+    - {label: "Volume and value", features: [transfers_out, transfers_in, usd_out, usd_in, largest_transfer_usd]}
+    - {label: "Layering", features: [pass_through, dwell_hours, peak_day_share, reciprocity, return_cycles]}
+    - {label: "Fan-in and fan-out", features: [counterparties_out, counterparties_in, max_daily_fan_out, max_daily_fan_in]}
+    - {label: "Channels and reach", features: [ach_share, wire_share, cash_share, cheque_share, card_share, bitcoin_share, cross_border_share, currencies, night_share]}
+    - {label: "Network position", features: [pagerank_pctl]}
+  disclaimer: >
+    Research demo on synthetic data. A score measures resemblance to the behaviour of
+    holders the simulation's laundering ran through; it is not evidence of wrongdoing —
+    receivers can be unwitting, and everything here is simulated. Laundering in this
+    generator has artefacts (ACH-heavy, single-currency, eight textbook shapes) that real
+    laundering does not.
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant
