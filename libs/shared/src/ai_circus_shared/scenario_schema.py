@@ -938,6 +938,33 @@ class RubricCheckConfig(BaseModel):
     examples: list[RubricExample] = []
 
 
+class KnowledgeGraphClass(BaseModel):
+    """How one ontology class — a node `type` of the scenario's knowledge graph — is
+    drawn. Colour carries the class's *role* (only three hues validate for a spatial
+    graph where any two nodes can touch, plus a recessive grey for source documents);
+    the glyph `shape` tells the classes of one role apart, so colour is never alone."""
+
+    key: str  # the node `type`, e.g. "ObligedEntity"
+    label: str  # e.g. "Obliged entity"
+    role: Literal["actor", "action", "condition", "document"] = "action"
+    shape: Literal["circle", "square", "diamond", "triangle", "hexagon", "pill"] = "circle"
+
+
+class KnowledgeGraphExtra(BaseModel):
+    """Opt-in knowledge-graph panel for a `conversational_rag` scenario whose documents
+    ship a knowledge graph (`documents.knowledge_graph`): ui-react's RagView shows the
+    graph next to the chat and lights up, per answer, the subgraph rag-agent's
+    `graph_search` / `graph_path` tools actually retrieved (the `knowledge_graph_trace`
+    AG-UI event). See ui-react's KnowledgeGraphView.tsx.
+    """
+
+    kind: Literal["knowledge_graph"] = "knowledge_graph"
+    title: str
+    subtitle: str | None = None
+    classes: list[KnowledgeGraphClass] = []  # legend order; unlisted types follow as found
+    disclaimer: str | None = None
+
+
 UiExtras = Annotated[
     RegionMapExtra
     | LivePlantExtra
@@ -949,7 +976,8 @@ UiExtras = Annotated[
     | ShipmentGlobeExtra
     | MoneyTrailExtra
     | TriageBoardExtra
-    | ReadingRoomExtra,
+    | ReadingRoomExtra
+    | KnowledgeGraphExtra,
     Field(discriminator="kind"),
 ]
 
@@ -967,6 +995,7 @@ _TABULAR_UI_EXTRAS = (
     MoneyTrailExtra,
 )
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
+_RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
 
 
 class HuggingFaceFilesSource(BaseModel):
@@ -1246,6 +1275,34 @@ class GithubDocsSource(BaseModel):
     ref: str = "main"
 
 
+# Where a tenant's knowledge graph lives in the scenario's bucket (next to raw_prefix).
+KNOWLEDGE_GRAPH_KEY = "kg/graph.json"
+# Edge kinds a knowledge graph's retrieval treats as structure, never as citable facts:
+# concept -> the document node it was extracted from, and the synonymy edges etl-vectorize
+# infers between near-identical concepts (HippoRAG 2) so relevance flows across wordings.
+KNOWLEDGE_GRAPH_DOCUMENT_KIND = "cited_in"
+KNOWLEDGE_GRAPH_SYNONYM_KIND = "similar_to"
+
+
+class KnowledgeGraphConfig(BaseModel):
+    """A knowledge graph shipped with a `conversational_rag` scenario's documents: a
+    `network_graph.NetworkGraph` JSON (`seed_file`, relative to the scenario directory)
+    whose entity nodes are typed concepts (`type` = ontology class) and whose edges are
+    relations with a `citation` and a verbatim `evidence` quote — plus one node per source
+    document (`citation` = its file name under `raw_prefix`), which every concept extracted
+    from it points at with a `cited_in` edge (HippoRAG 2's passage nodes). etl-vectorize
+    bootstraps it into the tenant's bucket (`KNOWLEDGE_GRAPH_KEY`) and indexes its nodes
+    and relations in `kg_collection_name`; rag-agent then answers through graph retrieval
+    (seed linking + Personalized PageRank) instead of plain top-k chunks. The bounds keep
+    each tool result — the prompt the LLM pays for — small.
+    """
+
+    seed_file: str
+    max_triples: int = Field(default=30, ge=5, le=80)  # relations per graph_search result
+    max_passages: int = Field(default=2, ge=0, le=5)  # document chunks per graph_search result
+    hops: int = Field(default=2, ge=1, le=3)  # radius around the seed concepts
+
+
 class DocumentsConfig(BaseModel):
     """Source-document config for a `conversational_rag` scenario.
 
@@ -1264,6 +1321,7 @@ class DocumentsConfig(BaseModel):
     github_source: GithubDocsSource | None = None
     chunking: DocumentChunking
     embedding: DocumentEmbedding
+    knowledge_graph: KnowledgeGraphConfig | None = None
 
     @model_validator(mode="after")
     def _at_least_one_seed_source(self) -> DocumentsConfig:
@@ -1286,6 +1344,12 @@ def qdrant_collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
     two can't drift out of sync on where a tenant's vectors live.
     """
     return f"{vector_store.collection_prefix}__{org_id}"
+
+
+def kg_collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
+    """Per-tenant Qdrant collection of a knowledge graph's nodes and relations (see
+    `KnowledgeGraphConfig`) — shared by etl-vectorize (writer) and rag-agent (reader)."""
+    return f"{vector_store.collection_prefix}_kg__{org_id}"
 
 
 class RagServices(BaseModel):
@@ -1542,9 +1606,9 @@ class ScenarioDefinition(BaseModel):
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
     deep_learning: DeepLearningConfig | None = None
-    # tabular_ml / deep_learning only — opts this scenario into one of ui-react's
-    # generic 5th workspace tabs (see UiExtras above). None (the common case) means the
-    # plain 4-tab workspace every scenario of that kind already gets.
+    # tabular_ml / deep_learning — opts this scenario into one of ui-react's generic 5th
+    # workspace tabs (see UiExtras above); conversational_rag — the knowledge-graph panel.
+    # None (the common case) means the plain workspace every scenario of that kind gets.
     ui_extras: UiExtras | None = None
     # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
     tutorial: TutorialConfig | None = None
@@ -1564,9 +1628,15 @@ class ScenarioDefinition(BaseModel):
             raise ValueError("kind='deep_learning' requires services: {training, inference}.")
         if self.ui_extras is None:
             return self
-        allowed = _DEEP_LEARNING_UI_EXTRAS if is_dl else _TABULAR_UI_EXTRAS
+        allowed = {"deep_learning": _DEEP_LEARNING_UI_EXTRAS, "conversational_rag": _RAG_UI_EXTRAS}.get(
+            self.kind, _TABULAR_UI_EXTRAS
+        )
         if not isinstance(self.ui_extras, allowed):
             raise ValueError(f"ui_extras kind {self.ui_extras.kind!r} is not available for kind={self.kind!r}.")
+        if isinstance(self.ui_extras, KnowledgeGraphExtra) and (
+            self.documents is None or self.documents.knowledge_graph is None
+        ):
+            raise ValueError("ui_extras.knowledge_graph requires documents.knowledge_graph.")
         return self
 
     @model_validator(mode="after")

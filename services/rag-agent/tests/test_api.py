@@ -32,6 +32,7 @@ from rag_agent import api as api_module
 from rag_agent.api import (
     _conversation_store,
     _embedder,
+    _graph_cache,
     _llm,
     _llm_display,
     _llm_model_name,
@@ -40,6 +41,7 @@ from rag_agent.api import (
     agui_endpoint,
     router,
 )
+from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.identity import resolve_identity
 from tests.conftest import FakeSecret
 
@@ -111,6 +113,7 @@ def _client_with(llm: FakeToolCallingModel) -> TestClient:
     )
     fake_definition = SimpleNamespace(
         slug="docs_rag",
+        documents=None,
         vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
         chat=ChatConfig(context="Bank account policies and fees."),
     )
@@ -124,6 +127,7 @@ def _client_with(llm: FakeToolCallingModel) -> TestClient:
         query_points=lambda **_kwargs: SimpleNamespace(points=[fake_point]),
     )
     app.dependency_overrides[_embedder] = lambda: SimpleNamespace(encode_query=lambda _q: [0.1, 0.2])
+    app.dependency_overrides[_graph_cache] = KnowledgeGraphCache
     app.dependency_overrides[_llm] = lambda: llm
     app.dependency_overrides[_llm_model_name] = lambda: "gemini-flash"
     app.dependency_overrides[_llm_display] = lambda: ("gemini-flash", "Google Gemini", True)
@@ -296,6 +300,7 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
         definition=SimpleNamespace(
             slug="docs_rag",
+            documents=None,
             vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
             chat=ChatConfig(context="Bank account policies and fees."),
         ),
@@ -342,6 +347,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
         definition=SimpleNamespace(
             slug="docs_rag",
+            documents=None,
             vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
             chat=ChatConfig(context="Bank account policies and fees."),
         ),
@@ -395,6 +401,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
         definition=SimpleNamespace(
             slug="docs_rag",
+            documents=None,
             vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
             chat=ChatConfig(context="Bank account policies and fees."),
         ),
@@ -554,6 +561,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
         definition=SimpleNamespace(
             slug="docs_rag",
+            documents=None,
             vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
             chat=ChatConfig(context="Bank account policies and fees."),
         ),
@@ -573,3 +581,76 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ("user", "What's the overdraft fee?"),
         ("assistant", "Overdraft fee is $25."),
     ]
+
+
+async def test_agui_endpoint_emits_the_knowledge_graph_trace_before_run_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A knowledge-graph scenario answers through graph tools, and what they retrieved
+    reaches the client as a CUSTOM `knowledge_graph_trace` event inside the run — so
+    KnowledgeGraphView can light up the subgraph behind the answer.
+    """
+    from ag_ui.core import EventType, RunFinishedEvent, RunStartedEvent
+    from ai_circus_shared.scenario_schema import (
+        DocumentChunking,
+        DocumentEmbedding,
+        DocumentsConfig,
+        KnowledgeGraphConfig,
+    )
+
+    from rag_agent.core.graph_retrieval import GraphTrace
+
+    trace = GraphTrace(seeds={"fiu"}, nodes={"fiu", "report"}, edges={("report", "reports_to", "fiu")})
+    built: dict[str, object] = {}
+
+    async def _fake_agent_run(_input: object):  # ruff: ignore[missing-return-type-private-function, unused-async]
+        yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id="t", run_id="r")
+        yield RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="t", run_id="r")
+
+    def _fake_build_agui_agent(_llm: object, tools: list, _context: str, *, knowledge_graph: bool) -> str:
+        built.update(tools=tools, knowledge_graph=knowledge_graph)
+        return "fake-graph"
+
+    monkeypatch.setattr(api_module, "build_graph_tools", lambda *_a, **_kw: (["graph-tool"], {}, trace))
+    monkeypatch.setattr(api_module, "build_agui_agent", _fake_build_agui_agent)
+    monkeypatch.setattr(
+        api_module,
+        "LangGraphAGUIAgent",
+        lambda *, name, graph, config=None: SimpleNamespace(run=_fake_agent_run),
+    )
+    documents = DocumentsConfig(
+        bucket="b",
+        raw_prefix="raw/",
+        seed_prefix="sample_docs",
+        chunking=DocumentChunking(strategy="recursive_character", chunk_size=800, chunk_overlap=120),
+        embedding=DocumentEmbedding(model="m"),
+        knowledge_graph=KnowledgeGraphConfig(seed_file="kg.json"),
+    )
+
+    response = await agui_endpoint(
+        scenario_slug="docs_rag",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={}
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        definition=SimpleNamespace(
+            slug="docs_rag",
+            documents=documents,
+            vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+            chat=ChatConfig(context="AML law."),
+        ),
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        graph_cache=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+
+    body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+
+    assert built == {"tools": ["graph-tool"], "knowledge_graph": True}
+    assert '"name":"knowledge_graph_trace"' in body
+    assert '"edges":[["report","reports_to","fiu"]]' in body
+    assert body.index('"name":"knowledge_graph_trace"') < body.index('"type":"RUN_FINISHED"')

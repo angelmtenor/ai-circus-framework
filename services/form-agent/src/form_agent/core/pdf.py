@@ -142,7 +142,8 @@ def _span(spec: FormFieldSpec) -> int:
 
 def _ordered_sections(form: FormConfig, values: dict[str, str]) -> list[tuple[FormSection, list[FormFieldSpec]]]:
     """(section, its active fields) in print order: shared "before", the selected
-    variant's own, shared "after". A plain form is one section named after it."""
+    variant's own, shared "after". A plain form is one section named after it.
+    """
     active = form.active_fields(values)
     if not form.sections:
         return [(FormSection(id="_all", title=form.title), active)]
@@ -197,7 +198,7 @@ class _NumberedCanvas(canvas.Canvas):
         self._saved: list[dict[str, Any]] = []
         self._footer = footer
 
-    def showPage(self) -> None:  # noqa: N802 — reportlab API name
+    def showPage(self) -> None:  # ruff: ignore[invalid-function-name] — reportlab API name
         self._saved.append(dict(self.__dict__))
         self._startPage()
 
@@ -592,5 +593,6 @@ class _Renderer:
 
 def render_form_pdf(form: FormConfig, values: dict[str, str], filing: Filing | None = None) -> bytes:
     """The form filled with `values` as PDF bytes — a watermarked draft when `filing`
-    is None, else the filed copy (registry stamp + signature + receipt page)."""
+    is None, else the filed copy (registry stamp + signature + receipt page).
+    """
     return _Renderer(form, values, filing).render()

@@ -1,0 +1,288 @@
+/* KnowledgeGraphView.tsx — the knowledge-graph panel beside a RAG chat. Panels use the
+   theme tokens; the stage is a canvas painted by knowledgeGraphScene.ts (its own
+   validated palette, shared with the network explorer). */
+
+.kg-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.kg-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.kg-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text-h);
+}
+.kg-head p {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.kg-reset {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  cursor: pointer;
+}
+
+.kg-stage {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.kg-stage canvas {
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.kg-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.kg-hint,
+.kg-trace-chip {
+  position: absolute;
+  left: 0.7rem;
+  bottom: 0.7rem;
+  max-width: calc(100% - 1.4rem);
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kg-trace-chip {
+  color: var(--text);
+  border-color: var(--accent-border);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.kg-trace-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--glow-accent);
+  animation: kg-pulse 1.4s ease-in-out infinite;
+}
+@keyframes kg-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kg-trace-dot {
+    animation: none;
+  }
+}
+
+.kg-hover {
+  position: absolute;
+  z-index: 2;
+  width: 226px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+.kg-hover strong {
+  display: block;
+  margin: 0.2rem 0;
+  color: var(--text-h);
+}
+.kg-hover p {
+  margin: 0;
+  color: var(--dim);
+}
+
+.kg-class {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+.kg-glyph {
+  flex: 0 0 auto;
+}
+
+.kg-detail {
+  position: absolute;
+  z-index: 3;
+  top: 0.6rem;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  width: min(330px, calc(100% - 1.2rem));
+  overflow-y: auto;
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+}
+.kg-detail h4 {
+  margin: 0.25rem 1.2rem 0.35rem 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.98rem;
+  color: var(--text-h);
+}
+.kg-detail-desc {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+.kg-detail-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  border: none;
+  background: none;
+  color: var(--dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.kg-relations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.kg-relations li {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.kg-rel-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.45rem;
+  font-size: 0.8rem;
+}
+.kg-rel-kind {
+  color: var(--dim);
+  font-style: italic;
+}
+.kg-rel-target,
+.kg-docs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-h);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kg-rel-target:hover,
+.kg-docs button:hover {
+  text-decoration: underline;
+}
+.kg-cite {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  border: 1px solid var(--accent-border);
+}
+.kg-evidence {
+  display: block;
+  margin-top: 0.3rem;
+  padding-left: 0.55rem;
+  border-left: 2px solid var(--border-strong);
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+.kg-docs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.kg-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+.kg-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.kg-disclaimer {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+
+/* RagView's split layout when the scenario ships a knowledge graph. */
+.rag-split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+  min-height: 0;
+}
+.rag-split > .panel-card--chat-full {
+  min-width: 0;
+}
+@media (max-width: 1100px) {
+  .rag-split {
+    grid-template-columns: 1fr;
+  }
+  .rag-split .kg-panel {
+    min-height: 480px;
+  }
+}

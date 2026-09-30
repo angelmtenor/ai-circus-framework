@@ -1,0 +1,3061 @@
+{
+ "nodes": [
+  {
+   "id": "article:3",
+   "kind": "entity",
+   "label": "Art. 3 — Obliged entities",
+   "type": "Article",
+   "description": "Obliged entities",
+   "citation": "amlr-art-003-obliged-entities.md"
+  },
+  {
+   "id": "obligedentity:obliged-entity",
+   "kind": "entity",
+   "label": "Obliged entity",
+   "type": "ObligedEntity",
+   "description": "Generic category for entities subject to AML obligations under the Regulation."
+  },
+  {
+   "id": "obligedentity:credit-institution",
+   "kind": "entity",
+   "label": "Credit institution",
+   "type": "ObligedEntity",
+   "description": "A credit institution as defined under EU law, subject to AML obligations."
+  },
+  {
+   "id": "obligedentity:financial-institution",
+   "kind": "entity",
+   "label": "Financial institution",
+   "type": "ObligedEntity",
+   "description": "A financial institution covered by the AML Regulation."
+  },
+  {
+   "id": "obligedentity:auditor-external-accountant-and-tax-advisor",
+   "kind": "entity",
+   "label": "Auditor, external accountant and tax advisor",
+   "type": "ObligedEntity",
+   "description": "Auditors, external accountants and tax advisors providing tax advice as principal activity."
+  },
+  {
+   "id": "obligedentity:estate-agent",
+   "kind": "entity",
+   "label": "Estate agent",
+   "type": "ObligedEntity",
+   "description": "Estate agents and real estate professionals acting as intermediaries in transactions with rent ≥ EUR 10,000."
+  },
+  {
+   "id": "obligedentity:person-trading-precious-metals-and-stones",
+   "kind": "entity",
+   "label": "Person trading precious metals and stones",
+   "type": "ObligedEntity",
+   "description": "Persons whose regular professional activity involves trading precious metals and stones."
+  },
+  {
+   "id": "obligedentity:person-trading-high-value-goods",
+   "kind": "entity",
+   "label": "Person trading high-value goods",
+   "type": "ObligedEntity",
+   "description": "Persons whose regular professional activity involves trading high-value goods."
+  },
+  {
+   "id": "obligedentity:provider-of-gambling-services",
+   "kind": "entity",
+   "label": "Provider of gambling services",
+   "type": "ObligedEntity",
+   "description": "Entities providing gambling services."
+  },
+  {
+   "id": "obligedentity:crowdfunding-service-provider",
+   "kind": "entity",
+   "label": "Crowdfunding service provider",
+   "type": "ObligedEntity",
+   "description": "Crowdfunding service providers and intermediaries."
+  },
+  {
+   "id": "obligedentity:cultural-goods-trader",
+   "kind": "entity",
+   "label": "Cultural goods trader",
+   "type": "ObligedEntity",
+   "description": "Persons trading or intermediating cultural goods where transaction value ≥ EUR 10,000."
+  },
+  {
+   "id": "limit:eur-10-000",
+   "kind": "entity",
+   "label": "EUR 10 000",
+   "type": "Limit",
+   "description": "Monetary threshold of ten thousand euros."
+  },
+  {
+   "id": "article:11",
+   "kind": "entity",
+   "label": "Art. 11 — Compliance functions",
+   "type": "Article",
+   "description": "Compliance functions",
+   "citation": "amlr-art-011-compliance-functions.md"
+  },
+  {
+   "id": "party:compliance-manager",
+   "kind": "entity",
+   "label": "Compliance manager",
+   "type": "Party",
+   "description": "Person appointed to oversee compliance with the AMLR."
+  },
+  {
+   "id": "party:compliance-officer",
+   "kind": "entity",
+   "label": "Compliance officer",
+   "type": "Party",
+   "description": "Person responsible for day‑to‑day AML/CFT compliance and reporting."
+  },
+  {
+   "id": "authority:supervisor",
+   "kind": "entity",
+   "label": "Supervisor",
+   "type": "Authority",
+   "description": "National competent authority supervising the obliged entity."
+  },
+  {
+   "id": "authority:fiu",
+   "kind": "entity",
+   "label": "FIU",
+   "type": "Authority",
+   "description": "Financial Intelligence Unit receiving suspicious transaction reports."
+  },
+  {
+   "id": "obligation:appoint-compliance-manager",
+   "kind": "entity",
+   "label": "Appoint compliance manager",
+   "type": "Obligation",
+   "description": "Obliged entity must appoint a compliance manager."
+  },
+  {
+   "id": "obligation:appoint-compliance-officer",
+   "kind": "entity",
+   "label": "Appoint compliance officer",
+   "type": "Obligation",
+   "description": "Obliged entity must appoint a compliance officer."
+  },
+  {
+   "id": "obligation:provide-resources-to-compliance-functions",
+   "kind": "entity",
+   "label": "Provide resources to compliance functions",
+   "type": "Obligation",
+   "description": "Obliged entity must allocate adequate staff and technology to compliance functions."
+  },
+  {
+   "id": "obligation:protect-compliance-officer",
+   "kind": "entity",
+   "label": "Protect compliance officer",
+   "type": "Obligation",
+   "description": "Obliged entity must protect the compliance officer from retaliation and discrimination."
+  },
+  {
+   "id": "obligation:allow-compliance-officer-reporting",
+   "kind": "entity",
+   "label": "Allow compliance officer reporting",
+   "type": "Obligation",
+   "description": "Compliance officer may report directly to the management body."
+  },
+  {
+   "id": "obligation:report-suspicious-transactions-to-fiu",
+   "kind": "entity",
+   "label": "Report suspicious transactions to FIU",
+   "type": "Obligation",
+   "description": "Compliance officer must report suspicious transactions to the FIU."
+  },
+  {
+   "id": "obligation:report-compliance-manager-to-management-body",
+   "kind": "entity",
+   "label": "Report compliance manager to management body",
+   "type": "Obligation",
+   "description": "Compliance manager must regularly report to the management body."
+  },
+  {
+   "id": "trigger:suspicion-of-money-laundering",
+   "kind": "entity",
+   "label": "Suspicion of money laundering",
+   "type": "Trigger",
+   "description": "Situation where a transaction is suspected of involving money laundering."
+  },
+  {
+   "id": "article:19",
+   "kind": "entity",
+   "label": "Art. 19 — Application of customer due diligence measures",
+   "type": "Article",
+   "description": "Application of customer due diligence measures",
+   "citation": "amlr-art-019-application-of-customer-due-diligence-measures.md"
+  },
+  {
+   "id": "obligation:apply-customer-due-diligence-measures",
+   "kind": "entity",
+   "label": "Apply customer due diligence measures",
+   "type": "Obligation"
+  },
+  {
+   "id": "trigger:establish-business-relationship",
+   "kind": "entity",
+   "label": "Establish business relationship",
+   "type": "Trigger"
+  },
+  {
+   "id": "trigger:transaction-value-at-least-eur-10-000",
+   "kind": "entity",
+   "label": "Transaction value at least EUR 10 000",
+   "type": "Trigger"
+  },
+  {
+   "id": "trigger:doubts-about-customer-identification-data",
+   "kind": "entity",
+   "label": "Doubts about customer identification data",
+   "type": "Trigger"
+  },
+  {
+   "id": "trigger:doubts-about-person-interacting",
+   "kind": "entity",
+   "label": "Doubts about person interacting",
+   "type": "Trigger"
+  },
+  {
+   "id": "limit:eur-1-000",
+   "kind": "entity",
+   "label": "EUR 1 000",
+   "type": "Limit"
+  },
+  {
+   "id": "limit:eur-2-000",
+   "kind": "entity",
+   "label": "EUR 2 000",
+   "type": "Limit"
+  },
+  {
+   "id": "obligation:exempt-obliged-entities-from-applying-cdd-measures",
+   "kind": "entity",
+   "label": "Exempt obliged entities from applying CDD measures",
+   "type": "Obligation"
+  },
+  {
+   "id": "obligedentity:amla",
+   "kind": "entity",
+   "label": "AMLA",
+   "type": "ObligedEntity"
+  },
+  {
+   "id": "obligation:develop-draft-regulatory-technical-standards",
+   "kind": "entity",
+   "label": "Develop draft regulatory technical standards",
+   "type": "Obligation"
+  },
+  {
+   "id": "article:20",
+   "kind": "entity",
+   "label": "Art. 20 — Customer due diligence measures",
+   "type": "Article",
+   "description": "Customer due diligence measures",
+   "citation": "amlr-art-020-customer-due-diligence-measures.md"
+  },
+  {
+   "id": "obligation:identify-and-verify-customer",
+   "kind": "entity",
+   "label": "Identify and verify customer",
+   "type": "Obligation"
+  },
+  {
+   "id": "obligation:identify-and-verify-beneficial-owners",
+   "kind": "entity",
+   "label": "Identify and verify beneficial owners",
+   "type": "Obligation"
+  },
+  {
+   "id": "obligation:assess-purpose-and-nature-of-business-relationship",
+   "kind": "entity",
+   "label": "Assess purpose and nature of business relationship",
+   "type": "Obligation"
+  },
+  {
+   "id": "article:21",
+   "kind": "entity",
+   "label": "Art. 21 — Inability to comply with the requirement to apply customer due diligence measures",
+   "type": "Article",
+   "description": "Inability to comply with the requirement to apply customer due diligence measures",
+   "citation": "amlr-art-021-inability-to-comply-with-the-requirement-to-apply.md"
+  },
+  {
+   "id": "party:customer",
+   "kind": "entity",
+   "label": "Customer",
+   "type": "Party",
+   "description": "Natural or legal person receiving services."
+  },
+  {
+   "id": "obligation:refrain-from-transaction",
+   "kind": "entity",
+   "label": "Refrain from transaction",
+   "type": "Obligation",
+   "description": "Obligation to stop carrying out a transaction or establishing a relationship."
+  },
+  {
+   "id": "obligation:terminate-business-relationship",
+   "kind": "entity",
+   "label": "Terminate business relationship",
+   "type": "Obligation",
+   "description": "Obligation to end an existing business relationship."
+  },
+  {
+   "id": "obligation:report-suspicion-to-fiu",
+   "kind": "entity",
+   "label": "Report suspicion to FIU",
+   "type": "Obligation",
+   "description": "Obligation to notify the FIU of a suspicious transaction."
+  },
+  {
+   "id": "obligation:keep-record-of-actions",
+   "kind": "entity",
+   "label": "Keep record of actions",
+   "type": "Obligation",
+   "description": "Obligation to maintain records of CDD actions and decisions."
+  },
+  {
+   "id": "record:record-of-decisions-and-supporting-documents",
+   "kind": "entity",
+   "label": "Record of decisions and supporting documents",
+   "type": "Record",
+   "description": "Documents evidencing decisions and justifications for CDD."
+  },
+  {
+   "id": "obligation:apply-measures-to-ensure-compliance",
+   "kind": "entity",
+   "label": "Apply measures to ensure compliance",
+   "type": "Obligation",
+   "description": "Obligation for credit and financial institutions to adopt measures ensuring AML/CFT compliance."
+  },
+  {
+   "id": "article:26",
+   "kind": "entity",
+   "label": "Art. 26 — Ongoing monitoring of the business relationship and monitoring of transactions performed by customers",
+   "type": "Article",
+   "description": "Ongoing monitoring of the business relationship and monitoring of transactions performed by customers",
+   "citation": "amlr-art-026-ongoing-monitoring-of-the-business-relationship.md"
+  },
+  {
+   "id": "obligation:conduct-ongoing-monitoring",
+   "kind": "entity",
+   "label": "Conduct ongoing monitoring",
+   "type": "Obligation",
+   "description": "Obliged entities must monitor business relationships and transactions continuously."
+  },
+  {
+   "id": "obligation:issue-guidelines-on-ongoing-monitoring",
+   "kind": "entity",
+   "label": "Issue guidelines on ongoing monitoring",
+   "type": "Obligation",
+   "description": "AMLA must publish guidance on ongoing monitoring of relationships and transactions."
+  },
+  {
+   "id": "limit:1-year",
+   "kind": "entity",
+   "label": "1 year",
+   "type": "Limit",
+   "description": "Maximum update period for higher‑risk customers."
+  },
+  {
+   "id": "limit:5-years",
+   "kind": "entity",
+   "label": "5 years",
+   "type": "Limit",
+   "description": "Maximum update period for other customers."
+  },
+  {
+   "id": "article:34",
+   "kind": "entity",
+   "label": "Art. 34 — Scope of application of enhanced due diligence measures",
+   "type": "Article",
+   "description": "Scope of application of enhanced due diligence measures",
+   "citation": "amlr-art-034-scope-of-application-of-enhanced-due-diligence.md"
+  },
+  {
+   "id": "obligedentity:trust-or-company-service-provider",
+   "kind": "entity",
+   "label": "Trust or company service provider",
+   "type": "ObligedEntity",
+   "description": "A trust or company service provider obliged under the AMLR."
+  },
+  {
+   "id": "obligation:apply-enhanced-due-diligence-measures",
+   "kind": "entity",
+   "label": "Apply enhanced due diligence measures",
+   "type": "Obligation",
+   "description": "Obliged entities must apply enhanced due diligence measures."
+  },
+  {
+   "id": "obligation:obtain-additional-information-on-the-customer-and-the-beneficial-owners",
+   "kind": "entity",
+   "label": "Obtain additional information on the customer and the beneficial owners",
+   "type": "Obligation",
+   "description": "Collect extra data on the customer and its beneficial owners."
+  },
+  {
+   "id": "obligation:obtain-additional-information-on-the-intended-nature-of-the-business-relationship",
+   "kind": "entity",
+   "label": "Obtain additional information on the intended nature of the business relationship",
+   "type": "Obligation",
+   "description": "Collect extra data on the intended nature of the business relationship."
+  },
+  {
+   "id": "obligation:obtain-additional-information-on-the-source-of-funds-and-source-of-wealth",
+   "kind": "entity",
+   "label": "Obtain additional information on the source of funds and source of wealth",
+   "type": "Obligation",
+   "description": "Collect extra data on the source of funds and wealth of the customer and beneficial owners."
+  },
+  {
+   "id": "obligation:obtain-information-on-the-reasons-for-the-intended-or-performed-transactions",
+   "kind": "entity",
+   "label": "Obtain information on the reasons for the intended or performed transactions",
+   "type": "Obligation",
+   "description": "Collect information on why the transactions are intended or performed."
+  },
+  {
+   "id": "obligation:obtain-approval-of-senior-management-for-establishing-or-continuing-the-business-relationship",
+   "kind": "entity",
+   "label": "Obtain approval of senior management for establishing or continuing the business relationship",
+   "type": "Obligation",
+   "description": "Secure senior‑management approval for starting or continuing the relationship."
+  },
+  {
+   "id": "obligation:conduct-enhanced-monitoring-of-the-business-relationship",
+   "kind": "entity",
+   "label": "Conduct enhanced monitoring of the business relationship",
+   "type": "Obligation",
+   "description": "Increase the number, timing and depth of controls on the relationship."
+  },
+  {
+   "id": "obligation:require-first-payment-through-an-account-in-the-customers-name",
+   "kind": "entity",
+   "label": "Require first payment through an account in the customer’s name",
+   "type": "Obligation",
+   "description": "Mandate that the first payment be made via an account in the customer’s name."
+  },
+  {
+   "id": "obligation:apply-specific-measures-for-personalised-services",
+   "kind": "entity",
+   "label": "Apply specific measures for personalised services",
+   "type": "Obligation",
+   "description": "Implement procedures to mitigate risks linked to personalised services."
+  },
+  {
+   "id": "trigger:increased-risk-of-money-laundering",
+   "kind": "entity",
+   "label": "Increased risk of money laundering",
+   "type": "Trigger",
+   "description": "A condition indicating a higher risk of money laundering."
+  },
+  {
+   "id": "obligation:obtain-additional-information-on-the-source-of-funds",
+   "kind": "entity",
+   "label": "Obtain additional information on the source of funds",
+   "type": "Obligation"
+  },
+  {
+   "id": "article:39",
+   "kind": "entity",
+   "label": "Art. 39 — Prohibition of correspondent relationships with shell institutions",
+   "type": "Article",
+   "description": "Prohibition of correspondent relationships with shell institutions",
+   "citation": "amlr-art-039-prohibition-of-correspondent-relationships-with.md"
+  },
+  {
+   "id": "obligedentity:crypto-asset-service-provider",
+   "kind": "entity",
+   "label": "Crypto-asset service provider",
+   "type": "ObligedEntity",
+   "description": "A provider of crypto‑asset services that is bound by the AMLR."
+  },
+  {
+   "id": "party:shell-institution",
+   "kind": "entity",
+   "label": "Shell institution",
+   "type": "Party",
+   "description": "An entity whose accounts are used to conceal the origin of funds."
+  },
+  {
+   "id": "obligation:enter-into-correspondent-relationship",
+   "kind": "entity",
+   "label": "Enter into correspondent relationship",
+   "type": "Obligation",
+   "description": "The act of establishing a correspondent relationship with another institution."
+  },
+  {
+   "id": "obligation:continue-correspondent-relationship",
+   "kind": "entity",
+   "label": "Continue correspondent relationship",
+   "type": "Obligation",
+   "description": "The act of maintaining an existing correspondent relationship."
+  },
+  {
+   "id": "obligation:ensure-no-correspondent-relationship-with-known-shell-users",
+   "kind": "entity",
+   "label": "Ensure no correspondent relationship with known shell users",
+   "type": "Obligation",
+   "description": "Take measures to avoid any correspondent relationship with a party known to serve shell institutions."
+  },
+  {
+   "id": "obligation:ensure-accounts-not-used-by-shell-institutions",
+   "kind": "entity",
+   "label": "Ensure accounts not used by shell institutions",
+   "type": "Obligation",
+   "description": "Make sure that the provider’s accounts are not exploited by shell institutions."
+  },
+  {
+   "id": "obligation:have-internal-policies-to-detect-attempts",
+   "kind": "entity",
+   "label": "Have internal policies to detect attempts",
+   "type": "Obligation",
+   "description": "Implement policies, procedures and controls to detect attempts to use accounts for unregulated crypto‑asset services."
+  },
+  {
+   "id": "article:42",
+   "kind": "entity",
+   "label": "Art. 42 — Specific provisions regarding politically exposed persons",
+   "type": "Article",
+   "description": "Specific provisions regarding politically exposed persons",
+   "citation": "amlr-art-042-specific-provisions-regarding-politically-exposed.md"
+  },
+  {
+   "id": "obligation:obtain-senior-management-approval",
+   "kind": "entity",
+   "label": "Obtain senior management approval",
+   "type": "Obligation",
+   "description": "Obtain senior management approval for occasional transactions or relationships with PEPs."
+  },
+  {
+   "id": "obligation:establish-source-of-wealth-and-source-of-funds",
+   "kind": "entity",
+   "label": "Establish source of wealth and source of funds",
+   "type": "Obligation",
+   "description": "Take measures to determine source of wealth and funds for PEP transactions."
+  },
+  {
+   "id": "obligation:conduct-enhanced-ongoing-monitoring",
+   "kind": "entity",
+   "label": "Conduct enhanced, ongoing monitoring",
+   "type": "Obligation",
+   "description": "Perform enhanced ongoing monitoring of PEP business relationships."
+  },
+  {
+   "id": "obligation:issue-guidelines-on-identification-of-close-associates",
+   "kind": "entity",
+   "label": "Issue guidelines on identification of close associates",
+   "type": "Obligation",
+   "description": "Issue guidelines on criteria for identifying close associates of PEPs."
+  },
+  {
+   "id": "party:politically-exposed-person",
+   "kind": "entity",
+   "label": "Politically exposed person",
+   "type": "Party",
+   "description": "Person holding a prominent public function."
+  },
+  {
+   "id": "trigger:occasional-transaction-with-politically-exposed-person",
+   "kind": "entity",
+   "label": "Occasional transaction with politically exposed person",
+   "type": "Trigger",
+   "description": "An occasional transaction involving a PEP."
+  },
+  {
+   "id": "trigger:business-relationship-with-politically-exposed-person",
+   "kind": "entity",
+   "label": "Business relationship with politically exposed person",
+   "type": "Trigger",
+   "description": "A business relationship with a PEP."
+  },
+  {
+   "id": "article:45",
+   "kind": "entity",
+   "label": "Art. 45 — Measures for persons who cease to be politically exposed persons",
+   "type": "Article",
+   "description": "Measures for persons who cease to be politically exposed persons",
+   "citation": "amlr-art-045-measures-for-persons-who-cease-to-be-politically.md"
+  },
+  {
+   "id": "trigger:former-politically-exposed-person",
+   "kind": "entity",
+   "label": "Former politically exposed person",
+   "type": "Trigger",
+   "description": "A person who previously held a prominent public function."
+  },
+  {
+   "id": "obligation:take-into-account-continuing-risk",
+   "kind": "entity",
+   "label": "Take into account continuing risk",
+   "type": "Obligation",
+   "description": "Consider the continuing risk from a former function in risk assessment."
+  },
+  {
+   "id": "obligation:apply-mitigation-measures",
+   "kind": "entity",
+   "label": "Apply mitigation measures",
+   "type": "Obligation",
+   "description": "Apply measures referred to in Article 34(4) to mitigate risks."
+  },
+  {
+   "id": "article:46",
+   "kind": "entity",
+   "label": "Art. 46 — Family members and persons known to be close associates of politically exposed persons",
+   "type": "Article",
+   "description": "Family members and persons known to be close associates of politically exposed persons",
+   "citation": "amlr-art-046-family-members-and-persons-known-to-be-close.md"
+  },
+  {
+   "id": "obligation:apply-measures-from-articles-42-44-45",
+   "kind": "entity",
+   "label": "Apply measures from Articles 42,44,45",
+   "type": "Obligation",
+   "description": "Apply the measures set out in Articles 42, 44 and 45"
+  },
+  {
+   "id": "party:family-member-or-close-associate-of-politically-exposed-person",
+   "kind": "entity",
+   "label": "Family member or close associate of politically exposed person",
+   "type": "Party",
+   "description": "Family members or persons known to be close associates of a politically exposed person"
+  },
+  {
+   "id": "article:52",
+   "kind": "entity",
+   "label": "Art. 52 — Beneficial ownership through ownership interest",
+   "type": "Article",
+   "description": "Beneficial ownership through ownership interest",
+   "citation": "amlr-art-052-beneficial-ownership-through-ownership-interest.md"
+  },
+  {
+   "id": "obligation:identify-beneficial-owners",
+   "kind": "entity",
+   "label": "Identify beneficial owners",
+   "type": "Obligation",
+   "description": "Obligation to determine the natural persons who ultimately own or control a legal entity."
+  },
+  {
+   "id": "authority:commission",
+   "kind": "entity",
+   "label": "Commission",
+   "type": "Authority",
+   "description": "The European Commission, which adopts delegated acts on thresholds."
+  },
+  {
+   "id": "party:beneficial-owner",
+   "kind": "entity",
+   "label": "Beneficial owner",
+   "type": "Party",
+   "description": "A natural person who ultimately owns or controls a legal entity."
+  },
+  {
+   "id": "trigger:increased-risk-of-money-laundering-or-terrorist-financing",
+   "kind": "entity",
+   "label": "Increased risk of money laundering or terrorist financing",
+   "type": "Trigger",
+   "description": "A condition where a legal entity is considered high‑risk for money‑laundering or terrorist financing."
+  },
+  {
+   "id": "limit:25-ownership-interest",
+   "kind": "entity",
+   "label": "25 % ownership interest",
+   "type": "Limit",
+   "description": "A threshold of at least twenty‑five percent of shares or voting rights."
+  },
+  {
+   "id": "limit:15-ownership-interest",
+   "kind": "entity",
+   "label": "15 % ownership interest",
+   "type": "Limit",
+   "description": "A reduced threshold, not exceeding fifteen percent, for high‑risk corporate entities."
+  },
+  {
+   "id": "article:69",
+   "kind": "entity",
+   "label": "Art. 69 — Reporting of suspicions",
+   "type": "Article",
+   "description": "Reporting of suspicions",
+   "citation": "amlr-art-069-reporting-of-suspicions.md"
+  },
+  {
+   "id": "obligation:provide-information-to-fiu",
+   "kind": "entity",
+   "label": "Provide information to FIU",
+   "type": "Obligation",
+   "description": "Obligation to supply requested information and transaction records."
+  },
+  {
+   "id": "obligation:reply-to-fiu-within-5-working-days",
+   "kind": "entity",
+   "label": "Reply to FIU within 5 working days",
+   "type": "Obligation",
+   "description": "Obligation to respond to FIU requests promptly."
+  },
+  {
+   "id": "obligation:transmit-information-to-fiu",
+   "kind": "entity",
+   "label": "Transmit information to FIU",
+   "type": "Obligation",
+   "description": "Obligation for the compliance officer to send information to the FIU."
+  },
+  {
+   "id": "obligation:retain-copy-of-reports",
+   "kind": "entity",
+   "label": "Retain copy of reports",
+   "type": "Obligation",
+   "description": "Obligation to keep a copy of submitted reports."
+  },
+  {
+   "id": "trigger:suspicion-of-criminal-proceeds",
+   "kind": "entity",
+   "label": "Suspicion of criminal proceeds",
+   "type": "Trigger",
+   "description": "Knowledge or suspicion that funds are proceeds of crime."
+  },
+  {
+   "id": "trigger:fiu-request",
+   "kind": "entity",
+   "label": "FIU request",
+   "type": "Trigger",
+   "description": "Request by the FIU for additional information."
+  },
+  {
+   "id": "limit:5-working-days",
+   "kind": "entity",
+   "label": "5 working days",
+   "type": "Limit",
+   "description": "Time limit for responding to FIU requests."
+  },
+  {
+   "id": "article:71",
+   "kind": "entity",
+   "label": "Art. 71 — Refraining from carrying out transactions",
+   "type": "Article",
+   "description": "Refraining from carrying out transactions",
+   "citation": "amlr-art-071-refraining-from-carrying-out-transactions.md"
+  },
+  {
+   "id": "obligation:inform-fiu",
+   "kind": "entity",
+   "label": "Inform FIU",
+   "type": "Obligation",
+   "description": "Notify the FIU immediately after carrying out a transaction when refraining is not possible."
+  },
+  {
+   "id": "obligation:assess-risks-of-proceeding",
+   "kind": "entity",
+   "label": "Assess risks of proceeding",
+   "type": "Obligation",
+   "description": "Evaluate the risks of continuing with a transaction after reporting."
+  },
+  {
+   "id": "limit:3-working-days",
+   "kind": "entity",
+   "label": "3 working days",
+   "type": "Limit",
+   "description": "Time limit within which the FIU may issue instructions after a report."
+  },
+  {
+   "id": "article:73",
+   "kind": "entity",
+   "label": "Art. 73 — Prohibition of disclosure",
+   "type": "Article",
+   "description": "Prohibition of disclosure",
+   "citation": "amlr-art-073-prohibition-of-disclosure.md"
+  },
+  {
+   "id": "obligation:disclose-transaction-assessment",
+   "kind": "entity",
+   "label": "Disclose transaction assessment",
+   "type": "Obligation",
+   "description": "Prohibited act of informing a customer or third person that transactions are being assessed under AMLR."
+  },
+  {
+   "id": "obligation:disclose-to-competent-authorities",
+   "kind": "entity",
+   "label": "Disclose to competent authorities",
+   "type": "Obligation",
+   "description": "Allowed disclosure of information to competent authorities performing supervisory functions."
+  },
+  {
+   "id": "obligation:disclose-within-group",
+   "kind": "entity",
+   "label": "Disclose within group",
+   "type": "Obligation",
+   "description": "Allowed disclosure of information between obliged entities of the same group or their subsidiaries."
+  },
+  {
+   "id": "party:third-person",
+   "kind": "entity",
+   "label": "Third person",
+   "type": "Party",
+   "description": "Any person other than the customer to whom information might be disclosed."
+  },
+  {
+   "id": "record:group-wide-policies-and-procedures",
+   "kind": "entity",
+   "label": "Group-wide policies and procedures",
+   "type": "Record",
+   "description": "Internal policies governing information sharing within a group of obliged entities."
+  },
+  {
+   "id": "article:77",
+   "kind": "entity",
+   "label": "Art. 77 — Record retention",
+   "type": "Article",
+   "description": "Record retention",
+   "citation": "amlr-art-077-record-retention.md"
+  },
+  {
+   "id": "obligation:retain-documents-and-information",
+   "kind": "entity",
+   "label": "Retain documents and information",
+   "type": "Obligation",
+   "description": "Obliged entity must keep copies of documents and information obtained in CDD and related records."
+  },
+  {
+   "id": "record:copy-of-documents-obtained-in-cdd",
+   "kind": "entity",
+   "label": "Copy of documents obtained in CDD",
+   "type": "Record",
+   "description": "Copy of documents and information obtained during customer due diligence."
+  },
+  {
+   "id": "record:record-of-assessment",
+   "kind": "entity",
+   "label": "Record of assessment",
+   "type": "Record",
+   "description": "Record of the assessment undertaken pursuant to Article 69(2)."
+  },
+  {
+   "id": "record:supporting-evidence-and-transaction-records",
+   "kind": "entity",
+   "label": "Supporting evidence and transaction records",
+   "type": "Record",
+   "description": "Original documents or admissible copies evidencing transactions."
+  },
+  {
+   "id": "record:records-from-information-sharing-partnerships",
+   "kind": "entity",
+   "label": "Records from information sharing partnerships",
+   "type": "Record",
+   "description": "Copies of documents and records of information sharing obtained through partnerships."
+  },
+  {
+   "id": "obligation:ensure-documents-not-redacted",
+   "kind": "entity",
+   "label": "Ensure documents not redacted",
+   "type": "Obligation",
+   "description": "Obliged entity must keep retained documents unredacted."
+  },
+  {
+   "id": "obligation:may-replace-copies-with-references",
+   "kind": "entity",
+   "label": "May replace copies with references",
+   "type": "Obligation",
+   "description": "Obliged entity may retain references instead of copies, provided immediate provision to authorities."
+  },
+  {
+   "id": "authority:member-state",
+   "kind": "entity",
+   "label": "Member State",
+   "type": "Authority",
+   "description": "National authority of an EU Member State."
+  },
+  {
+   "id": "article:79",
+   "kind": "entity",
+   "label": "Art. 79 — Anonymous accounts and bearer shares and bearer share warrants",
+   "type": "Article",
+   "description": "Anonymous accounts and bearer shares and bearer share warrants",
+   "citation": "amlr-art-079-anonymous-accounts-and-bearer-shares-and-bearer.md"
+  },
+  {
+   "id": "obligation:keep-anonymous-accounts",
+   "kind": "entity",
+   "label": "Keep anonymous accounts",
+   "type": "Obligation",
+   "description": "Prohibition to keep anonymous bank, payment or crypto‑asset accounts."
+  },
+  {
+   "id": "obligation:identify-customer",
+   "kind": "entity",
+   "label": "Identify customer",
+   "type": "Obligation",
+   "description": "Obligation to identify the customer."
+  },
+  {
+   "id": "obligation:accept-anonymous-prepaid-card-payments",
+   "kind": "entity",
+   "label": "Accept anonymous prepaid card payments",
+   "type": "Obligation",
+   "description": "Prohibition to accept payments with anonymous prepaid cards."
+  },
+  {
+   "id": "obligation:issue-bearer-shares",
+   "kind": "entity",
+   "label": "Issue bearer shares",
+   "type": "Obligation",
+   "description": "Prohibition to issue bearer shares."
+  },
+  {
+   "id": "article:80",
+   "kind": "entity",
+   "label": "Art. 80 — Limits to large cash payments in exchange for goods or services",
+   "type": "Article",
+   "description": "Limits to large cash payments in exchange for goods or services",
+   "citation": "amlr-art-080-limits-to-large-cash-payments-in-exchange-for.md"
+  },
+  {
+   "id": "obligation:accept-cash-payments-up-to-limit",
+   "kind": "entity",
+   "label": "Accept cash payments up to limit",
+   "type": "Obligation",
+   "description": "Accept or make cash payments not exceeding the EUR 10 000 threshold"
+  },
+  {
+   "id": "obligation:report-cash-payments-at-credit-institution-premises-to-fiu",
+   "kind": "entity",
+   "label": "Report cash payments at credit institution premises to FIU",
+   "type": "Obligation",
+   "description": "Report cash payments or deposits made at credit institution premises to the FIU"
+  },
+  {
+   "id": "obligation:apply-limit-to-private-payments",
+   "kind": "entity",
+   "label": "Apply limit to private payments",
+   "type": "Obligation",
+   "description": "Apply the EUR 10 000 cash payment limit to payments between natural persons"
+  },
+  {
+   "id": "obligation:adopt-lower-limits",
+   "kind": "entity",
+   "label": "Adopt lower limits",
+   "type": "Obligation",
+   "description": "Member State may set cash‑payment limits lower than the EU threshold"
+  },
+  {
+   "id": "obligation:notify-limits-to-commission",
+   "kind": "entity",
+   "label": "Notify limits to Commission",
+   "type": "Obligation",
+   "description": "Member State must inform the Commission of any lower national cash‑payment limits"
+  },
+  {
+   "id": "obligation:ensure-penalties-for-breach",
+   "kind": "entity",
+   "label": "Ensure penalties for breach",
+   "type": "Obligation",
+   "description": "Member State must ensure penalties for persons who breach the cash‑payment limit"
+  }
+ ],
+ "edges": [
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(1)",
+   "evidence": "The following entities are to be considered obliged entities for the purposes of this Regulation: (1) credit institutions;"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(2)",
+   "evidence": "The following entities are to be considered obliged entities for the purposes of this Regulation: (1) credit institutions; (2) financial institutions;"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:auditor-external-accountant-and-tax-advisor",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(a)",
+   "evidence": "auditors, external accountants and tax advisors, and any other natural or legal person including independent legal professionals such as lawyers"
+  },
+  {
+   "source": "obligedentity:auditor-external-accountant-and-tax-advisor",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:estate-agent",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(d)",
+   "evidence": "estate agents and other real estate professionals ... monthly rent amounts to at least EUR 10 000 or the equivalent in national currency"
+  },
+  {
+   "source": "obligedentity:estate-agent",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:person-trading-precious-metals-and-stones",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(e)",
+   "evidence": "persons trading, as a regular or principal professional activity, in precious metals and stones;"
+  },
+  {
+   "source": "obligedentity:person-trading-precious-metals-and-stones",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(f)",
+   "evidence": "persons trading, as a regular or principal professional activity, in high-value goods;"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:crowdfunding-service-provider",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(h)",
+   "evidence": "crowdfunding service providers and crowdfunding intermediaries;"
+  },
+  {
+   "source": "obligedentity:crowdfunding-service-provider",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:cultural-goods-trader",
+   "target": "obligedentity:obliged-entity",
+   "kind": "is_a",
+   "label": "is a",
+   "citation": "AMLR Art. 3(3)(i)",
+   "evidence": "persons trading or acting as intermediaries in the trade of cultural goods ... value of the transaction or linked transactions amounts to at least EUR 10 000 or the equivalent in national currency;"
+  },
+  {
+   "source": "obligedentity:cultural-goods-trader",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:estate-agent",
+   "target": "limit:eur-10-000",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 3(3)(d)",
+   "evidence": "monthly rent amounts to at least EUR 10 000 or the equivalent in national currency"
+  },
+  {
+   "source": "limit:eur-10-000",
+   "target": "article:3",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:cultural-goods-trader",
+   "target": "limit:eur-10-000",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 3(3)(i)",
+   "evidence": "value of the transaction or linked transactions amounts to at least EUR 10 000 or the equivalent in national currency"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:appoint-compliance-manager",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(1)",
+   "evidence": "Obliged entities shall appoint one member of the management body in its management function"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:appoint-compliance-manager",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:appoint-compliance-officer",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(2)",
+   "evidence": "Obliged entities shall have a compliance officer, to be appointed by the management body"
+  },
+  {
+   "source": "obligation:appoint-compliance-officer",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:provide-resources-to-compliance-functions",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(3)",
+   "evidence": "Obliged entities shall provide the compliance functions with adequate resources, including staff and technology"
+  },
+  {
+   "source": "obligation:provide-resources-to-compliance-functions",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:protect-compliance-officer",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(4)",
+   "evidence": "Obliged entities shall take measures to ensure that the compliance officer is protected against retaliation"
+  },
+  {
+   "source": "obligation:protect-compliance-officer",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:allow-compliance-officer-reporting",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(5)",
+   "evidence": "the compliance officer ... can report directly to the management body"
+  },
+  {
+   "source": "obligation:allow-compliance-officer-reporting",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "party:compliance-officer",
+   "target": "obligation:report-suspicious-transactions-to-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(2)",
+   "evidence": "the compliance officer shall also be responsible for reporting suspicious transactions to the FIU"
+  },
+  {
+   "source": "party:compliance-officer",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicious-transactions-to-fiu",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicious-transactions-to-fiu",
+   "target": "trigger:suspicion-of-money-laundering",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 11(2)",
+   "evidence": "reporting suspicious transactions to the FIU"
+  },
+  {
+   "source": "trigger:suspicion-of-money-laundering",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "party:compliance-manager",
+   "target": "obligation:report-compliance-manager-to-management-body",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 11(6)",
+   "evidence": "The compliance manager shall regularly report on the implementation ... to the management body"
+  },
+  {
+   "source": "party:compliance-manager",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-compliance-manager-to-management-body",
+   "target": "article:11",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:apply-customer-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 19(1)(a)",
+   "evidence": "in any of the following circumstances: (a) when establishing a business relationship;"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "trigger:establish-business-relationship",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 19(1)(a)",
+   "evidence": "in any of the following circumstances: (a) when establishing a business relationship;"
+  },
+  {
+   "source": "trigger:establish-business-relationship",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "trigger:transaction-value-at-least-eur-10-000",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 19(1)(b)",
+   "evidence": "when carrying out an occasional transaction of a value of at least EUR 10 000, or the equivalent in national currency,"
+  },
+  {
+   "source": "trigger:transaction-value-at-least-eur-10-000",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "trigger:suspicion-of-money-laundering",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 19(1)(d)",
+   "evidence": "when there is a suspicion of money laundering or terrorist financing, regardless of any derogation, exemption or threshold;"
+  },
+  {
+   "source": "trigger:suspicion-of-money-laundering",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "trigger:doubts-about-customer-identification-data",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 19(1)(e)",
+   "evidence": "when there are doubts about the veracity or adequacy of previously obtained customer identification data;"
+  },
+  {
+   "source": "trigger:doubts-about-customer-identification-data",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "trigger:doubts-about-person-interacting",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 19(1)(f)",
+   "evidence": "when there are doubts as to whether the person they interact with is the customer or person authorised to act on behalf of the customer."
+  },
+  {
+   "source": "trigger:doubts-about-person-interacting",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:apply-customer-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 19(2)",
+   "evidence": "credit institutions and financial institutions ... shall apply customer due diligence measures when ... amounts to a value of at least EUR 1 000, or the equivalent in national currency,"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "limit:eur-1-000",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 19(2)",
+   "evidence": "amounts to a value of at least EUR 1 000, or the equivalent in national currency,"
+  },
+  {
+   "source": "limit:eur-1-000",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:apply-customer-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 19(2)",
+   "evidence": "credit institutions and financial institutions ... shall apply customer due diligence measures when ... amounts to a value of at least EUR 1 000, or the equivalent in national currency,"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:provider-of-gambling-services",
+   "target": "obligation:apply-customer-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 19(5)",
+   "evidence": "providers of gambling services shall apply customer due diligence measures ... when carrying out transactions amounting to at least EUR 2 000 or the equivalent in national currency,"
+  },
+  {
+   "source": "obligedentity:provider-of-gambling-services",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-customer-due-diligence-measures",
+   "target": "limit:eur-2-000",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 19(5)",
+   "evidence": "transactions amounting to at least EUR 2 000 or the equivalent in national currency,"
+  },
+  {
+   "source": "limit:eur-2-000",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:supervisor",
+   "target": "obligation:exempt-obliged-entities-from-applying-cdd-measures",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 19(7)",
+   "evidence": "Supervisors may, directly or in cooperation with other authorities ... exempt obliged entities from applying, in full or in part, the customer due diligence measures"
+  },
+  {
+   "source": "authority:supervisor",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:exempt-obliged-entities-from-applying-cdd-measures",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "obligation:develop-draft-regulatory-technical-standards",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 19(9)",
+   "evidence": "By 10 July 2026, AMLA shall develop draft regulatory technical standards and submit them to the Commission for adoption."
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:develop-draft-regulatory-technical-standards",
+   "target": "article:19",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:identify-and-verify-customer",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 20(1)(a)",
+   "evidence": "identifying the customer and verifying the customer’s identity"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:20",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-and-verify-customer",
+   "target": "article:20",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:identify-and-verify-beneficial-owners",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 20(1)(b)",
+   "evidence": "identifying the beneficial owners and taking reasonable measures to verify their identity"
+  },
+  {
+   "source": "obligation:identify-and-verify-beneficial-owners",
+   "target": "article:20",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:assess-purpose-and-nature-of-business-relationship",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 20(1)(c)",
+   "evidence": "assessing and, as appropriate, obtaining information on and understanding the purpose and intended nature of the business relationship or the occasional transactions"
+  },
+  {
+   "source": "obligation:assess-purpose-and-nature-of-business-relationship",
+   "target": "article:20",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:refrain-from-transaction",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 21(1)",
+   "evidence": "it shall refrain from carrying out a transaction or establishing a business relationship, and shall terminate the business relationship and consider reporting a suspicious transaction to the FIU"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:21",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:refrain-from-transaction",
+   "target": "article:21",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:terminate-business-relationship",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 21(1)",
+   "evidence": "it shall refrain from carrying out a transaction or establishing a business relationship, and shall terminate the business relationship and consider reporting a suspicious transaction to the FIU"
+  },
+  {
+   "source": "obligation:terminate-business-relationship",
+   "target": "article:21",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:report-suspicion-to-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 21(1)",
+   "evidence": "it shall refrain from carrying out a transaction or establishing a business relationship, and shall terminate the business relationship and consider reporting a suspicious transaction to the FIU"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "article:21",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:conduct-ongoing-monitoring",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 26(1)",
+   "evidence": "Obliged entities shall conduct ongoing monitoring of business relationships, including transactions undertaken by the customer throughout the course of a business relationship"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:conduct-ongoing-monitoring",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:conduct-ongoing-monitoring",
+   "target": "party:customer",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 26(1)",
+   "evidence": "transactions undertaken by the customer"
+  },
+  {
+   "source": "party:customer",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:conduct-ongoing-monitoring",
+   "target": "limit:1-year",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 26(2)(a)",
+   "evidence": "for higher risk customers to which measures under Section 4 of this Chapter apply, 1 year"
+  },
+  {
+   "source": "limit:1-year",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:keep-record-of-actions",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 26(2)",
+   "evidence": "obliged entities shall ensure that the relevant documents, data or information of the customer are kept up to date"
+  },
+  {
+   "source": "obligation:keep-record-of-actions",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:keep-record-of-actions",
+   "target": "party:customer",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 26(2)",
+   "evidence": "relevant documents, data or information of the customer"
+  },
+  {
+   "source": "obligation:keep-record-of-actions",
+   "target": "limit:5-years",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 26(2)(b)",
+   "evidence": "for all other customers, 5 years"
+  },
+  {
+   "source": "limit:5-years",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:apply-measures-to-ensure-compliance",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 26(4)",
+   "evidence": "obliged entities shall regularly verify whether the conditions laid down in Article 20(1), point (d), are met"
+  },
+  {
+   "source": "obligation:apply-measures-to-ensure-compliance",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-measures-to-ensure-compliance",
+   "target": "party:customer",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 26(4)",
+   "evidence": "verify whether the conditions laid down in Article 20(1), point (d), are met"
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "obligation:issue-guidelines-on-ongoing-monitoring",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 26(5)",
+   "evidence": "AMLA shall issue guidelines on ongoing monitoring of a business relationship and on the monitoring of the transactions carried out in the context of such relationship"
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:issue-guidelines-on-ongoing-monitoring",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:26",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:conduct-ongoing-monitoring",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 26(1)",
+   "evidence": "Obliged entities shall conduct ongoing monitoring of business relationships, including transactions undertaken by the customer throughout the course of a business relationship"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:apply-enhanced-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 34(1)",
+   "evidence": "obliged entities shall apply enhanced due diligence measures to manage and mitigate such risks appropriately"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:apply-enhanced-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 34(1)",
+   "evidence": "obliged entities shall apply enhanced due diligence measures to manage and mitigate such risks appropriately"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:trust-or-company-service-provider",
+   "target": "obligation:apply-enhanced-due-diligence-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 34(1)",
+   "evidence": "obliged entities shall apply enhanced due diligence measures to manage and mitigate such risks appropriately"
+  },
+  {
+   "source": "obligedentity:trust-or-company-service-provider",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:obtain-additional-information-on-the-customer-and-the-beneficial-owners",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(a) obtaining additional information on the customer and the beneficial owners;"
+  },
+  {
+   "source": "obligation:obtain-additional-information-on-the-customer-and-the-beneficial-owners",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:obtain-additional-information-on-the-intended-nature-of-the-business-relationship",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(b) obtaining additional information on the intended nature of the business relationship;"
+  },
+  {
+   "source": "obligation:obtain-additional-information-on-the-intended-nature-of-the-business-relationship",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:obtain-additional-information-on-the-source-of-funds-and-source-of-wealth",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(c) obtaining additional information on the source of funds, and source of wealth of the customer and of the beneficial owners;"
+  },
+  {
+   "source": "obligation:obtain-additional-information-on-the-source-of-funds-and-source-of-wealth",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:obtain-information-on-the-reasons-for-the-intended-or-performed-transactions",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(d) obtaining information on the reasons for the intended or performed transactions and their consistency with the business relationship;"
+  },
+  {
+   "source": "obligation:obtain-information-on-the-reasons-for-the-intended-or-performed-transactions",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:obtain-approval-of-senior-management-for-establishing-or-continuing-the-business-relationship",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(e) obtaining the approval of senior management for establishing or continuing the business relationship;"
+  },
+  {
+   "source": "obligation:obtain-approval-of-senior-management-for-establishing-or-continuing-the-business-relationship",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:conduct-enhanced-monitoring-of-the-business-relationship",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(f) conducting enhanced monitoring of the business relationship by increasing the number and timing of controls applied, and selecting patterns of transactions that need further examination;"
+  },
+  {
+   "source": "obligation:conduct-enhanced-monitoring-of-the-business-relationship",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "obligation:require-first-payment-through-an-account-in-the-customers-name",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 34(4)",
+   "evidence": "(g) requiring the first payment to be carried out through an account in the customer’s name with a credit institution subject to customer due diligence standards"
+  },
+  {
+   "source": "obligation:require-first-payment-through-an-account-in-the-customers-name",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-enhanced-due-diligence-measures",
+   "target": "trigger:increased-risk-of-money-laundering",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 34(1)",
+   "evidence": "higher risk that are identified by obliged entities pursuant to Article 20(2)"
+  },
+  {
+   "source": "trigger:increased-risk-of-money-laundering",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:apply-specific-measures-for-personalised-services",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 34(5)",
+   "evidence": "(a) specific measures including procedures to mitigate risks associated with personalised services and products offered to that customer;"
+  },
+  {
+   "source": "obligation:apply-specific-measures-for-personalised-services",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:obtain-additional-information-on-the-source-of-funds",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 34(5)",
+   "evidence": "(b) obtaining additional information on that customer’s source of funds;"
+  },
+  {
+   "source": "obligation:obtain-additional-information-on-the-source-of-funds",
+   "target": "article:34",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:enter-into-correspondent-relationship",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:enter-into-correspondent-relationship",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:continue-correspondent-relationship",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "obligation:continue-correspondent-relationship",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:enter-into-correspondent-relationship",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:continue-correspondent-relationship",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:ensure-no-correspondent-relationship-with-known-shell-users",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "known to allow its accounts to be used by a shell institution"
+  },
+  {
+   "source": "obligation:ensure-no-correspondent-relationship-with-known-shell-users",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:ensure-no-correspondent-relationship-with-known-shell-users",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "known to allow its accounts to be used by a shell institution"
+  },
+  {
+   "source": "obligedentity:crypto-asset-service-provider",
+   "target": "obligation:ensure-accounts-not-used-by-shell-institutions",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 39(2)",
+   "evidence": "shall ensure that their accounts are not used by shell institutions to provide crypto-asset services"
+  },
+  {
+   "source": "obligedentity:crypto-asset-service-provider",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:ensure-accounts-not-used-by-shell-institutions",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:crypto-asset-service-provider",
+   "target": "obligation:have-internal-policies-to-detect-attempts",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 39(2)",
+   "evidence": "shall have in place internal policies, procedures and controls to detect any attempt to use their accounts"
+  },
+  {
+   "source": "obligation:have-internal-policies-to-detect-attempts",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:enter-into-correspondent-relationship",
+   "target": "party:shell-institution",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "party:shell-institution",
+   "target": "article:39",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:continue-correspondent-relationship",
+   "target": "party:shell-institution",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "shall not enter into, or continue, a correspondent relationship with a shell institution"
+  },
+  {
+   "source": "obligation:ensure-no-correspondent-relationship-with-known-shell-users",
+   "target": "party:shell-institution",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 39(1)",
+   "evidence": "known to allow its accounts to be used by a shell institution"
+  },
+  {
+   "source": "obligation:ensure-accounts-not-used-by-shell-institutions",
+   "target": "party:shell-institution",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 39(2)",
+   "evidence": "shall ensure that their accounts are not used by shell institutions to provide crypto-asset services"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:obtain-senior-management-approval",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 42(1)(a)",
+   "evidence": "obtain senior management approval for carrying out occasional transactions or for establishing or continuing business relationships with politically exposed persons"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:obtain-senior-management-approval",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:establish-source-of-wealth-and-source-of-funds",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 42(1)(b)",
+   "evidence": "take adequate measures to establish the source of wealth and source of funds that are involved in business relationships or occasional transactions with politically exposed persons"
+  },
+  {
+   "source": "obligation:establish-source-of-wealth-and-source-of-funds",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:conduct-enhanced-ongoing-monitoring",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 42(1)(c)",
+   "evidence": "conduct enhanced, ongoing monitoring of those business relationships"
+  },
+  {
+   "source": "obligation:conduct-enhanced-ongoing-monitoring",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:obtain-senior-management-approval",
+   "target": "trigger:occasional-transaction-with-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 42(1)(a)",
+   "evidence": "obtain senior management approval for carrying out occasional transactions or for establishing or continuing business relationships with politically exposed persons"
+  },
+  {
+   "source": "trigger:occasional-transaction-with-politically-exposed-person",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:establish-source-of-wealth-and-source-of-funds",
+   "target": "trigger:occasional-transaction-with-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 42(1)(b)",
+   "evidence": "take adequate measures to establish the source of wealth and source of funds that are involved in business relationships or occasional transactions with politically exposed persons"
+  },
+  {
+   "source": "obligation:conduct-enhanced-ongoing-monitoring",
+   "target": "trigger:business-relationship-with-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 42(1)(c)",
+   "evidence": "conduct enhanced, ongoing monitoring of those business relationships"
+  },
+  {
+   "source": "trigger:business-relationship-with-politically-exposed-person",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:obtain-senior-management-approval",
+   "target": "party:politically-exposed-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 42(1)(a)",
+   "evidence": "obtain senior management approval for carrying out occasional transactions or for establishing or continuing business relationships with politically exposed persons"
+  },
+  {
+   "source": "party:politically-exposed-person",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:establish-source-of-wealth-and-source-of-funds",
+   "target": "party:politically-exposed-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 42(1)(b)",
+   "evidence": "take adequate measures to establish the source of wealth and source of funds that are involved in business relationships or occasional transactions with politically exposed persons"
+  },
+  {
+   "source": "obligation:conduct-enhanced-ongoing-monitoring",
+   "target": "party:politically-exposed-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 42(1)(c)",
+   "evidence": "conduct enhanced, ongoing monitoring of those business relationships"
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "obligation:issue-guidelines-on-identification-of-close-associates",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 42(2)",
+   "evidence": "By 10 July 2027, AMLA shall issue guidelines on the following matters"
+  },
+  {
+   "source": "obligedentity:amla",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:issue-guidelines-on-identification-of-close-associates",
+   "target": "article:42",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:issue-guidelines-on-identification-of-close-associates",
+   "target": "party:politically-exposed-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 42(2)(a)",
+   "evidence": "the criteria for the identification of persons known to be close associates"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:take-into-account-continuing-risk",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 45(1)",
+   "evidence": "obliged entities shall take into account the continuing risk posed by that person"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:take-into-account-continuing-risk",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:take-into-account-continuing-risk",
+   "target": "trigger:former-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 45(1)",
+   "evidence": "obliged entities shall take into account the continuing risk posed by that person"
+  },
+  {
+   "source": "trigger:former-politically-exposed-person",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:apply-mitigation-measures",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 45(2)",
+   "evidence": "but in any case for not less than 12 months following the time"
+  },
+  {
+   "source": "obligation:apply-mitigation-measures",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-mitigation-measures",
+   "target": "limit:1-year",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 45(2)",
+   "evidence": "but in any case for not less than 12 months following the time"
+  },
+  {
+   "source": "limit:1-year",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-mitigation-measures",
+   "target": "trigger:former-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 45(2)",
+   "evidence": "Obliged entities shall apply one or more of the measures referred to in Article 34(4)"
+  },
+  {
+   "source": "obligation:apply-mitigation-measures",
+   "target": "trigger:occasional-transaction-with-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 45(3)",
+   "evidence": "where an obliged entity carries out an occasional transaction or enters into a business relationship with a person who in the past was entrusted"
+  },
+  {
+   "source": "trigger:occasional-transaction-with-politically-exposed-person",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-mitigation-measures",
+   "target": "trigger:business-relationship-with-politically-exposed-person",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 45(3)",
+   "evidence": "where an obliged entity carries out an occasional transaction or enters into a business relationship with a person who in the past was entrusted"
+  },
+  {
+   "source": "trigger:business-relationship-with-politically-exposed-person",
+   "target": "article:45",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:apply-measures-from-articles-42-44-45",
+   "target": "party:family-member-or-close-associate-of-politically-exposed-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 46(46)",
+   "evidence": "The measures referred to in Articles 42, 44 and 45 shall also apply to family members or persons known to be close associates of politically exposed persons"
+  },
+  {
+   "source": "obligation:apply-measures-from-articles-42-44-45",
+   "target": "article:46",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "party:family-member-or-close-associate-of-politically-exposed-person",
+   "target": "article:46",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:identify-beneficial-owners",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 52(1)",
+   "evidence": "‘an ownership interest in the corporate entity’ shall mean direct or indirect ownership of 25 % or more of the shares or voting rights"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "limit:25-ownership-interest",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 52(1)",
+   "evidence": "direct or indirect ownership of 25 % or more of the shares or voting rights or other ownership interest"
+  },
+  {
+   "source": "limit:25-ownership-interest",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "limit:15-ownership-interest",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 52(2)",
+   "evidence": "the lower threshold referred to in the first subparagraph shall be set at a maximum of 15 % of ownership interest"
+  },
+  {
+   "source": "limit:15-ownership-interest",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "trigger:increased-risk-of-money-laundering-or-terrorist-financing",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 52(2)",
+   "evidence": "categories of corporate entities that are exposed to higher money laundering and terrorist financing risks"
+  },
+  {
+   "source": "trigger:increased-risk-of-money-laundering-or-terrorist-financing",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "party:beneficial-owner",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 52(1)",
+   "evidence": "direct or indirect ownership of 25 % or more of the shares or voting rights ... the beneficial owners"
+  },
+  {
+   "source": "party:beneficial-owner",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:commission",
+   "target": "obligation:identify-beneficial-owners",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 52(2)",
+   "evidence": "the Commission shall assess whether the risks associated with those categories of legal entities are relevant"
+  },
+  {
+   "source": "authority:commission",
+   "target": "article:52",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:provide-information-to-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 69(1)(b)",
+   "evidence": "providing the FIU, at its request, with all necessary information, including information on transaction records, within the deadlines imposed"
+  },
+  {
+   "source": "obligation:provide-information-to-fiu",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:reply-to-fiu-within-5-working-days",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 69(1)",
+   "evidence": "obliged entities shall reply to requests for information by the FIU within 5 working days"
+  },
+  {
+   "source": "obligation:reply-to-fiu-within-5-working-days",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "trigger:suspicion-of-criminal-proceeds",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 69(1)(a)",
+   "evidence": "where the obliged entity knows, suspects or has reasonable grounds to suspect that funds or activities ... are the proceeds of criminal activity"
+  },
+  {
+   "source": "trigger:suspicion-of-criminal-proceeds",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:provide-information-to-fiu",
+   "target": "trigger:fiu-request",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 69(1)(b)",
+   "evidence": "providing the FIU, at its request, with all necessary information"
+  },
+  {
+   "source": "trigger:fiu-request",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "authority:fiu",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 69(1)(a)",
+   "evidence": "reporting to the FIU, on their own initiative"
+  },
+  {
+   "source": "authority:fiu",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:provide-information-to-fiu",
+   "target": "authority:fiu",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 69(1)(b)",
+   "evidence": "providing the FIU, at its request"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "record:record-of-decisions-and-supporting-documents",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 69(1)(a)",
+   "evidence": "including information on transaction records"
+  },
+  {
+   "source": "record:record-of-decisions-and-supporting-documents",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:provide-information-to-fiu",
+   "target": "record:record-of-decisions-and-supporting-documents",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 69(1)(b)",
+   "evidence": "including information on transaction records"
+  },
+  {
+   "source": "obligation:reply-to-fiu-within-5-working-days",
+   "target": "limit:5-working-days",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 69(1)",
+   "evidence": "obliged entities shall reply to requests for information by the FIU within 5 working days"
+  },
+  {
+   "source": "limit:5-working-days",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:transmit-information-to-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 69(6)",
+   "evidence": "The compliance officer ... shall transmit the information ... to the FIU of the Member State"
+  },
+  {
+   "source": "obligation:transmit-information-to-fiu",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:transmit-information-to-fiu",
+   "target": "authority:fiu",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 69(6)",
+   "evidence": "shall transmit the information ... to the FIU"
+  },
+  {
+   "source": "obligation:protect-compliance-officer",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:retain-copy-of-reports",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 69(9)",
+   "evidence": "shall retain a copy of any reports submitted pursuant to that paragraph in accordance with Article 77"
+  },
+  {
+   "source": "obligation:retain-copy-of-reports",
+   "target": "article:69",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:refrain-from-transaction",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 71(1)",
+   "evidence": "Obliged entities shall refrain from carrying out transactions which they know or suspect to be related to proceeds of criminal activity or to terrorist financing"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:refrain-from-transaction",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-suspicion-to-fiu",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:fiu",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:refrain-from-transaction",
+   "target": "trigger:suspicion-of-criminal-proceeds",
+   "kind": "triggered_by",
+   "label": "triggered by",
+   "citation": "AMLR Art. 71(1)",
+   "evidence": "Obliged entities shall refrain from carrying out transactions which they know or suspect to be related to proceeds of criminal activity or to terrorist financing"
+  },
+  {
+   "source": "trigger:suspicion-of-criminal-proceeds",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:inform-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 71(2)",
+   "evidence": "the obliged entity shall inform the FIU immediately after carrying out the transaction"
+  },
+  {
+   "source": "obligation:inform-fiu",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:inform-fiu",
+   "target": "authority:fiu",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 71(2)",
+   "evidence": "the obliged entity shall inform the FIU immediately after carrying out the transaction"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:assess-risks-of-proceeding",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 71(1)",
+   "evidence": "Obliged entities may carry out the transaction concerned after having assessed the risks of proceeding with the transaction"
+  },
+  {
+   "source": "obligation:assess-risks-of-proceeding",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:assess-risks-of-proceeding",
+   "target": "limit:3-working-days",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 71(1)",
+   "evidence": "if they have not received instructions to the contrary from the FIU within 3 working days of submitting the report"
+  },
+  {
+   "source": "limit:3-working-days",
+   "target": "article:71",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:disclose-transaction-assessment",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 73(1)",
+   "evidence": "shall not disclose to the customer concerned or to other third persons the fact that transactions or activities are being or have been assessed"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:disclose-transaction-assessment",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:disclose-to-competent-authorities",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 73(2)",
+   "evidence": "shall not apply to disclosures to competent authorities and to self-regulatory bodies where they perform supervisory functions"
+  },
+  {
+   "source": "obligation:disclose-to-competent-authorities",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:disclose-within-group",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 73(3)",
+   "evidence": "disclosure may take place between obliged entities that belong to the same group, or between such entities and their branches and subsidiaries established in third countries"
+  },
+  {
+   "source": "obligation:disclose-within-group",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:disclose-within-group",
+   "target": "record:group-wide-policies-and-procedures",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 73(3)",
+   "evidence": "provided that those branches and subsidiaries fully comply with the group-wide policies and procedures"
+  },
+  {
+   "source": "record:group-wide-policies-and-procedures",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:disclose-transaction-assessment",
+   "target": "party:customer",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 73(1)",
+   "evidence": "shall not disclose to the customer concerned ... the fact that transactions or activities are being or have been assessed"
+  },
+  {
+   "source": "party:customer",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:disclose-transaction-assessment",
+   "target": "party:third-person",
+   "kind": "applies_to",
+   "label": "applies to",
+   "citation": "AMLR Art. 73(1)",
+   "evidence": "shall not disclose to ... other third persons the fact that transactions or activities are being or have been assessed"
+  },
+  {
+   "source": "party:third-person",
+   "target": "article:73",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:retain-documents-and-information",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 77(1)",
+   "evidence": "Obliged entities shall retain the following documents and information:"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "record:copy-of-documents-obtained-in-cdd",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 77(1)(a)",
+   "evidence": "a copy of the documents and information obtained in the performance of customer due diligence pursuant to Chapter III"
+  },
+  {
+   "source": "record:copy-of-documents-obtained-in-cdd",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "record:record-of-assessment",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 77(1)(b)",
+   "evidence": "a record of the assessment undertaken pursuant to Article 69(2), including the information and circumstances considered"
+  },
+  {
+   "source": "record:record-of-assessment",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "record:supporting-evidence-and-transaction-records",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 77(1)(c)",
+   "evidence": "the supporting evidence and records of transactions, consisting of the original documents or copies admissible in judicial proceedings"
+  },
+  {
+   "source": "record:supporting-evidence-and-transaction-records",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "record:records-from-information-sharing-partnerships",
+   "kind": "requires",
+   "label": "requires",
+   "citation": "AMLR Art. 77(1)(d)",
+   "evidence": "copies of the documents and information obtained in the framework of those partnerships, and records of all instances of information sharing"
+  },
+  {
+   "source": "record:records-from-information-sharing-partnerships",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:ensure-documents-not-redacted",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 77(1)",
+   "evidence": "Obliged entities shall ensure that documents, information and records kept pursuant to this Article are not redacted"
+  },
+  {
+   "source": "obligation:ensure-documents-not-redacted",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:may-replace-copies-with-references",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 77(2)",
+   "evidence": "obliged entities may decide to replace the retention of copies of the information by a retention of the references to such information"
+  },
+  {
+   "source": "obligation:may-replace-copies-with-references",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:keep-anonymous-accounts",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(1)",
+   "evidence": "shall be prohibited from keeping anonymous bank and payment accounts, anonymous passbooks"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:keep-anonymous-accounts",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:keep-anonymous-accounts",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(1)",
+   "evidence": "shall be prohibited from keeping anonymous bank and payment accounts, anonymous passbooks"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:crypto-asset-service-provider",
+   "target": "obligation:keep-anonymous-accounts",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(1)",
+   "evidence": "shall be prohibited from keeping anonymous bank and payment accounts, anonymous passbooks"
+  },
+  {
+   "source": "obligedentity:crypto-asset-service-provider",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:identify-customer",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 79(1)",
+   "evidence": "shall be subject to customer due diligence measures before those accounts"
+  },
+  {
+   "source": "obligation:identify-customer",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:identify-beneficial-owners",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:credit-institution",
+   "target": "obligation:accept-anonymous-prepaid-card-payments",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(2)",
+   "evidence": "shall not accept payments carried out with anonymous prepaid cards issued in third countries"
+  },
+  {
+   "source": "obligation:accept-anonymous-prepaid-card-payments",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:financial-institution",
+   "target": "obligation:accept-anonymous-prepaid-card-payments",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(2)",
+   "evidence": "shall not accept payments carried out with anonymous prepaid cards issued in third countries"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "obligation:issue-bearer-shares",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 79(3)",
+   "evidence": "shall be prohibited from issuing bearer shares, and shall convert all existing bearer shares"
+  },
+  {
+   "source": "obligedentity:obliged-entity",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:issue-bearer-shares",
+   "target": "article:79",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "obligation:accept-cash-payments-up-to-limit",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 80(1)",
+   "evidence": "Persons trading in goods or providing services may accept or make a payment in cash only up to an amount of EUR 10 000"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:accept-cash-payments-up-to-limit",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:accept-cash-payments-up-to-limit",
+   "target": "limit:eur-10-000",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 80(1)",
+   "evidence": "up to an amount of EUR 10 000 or the equivalent in national or foreign currency"
+  },
+  {
+   "source": "limit:eur-10-000",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "obligation:apply-limit-to-private-payments",
+   "kind": "must_not",
+   "label": "must not",
+   "citation": "AMLR Art. 80(4)",
+   "evidence": "payments between natural persons who are not acting in a professional capacity"
+  },
+  {
+   "source": "obligation:apply-limit-to-private-payments",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligedentity:person-trading-high-value-goods",
+   "target": "obligation:report-cash-payments-at-credit-institution-premises-to-fiu",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 80(4)",
+   "evidence": "shall be reported to the FIU within the deadlines imposed by the FIU"
+  },
+  {
+   "source": "obligation:report-cash-payments-at-credit-institution-premises-to-fiu",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:report-cash-payments-at-credit-institution-premises-to-fiu",
+   "target": "authority:fiu",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 80(4)",
+   "evidence": "shall be reported to the FIU within the deadlines imposed by the FIU"
+  },
+  {
+   "source": "authority:fiu",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:member-state",
+   "target": "obligation:adopt-lower-limits",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 80(2)",
+   "evidence": "Member States may adopt lower limits following consultation of the European Central Bank"
+  },
+  {
+   "source": "authority:member-state",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:adopt-lower-limits",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:member-state",
+   "target": "obligation:notify-limits-to-commission",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 80(3)",
+   "evidence": "Member States shall notify those limits to the Commission by 10 October 2024"
+  },
+  {
+   "source": "obligation:notify-limits-to-commission",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:notify-limits-to-commission",
+   "target": "authority:commission",
+   "kind": "reports_to",
+   "label": "reports to",
+   "citation": "AMLR Art. 80(3)",
+   "evidence": "Member States shall notify those limits to the Commission by 10 October 2024"
+  },
+  {
+   "source": "authority:commission",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:member-state",
+   "target": "obligation:ensure-penalties-for-breach",
+   "kind": "must_perform",
+   "label": "must perform",
+   "citation": "AMLR Art. 80(5)",
+   "evidence": "Member States shall ensure that appropriate measures, including the imposition of penalties, are taken against natural or legal persons"
+  },
+  {
+   "source": "obligation:ensure-penalties-for-breach",
+   "target": "article:80",
+   "kind": "cited_in",
+   "label": "cited in"
+  }
+ ]
+}

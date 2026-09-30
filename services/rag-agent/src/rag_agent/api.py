@@ -16,18 +16,21 @@ from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
+from ai_circus_shared.network_graph import GraphEdge, GraphNode, NetworkGraph
 from ai_circus_shared.observability import langfuse_request_metadata
-from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.scenario_schema import ScenarioDefinition, kg_collection_name
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
 from rag_agent import get_env_config
-from rag_agent.core.agent import ModelUsageCallback, build_agui_agent, build_retrieve_tool
+from rag_agent.core.agent import ModelUsageCallback, build_agui_agent, build_graph_tools, build_retrieve_tool
+from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.identity import resolve_identity
 from rag_agent.core.logger import get_logger
 
@@ -73,6 +76,10 @@ def _qdrant(request: Request) -> QdrantClient:
 
 def _embedder(request: Request) -> EmbeddingProvider:
     return request.app.state.embedder
+
+
+def _graph_cache(request: Request) -> KnowledgeGraphCache:
+    return request.app.state.graph_cache
 
 
 def _llm_model_name() -> str:
@@ -161,6 +168,50 @@ def model_endpoint(
     """
     model, provider, vision = display
     return ModelResponse(model=model, provider=provider, vision=vision)
+
+
+@router.get("/knowledge-graph/{scenario_slug}", response_model=NetworkGraph, response_model_exclude_none=True)
+def knowledge_graph_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    qdrant: QdrantClient = Depends(_qdrant),
+    graph_cache: KnowledgeGraphCache = Depends(_graph_cache),
+) -> NetworkGraph:
+    """The caller's tenant's knowledge graph for a scenario that ships one
+    (`documents.knowledge_graph`), in the `network_graph.NetworkGraph` contract — what
+    ui-react's KnowledgeGraphView draws. Read from the same tenant-scoped collection (and
+    cache) the graph_search tool uses, so the picture is exactly what the agent searches.
+    """
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    if definition.documents is None or definition.documents.knowledge_graph is None or definition.vector_store is None:
+        raise HTTPException(status_code=404, detail="This scenario has no knowledge graph.")
+    graph = graph_cache.get(qdrant, kg_collection_name(definition.vector_store, identity.org_id))
+    if graph is None:
+        raise HTTPException(status_code=404, detail="The knowledge graph has not been indexed for this tenant yet.")
+    return NetworkGraph(
+        nodes=[
+            GraphNode(
+                id=n.id,
+                kind="entity",
+                label=n.label,
+                type=n.type or None,
+                description=n.description or None,
+                citation=n.citation or None,
+            )
+            for n in graph.nodes.values()
+        ],
+        edges=[
+            GraphEdge(
+                source=e.source,
+                target=e.target,
+                kind=e.kind,
+                label=e.kind.replace("_", " "),
+                citation=e.citation or None,
+                evidence=e.evidence or None,
+            )
+            for e in graph.edges
+        ],
+    )
 
 
 @router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])
@@ -264,6 +315,7 @@ async def agui_endpoint(
     definition: ScenarioDefinition = Depends(_scenario_definition),
     qdrant: QdrantClient = Depends(_qdrant),
     embedder: EmbeddingProvider = Depends(_embedder),
+    graph_cache: KnowledgeGraphCache = Depends(_graph_cache),
     llm: ChatOpenAI = Depends(_llm),
     model_name: str = Depends(_llm_model_name),
     store: ConversationStore = Depends(_conversation_store),
@@ -298,7 +350,15 @@ async def agui_endpoint(
     # here would block the event loop that is also streaming every other chat.
     if await run_in_threadpool(store.get_conversation, input_data.thread_id, identity.org_id, identity.subject) is None:
         raise HTTPException(status_code=404, detail="Conversation not found.")
-    tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
+    documents = definition.documents
+    trace = None
+    if documents is not None and documents.knowledge_graph is not None:
+        tools, _captured, trace = build_graph_tools(
+            qdrant, embedder, graph_cache, documents, definition.vector_store, identity.org_id
+        )
+    else:
+        tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
+        tools: list[BaseTool] = [tool]
     # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
     # client (see _llm) without mutating it — per-request only, so concurrent
     # calls from other orgs through the same cached client never see this one's
@@ -323,7 +383,7 @@ async def agui_endpoint(
             },
         }
     )
-    graph = build_agui_agent(llm_for_request, [tool], definition.chat.context)
+    graph = build_agui_agent(llm_for_request, tools, definition.chat.context, knowledge_graph=trace is not None)
     model_usage = ModelUsageCallback()
     agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config={"callbacks": [model_usage]})
 
@@ -365,6 +425,10 @@ async def agui_endpoint(
                             },
                         )
                     )
+                elif event.type == EventType.RUN_FINISHED and trace is not None and (trace.nodes or trace.seeds):
+                    # Same timing rule as model_fallback: inside the run, before RUN_FINISHED,
+                    # so KnowledgeGraphView lights up the subgraph this answer was built from.
+                    yield encoder.encode(CustomEvent(name="knowledge_graph_trace", value=trace.as_event()))
                 yield encoder.encode(event)
         except Exception as exc:
             logger.error("agui run failed for scenario={!r}: {}", scenario_slug, exc)
