@@ -5,7 +5,7 @@
  * ties, linked entities, backtest counts, peer percentiles). See NetworkExplorerView.
  */
 import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
-import type { NetworkExplorerExtra, NetworkGraph } from "./apiClient";
+import type { GraphEdge, NetworkExplorerExtra, NetworkGraph } from "./apiClient";
 import type { Record_ } from "./predictUtils";
 
 export type NodeKind = "row" | "entity" | "context";
@@ -318,12 +318,57 @@ export function percentileOf(sorted: number[], v: number): number {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "2001-10" -> "Oct 2001"; "2001-10-16" -> "16 Oct 2001"; anything else as-is. */
+/** "2001-10" -> "Oct 2001"; "2001-10-16" -> "16 Oct 2001"; "2022-09-03T14" -> "3 Sep · 14:00"; anything else as-is. */
 export function periodLabel(period: string): string {
-  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(period);
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2})(?:T(\d{2}))?)?$/.exec(period);
   if (!m) return period;
   const month = MONTHS[Number(m[2]) - 1] ?? m[2];
+  if (m[4] !== undefined) return `${Number(m[3])} ${month} · ${m[4]}:00`;
   return m[3] ? `${Number(m[3])} ${month} ${m[1]}` : `${month} ${m[1]}`;
+}
+
+/** The replay's period length: hourly periods ("2022-09-03T14") or monthly ones. */
+export function periodUnit(periods: string[]): "hour" | "month" {
+  return periods.some((p) => p.includes("T")) ? "hour" : "month";
+}
+
+/** Axis ticks under the timeline: the year at each January, or the day at each midnight. */
+export function periodTicks(periods: string[]): { index: number; label: string }[] {
+  if (periodUnit(periods) === "hour") {
+    return periods
+      .map((p, i) => ({ index: i, label: periodLabel(p.slice(0, 10)).replace(/ \d{4}$/, ""), midnight: p.endsWith("T00") }))
+      .filter((t) => t.midnight)
+      .map(({ index, label }) => ({ index, label }));
+  }
+  return periods.map((p, i) => ({ index: i, label: p.slice(0, 4), jan: p.endsWith("-01") })).filter((t) => t.jan).map(({ index, label }) => ({ index, label }));
+}
+
+/** Merge the edges of several `kinds` (e.g. one per payment format) into one `into` edge per
+ * ordered pair — weights and per-period series summed, labelled with the biggest kinds. */
+export function mergeFlowKinds(graph: NetworkGraph, kinds: string[], into: string, labels: Record<string, string> = {}): NetworkGraph {
+  const wanted = new Set(kinds);
+  const merged = new Map<string, { edge: GraphEdge; byKind: Map<string, number> }>();
+  const rest: GraphEdge[] = [];
+  for (const edge of graph.edges) {
+    if (!wanted.has(edge.kind)) {
+      rest.push(edge);
+      continue;
+    }
+    const key = `${edge.source}\u0000${edge.target}`;
+    let entry = merged.get(key);
+    if (!entry) {
+      entry = { edge: { source: edge.source, target: edge.target, kind: into, weight: 0, series: {} }, byKind: new Map() };
+      merged.set(key, entry);
+    }
+    entry.edge.weight += edge.weight;
+    for (const [period, value] of Object.entries(edge.series ?? {})) entry.edge.series[period] = (entry.edge.series[period] ?? 0) + value;
+    entry.byKind.set(edge.kind, (entry.byKind.get(edge.kind) ?? 0) + edge.weight);
+  }
+  const flows = [...merged.values()].map(({ edge, byKind }) => ({
+    ...edge,
+    label: [...byKind].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([kind]) => labels[kind] ?? kind).join(" · "),
+  }));
+  return { ...graph, edges: [...rest, ...flows] };
 }
 
 /** Index of the period an event date ("YYYY-MM[-DD]") falls in, or -1. */

@@ -14,7 +14,7 @@ import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY
 import { interpolateZoom } from "d3-interpolate";
 import { select, type Selection } from "d3-selection";
 import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
-import { type Network, type NxLink, type NxNode, windowWeight } from "./networkModel";
+import { type Network, type NxLink, type NxNode, periodLabel, windowWeight } from "./networkModel";
 import { NETWORK_PALETTE, type SurfaceMode, tierColor } from "./riskPalette";
 
 export type SceneMode = "risk" | "communities";
@@ -814,10 +814,7 @@ export class NetworkScene {
   }
 
   private periodCaption(period: number): string {
-    const raw = this.net?.periods[period] ?? "";
-    const m = /^(\d{4})-(\d{2})/.exec(raw);
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return m ? `${months[Number(m[2]) - 1]} ${m[1]}` : raw;
+    return periodLabel(this.net?.periods[period] ?? "");
   }
 
   private drawRank(node: NxNode): number {
