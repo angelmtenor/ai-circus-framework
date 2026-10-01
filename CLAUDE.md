@@ -34,6 +34,7 @@ make k3s-all-lite            # same, without mlflow/agui-voice (~1.2 GB less RAM
 make k3s-pipeline            # REQUIRED on a fresh cluster: etl-tabular -> training Jobs, then restarts prediction
 make k3s-verify              # curl checks (admin + engineering-demo tenants); then a real browser check
 make k3s-pause / k3s-resume-lite
+make k3s-demo / k3s-demo-off  # live demo on a 16 GB laptop: scale observability + admin Platform to 0 (~2.5 GB); verify with VERIFY_SKIP="langfuse mlflow"
 # after a code change: rebuild + reimport + restart what changed (a same-tag import never restarts pods)
 make k3s-build k3s-import && kubectl -n ai-circus rollout restart deployment/<svc>
 
