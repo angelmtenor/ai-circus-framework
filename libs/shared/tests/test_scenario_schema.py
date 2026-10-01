@@ -1260,3 +1260,71 @@ def test_knowledge_graph_panel_is_rag_only_and_needs_a_graph() -> None:
         _ui_extras_scenario(KnowledgeGraphExtra(title="x"))  # type: ignore[arg-type]
     assert kg.vector_store is not None
     assert kg_collection_name(kg.vector_store, "org-1") == "aml_regulation_kg_kg__org-1"
+
+
+# --- prestaciones_sociales: business rules + decision policy + case_desk ---
+
+
+def test_repo_prestaciones_sociales_has_rules_policy_and_a_case_desk() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    assert aid.industry == "public_sector" and aid.kind == "tabular_ml"
+    assert aid.dataset is not None and aid.model is not None
+    assert aid.dataset.text_language == "es" and len(aid.dataset.text_columns()) == 3
+    assert aid.dataset.business_rules is not None
+    assert {f.key for f in aid.dataset.business_rules.families} == {
+        "completitud",
+        "validez",
+        "requisitos",
+        "proteccion",
+    }
+    assert {r.outcome for r in aid.dataset.business_rules.rules} == {"request_info", "reject", "review"}
+    assert aid.dataset.audit_columns == ["Sexo", "Nacionalidad"] == aid.dataset.protected_features_excluded
+    assert aid.model.decision_policy is not None and aid.model.out_of_fold_scores
+    assert aid.model.text_challenger is not None
+    assert aid.ui_extras is not None and aid.ui_extras.kind == "case_desk"
+
+
+def test_case_desk_sheet_lists_every_feature_and_rule_column_once() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    extras = aid.ui_extras.model_dump()  # type: ignore[union-attr]
+    sections = [dict(s) for s in extras["sections"]]
+    with pytest.raises(ValidationError, match="missing"):
+        _with(aid, ui_extras={**extras, "sections": sections[:-1]})
+    duplicated = [*sections, {"title": "again", "fields": [sections[0]["fields"][0]]}]
+    with pytest.raises(ValidationError, match="duplicated"):
+        _with(aid, ui_extras={**extras, "sections": duplicated})
+    with pytest.raises(ValidationError, match=r"not dataset\.audit_columns"):
+        _with(aid, ui_extras={**extras, "equity_columns": ["EdadSolicitante"]})
+    with pytest.raises(ValidationError, match=r"requires model\.out_of_fold_scores"):
+        _with(aid, model={**aid.model.model_dump(), "out_of_fold_scores": False})  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="decision_policy"):
+        _with(aid, model={**aid.model.model_dump(), "decision_policy": None})  # type: ignore[union-attr]
+
+
+def test_business_rules_must_read_real_columns_of_the_right_type() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    dataset = aid.dataset.model_dump()  # type: ignore[union-attr]
+    rules = dataset["business_rules"]["rules"]
+
+    def with_rule(**changes: object) -> ScenarioDefinition:
+        broken = [{**rules[0], **changes}, *rules[1:]]
+        return _with(aid, dataset={**dataset, "business_rules": {**dataset["business_rules"], "rules": broken}})
+
+    with pytest.raises(ValidationError, match="unknown columns"):
+        with_rule(field="NoSuchColumn")
+    with pytest.raises(ValidationError, match="contains_any needs a text column"):
+        with_rule(op="contains_any", value=["x"])
+    with pytest.raises(ValidationError, match="needs a numeric column"):
+        with_rule(op="lt", value=3)
+    with pytest.raises(ValidationError, match="are not 'AportaDNI' options"):
+        with_rule(value="Quizá")
+
+
+def test_rule_columns_never_double_as_features_and_audit_columns_must_be_protected() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    dataset = aid.dataset.model_dump()  # type: ignore[union-attr]
+    clash = {**dataset["rule_columns"], "EdadSolicitante": dataset["feature_schema"]["EdadSolicitante"]}
+    with pytest.raises(ValidationError, match="rule_columns"):
+        _with(aid, dataset={**dataset, "rule_columns": clash})
+    with pytest.raises(ValidationError, match="protected_features_excluded"):
+        _with(aid, dataset={**dataset, "audit_columns": ["Distrito"]})
