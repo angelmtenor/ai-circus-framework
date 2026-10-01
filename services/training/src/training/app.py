@@ -22,6 +22,7 @@ from typing import Any
 
 import joblib
 import pandas as pd
+from ai_circus_shared.business_rules import passes
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
@@ -84,10 +85,12 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     )
 
     df = pd.read_parquet(io.BytesIO(store.get(config.ORG_ID, NORMALIZED_DATASET_KEY)))
+    df, rules_excluded_rows = _drop_rule_stopped_rows(df, definition)
     x = df.loc[:, definition.dataset.feature_columns]
     y = df[definition.dataset.target]
     text_features = definition.dataset.text_columns()
     numeric_features, categorical_features = split_features(x, definition.dataset.feature_columns, text_features)
+    text_language = definition.dataset.text_language
 
     # stratify=y requires discrete classes — not meaningful (and not possible) for a
     # continuous regression target.
@@ -109,6 +112,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
             selection_metric=selection_metric,
             cv_folds=model.cv_folds,
             text_features=text_features,
+            text_language=text_language,
         )
         for name in model.candidates
     ]
@@ -136,6 +140,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         numeric_features,
         categorical_features,
         text_features,
+        text_language,
     )
 
     # Refit the selected model on the full dataset for the final artifact.
@@ -170,6 +175,7 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
             # pyrefly: ignore [bad-argument-type]
             y,
             text_features,
+            text_language,
         )
         lower_bytes = _dump(pipeline_lower)
         store.put(config.ORG_ID, MODEL_PIPELINE_LOWER_KEY, lower_bytes)
@@ -231,6 +237,10 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         ],
         "metrics": best.metrics,
         "holdout_evaluation": evaluation,
+        # Rows a blocking business rule stops are never trained on (the model must not
+        # re-learn what the rules decide) — see _drop_rule_stopped_rows.
+        "rules_excluded_rows": rules_excluded_rows,
+        "text_language": text_language,
         "training_rows": len(x_train),
         "holdout_rows": len(x_test),
         "feature_columns": definition.dataset.feature_columns,
@@ -271,6 +281,24 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
 
 
+def _drop_rule_stopped_rows(df: pd.DataFrame, definition: ScenarioDefinition) -> tuple[pd.DataFrame, int]:
+    """Without `business_rules`, `df` unchanged. With them, only the rows that pass every
+    blocking rule: the rest (a missing document, a value out of range, a requirement not
+    met) are decided by the rules, so fitting on them would teach the model the rules'
+    own outcome instead of the judgement left to it. Returns (rows kept, rows dropped).
+    """
+    assert definition.dataset is not None
+    rules = definition.dataset.business_rules
+    if rules is None:
+        return df, 0
+    records = df.astype(object).where(df.notna(), None).to_dict("records")
+    keep = pd.Series([passes(rules, r) for r in records], index=df.index)
+    dropped = int((~keep).sum())
+    logger.info("Business rules stop {} of {} rows — training on the other {}", dropped, len(df), int(keep.sum()))
+    kept: pd.DataFrame = df.loc[keep]
+    return kept, dropped
+
+
 def _out_of_fold(
     slug: str,
     definition: ScenarioDefinition,
@@ -280,6 +308,7 @@ def _out_of_fold(
     numeric_features: list[str],
     categorical_features: list[str],
     text_features: list[str],
+    text_language: str = "en",
 ) -> dict[str, Any] | None:
     """`model.out_of_fold_scores`' cross-fitted scores, or None when not configured —
     or not possible (too many rows, or a class smaller than the number of folds).
@@ -300,7 +329,15 @@ def _out_of_fold(
         return None
     explain = len(x) <= MAX_OUT_OF_FOLD_EXPLAINED_ROWS
     scores = out_of_fold_scores(
-        model_name, x, y, numeric_features, categorical_features, folds, text_features, explain=explain
+        model_name,
+        x,
+        y,
+        numeric_features,
+        categorical_features,
+        folds,
+        text_features,
+        explain=explain,
+        text_language=text_language,
     )
     logger.success(
         "Out-of-fold scores for scenario={}: {} rows, ROC AUC {}{}",

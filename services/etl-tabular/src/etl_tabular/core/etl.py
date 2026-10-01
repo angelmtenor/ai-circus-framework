@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from ai_circus_shared.business_rules import passes
 from ai_circus_shared.network_graph import parse_graph, restrict_to_rows
 from ai_circus_shared.scenario_schema import TabularDataset
 from ai_circus_shared.storage import ObjectStore
@@ -62,16 +63,40 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     two *different* records that merely share every feature value (e.g. two 3rd-class
     22-year-old men on the same fare) are real, distinct rows — only an exact repeat of
     the same record is a duplicate. `display_columns` (e.g. a name) ride along for the
-    UI and are never selected as model inputs (training reads `feature_columns` only).
+    UI and are never selected as model inputs (training reads `feature_columns` only),
+    and so do `rule_columns` (read by the business rules) and `audit_columns` (a
+    fairness audit only).
+
+    With `business_rules`, a row a blocking rule stops (a missing document, a value out
+    of range) is kept even when it has missing values — it is part of the funnel the UI
+    shows — and training drops it (see training's app.py); `dropna()` only applies to
+    the rows that pass.
     """
-    columns = [*dataset.display_columns, *dataset.feature_columns, dataset.target]
+    columns = [
+        *dataset.display_columns,
+        *dataset.audit_columns,
+        *dataset.feature_columns,
+        *dataset.rule_columns,
+        dataset.target,
+    ]
     selected = df.loc[:, columns].copy()
     text_columns = dataset.text_columns()
     for column in text_columns:
         # Casting before dedupe/dropna: an empty review is still a valid record.
         max_length = dataset.feature_schema[column].max_length  # type: ignore[union-attr]
         selected[column] = selected[column].fillna("").astype(str).str.strip().str.slice(0, max_length)
-    df = selected[~selected.reset_index().duplicated().to_numpy()].dropna()
+    deduped = selected[~selected.reset_index().duplicated().to_numpy()]
+    if dataset.business_rules is None:
+        df = deduped.dropna()
+    else:
+        records = deduped.astype(object).where(deduped.notna(), None).to_dict("records")
+        stopped = pd.Series([not passes(dataset.business_rules, r) for r in records], index=deduped.index)
+        # The target is never optional: a row with no resolution teaches and shows nothing.
+        complete = deduped.notna().all(axis=1) | (stopped & deduped[dataset.target].notna())
+        df = deduped[complete]
+        logger.info(
+            "Business rules stop {} of {} rows (kept for analytics, never trained on)", stopped.sum(), len(deduped)
+        )
 
     if len(df) > MAX_DATASET_ROWS:
         # Evenly-spaced, not a head/tail slice or random sample — keeps the row cap
@@ -81,7 +106,7 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
         df = df.iloc[idx]
         logger.info("Capped dataset at {} rows (was larger)", MAX_DATASET_ROWS)
 
-    for column in dataset.feature_columns:
+    for column in [*dataset.feature_columns, *dataset.rule_columns, *dataset.audit_columns]:
         if column in text_columns:
             continue
         is_numeric = pd.api.types.is_numeric_dtype(df[column]) and not pd.api.types.is_bool_dtype(df[column])

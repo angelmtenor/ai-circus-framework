@@ -91,6 +91,15 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.rubric_check = definition.rubric_check.model_dump() if definition.rubric_check is not None else None
         challenger = definition.model.text_challenger if definition.model is not None else None
         existing.text_challenger = challenger.model_dump() if challenger is not None else None
+        dataset = definition.dataset
+        existing.rule_columns = (
+            {k: v.model_dump() for k, v in dataset.rule_columns.items()} if dataset and dataset.rule_columns else None
+        )
+        existing.business_rules = (
+            dataset.business_rules.model_dump() if dataset and dataset.business_rules is not None else None
+        )
+        policy = definition.model.decision_policy if definition.model is not None else None
+        existing.decision_policy = policy.model_dump() if policy is not None else None
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.

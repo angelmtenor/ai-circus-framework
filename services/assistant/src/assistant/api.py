@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -20,13 +21,14 @@ from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from assistant import get_env_config
 from assistant.core.agent import ModelUsageCallback, build_agui_agent
+from assistant.core.extraction import MAX_OCR_CHARS, build_extraction_prompt, parse_extraction
 from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
 from assistant.core.prediction_client import PredictionServiceClient
@@ -99,6 +101,34 @@ class RubricCheckOut(BaseModel):
     summary: str
     behaviours: list[RubricBehaviourOut]
     advice: list[str]
+    model: str
+
+
+class ExtractRecordIn(BaseModel):
+    """Body for POST /extract-record/{scenario_slug}: the OCR text of one scanned application."""
+
+    text: str = Field(min_length=20, max_length=MAX_OCR_CHARS)
+
+
+class ExtractedFieldOut(BaseModel):
+    """One box the LLM read from the scan: its value (already fitted to the box's type),
+    the quote it comes from, and whether that quote really appears in the OCR text.
+    """
+
+    value: str | float
+    evidence: str
+    confidence: float
+    verified: bool
+
+
+class ExtractRecordOut(BaseModel):
+    """The boxes read from a scan (see core/extraction.py): `rejected` holds values that
+    didn't fit their box (not an option, out of range), `missing` the boxes not found.
+    """
+
+    fields: dict[str, ExtractedFieldOut]
+    rejected: dict[str, str]
+    missing: list[str]
     model: str
 
 
@@ -239,6 +269,76 @@ def rubric_check_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=502, detail=f"The language model's answer was not usable: {exc}") from exc
     return RubricCheckOut(**result, model=model_name)
+
+
+def _case_desk(definition: ScenarioDefinition) -> Any:
+    """The scenario's `case_desk` extra, or a 404 — only those scenarios take scanned intake."""
+    extras = definition.ui_extras
+    if definition.dataset is None or extras is None or extras.kind != "case_desk":
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no case desk intake.")
+    return extras
+
+
+@router.post("/extract-record/{scenario_slug}", response_model=ExtractRecordOut)
+def extract_record_endpoint(
+    body: ExtractRecordIn,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    llm: ChatOpenAI = Depends(_chat_llm),
+    model_name: str = Depends(_llm_model),
+) -> ExtractRecordOut:
+    """Read a scanned application's OCR text into the scenario's boxes with the active LLM
+    (plain `def`: FastAPI runs the blocking call in its threadpool). 404 when the scenario
+    has no case desk, 502 when the model can't be reached or answers something unusable.
+    """
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    extras = _case_desk(definition)
+    assert definition.dataset is not None
+    skip = {c.field for c in extras.computed_fields}
+    llm_for_request = llm.model_copy(
+        update={
+            "temperature": 0,
+            "model_kwargs": {**llm.model_kwargs, "user": identity.org_id},
+            "extra_body": {
+                **(llm.extra_body or {}),
+                "metadata": langfuse_request_metadata(
+                    service="assistant-extract", org_id=identity.org_id, scenario_slug=definition.slug
+                ),
+            },
+        }
+    )
+    try:
+        reply = llm_for_request.invoke([
+            SystemMessage(content=build_extraction_prompt(definition.dataset, skip, extras.form_title)),
+            HumanMessage(content=f"OCR text of the scanned form:\n<<<\n{body.text}\n>>>"),
+        ])
+    except Exception as exc:  # provider errors come in many shapes (rate limit, auth, timeout)
+        logger.warning("Record extraction LLM call failed for scenario={}: {}", definition.slug, exc)
+        raise HTTPException(status_code=502, detail=f"The language model could not be reached: {exc}") from exc
+    content = reply.content if isinstance(reply.content, str) else str(reply.content)
+    try:
+        result = parse_extraction(content, definition.dataset, skip, body.text)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"The language model's answer was not usable: {exc}") from exc
+    return ExtractRecordOut(**result, model=model_name)
+
+
+@router.get("/intake-samples/{scenario_slug}/{filename}")
+def intake_sample_endpoint(
+    filename: str,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> FileResponse:
+    """One of the case desk's fictional scanned applications (`ui_extras.sample_uploads`) —
+    only files the scenario lists are served, from its own `sample_uploads/` folder.
+    """
+    extras = _case_desk(definition)
+    if filename not in {sample.file for sample in extras.sample_uploads}:
+        raise HTTPException(status_code=404, detail="Sample document not found.")
+    path = Path(get_env_config().SCENARIOS_DIR) / definition.slug / "sample_uploads" / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Sample document not found.")
+    return FileResponse(path, filename=filename, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])

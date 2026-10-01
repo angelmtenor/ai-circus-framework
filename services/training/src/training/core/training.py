@@ -18,7 +18,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import shap
-from ai_circus_shared.tabular_ml import KEPT_NEGATIONS, TEXT_VECTORIZER_PARAMS, original_feature, text_transformer_name
+from ai_circus_shared.tabular_ml import (
+    KEPT_NEGATIONS,
+    TEXT_STOP_WORDS_BY_LANGUAGE,
+    TEXT_VECTORIZER_PARAMS,
+    original_feature,
+    text_transformer_name,
+)
 from lightgbm import LGBMClassifier, LGBMRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
@@ -85,6 +91,14 @@ INTERVAL_UPPER_ALPHA = 0.95
 
 # sklearn's English stop words, minus the negations a review model must read.
 TEXT_STOP_WORDS = sorted(ENGLISH_STOP_WORDS - KEPT_NEGATIONS)
+
+
+def text_stop_words(language: str = "en") -> list[str]:
+    """TF-IDF stop words for `dataset.text_language` (negations always kept)."""
+    spanish = TEXT_STOP_WORDS_BY_LANGUAGE.get(language)
+    return sorted(spanish) if spanish is not None else TEXT_STOP_WORDS
+
+
 # Rows per SHAP batch: a TF-IDF feature's SHAP matrix is dense (an absent word still
 # contributes -coef*mean), so a few thousand rows x a 3,000-term vocabulary are
 # explained in slices rather than densified in one go.
@@ -134,6 +148,7 @@ def build_pipeline(
     categorical_features: list[str],
     estimator: object,
     text_features: Sequence[str] = (),
+    text_language: str = "en",
 ) -> Pipeline:
     """Build a ColumnTransformer (impute+encode, TF-IDF per text feature) + estimator
     scikit-learn Pipeline.
@@ -162,7 +177,7 @@ def build_pipeline(
             *(
                 (
                     text_transformer_name(column),
-                    TfidfVectorizer(stop_words=TEXT_STOP_WORDS, **TEXT_VECTORIZER_PARAMS),
+                    TfidfVectorizer(stop_words=text_stop_words(text_language), **TEXT_VECTORIZER_PARAMS),
                     column,
                 )  # type: ignore[arg-type]
                 for column in text_features
@@ -192,12 +207,17 @@ def cross_validated_metrics(
     task_type: str,
     folds: int,
     text_features: Sequence[str] = (),
+    text_language: str = "en",
 ) -> dict[str, float]:
     """k-fold CV (stratified for classification) of a fresh pipeline on `x`/`y` — the
     training split only, so the hold-out stays untouched for the final report.
     """
     pipeline = build_pipeline(
-        numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][estimator_name](), text_features
+        numeric_features,
+        categorical_features,
+        CANDIDATE_ESTIMATORS[task_type][estimator_name](),
+        text_features,
+        text_language,
     )
     splitter = (
         StratifiedKFold(n_splits=folds, shuffle=True, random_state=0)
@@ -227,6 +247,7 @@ def train_candidate(
     selection_metric: str | None = None,
     cv_folds: int = 0,
     text_features: Sequence[str] = (),
+    text_language: str = "en",
 ) -> TrainedCandidate:
     """Train one named candidate estimator on the training split and score it — on the
     hold-out, plus k-fold CV on the training split when `cv_folds` >= 2.
@@ -236,11 +257,19 @@ def train_candidate(
     if cv_folds >= 2:
         metrics.update(
             cross_validated_metrics(
-                name, x_train, y_train, numeric_features, categorical_features, task_type, cv_folds, text_features
+                name,
+                x_train,
+                y_train,
+                numeric_features,
+                categorical_features,
+                task_type,
+                cv_folds,
+                text_features,
+                text_language,
             )
         )
     pipeline = build_pipeline(
-        numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name](), text_features
+        numeric_features, categorical_features, CANDIDATE_ESTIMATORS[task_type][name](), text_features, text_language
     )
     pipeline.fit(x_train, y_train)
     score = pipeline.score(x_test, y_test)
@@ -345,6 +374,7 @@ def fit_quantile_pipelines(
     x: pd.DataFrame,
     y: pd.Series,
     text_features: Sequence[str] = (),
+    text_language: str = "en",
 ) -> tuple[Pipeline, Pipeline]:
     """Fit a (lower, upper) pair of LightGBM quantile-objective pipelines for a 90%
     prediction interval, independent of which regression candidate `select_best_candidate`
@@ -355,12 +385,14 @@ def fit_quantile_pipelines(
         categorical_features,
         LGBMRegressor(objective="quantile", alpha=INTERVAL_LOWER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
         text_features,
+        text_language,
     )
     upper = build_pipeline(
         numeric_features,
         categorical_features,
         LGBMRegressor(objective="quantile", alpha=INTERVAL_UPPER_ALPHA, n_estimators=200, max_depth=6, verbosity=-1),
         text_features,
+        text_language,
     )
     lower.fit(x, y)
     upper.fit(x, y)
@@ -430,6 +462,7 @@ def out_of_fold_scores(
     folds: int,
     text_features: Sequence[str] = (),
     explain: bool = True,
+    text_language: str = "en",
 ) -> dict[str, Any]:
     """Every row's probability and SHAP contributions from a copy of the selected
     model trained on the *other* folds only (stratified k-fold cross-fitting over the
@@ -447,7 +480,7 @@ def out_of_fold_scores(
     probabilities = np.zeros(len(x))
     for fold, (train_index, test_index) in enumerate(splitter.split(x, y)):
         estimator = CANDIDATE_ESTIMATORS["classification"][estimator_name]()
-        pipeline = build_pipeline(numeric_features, categorical_features, estimator, text_features)
+        pipeline = build_pipeline(numeric_features, categorical_features, estimator, text_features, text_language)
         pipeline.fit(x.iloc[train_index], y.iloc[train_index])
         held_out = x.iloc[test_index]
         proba = pipeline.predict_proba(held_out)[:, 1]

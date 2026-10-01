@@ -54,6 +54,9 @@ class FakeLogger:
     def warning(self, *args: object) -> None:
         """Accept warning log calls."""
 
+    def info(self, *args: object) -> None:
+        """Accept info log calls."""
+
 
 class FakeEnvConfig:
     """Minimal stand-in for the generated EnvConfig, covering the fields app.main() reads."""
@@ -402,3 +405,60 @@ def test_main_skips_out_of_fold_scores_when_a_class_is_smaller_than_the_folds(
 
     assert ("demo", MODEL_OUT_OF_FOLD_KEY) not in store.objects
     assert json.loads(store.objects["demo", MODEL_METADATA_KEY])["out_of_fold"] is None
+
+
+def test_main_never_trains_on_rows_a_blocking_business_rule_stops(
+    monkeypatch: pytest.MonkeyPatch, fake_definition: object
+) -> None:
+    base = fake_definition.dataset.model_dump()  # type: ignore[attr-defined]
+    fake_definition.dataset = TabularDataset.model_validate(  # type: ignore[attr-defined]
+        base
+        | {
+            "rule_columns": {
+                "HasId": {"type": "categorical", "label": "ID", "options": ["Yes", "No"], "default": "Yes"}
+            },
+            "business_rules": {
+                "families": [{"key": "docs", "label": "Docs"}],
+                "rules": [
+                    {
+                        "key": "C1",
+                        "label": "ID",
+                        "family": "docs",
+                        "field": "HasId",
+                        "op": "equals",
+                        "value": "No",
+                        "outcome": "request_info",
+                        "message": "No ID",
+                    },
+                    {
+                        "key": "P1",
+                        "label": "Priority",
+                        "family": "docs",
+                        "field": "numeric_feature",
+                        "op": "gt",
+                        "value": 2.5,
+                        "outcome": "review",
+                        "message": "Priority",
+                    },
+                ],
+            },
+        }
+    )
+    df = _synthetic_normalized_dataset()
+    df["HasId"] = "Yes"
+    df.loc[df.index[:20], "HasId"] = "No"
+
+    store = _run_main(monkeypatch, fake_definition, df)
+
+    metadata = json.loads(store.objects["demo", MODEL_METADATA_KEY])
+    assert metadata["rules_excluded_rows"] == 20  # `review` rules do not stop a row, only blocking ones
+    assert metadata["training_rows"] + metadata["holdout_rows"] == len(df) - 20
+
+
+def test_text_stop_words_follow_the_scenarios_language_and_keep_negations() -> None:
+    from training.core.training import text_stop_words
+
+    spanish = set(text_stop_words("es"))
+    assert {"de", "la", "que"} <= spanish
+    assert not {"no", "sin", "ni", "nunca", "muy", "poco"} & spanish
+    assert "the" in text_stop_words("en") and "the" not in spanish

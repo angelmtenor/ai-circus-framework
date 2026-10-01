@@ -57,6 +57,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "aml_regulation_kg",
         "global_health_shipments",
         "sede_electronica",
+        "prestaciones_sociales",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -244,6 +245,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "aml_regulation_kg",
         "global_health_shipments",
         "sede_electronica",
+        "prestaciones_sociales",
     }
 
 
@@ -260,8 +262,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 28
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 28
+    assert session.query(Scenario).count() == 29
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 29
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -386,3 +388,15 @@ def test_seed_scenarios_stores_the_money_trail_as_plain_json(session: Session) -
         session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID, scenario_slug="aml_money_trail").count()
         == 0
     )
+
+
+def test_seed_scenarios_populates_business_rules_and_the_decision_policy(session: Session) -> None:
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    aid = session.get(Scenario, "prestaciones_sociales")
+    assert aid.decision_policy["approve_at"] == pytest.approx(0.7)
+    assert aid.decision_policy["deny_at"] == pytest.approx(0.3)
+    assert {rule["key"] for rule in aid.business_rules["rules"]} >= {"C1", "V1", "R1", "P1"}
+    assert aid.rule_columns["AportaDNI"]["type"] == "categorical"
+    assert aid.ui_extras["kind"] == "case_desk"
+    assert session.get(Scenario, "titanic").business_rules is None
