@@ -152,3 +152,39 @@ def test_train_text_challenger_on_the_champions_split() -> None:
     assert result.metadata["metrics"]["cv_roc_auc_mean"] > 0.9
     assert result.metadata["global_feature_importance"][0]["feature"] == "Review"
     assert result.metadata["holdout_evaluation"]["n"] == 48
+
+
+def test_train_text_challenger_embeds_every_text_column() -> None:
+    rng = np.random.default_rng(1)
+    n = 240
+    y = pd.Series(rng.integers(0, 2, size=n), name="bad")
+    x = pd.DataFrame({
+        "pay": rng.integers(1, 6, size=n).astype(float),
+        "Review": [f"{rng.choice(TOXIC) if t else rng.choice(GOOD)} {i}" for i, t in enumerate(y)],
+        "Report": [f"{rng.choice(TOXIC) if t else rng.choice(GOOD)} report {i}" for i, t in enumerate(y)],
+    })
+    store = _store_with_cache([*x["Review"], *x["Report"]])
+
+    result = train_text_challenger(
+        CHALLENGER,
+        store=store,  # type: ignore[arg-type]
+        org_id="demo",
+        provider=FakeProvider(),  # type: ignore[arg-type]
+        x=x,
+        y=y,
+        train_index=x.index[:192],
+        test_index=x.index[192:],
+        numeric_features=["pay"],
+        categorical_features=[],
+        text_features=["Review", "Report"],
+        feature_columns=["pay", "Review", "Report"],
+        task_type="classification",
+        selection_metric="roc_auc",
+        cv_folds=3,
+    )
+
+    assert result.metadata["text_columns"] == ["Review", "Report"]
+    assert result.metadata["text_column"] == "Review"
+    assert set(result.metadata["input_columns"]) >= {"Review__emb_0", "Report__emb_3"}
+    ranked = {f["feature"] for f in result.metadata["global_feature_importance"]}
+    assert {"Review", "Report"} <= ranked
