@@ -346,3 +346,62 @@ def test_an_invalid_graph_fails_loudly_and_writes_nothing(scenario_dir: Path) ->
     with pytest.raises(ValidationError, match="unknown node"):
         run_etl(store, "org-1", GRAPH_DATASET, scenario_dir)
     assert not store.exists("org-1", GRAPH_KEY)
+
+
+RULED_DATASET = TabularDataset(
+    bucket="scenario-aid",
+    raw_object="raw/aid.csv",
+    seed_file="sample_data/aid.csv",
+    index_col="Id",
+    target="Granted",
+    protected_features_excluded=["Sex"],
+    audit_columns=["Sex"],
+    feature_columns=["Income", "Amount"],
+    feature_schema={
+        "Income": {"type": "numeric", "label": "Income", "min": 0, "max": 5000, "default": 600},
+        "Amount": {"type": "numeric", "label": "Amount", "min": 0, "max": 5000, "default": 300},
+    },
+    rule_columns={"HasId": {"type": "categorical", "label": "ID provided", "options": ["Yes", "No"], "default": "Yes"}},
+    business_rules={
+        "families": [{"key": "docs", "label": "Documents"}],
+        "rules": [
+            {
+                "key": "C1",
+                "label": "ID",
+                "family": "docs",
+                "field": "HasId",
+                "op": "equals",
+                "value": "No",
+                "outcome": "request_info",
+                "message": "No ID",
+            },
+            {
+                "key": "C2",
+                "label": "Amount",
+                "family": "docs",
+                "field": "Amount",
+                "op": "missing",
+                "outcome": "request_info",
+                "message": "No amount",
+            },
+        ],
+    },
+)
+
+
+def test_clean_keeps_rule_stopped_rows_with_gaps_but_drops_incomplete_passing_ones() -> None:
+    raw = pd.DataFrame(
+        {
+            "Sex": ["F", "M", "F", "M"],
+            "Income": [400, 500, None, 300],
+            "Amount": [200, None, 300, 100],
+            "HasId": ["Yes", "Yes", "Yes", "No"],
+            "Granted": [1, 0, 1, 0],
+        },
+        index=pd.Index([1, 2, 3, 4], name="Id"),
+    )
+    cleaned = clean(raw, RULED_DATASET)
+    # 2: stopped by C2 (no amount) -> kept for the funnel; 3: passes but has a gap -> dropped.
+    assert list(cleaned.index) == [1, 2, 4]
+    assert {"Sex", "HasId"} <= set(cleaned.columns)
+    assert cleaned["HasId"].dtype == "category"
