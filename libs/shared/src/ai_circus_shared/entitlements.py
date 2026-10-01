@@ -156,6 +156,13 @@ class ScenarioSummary(BaseModel):
     # scenario_schema.RubricCheckConfig / TextChallenger); plain dicts like `form`.
     rubric_check: dict[str, Any] | None = None
     text_challenger: dict[str, Any] | None = None
+    # tabular_ml with deterministic business rules before the model — the rule-only form
+    # columns, the rules (families + rules + outcome labels) and the approve / review /
+    # deny thresholds (see scenario_schema.TabularDataset / TabularModel); plain dicts
+    # like `form`.
+    rule_columns: dict[str, Any] | None = None
+    business_rules: dict[str, Any] | None = None
+    decision_policy: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
