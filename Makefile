@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
+	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
@@ -170,7 +170,10 @@ wait-services: ## Wait for platform-registry and every Traefik-routed backend to
 	done
 	@echo "✓ all services answering"
 
-verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant end-to-end — the exact calls the login screen makes — catches "Failed to fetch"-class setup issues before you open a browser
+# Monitors `verify` may skip because they were scaled down on purpose (`k3s-lite`/`k3s-demo`): langfuse and/or mlflow.
+VERIFY_SKIP ?=
+
+verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant end-to-end — the exact calls the login screen makes — catches "Failed to fetch"-class setup issues before you open a browser — VERIFY_SKIP="langfuse mlflow" skips the monitors
 	@echo "🔎 verifying admin tenant end-to-end..."
 	@key="$${ADMIN_API_KEY:-angel2026}"; \
 	code=$$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $$key" "http://localhost:$${PLATFORM_REGISTRY_PORT:-8010}/llm-settings/active-model"); \
@@ -190,12 +193,20 @@ verify: ## Curl-check the admin (and, if configured, engineering-demo) tenant en
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://aiopen.localhost/"); \
 	if [ "$$code" = "200" ]; then echo "  ✓ aiopen.localhost reachable ($$code)"; \
 	else echo "❌ aiopen.localhost -> $$code — check: docker compose logs ui-react, and that port 80 isn't already used by something else on this machine"; exit 1; fi
+ifeq (,$(filter langfuse,$(VERIFY_SKIP)))
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://langfuse.localhost/api/public/health"); \
 	if [ "$$code" = "200" ]; then echo "  ✓ langfuse.localhost reachable ($$code) — GenAI monitor"; \
 	else echo "❌ langfuse.localhost -> $$code — check: logs of langfuse-web / clickhouse (first boot runs migrations for a few minutes)"; exit 1; fi
+else
+	@echo "  – langfuse.localhost skipped (VERIFY_SKIP)"
+endif
+ifeq (,$(filter mlflow,$(VERIFY_SKIP)))
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' "http://mlflow.localhost/health"); \
 	if [ "$$code" = "401" ]; then echo "  ✓ mlflow.localhost reachable ($$code, admin-basicauth in front) — MLOps monitor"; \
 	else echo "❌ mlflow.localhost -> $$code (expected 401 from the admin-basicauth gate) — check: logs of mlflow"; exit 1; fi
+else
+	@echo "  – mlflow.localhost skipped (VERIFY_SKIP)"
+endif
 	@echo "✓ admin tenant verified — http://aiopen.localhost is ready for the 'admin' User dropdown login"
 	@demo_key="$${ENGINEERING_DEMO_API_KEY:-}"; \
 	if [ -z "$$demo_key" ]; then \
@@ -237,6 +248,13 @@ K3S_IMAGES   = platform-registry etl-tabular prediction llm-gateway assistant tr
 # (+ clickhouse/valkey) and data-platform-manager (the admin Platform health dashboard) deliberately
 # stay on. Override per call to trim further, e.g. K3S_LITE_SKIP="mlflow agui-voice langfuse-web langfuse-worker".
 K3S_LITE_SKIP ?= mlflow agui-voice
+# `k3s-demo` goes further for a live demo on a 16 GB laptop: everything that serves no scenario
+# (observability + the admin Platform dashboard) is scaled to 0 — ~2.5 GB RSS. Scenarios of every
+# kind, deep learning included, keep working; LLM traces are simply not recorded meanwhile.
+K3S_DEMO_SKIP     ?= mlflow agui-voice langfuse-web langfuse-worker data-platform-manager
+K3S_DEMO_SKIP_STS ?= clickhouse
+# ...but `k3s-demo-off` leaves these off (voice is heavy and rarely used; `make k3s-full K3S_LITE_SKIP=agui-voice` brings it back).
+K3S_DEMO_KEEP_OFF ?= agui-voice
 
 K3S_SUBNET   ?=  # optional, e.g. 172.28.0.0/16 — pins static node IPs so a Docker/host restart can't swap them (k3d marks --subnet experimental; see k8s/README.md)
 K3S_VERSION  ?= v1.35.5-k3s1
@@ -372,6 +390,27 @@ k3s-full: ## Scale every Deployment `k3s-lite` turned off back to 1 replica (the
 
 k3s-resume-lite: k3s-resume k3s-lite k3s-wait ## Resume a paused cluster WITHOUT the heavy rarely-used pods (default skips mlflow and agui-voice — ~1.2 GB less RSS), then wait for the rest to be Ready
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' resumed in lite mode — http://aiopen.localhost ('make k3s-full' brings the skipped pods back)"
+
+k3s-demo: ## Demo mode — scale every pod no scenario needs (K3S_DEMO_SKIP + K3S_DEMO_SKIP_STS: MLflow, voice, Langfuse + clickhouse, the admin Platform dashboard) to 0, then hand the Linux page cache back to Windows/the host; undo with `make k3s-demo-off`
+	@$(MAKE) --no-print-directory k3s-lite K3S_LITE_SKIP="$(K3S_DEMO_SKIP)"
+	@for sts in $(K3S_DEMO_SKIP_STS); do \
+		kubectl -n ai-circus scale statefulset/$$sts --replicas=0 || exit 1; \
+	done
+	@sync; if sudo -n true 2>/dev/null; then \
+		echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null && echo "✓ page cache dropped"; \
+	else \
+		echo "ℹ skipped dropping the page cache (needs sudo) — run: sync && echo 3 | sudo tee /proc/sys/vm/drop_caches"; \
+	fi
+	@free -m | head -2
+	@echo "✓ demo mode — off: $(K3S_DEMO_SKIP) $(K3S_DEMO_SKIP_STS) (no LLM traces, no admin Platform view; 'make k3s-demo-off' restores)"
+	@echo "   verify with: make k3s-verify VERIFY_SKIP=\"langfuse mlflow\""
+
+k3s-demo-off: ## Undo `k3s-demo` — scale K3S_DEMO_SKIP (minus K3S_DEMO_KEEP_OFF: voice) + K3S_DEMO_SKIP_STS back to 1 replica and wait for the platform to be Ready
+	@for sts in $(K3S_DEMO_SKIP_STS); do \
+		kubectl -n ai-circus scale statefulset/$$sts --replicas=1 || exit 1; \
+	done
+	@$(MAKE) --no-print-directory k3s-full K3S_LITE_SKIP="$(filter-out $(K3S_DEMO_KEEP_OFF),$(K3S_DEMO_SKIP))"
+	@$(MAKE) --no-print-directory k3s-wait
 
 k3s-portforward: ## Standing port-forward to platform-registry (the browser reaches it directly) — a systemd user service where available, so it survives reboots and pod restarts (scripts/k3s_portforward.sh); auto-run by k3s-wait, safe to re-run
 	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${PLATFORM_REGISTRY_PORT:-8010}"
