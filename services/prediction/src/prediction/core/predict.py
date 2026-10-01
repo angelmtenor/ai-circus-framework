@@ -261,11 +261,16 @@ def predict_challenger(
     missing = [c for c in feature_columns if c not in records.columns]
     if missing:
         raise MissingFeatureColumnsError(missing)
-    column = meta["text_column"]
-    x = prepare_text(records.loc[:, feature_columns], [column])
-    vectors = np.asarray(embed([str(t) for t in x[column]]), dtype=np.float32)
-    embedded = pd.DataFrame(vectors, index=x.index, columns=embedding_columns(column, vectors.shape[1]))
-    x_embedded = pd.concat([x.drop(columns=[column]), embedded], axis=1).loc[:, meta["input_columns"]]
+    # `text_columns` (multi-column challengers) falls back to the single `text_column` of
+    # models trained before that existed.
+    columns: list[str] = meta.get("text_columns") or [meta["text_column"]]
+    x = prepare_text(records.loc[:, feature_columns], columns)
+    x_embedded = x
+    for column in columns:
+        vectors = np.asarray(embed([str(t) for t in x[column]]), dtype=np.float32)
+        embedded = pd.DataFrame(vectors, index=x.index, columns=embedding_columns(column, vectors.shape[1]))
+        x_embedded = pd.concat([x_embedded.drop(columns=[column]), embedded], axis=1)
+    x_embedded = x_embedded.loc[:, meta["input_columns"]]
 
     if artifacts.metadata["task_type"] == "regression":
         predictions = np.asarray(artifacts.challenger_pipeline.predict(x_embedded))
@@ -274,15 +279,17 @@ def predict_challenger(
     transformed = artifacts.challenger_pipeline.named_steps["preprocessor"].transform(x_embedded)
     shap_values = shap_matrix(artifacts.challenger_explainer, transformed)
     names: list[str] = meta["transformed_feature_names"]
-    groups = [original_feature(n, feature_columns, [column]) for n in names]
-    embedding_indices = [j for j, g in enumerate(groups) if g == column]
-    other_indices = [j for j, g in enumerate(groups) if g != column]
+    groups = [original_feature(n, feature_columns, columns) for n in names]
+    other_indices = [j for j, g in enumerate(groups) if g not in columns]
     return [
         PredictionResult(
             prediction=round(float(prediction), 4),
             contributions={
                 **{names[j]: round(float(shap_values[i, j]), 4) for j in other_indices},
-                column: round(float(shap_values[i, embedding_indices].sum()), 4),
+                **{
+                    column: round(float(shap_values[i, [j for j, g in enumerate(groups) if g == column]].sum()), 4)
+                    for column in columns
+                },
             },
         )
         for i, prediction in enumerate(predictions)

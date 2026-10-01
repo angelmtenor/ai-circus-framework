@@ -135,9 +135,13 @@ def _client(artifacts: ModelArtifacts) -> TestClient:
     app.include_router(router)
     app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="org-1", roles=frozenset())
     dataset = SimpleNamespace(
-        text_columns=lambda: ["Review"], feature_schema={"Review": SimpleNamespace(type="text", max_length=60)}
+        text_columns=lambda: ["Review"],
+        feature_schema={"Review": SimpleNamespace(type="text", max_length=60)},
+        business_rules=None,
     )
-    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="toxic_leadership", dataset=dataset)
+    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(
+        slug="toxic_leadership", dataset=dataset, model=SimpleNamespace(decision_policy=None)
+    )
     cache = _Cache(artifacts)
     app.dependency_overrides[_model_cache] = lambda: cache
     return TestClient(app)

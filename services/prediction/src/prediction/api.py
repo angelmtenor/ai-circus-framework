@@ -11,6 +11,7 @@ from typing import Literal
 import httpx
 import pandas as pd
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.business_rules import RuleResult, decide, evaluate
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.scenario_schema import ScenarioDefinition
@@ -26,6 +27,7 @@ from prediction.core.predict import (
     MAX_TEXT_EXPLAIN_RECORDS,
     ChallengerUnavailableError,
     MissingFeatureColumnsError,
+    PredictionResult,
     predict_challenger,
 )
 from prediction.core.predict import predict as run_predict
@@ -87,6 +89,13 @@ class PredictionOut(BaseModel):
     prediction_lower: float | None = None
     prediction_upper: float | None = None
     text_explanations: dict[str, list[TokenWeightOut]] | None = None
+    # Only for a scenario with `dataset.business_rules` / `model.decision_policy`: every
+    # rule checked against this record, the gate (most severe fired blocking/review
+    # outcome, None = pass) and the proposal. A gated record is still scored — the
+    # probability is informative, but the decision is the gate's ("model not applied").
+    rules: list[RuleResult] | None = None
+    gate: str | None = None
+    decision: str | None = None
 
 
 class PredictResponse(BaseModel):
@@ -106,6 +115,10 @@ class DatasetSampleOut(BaseModel):
     total_rows: int
     id_column: str | None = None
     display_columns: list[str] = []
+    # Scenarios with `dataset.business_rules`: each row's gate and fired rule keys, keyed
+    # by row id — the funnel the case desk draws before any model score.
+    gates: dict[str, str | None] | None = None
+    fired_rules: dict[str, list[str]] | None = None
 
 
 class FeatureImportanceOut(BaseModel):
@@ -319,19 +332,33 @@ def predict_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return PredictResponse(
         predictions=[
-            PredictionOut(
-                prediction=p.prediction,
-                contributions=p.contributions,
-                prediction_lower=p.prediction_lower,
-                prediction_upper=p.prediction_upper,
-                text_explanations=(
-                    {column: [TokenWeightOut(**t) for t in tokens] for column, tokens in p.text_explanations.items()}
-                    if p.text_explanations is not None
-                    else None
-                ),
-            )
-            for p in predictions
+            _prediction_out(p, record, definition) for p, record in zip(predictions, body.records, strict=True)
         ]
+    )
+
+
+def _prediction_out(p: PredictionResult, record: dict[str, object], definition: ScenarioDefinition) -> PredictionOut:
+    """One scored record as the response model — with the business rules' results, the
+    gate and the decision when the scenario declares them.
+    """
+    assert definition.dataset is not None and definition.model is not None
+    rules = definition.dataset.business_rules
+    outcome = evaluate(rules, record) if rules is not None else None
+    policy = definition.model.decision_policy
+    gate = outcome.gate if outcome is not None else None
+    return PredictionOut(
+        prediction=p.prediction,
+        contributions=p.contributions,
+        prediction_lower=p.prediction_lower,
+        prediction_upper=p.prediction_upper,
+        text_explanations=(
+            {column: [TokenWeightOut(**t) for t in tokens] for column, tokens in p.text_explanations.items()}
+            if p.text_explanations is not None
+            else None
+        ),
+        rules=outcome.results if outcome is not None else None,
+        gate=gate,
+        decision=decide(policy, p.prediction, gate) if policy is not None else gate,
     )
 
 
@@ -394,7 +421,12 @@ def dataset_sample_endpoint(
     assert identity.org_id is not None
     assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
     df = model_cache.dataset(identity.org_id, definition.slug)
-    columns = [*definition.dataset.feature_columns, definition.dataset.target]
+    columns = [
+        *definition.dataset.feature_columns,
+        *definition.dataset.rule_columns,
+        *definition.dataset.audit_columns,
+        definition.dataset.target,
+    ]
     sample = dataset_core.sample_rows(
         df,
         columns,
@@ -403,12 +435,24 @@ def dataset_sample_endpoint(
         display_columns=definition.dataset.display_columns,
     )
     id_column = definition.dataset.index_col if definition.dataset.index_col in sample.columns else None
+    gates: dict[str, str | None] | None = None
+    fired: dict[str, list[str]] | None = None
+    rules = definition.dataset.business_rules
+    if rules is not None and id_column is not None:
+        gates, fired = {}, {}
+        for row in sample.rows:
+            outcome = evaluate(rules, row)
+            row_id = str(row[id_column])
+            gates[row_id] = outcome.gate
+            fired[row_id] = [r.key for r in outcome.results if r.fired]
     return DatasetSampleOut(
         columns=sample.columns,
         rows=sample.rows,
         total_rows=sample.total_rows,
         id_column=id_column,
         display_columns=[c for c in definition.dataset.display_columns if c in sample.columns],
+        gates=gates,
+        fired_rules=fired,
     )
 
 
