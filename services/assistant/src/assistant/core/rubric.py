@@ -64,7 +64,7 @@ def build_rubric_prompt(rubric: RubricCheckConfig) -> str:
     )
 
 
-def _extract_json(content: str) -> dict[str, Any]:
+def extract_json(content: str) -> dict[str, Any]:
     """The first JSON object in the model's reply (tolerates code fences / preambles)."""
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
     candidate = fenced.group(1) if fenced else content[content.find("{") : content.rfind("}") + 1]
@@ -83,7 +83,7 @@ def _normalise(text: str) -> str:
 
 def parse_rubric_response(content: str, rubric: RubricCheckConfig, description: str) -> dict[str, Any]:
     """Validate the model's JSON against the rubric; raise ValueError when unusable."""
-    raw = _extract_json(content)
+    raw = extract_json(content)
     polarity = {b.key: "positive" for b in rubric.positive} | {b.key: "negative" for b in rubric.negative}
     names = {b.key: b.name for b in (*rubric.positive, *rubric.negative)}
     source = _normalise(description)

@@ -9,6 +9,7 @@ from typing import ClassVar
 import numpy as np
 import pytest
 from ai_circus_shared.auth import Identity
+from ai_circus_shared.business_rules import BusinessRules, DecisionPolicy
 from fastapi.testclient import TestClient
 
 from prediction.api import _model_cache, _scenario_definition, router
@@ -20,7 +21,11 @@ from prediction.core.predict import predict as real_predict
 
 def _definition(slug: str) -> SimpleNamespace:
     """A stand-in ScenarioDefinition with a tabular dataset and no text features."""
-    return SimpleNamespace(slug=slug, dataset=SimpleNamespace(text_columns=list, feature_schema={}))
+    return SimpleNamespace(
+        slug=slug,
+        dataset=SimpleNamespace(text_columns=list, feature_schema={}, business_rules=None),
+        model=SimpleNamespace(decision_policy=None),
+    )
 
 
 class FakePipeline:
@@ -319,3 +324,62 @@ def test_out_of_fold_endpoint_404s_when_the_model_has_none() -> None:
     artifacts = ModelArtifacts(pipeline=FakePipeline(), explainer=FakeExplainer(), metadata={})
     client, _ = _graph_app(SimpleNamespace(slug="churn"), artifacts=artifacts)
     assert client.get("/model/churn/out-of-fold").status_code == 404
+
+
+def _ruled_definition() -> SimpleNamespace:
+    """The stand-in scenario plus one blocking rule, one priority rule and a policy."""
+    definition = _definition("churn")
+    definition.dataset.business_rules = BusinessRules.model_validate({
+        "families": [{"key": "docs", "label": "Docs"}],
+        "rules": [
+            {
+                "key": "C1",
+                "label": "ID",
+                "family": "docs",
+                "field": "HasId",
+                "op": "equals",
+                "value": "No",
+                "outcome": "request_info",
+                "message": "No ID",
+            },
+            {
+                "key": "P1",
+                "label": "Priority",
+                "family": "docs",
+                "field": "Geography",
+                "op": "equals",
+                "value": "Spain",
+                "outcome": "review",
+                "message": "Priority",
+            },
+        ],
+    })
+    definition.model.decision_policy = DecisionPolicy(approve_at=0.7, deny_at=0.5)
+    return definition
+
+
+def test_predict_returns_rules_gate_and_decision_for_a_ruled_scenario(client: TestClient) -> None:
+    """The fixed model scores 0.6: between the thresholds, so a person decides."""
+    client.app.dependency_overrides[_scenario_definition] = _ruled_definition  # type: ignore[union-attr]
+    records = [
+        {"CreditScore": 600, "Geography": "France", "HasId": "Yes"},  # passes -> 0.6 is in the review band
+        {"CreditScore": 600, "Geography": "France", "HasId": "No"},  # blocked: the gate wins over the score
+        {"CreditScore": 600, "Geography": "Spain", "HasId": "Yes"},  # priority rule forces a person
+    ]
+
+    body = client.post("/predict/churn", json={"records": records}).json()
+
+    assert [(p["gate"], p["decision"]) for p in body["predictions"]] == [
+        (None, "review"),
+        ("request_info", "request_info"),
+        ("review", "review"),
+    ]
+    assert [r["fired"] for r in body["predictions"][1]["rules"]] == [True, False]
+    assert body["predictions"][1]["prediction"] == pytest.approx(0.6)  # still scored: "model not applied"
+
+
+def test_predict_without_rules_leaves_the_new_fields_empty(client: TestClient) -> None:
+    prediction = client.post("/predict/churn", json={"records": [{"CreditScore": 1, "Geography": "x"}]}).json()[
+        "predictions"
+    ][0]
+    assert (prediction["rules"], prediction["gate"], prediction["decision"]) == (None, None, None)

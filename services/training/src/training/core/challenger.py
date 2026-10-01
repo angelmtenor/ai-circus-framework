@@ -135,14 +135,18 @@ def train_text_challenger(
     selection_metric: str,
     cv_folds: int,
 ) -> ChallengerResult:
-    """Embed, then train/score `challenger.estimator` on exactly the champion's split."""
-    if len(text_features) != 1:
-        raise ChallengerUnavailableError("The text challenger supports exactly one text feature.")
-    column = text_features[0]
+    """Embed every text column, then train/score `challenger.estimator` on exactly the
+    champion's split.
+    """
+    if not text_features:
+        raise ChallengerUnavailableError("The text challenger needs at least one text feature.")
     cache = load_embedding_cache(store, org_id, challenger)
-    vectors = embed_texts([str(t) for t in x[column]], cache, provider)
-    x_embedded = with_embeddings(x, column, vectors)
-    embedded_columns = embedding_columns(column, vectors.shape[1])
+    x_embedded = x
+    embedded_columns: list[str] = []
+    for column in text_features:
+        vectors = embed_texts([str(t) for t in x[column]], cache, provider)
+        x_embedded = with_embeddings(x_embedded, column, vectors)
+        embedded_columns += embedding_columns(column, vectors.shape[1])
     numeric = [*numeric_features, *embedded_columns]
 
     candidate = train_candidate(
@@ -164,17 +168,19 @@ def train_text_challenger(
     )
     candidate.pipeline.fit(x_embedded, y)
     explainer = build_explainer(candidate.pipeline, x_embedded)
-    # text_features: each embedding's 1,024 dimensions are summed into one `Review` push per row.
+    # text_features: each embedding's 1,024 dimensions are summed into one push per text column.
     importance = global_shap_importance(
-        candidate.pipeline, explainer, x_embedded, feature_columns, text_features=[column]
+        candidate.pipeline, explainer, x_embedded, feature_columns, text_features=list(text_features)
     )
     metadata = {
         "name": challenger.estimator,
         "label": challenger.label,
         "embedding_model": challenger.embedding_model,
         "hf_model_id": challenger.hf_model_id,
-        "embedding_dim": int(vectors.shape[1]),
-        "text_column": column,
+        "embedding_dim": len(embedded_columns) // len(text_features),
+        "text_columns": list(text_features),
+        # The first text column, for prediction images that predate multi-column challengers.
+        "text_column": text_features[0],
         "input_columns": list(x_embedded.columns),
         "transformed_feature_names": transformed_feature_names(candidate.pipeline),
         "selection_score": candidate.selection_score,

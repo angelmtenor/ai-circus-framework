@@ -13,6 +13,8 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
+from ai_circus_shared.business_rules import BusinessRules, DecisionPolicy
+
 
 class NumericFeatureUI(BaseModel):
     """Declarative UI hint for a numeric feature: a bounded slider/number input."""
@@ -138,6 +140,19 @@ class TabularDataset(BaseModel):
     # Optional network between rows (and curated entities) — drawn by the
     # `network_explorer` extra tab; the model itself only ever reads feature_columns.
     graph: TabularGraph | None = None
+    # Columns only `business_rules` read (e.g. "ID document provided: Yes/No") — kept
+    # in the normalized dataset, accepted by /predict and drawn on the form, never a
+    # model input. Keyed like feature_schema, in form order.
+    rule_columns: dict[str, FeatureUI] = {}
+    # Deterministic checks every record goes through before the model (see
+    # ai_circus_shared.business_rules): rows a blocking rule stops are kept for analytics
+    # but never trained on, and /predict returns the fired rules, gate and decision.
+    business_rules: BusinessRules | None = None
+    # A subset of protected_features_excluded kept in the normalized dataset for a
+    # fairness audit only (outcome rates per group) — never a model input.
+    audit_columns: list[str] = []
+    # Language of the free-text features: picks TF-IDF's stop-word list (negations kept).
+    text_language: Literal["en", "es"] = "en"
 
     @model_validator(mode="after")
     def _graph_has_its_own_raw_object(self) -> TabularDataset:
@@ -169,6 +184,49 @@ class TabularDataset(BaseModel):
     def text_columns(self) -> list[str]:
         """The `type: text` feature columns, in feature order."""
         return [c for c in self.feature_columns if getattr(self.feature_schema.get(c), "type", None) == "text"]
+
+    @model_validator(mode="after")
+    def _rule_and_audit_columns_are_not_model_inputs(self) -> TabularDataset:
+        """A rule-only column must never double as a feature/target/display column,
+        and an audit column must be one the scenario explicitly keeps out of the model."""
+        clashing = set(self.rule_columns) & {
+            *self.feature_columns,
+            self.target,
+            *self.display_columns,
+            *self.protected_features_excluded,
+        }
+        if clashing:
+            raise ValueError(f"rule_columns {sorted(clashing)} are also features/target/display/protected columns.")
+        not_protected = sorted(set(self.audit_columns) - set(self.protected_features_excluded))
+        if not_protected:
+            raise ValueError(f"audit_columns {not_protected} must be listed in protected_features_excluded.")
+        return self
+
+    @model_validator(mode="after")
+    def _business_rules_reference_real_columns(self) -> TabularDataset:
+        """Every rule reads a feature or rule column, `contains_any` only reads text,
+        and a categorical comparison only names real options — a typo would otherwise
+        make a rule silently never fire."""
+        if self.business_rules is None:
+            return self
+        schema = {**self.feature_schema, **self.rule_columns}
+        for rule in self.business_rules.rules:
+            conditions = [rule, *([rule.when] if rule.when else [])]
+            for condition in conditions:
+                unknown = sorted(set(condition.fields()) - set(schema))
+                if unknown:
+                    raise ValueError(f"business rule {rule.key!r} reads unknown columns {unknown}.")
+                spec = schema[condition.field]
+                if condition.op == "contains_any" and spec.type != "text":
+                    raise ValueError(f"business rule {rule.key!r}: contains_any needs a text column.")
+                if condition.op in {"lt", "lte", "gt", "gte"} and spec.type != "numeric":
+                    raise ValueError(f"business rule {rule.key!r}: {condition.op} needs a numeric column.")
+                if spec.type == "categorical" and condition.value is not None and condition.op != "missing":
+                    values = condition.value if isinstance(condition.value, list) else [condition.value]
+                    bad = sorted(str(v) for v in values if str(v) not in spec.options)
+                    if bad:
+                        raise ValueError(f"business rule {rule.key!r}: {bad} are not {condition.field!r} options.")
+        return self
 
     @model_validator(mode="after")
     def _protected_features_actually_excluded(self) -> TabularDataset:
@@ -255,11 +313,16 @@ class TabularModel(BaseModel):
     # optimistic (on a few hundred rows, close to memorised) — a view that reveals the
     # real outcome next to the scores (network_explorer, shipment_globe) must use these.
     out_of_fold_scores: bool = False
+    # Classification only: the probability of the (favourable) positive class becomes
+    # an approve / manual review / deny proposal (see business_rules.DecisionPolicy).
+    decision_policy: DecisionPolicy | None = None
 
     @model_validator(mode="after")
     def _selection_settings_match_task(self) -> TabularModel:
         if self.cv_folds == 1:
             raise ValueError("model.cv_folds must be 0 (single hold-out) or >= 2.")
+        if self.decision_policy is not None and self.task_type != "classification":
+            raise ValueError("model.decision_policy is only available for classification.")
         if self.out_of_fold_scores and self.task_type != "classification":
             raise ValueError("model.out_of_fold_scores is only available for classification.")
         allowed = {"classification": {"accuracy", "roc_auc"}, "regression": {"r2"}}[self.task_type]
@@ -965,6 +1028,79 @@ class KnowledgeGraphExtra(BaseModel):
     disclaimer: str | None = None
 
 
+class CaseDeskSection(BaseModel):
+    """One band of a `CaseDeskExtra` application sheet: its boxes, in order (numbered
+    consecutively across the whole sheet, like an official form's casillas)."""
+
+    title: str
+    fields: list[str] = Field(min_length=1)  # feature_columns / rule_columns entries
+
+
+class CaseDeskSample(BaseModel):
+    """A fictional scanned application (`file` in the scenario's `sample_uploads/`
+    folder, served entitlement-checked by the scenario's assistant) the desk can read
+    with OCR + LLM extraction, one click."""
+
+    file: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}$")
+    label: str
+    description: str | None = None
+
+
+class CaseDeskPersona(BaseModel):
+    """A named application preset: every feature, plus any rule columns (missing rule
+    columns are left blank on the form)."""
+
+    label: str
+    description: str | None = None
+    record: dict[str, float | str]
+
+
+class CaseDeskComputedField(BaseModel):
+    """A numeric box the desk fills itself: `numerator / denominator / divisor` (e.g.
+    income per head in IPREM units), recomputed whenever either input changes, so a
+    form can never carry a ratio that contradicts its own boxes."""
+
+    field: str
+    numerator: str
+    denominator: str
+    divisor: float = Field(default=1.0, gt=0)
+    decimals: int = Field(default=2, ge=0, le=6)
+
+
+class CaseDeskExtra(BaseModel):
+    """Opt-in 5th workspace tab for a `tabular_ml` scenario whose rows are
+    *applications* decided by business rules + a binary model + a decision policy
+    (`dataset.business_rules`, `model.decision_policy`): every application flows
+    through the rules gate into the model and its three proposal trays (out-of-fold
+    scores, live threshold sliders); one opens as an official paper sheet with its rule
+    checklist, per-box SHAP heat and highlighted words; a scanned sample can be read
+    into the sheet (OCR + LLM extraction); and outcome rates are audited per
+    `equity_columns` group. See ui-react's CaseDeskView.tsx — the single generic
+    renderer; the wording fields below are its only domain vocabulary.
+    """
+
+    kind: Literal["case_desk"] = "case_desk"
+    tab_label: str = "Case desk"
+    title: str
+    subtitle: str | None = None
+    # The desk's own wording ("Casilla", "Reglas", "Modelo"...) and number formats.
+    locale: Literal["en", "es"] = "en"
+    case_noun: str = "application"
+    case_noun_plural: str = "applications"
+    reviewer_noun: str = "caseworker"
+    authority: str  # e.g. "Ayuntamiento de Villaclara" (a fictional body)
+    authority_unit: str | None = None
+    form_title: str
+    form_code: str | None = None
+    name_column: str | None = None  # a dataset.display_columns entry
+    sections: list[CaseDeskSection] = Field(min_length=1)
+    equity_columns: list[str] = []  # dataset.audit_columns entries
+    sample_uploads: list[CaseDeskSample] = []
+    personas: list[CaseDeskPersona] = []
+    computed_fields: list[CaseDeskComputedField] = []
+    note: str | None = None  # e.g. "Synthetic data — proposals only, a person decides."
+
+
 UiExtras = Annotated[
     RegionMapExtra
     | LivePlantExtra
@@ -975,6 +1111,7 @@ UiExtras = Annotated[
     | DispatchTowerExtra
     | ShipmentGlobeExtra
     | MoneyTrailExtra
+    | CaseDeskExtra
     | TriageBoardExtra
     | ReadingRoomExtra
     | KnowledgeGraphExtra,
@@ -993,6 +1130,7 @@ _TABULAR_UI_EXTRAS = (
     DispatchTowerExtra,
     ShipmentGlobeExtra,
     MoneyTrailExtra,
+    CaseDeskExtra,
 )
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
 _RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
@@ -1918,6 +2056,53 @@ class ScenarioDefinition(BaseModel):
         unknown_icons = sorted(set(extras.choice_icons) - choice_options)
         if unknown_icons:
             raise ValueError(f"{where} choice_icons {unknown_icons} are not options of the choice features.")
+        return self
+
+    @model_validator(mode="after")
+    def _case_desk_references_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `case_desk` block has no rules or policy to show, would leave a
+        form field off the sheet (or draw one twice), or audits a column the dataset
+        doesn't keep — ui-react's CaseDeskView would otherwise render a sheet the
+        model can't score."""
+        extras = self.ui_extras
+        if not isinstance(extras, CaseDeskExtra) or self.dataset is None:
+            return self
+        where = "ui_extras.case_desk"
+        if self.model is None or self.model.task_type != "classification" or self.model.decision_policy is None:
+            raise ValueError(f"{where} requires a classification model with a model.decision_policy.")
+        if not self.model.out_of_fold_scores:
+            raise ValueError(
+                f"{where} requires model.out_of_fold_scores: it reveals every application's real resolution next "
+                "to its score, which is only honest for scores from models that never saw that row."
+            )
+        if self.dataset.business_rules is None:
+            raise ValueError(f"{where} requires dataset.business_rules (the gate before the model).")
+        on_sheet = [f for section in extras.sections for f in section.fields]
+        expected = [*self.dataset.feature_columns, *self.dataset.rule_columns]
+        duplicated = sorted({f for f in on_sheet if on_sheet.count(f) > 1})
+        missing = sorted(set(expected) - set(on_sheet))
+        unknown = sorted(set(on_sheet) - set(expected))
+        if duplicated or missing or unknown:
+            raise ValueError(
+                f"{where} sections must list every feature and rule column once: duplicated {duplicated}, "
+                f"missing {missing}, unknown {unknown}."
+            )
+        if extras.name_column is not None and extras.name_column not in self.dataset.display_columns:
+            raise ValueError(f"{where} name_column {extras.name_column!r} is not a display_column.")
+        not_audited = sorted(set(extras.equity_columns) - set(self.dataset.audit_columns))
+        if not_audited:
+            raise ValueError(f"{where} equity_columns {not_audited} are not dataset.audit_columns.")
+        for computed in extras.computed_fields:
+            for feature in (computed.field, computed.numerator, computed.denominator):
+                self._feature_of_type(feature, "numeric", f"{where} computed_fields")
+        rule_schema = self.dataset.rule_columns
+        for persona in extras.personas:
+            features = {k: v for k, v in persona.record.items() if k not in rule_schema}
+            self._check_example(ExampleRecord(label=persona.label, record=features), f"{where} persona")
+            for column, value in persona.record.items():
+                spec = rule_schema.get(column)
+                if spec is not None and spec.type == "categorical" and value not in spec.options:
+                    raise ValueError(f"{where} persona {persona.label!r}: {column}={value!r} is not an option.")
         return self
 
     @model_validator(mode="after")

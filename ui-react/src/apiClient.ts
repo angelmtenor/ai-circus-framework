@@ -348,6 +348,71 @@ export type MoneyTrailExtra = {
   case_column?: string | null;
   disclaimer?: string | null;
 };
+// Mirrors ai_circus_shared.business_rules — the deterministic gate before a tabular model.
+export type RuleOutcome = "reject" | "request_info" | "review";
+export type Decision = "approve" | "deny" | "review" | "request_info" | "reject";
+export type RuleOp = "missing" | "equals" | "not_equals" | "in" | "not_in" | "lt" | "lte" | "gt" | "gte" | "contains_any";
+export type RuleCondition = { field: string; op: RuleOp; value?: string | number | string[] | number[] | null; value_field?: string | null };
+export type BusinessRule = RuleCondition & {
+  key: string;
+  label: string;
+  family: string;
+  outcome: RuleOutcome;
+  message: string;
+  legal_basis?: string | null;
+  when?: RuleCondition | null;
+};
+export type BusinessRulesConfig = {
+  families: { key: string; label: string; description?: string | null }[];
+  rules: BusinessRule[];
+  outcome_labels: Record<RuleOutcome, string>;
+};
+export type DecisionPolicy = { approve_at: number; deny_at: number; labels: Record<Decision, string> };
+// One rule checked against one record (prediction's /predict `rules`).
+export type RuleResult = {
+  key: string;
+  label: string;
+  family: string;
+  outcome: RuleOutcome;
+  applicable: boolean;
+  fired: boolean;
+  message: string;
+  legal_basis?: string | null;
+  evidence?: string | null;
+};
+
+// Mirrors scenario_schema.py's CaseDeskExtra — drives CaseDeskView.tsx.
+export type CaseDeskExtra = {
+  kind: "case_desk";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  locale: "en" | "es";
+  case_noun: string;
+  case_noun_plural: string;
+  reviewer_noun: string;
+  authority: string;
+  authority_unit?: string | null;
+  form_title: string;
+  form_code?: string | null;
+  name_column?: string | null;
+  sections: { title: string; fields: string[] }[];
+  equity_columns: string[];
+  sample_uploads: { file: string; label: string; description?: string | null }[];
+  personas: { label: string; description?: string | null; record: Record<string, number | string> }[];
+  computed_fields: { field: string; numerator: string; denominator: string; divisor: number; decimals: number }[];
+  note?: string | null;
+};
+
+// assistant's POST /extract-record — the boxes read from a scanned application.
+export type ExtractedField = { value: string | number; evidence: string; confidence: number; verified: boolean };
+export type ExtractedRecord = {
+  fields: Record<string, ExtractedField>;
+  rejected: Record<string, string>;
+  missing: string[];
+  model: string;
+};
+
 // Mirrors scenario_schema.py's KnowledgeGraphExtra — drives KnowledgeGraphView.tsx.
 export type KnowledgeGraphRole = "actor" | "action" | "condition" | "document";
 export type KnowledgeGraphShape = "circle" | "square" | "diamond" | "triangle" | "hexagon" | "pill";
@@ -371,6 +436,7 @@ export type UiExtras =
   | DispatchTowerExtra
   | ShipmentGlobeExtra
   | MoneyTrailExtra
+  | CaseDeskExtra
   | TriageBoardExtra
   | ReadingRoomExtra
   | KnowledgeGraphExtra;
@@ -507,6 +573,10 @@ export type ScenarioSummary = {
   // behaviour (see RubricCheckPanel.tsx) and the sentence-embedding challenger model.
   rubric_check?: RubricCheckConfig | null;
   text_challenger?: TextChallengerConfig | null;
+  // tabular_ml with deterministic business rules before the model (see CaseDeskExtra).
+  rule_columns?: Record<string, FeatureSpec> | null;
+  business_rules?: BusinessRulesConfig | null;
+  decision_policy?: DecisionPolicy | null;
 };
 
 // Mirrors scenario_schema.py's RubricCheckConfig / TextChallenger.
@@ -556,6 +626,12 @@ export type PredictionResult = {
   // Only with `explainText`: per text feature, every word of the submitted text with its
   // share of that feature's contribution (the rest is words absent from it).
   text_explanations?: Record<string, DlTokenWeight[]> | null;
+  // Scenarios with business rules / a decision policy only: every rule's result, the
+  // gate (null = passed) and the proposal. A gated record is still scored, but the
+  // decision is the gate's.
+  rules?: RuleResult[] | null;
+  gate?: RuleOutcome | null;
+  decision?: Decision | null;
 };
 
 export type DatasetSample = {
@@ -566,6 +642,9 @@ export type DatasetSample = {
   total_rows: number;
   id_column?: string | null;
   display_columns?: string[];
+  // Scenarios with business rules: each row's gate and fired rule keys, keyed by row id.
+  gates?: Record<string, RuleOutcome | null> | null;
+  fired_rules?: Record<string, string[]> | null;
 };
 
 // GET /model/{slug}/card — how the deployed model was chosen, and how it scores on
@@ -1041,6 +1120,35 @@ export async function submissionPdf(
     headers: headers(accessToken),
   });
   return asBlob(response);
+}
+
+/** The boxes of a scanned application, read from its OCR text by the assistant's LLM. */
+export async function extractRecord(
+  baseUrl: string,
+  scenarioSlug: string,
+  text: string,
+  accessToken: string | null,
+): Promise<ExtractedRecord> {
+  const response = await fetch(`${baseUrl}/extract-record/${scenarioSlug}`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ text }),
+  });
+  return asJson(response);
+}
+
+/** One of a case desk's fictional scanned applications, as a File ready to read. */
+export async function intakeSample(
+  baseUrl: string,
+  scenarioSlug: string,
+  filename: string,
+  accessToken: string | null,
+): Promise<File> {
+  const response = await fetch(`${baseUrl}/intake-samples/${scenarioSlug}/${encodeURIComponent(filename)}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  const blob = await asBlob(response);
+  return new File([blob], filename, { type: blob.type || "application/pdf" });
 }
 
 /** One of the scenario's fictional sample documents, as a File ready to attach to the chat. */

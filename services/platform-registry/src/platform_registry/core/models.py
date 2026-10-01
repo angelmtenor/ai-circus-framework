@@ -86,6 +86,12 @@ class Scenario(Base):
     # and TextChallenger (auto-added by ensure_added_columns, like tutorial above).
     rubric_check: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     text_challenger: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml with deterministic business rules — see scenario_schema.TabularDataset
+    # (rule_columns, business_rules) and TabularModel.decision_policy (auto-added by
+    # ensure_added_columns, like tutorial above).
+    rule_columns: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    business_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    decision_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

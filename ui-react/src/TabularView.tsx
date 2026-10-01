@@ -24,6 +24,7 @@ const NetworkTab = lazy(() => import("./NetworkTab").then((m) => ({ default: m.N
 const DispatchTowerView = lazy(() => import("./DispatchTowerView").then((m) => ({ default: m.DispatchTowerView })));
 const ShipmentGlobeView = lazy(() => import("./ShipmentGlobeView").then((m) => ({ default: m.ShipmentGlobeView })));
 const MoneyTrailView = lazy(() => import("./MoneyTrailView").then((m) => ({ default: m.MoneyTrailView })));
+const CaseDeskView = lazy(() => import("./CaseDeskView").then((m) => ({ default: m.CaseDeskView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
@@ -41,6 +42,7 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   dispatch_tower: { icon: "radar", label: "Dispatch Tower" },
   shipment_globe: { icon: "globe", label: "Globe" },
   money_trail: { icon: "coins", label: "Money Trail" },
+  case_desk: { icon: "desk", label: "Case desk" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
@@ -164,6 +166,7 @@ function TabularViewContent({
         {tab === "extra" && scenario.ui_extras?.kind === "dispatch_tower" && <DispatchTowerView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "shipment_globe" && <ShipmentGlobeView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "money_trail" && <MoneyTrailView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "case_desk" && <CaseDeskView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (
