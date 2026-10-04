@@ -301,7 +301,7 @@ A tutorial is a YAML file:
    `ui_extras` tab that suits the story.
 4. Restart `platform-registry` (it seeds scenarios), then run `make k3s-pipeline`.
 
-The second tutorial, [Toxic Leadership](toxic_leadership.md), follows exactly this recipe and adds
+The second tutorial, [Toxic Management & Work Environment](toxic_leadership.md), follows exactly this recipe and adds
 free text (`type: text` features), a transformer challenger and an LLM rubric check. Good
 candidates from the same notebook collection are *Student Admissions* and *House Prices*. The
 **Society & Ethics** domain is ready for fairness-oriented datasets.

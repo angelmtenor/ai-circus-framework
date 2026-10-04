@@ -17,10 +17,11 @@ slug: prestaciones_sociales
 kind: tabular_ml
 title: "Ayudas de Emergencia Social — Valoración inteligente"
 description: >
-  Solicitudes de ayuda de emergencia social de un ayuntamiento ficticio: reglas de
-  negocio que paran lo incompleto antes del modelo, un modelo que lee a la vez las
-  casillas numéricas, las categóricas y el texto libre, y una propuesta explicada
-  casilla a casilla — conceder, denegar o revisión manual. Siempre decide una persona.
+  Que el dinero público llegue a quien de verdad lo necesita: ni fraude, ni ayudas
+  concedidas a mano a personas conocidas, ni ayudas para lo que el solicitante puede
+  pagarse. Las mismas reglas de negocio para todas las solicitudes, un modelo que lee
+  a la vez las casillas y el texto libre, y una propuesta explicada casilla a casilla
+  — conceder, denegar o revisión manual. Siempre decide una persona.
 role_required: "scenario:prestaciones_sociales"
 industry: public_sector
 icon: "🤝"
@@ -31,7 +32,15 @@ chat:
     Ayuntamiento de Villaclara, una entidad FICTICIA, en un escenario de demostración con
     600 solicitudes SINTÉTICAS de Ayuda Económica de Emergencia Social (AES): alquiler o
     hipoteca, suministros básicos, alimentación e higiene, material escolar, gastos
-    sanitarios y otros gastos, hasta 1.500 € por solicitud. Cada solicitud pasa primero
+    sanitarios y otros gastos, hasta 1.500 € por solicitud. El propósito es que el dinero
+    público llegue a quien de verdad lo necesita. La valoración manual de estas ayudas
+    sufre dos problemas conocidos en España: el fraude (ingresos sin declarar, ayudas
+    repetidas por el mismo concepto, gastos que no son básicos o que la unidad de
+    convivencia puede pagarse) y el favoritismo (conceder a mano a personas conocidas).
+    Aquí todas las solicitudes pasan por las mismas reglas y el mismo modelo, y cada
+    propuesta muestra sus razones, de modo que apartarse de ella exige motivarlo por
+    escrito. Ni el modelo ni las reglas acusan a nadie de fraude: señalan qué hay que
+    comprobar, y lo comprueba una persona. Cada solicitud pasa primero
     por reglas de negocio deterministas, en cuatro familias: completitud (falta un
     documento o una casilla → requerimiento de subsanación, art. 68 de la Ley 39/2015, 10
     días), validez y coherencia (un dato fuera de rango o contradictorio → subsanación),
@@ -56,6 +65,7 @@ chat:
     con claridad lo que dicen las reglas de lo que estima el modelo. Nunca prometas ni
     deniegues una ayuda real.
   sample_questions:
+    - "¿Cómo ayuda esto a evitar el fraude y el favoritismo?"
     - "¿Por qué este expediente va a revisión manual?"
     - "¿Qué casillas pesan más en las concesiones?"
     - "¿Qué reglas paran más solicitudes antes del modelo?"

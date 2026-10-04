@@ -1,14 +1,23 @@
-# 🚩 Toxic Leadership — an NLP + ML tutorial
+# 🚩 Toxic Management & Work Environment — an NLP + ML tutorial
 
 > Domain: **Tutorials** · Kind: `tabular_ml` (binary classification, free text + structured data) · Scenario: [`scenarios/toxic_leadership/scenario.yaml`](../../scenarios/toxic_leadership/scenario.yaml)
 
 "People don't leave companies, they leave managers." Engineers write it in reviews every day:
-directors who can't read code, visions made of buzzwords, credit taken and blame handed down.
+directors who can't read code, salespeople who sell what doesn't exist, visions made of
+buzzwords, work offloaded, credit taken and blame handed down.
+
+In most companies it is a **very small number of people** — managers, salespeople, self-styled
+"AI experts" with an inflated CV and no idea of machine learning — who, as they say in Spain,
+*tienen mucha cara*: they delegate their own job to the technical staff, overload them, and
+spread falsehoods about them inside the company. A few such people can embitter a whole
+engineering team and do outsized damage to the business. Recognising the pattern, and
+reporting it with evidence, is a responsibility of every senior engineer and tech lead.
+
 This scenario turns **4,000 real Glassdoor reviews by software, data and AI engineers** into a
 model that reads them. A gradient-boosting model combines what each engineer *wrote* with the
-facts of their job, learns the vocabulary of bad leadership, and races a modern
-sentence-transformer. An LLM coach reads any description of a leader's behaviour against a
-research-based rubric.
+facts of their job, learns the vocabulary of toxic management, and races a modern
+sentence-transformer. An LLM coach reads any description of how someone behaves — a manager,
+a salesperson, a self-styled expert — against a research-based rubric.
 
 <p align="center">
   <img src="../screenshots/toxic_leadership/office-model.png" alt="The Office tab: a glass office tower at night, one floor per job family, every review a person at a desk coloured from blue (leadership OK) to red (bad leadership); an AI-FIRST neon on the roof and a C-suite penthouse with its lights on and nobody at the desks" width="900">
@@ -74,8 +83,10 @@ Click a desk to read the review with every word coloured by how much it pushed t
 
 ### What if…?
 
-Seven fictional archetypes are ready to edit: *The LinkedIn Visionary* (a Director of AI who
+Nine fictional archetypes are ready to edit: *The LinkedIn Visionary* (a Director of AI who
 has never trained a model), *The Buzzword Machine*, *The Delegator-in-Chief*, *The
+Overpromising Salesperson* (sells what doesn't exist; the engineers work the weekends), *The
+Rumour Mill* (covers their own misses with false stories about the team), *The
 Micromanager*, *The Cornering Boss*, *The Tech Lead Who Still Codes* and *Underpaid but well
 led*. Rewrite the review or change the ratings and the prediction, waterfall and word
 highlights update live; **⚖ Compare with the transformer** scores the same text with the
@@ -87,8 +98,8 @@ challenger.
 
 ## The Leadership check
 
-Below the tower: describe what a leader **does** (no names) and three readers answer side by
-side.
+Below the tower: describe what someone with power over the team's work — a manager, a
+salesperson, a self-styled expert — **does** (no names) and three readers answer side by side.
 
 - **An LLM coach** (the platform's active model, through llm-gateway) reads the description
   against a research-based rubric and answers with a verdict, a balance from toxic to great,
@@ -102,8 +113,9 @@ Project Oxygen** (coaching, empowering without micromanaging, psychological safe
 vision, technical skill to advise the team, strong decisions, honesty). The negative side
 follows the **Toxic Leadership Scale** (Schmidt, 2008: abusive, authoritarian, narcissistic,
 self-promoting, unpredictable) plus the patterns engineers report most: dishonesty and
-credential inflation, blame-shifting, offloading their own job onto the team, no technical
-depth or curiosity, cornering people who disagree, and disengagement.
+credential inflation, blame-shifting, offloading their own job onto the team, overloading the
+team, spreading falsehoods about it, no technical depth or curiosity, cornering people who
+disagree, and disengagement.
 
 <p align="center"><img src="../screenshots/toxic_leadership/leadership-check.png" alt="Leadership check: the LLM coach rates the LinkedIn Visionary description Toxic management, citing dishonesty, no technical depth, blame-shifting and credit-taking with verified quotes and advice; beside it, TF-IDF 32% and transformer 64%" width="900"></p>
 
@@ -204,6 +216,13 @@ named manager, rank employees or monitor what staff write. No text model can see
 or LinkedIn profile is true, or how good someone is technically — that takes evidence:
 technical conversations, work samples, references.
 
+**Speaking up is part of the job.** When someone offloads their work onto your team, overloads
+it or spreads falsehoods about it, a senior engineer or tech lead should report it — the people
+below often can't. Report it the way you'd defend a model: evidence (who did the work, what was
+promised and claimed, dates, hours), the right channel (your management chain, HR, the
+company's internal reporting channel), behaviours rather than labels, and never rumours. The
+model shows the aggregate pattern; the report is a human act, with facts.
+
 ---
 
 ## Bag of words vs transformers
@@ -295,10 +314,10 @@ machine's GPU (CPU works too, much slower) and retrain:
 make k3s-text-embeddings SCENARIOS=toxic_leadership
 ```
 
-Then open <http://aiopen.localhost>, set **Domain → Tutorials** and open **Toxic Leadership — NLP + ML
+Then open <http://aiopen.localhost>, set **Domain → Tutorials** and open **Toxic Management & Work Environment — NLP + ML
 Tutorial**.
 
-<p align="center"><img src="../screenshots/toxic_leadership/gallery-tutorials.png" alt="Scenario gallery filtered to the Tutorials domain: Titanic and Toxic Leadership" width="700"></p>
+<p align="center"><img src="../screenshots/toxic_leadership/gallery-tutorials.png" alt="Scenario gallery filtered to the Tutorials domain: Titanic and Toxic Management" width="700"></p>
 
 To change the recipe, edit the script and regenerate the seed file (and the tutorial's ablation
 numbers), then re-run the pipeline:

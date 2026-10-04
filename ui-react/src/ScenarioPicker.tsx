@@ -61,6 +61,15 @@ const CATEGORIES: Category[] = [
   },
 ];
 
+// Card order inside each kind: alphabetical by slug (the registry's list has no
+// guaranteed order), with the public-sector scenarios grouped at the end.
+const LAST_DOMAINS = new Set(["public_sector"]);
+
+function galleryOrder(a: ScenarioSummary, b: ScenarioSummary): number {
+  const last = Number(LAST_DOMAINS.has(a.industry)) - Number(LAST_DOMAINS.has(b.industry));
+  return last || a.slug.localeCompare(b.slug);
+}
+
 function categoryFor(scenario: ScenarioSummary): Category {
   return (
     CATEGORIES.find((category) => category.match(scenario)) ?? {
@@ -110,7 +119,7 @@ export function ScenarioPicker({
 
   const groups = CATEGORIES.map((category) => ({
     ...category,
-    scenarios: filteredScenarios.filter(category.match),
+    scenarios: filteredScenarios.filter(category.match).sort(galleryOrder),
   })).filter((group) => group.scenarios.length > 0);
 
   return (

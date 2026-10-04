@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>29 scenarios</b> · <b>4 kinds</b> · <b>18 with a showpiece dashboard</b> · every one of them just a <code>scenario.yaml</code>
+  <b>4 kinds of scenario</b> · <b>a showpiece dashboard for most of them</b> · every one of them just a <code>scenario.yaml</code>
 </p>
 
 <p align="center">
@@ -24,32 +24,16 @@
 </p>
 
 > Formerly known as **ai-circus-framework**. **🚧 Work in progress** — a personal, evolving
-> open-source project: architecture, scenarios and UI are all still moving. Treat anything here as
-> a snapshot rather than a finished product.
+> open-source project: architecture, scenarios and UI are all still moving. New scenarios — and,
+> when one needs it, the generic module behind it — land continuously; the [Showcase](#showcase)
+> and the [Scenario catalog](#scenario-catalog) always list what exists. Treat anything here as a
+> snapshot rather than a finished product.
 
 A scalable, multi-tenant microservices platform for building and demoing data-science and GenAI
 **scenarios**. A scenario is product content, not code: one YAML file picks the data, the model,
 the chat and — optionally — a **custom dashboard tab** that tells the scenario's story. One
 service instance per kind serves every scenario of that kind, every request is checked against
 the caller's tenant, and every prediction comes with its *why*.
-
----
-
-<a id="whats-new"></a>
-
-## 🆕 What's new
-
-| | Scenario | The showpiece |
-|---|---|---|
-| 🏛️ | **[Emergency Social Aid — rules, a model and a person](docs/scenarios/prestaciones_sociales.md)** | *Mesa de valoración*: deterministic business rules → LightGBM → grant / manual review / deny trays, an official paper sheet lit by per-box SHAP, scanned-document intake (OCR + LLM) and an equity audit |
-| ⚖️ | **[AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md)** | GraphRAG over the EU AML Regulation — HippoRAG 2-style retrieval, and a graph that lights up the path behind every answer |
-| 💸 | **[Follow the Money](docs/scenarios/aml_money_trail.md)** | IBM AMLworld: a world map replaying every payment hour by hour, a network graph of holders and banks, a typology reveal |
-| 🕸️ | **[Enron: Follow the Network](docs/scenarios/enron_fraud_network.md)** | The real e-mail network of 1999-2002 with the Powers Report partnerships, an investigation workspace and a public-record reveal |
-| 🚚 | **[Dispatch Tower & Lifeline Globe](docs/scenarios/logistics.md)** | ETA isochrones and a carrier race with prediction intervals; a decade of HIV-medicine shipments on a rotating globe |
-| 🏦 | **Bank Distress Early Warning** | 8,196 real US banks on a supervisory watchlist map — then reveal who the regulator closed in 2009-10 |
-| 🧾 | **Sede Electrónica** | An official multi-model tax form the assistant fills from uploaded documents, printed as a PDF with a filing receipt |
-| 🔬 | **Screw & solar-cell inspection** | Two more computer-vision lines next to the PCB one — anomaly detection and EL grading with manual-review lanes |
-| 🎓 | **[Titanic](docs/scenarios/titanic.md) & [Toxic Leadership](docs/scenarios/toxic_leadership.md) tutorials** | The whole ML workflow (and NLP: TF-IDF vs. transformers) taught chapter by chapter on live data |
 
 ---
 
@@ -92,23 +76,6 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 </tr>
 </table>
 
-### 🏛️ Public sector
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<a href="docs/scenarios/prestaciones_sociales.md"><img src="docs/screenshots/prestaciones_sociales/circuit.png" alt="Mesa de valoración circuit: applications flow through business rules and the model into grant, manual review and deny trays"></a>
-<b>🏛️ Mesa de valoración</b> · <code>case_desk</code><br>
-<sub>Emergency Social Aid — 600 applications through rules → model → trays with live thresholds; open one on its official paper sheet with per-box SHAP heat, or drop in a scanned form.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="docs/screenshots/custom_tabs/official-form.webp" alt="Sede Electrónica: the assistant read a census certificate and filled 15 numbered boxes of the change-of-address model">
-<b>🧾 Official form sheet</b> · <code>form.sections</code><br>
-<sub>Sede Electrónica — a family of official models with numbered boxes; the assistant picks the model, reads an uploaded certificate, fills every box it can and says where each value came from.</sub>
-</td>
-</tr>
-</table>
-
 ### 🚚 Logistics
 
 <table>
@@ -136,9 +103,9 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 <sub>Titanic — all 891 passengers back aboard, coloured by a ROC AUC 0.885 model; reveal who survived, find the model's surprises, explain anyone and ask "what if?". Plus an 11-chapter tutorial.</sub>
 </td>
 <td width="50%" valign="top">
-<a href="docs/scenarios/toxic_leadership.md"><img src="docs/screenshots/toxic_leadership/office-model.png" alt="The Office tab: every engineer's review a desk in an illustrated office tower, coloured by probability of bad leadership"></a>
+<a href="docs/scenarios/toxic_leadership.md"><img src="docs/screenshots/toxic_leadership/office-model.png" alt="The Office tab: every engineer's review a desk in an illustrated office tower, coloured by probability of toxic management"></a>
 <b>🏢 The Office</b> · <code>voyage_explorer</code> (<code>office_tower</code>)<br>
-<sub>Toxic Leadership — 4,000 engineers' reviews as desks in a tower; word-level SHAP, TF-IDF vs. a sentence-transformer challenger, and an LLM Leadership check. Plus a 13-chapter NLP tutorial.</sub>
+<sub>Toxic Management & Work Environment — the few who offload their job onto engineers, overload them and spread falsehoods, read in 4,000 engineers' reviews: word-level SHAP, TF-IDF vs. a sentence-transformer, an LLM Leadership check. Plus a 13-chapter NLP tutorial.</sub>
 </td>
 </tr>
 </table>
@@ -201,6 +168,23 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 </tr>
 </table>
 
+### 🏛️ Public sector
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/prestaciones_sociales.md"><img src="docs/screenshots/prestaciones_sociales/circuit.png" alt="Mesa de valoración circuit: applications flow through business rules and the model into grant, manual review and deny trays"></a>
+<b>🏛️ Mesa de valoración</b> · <code>case_desk</code><br>
+<sub>Emergency Social Aid — public money for those who really need it: the same rules and model for every application, so a grant rests on the file, not on who is asking — against fraud and favours to acquaintances. Rules → model → trays with live thresholds, an official sheet with per-box SHAP heat, scanned-form intake.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/official-form.webp" alt="Sede Electrónica: the assistant read a census certificate and filled 15 numbered boxes of the change-of-address model">
+<b>🧾 Official form sheet</b> · <code>form.sections</code><br>
+<sub>Sede Electrónica — a family of official models with numbered boxes; the assistant picks the model, reads an uploaded certificate, fills every box it can and says where each value came from.</sub>
+</td>
+</tr>
+</table>
+
 <sub>Demonstrations on public or synthetic data — not medical devices, not supervisory, legal or
 benefits decisions. Each scenario's chapter and <code>scenario.yaml</code> state its sources and limits.</sub>
 
@@ -208,7 +192,7 @@ benefits decisions. Each scenario's chapter and <code>scenario.yaml</code> state
 
 ## Table of contents
 
-- [What's new](#whats-new) · [Showcase — every custom dashboard](#showcase)
+- [Showcase — every custom dashboard](#showcase)
 - [Tour of the platform](#tour-of-the-platform)
 - [Scenario catalog](#scenario-catalog)
 - [Getting started](#getting-started)
@@ -239,12 +223,13 @@ Every scenario a tenant is entitled to, rendered generically from `scenarios/*/s
 no per-scenario UI code — grouped by kind (**Machine Learning**, **Deep Learning**,
 **Conversational Assistant**, **Assisted Forms**) with a **Domain** filter — the industries,
 plus the learning/society domains **Tutorials** and **Society & Ethics**. Cards show their task
-type (classification/regression, NLP/computer vision) and a chip for tutorial scenarios; the
-full catalog is in the [table below](#scenario-catalog).
+type (classification/regression, NLP/computer vision) and a chip for tutorial scenarios; within
+each kind, the public-sector scenarios come last. The full catalog is in the
+[table below](#scenario-catalog).
 
 <p align="center"><img src="docs/screenshots/scenario-gallery.png" alt="Scenario gallery — every scenario of every kind the admin tenant is entitled to" width="850"></p>
 
-### Tutorials — Titanic and Toxic Leadership
+### Tutorials — Titanic and Toxic Management
 
 A **tutorial** scenario teaches the ML workflow on a classic dataset. `titanic` opens on an
 11-chapter **Tutorial** tab (framing, cleaning, feature engineering, exploration,
@@ -267,17 +252,22 @@ probability explained as a SHAP waterfall, with a live what-if editor. Full walk
   <img src="docs/screenshots/titanic/tutorial-evaluate.png" alt="Tutorial chapter 7: hold-out ROC curve and confusion matrix" width="49%">
 </p>
 
-`toxic_leadership` is the **NLP** tutorial: free text plus structured data. Its 13 chapters cover
-anonymisation, the halo effect, TF-IDF, gradient boosting on words and ratings together, the
-vocabulary of toxic leadership, and bag of words vs transformers (TF-IDF, MiniLM, MPNet and
-voyage-4-nano, measured). **The Office** tab seats every review in an office tower; click one to
-read it with the words the model weighed highlighted, and compare the deployed TF-IDF model with
-the sentence-transformer challenger. The **Leadership check** reads a description of behaviour
-(never a named person) against Project Oxygen's great-manager behaviours and the Toxic
-Leadership Scale. Full walkthrough: [docs/scenarios/toxic_leadership.md](docs/scenarios/toxic_leadership.md).
+`toxic_leadership` is the **NLP** tutorial, about toxic management and the work environment it
+creates. In most companies it takes very few people — managers, salespeople, self-styled "AI
+experts" with an inflated CV — to embitter a technical team: they offload their own job onto the
+engineers, overload them and spread falsehoods about them. Engineers say so in what they write,
+and senior engineers and tech leads have a responsibility to recognise the pattern and report it
+with evidence. Its 13 chapters cover anonymisation, the halo effect, TF-IDF, gradient boosting on
+words and ratings together, the vocabulary of toxic management, bag of words vs transformers
+(TF-IDF, MiniLM, MPNet and voyage-4-nano, measured) and how to speak up responsibly. **The
+Office** tab seats every review in an office tower; click one to read it with the words the
+model weighed highlighted, and compare the deployed TF-IDF model with the sentence-transformer
+challenger. The **Leadership check** reads a description of behaviour (never a named person)
+against Project Oxygen's great-manager behaviours, the Toxic Leadership Scale and the patterns
+engineers report most — offloading, overloading, credential inflation, spreading falsehoods. Full walkthrough: [docs/scenarios/toxic_leadership.md](docs/scenarios/toxic_leadership.md).
 
 <p align="center">
-  <img src="docs/screenshots/toxic_leadership/office-review.png" alt="One review explained: 97% bad leadership, with 'away', 'management', 'no direction' and 'meetings' highlighted, and both models side by side" width="36%">
+  <img src="docs/screenshots/toxic_leadership/office-review.png" alt="One review explained: 97% toxic management, with 'away', 'management', 'no direction' and 'meetings' highlighted, and both models side by side" width="36%">
   <img src="docs/screenshots/toxic_leadership/leadership-check.png" alt="Leadership check: an LLM coach rates a described behaviour against the rubric, quoting the text as evidence" width="62%">
 </p>
 
@@ -442,14 +432,14 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
 | **[Titanic Survival — ML Tutorial](docs/scenarios/titanic.md)** (`titanic`) | `tabular_ml` — classification, domain `tutorial` | Passenger survival probability — a guided **Tutorial** tab (every step of the ML workflow, live charts/metrics/SHAP) and a **Voyage** tab (all 891 passengers aboard an illustrated ship, filterable, SHAP-explained, what-if) · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.88 | Kaggle — Titanic (via angelmtenor/data-science-keras) |
-| **[Toxic Leadership — NLP + ML Tutorial](docs/scenarios/toxic_leadership.md)** (`toxic_leadership`) | `tabular_ml` — classification with free text, domain `tutorial` | Whether an engineer rated senior management 1–2★, from their review text + job context — a 13-chapter **Tutorial**, **The Office** tab (4,000 reviews in an office tower, word-level SHAP, TF-IDF vs sentence-transformer challenger) and an LLM **Leadership check** · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.87, hold-out 0.886 | Kaggle — Glassdoor Job Reviews (CC BY-SA 4.0) |
+| **[Toxic Management & Work Environment — NLP + ML Tutorial](docs/scenarios/toxic_leadership.md)** (`toxic_leadership`) | `tabular_ml` — classification with free text, domain `tutorial` | Whether an engineer rated senior management 1–2★, from their review text + job context — the vocabulary of the few who offload their job onto engineers, overload them and spread falsehoods — a 13-chapter **Tutorial**, **The Office** tab (4,000 reviews in an office tower, word-level SHAP, TF-IDF vs sentence-transformer challenger) and an LLM **Leadership check** · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.87, hold-out 0.886 | Kaggle — Glassdoor Job Reviews (CC BY-SA 4.0) |
 | **[Global Health Shipments · Late Delivery Risk](docs/scenarios/logistics.md#global-health-shipments--the-lifeline-globe)** (`global_health_shipments`) | `tabular_ml` — classification, domain `logistics` | Whether a line item of HIV/AIDS medicines or test kits reaches the country after its scheduled date, seen when it is planned — a **Lifeline Globe** tab: 9,949 real shipments (2006-2015) as arcs on a rotating globe, replayed month by month, a split-flap departures board riskiest-first, SHAP + a live one-change re-plan (mode, route, lead time) and an honest out-of-fold backtest reveal · LightGBM, 5-fold CV ROC AUC ≈ 0.90, hold-out 0.92 | USAID SCMS delivery history (US public domain) |
 | **AI Open Framework Reference Guide** (`ai_circus_reference`) | `conversational_rag` | N/A — agentic Q&A over this project's own dev/ML/GenAI reference notes | Original content |
 | **Public Service Request Portal** (`service_request`) | `assisted_form` | N/A — the assistant fills out and classifies a service-request form live, from conversation | Original content |
 | **Sede Electrónica — Official Tax Forms** (`sede_electronica`) | `assisted_form` — official multi-model layout, domain `public_sector` | N/A — a Spanish-style electronic office (fictional issuer): a general request form + 4 specific models (change of tax address, instalments, refund of undue payments, family situation for withholding); the assistant picks the model, reads uploaded documents, fills the numbered boxes, checks DNI/IBAN and files it with a PDF receipt | Original content (fictional issuer and documents) |
 | **Bank Distress Early Warning** (`bank_early_warning`) | `tabular_ml` — classification, domain `public_sector` | Whether a US bank is closed by the regulator within 24 months, from its 31 Dec 2008 call report (CAMELS ratios) — a **Watchlist** tab: every bank scored into supervisory tiers on a US map and a risk landscape, pillar-level SHAP, a backtest reveal · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.97, hold-out 0.94 | FDIC BankFind Suite (US public domain) |
-| **[Emergency Social Aid — rules, a model and a person](docs/scenarios/prestaciones_sociales.md)** (`prestaciones_sociales`) | `tabular_ml` — classification + business rules + a decision policy, free text in Spanish, domain `public_sector` | Whether a (synthetic) municipal emergency-aid application deserves a grant, after deterministic rules stop what is incomplete — a **Mesa de valoración** tab: rules → model → grant / manual review / deny trays with live thresholds, an official paper sheet lit by per-box SHAP, scanned-document intake (OCR + LLM), an equity audit · small-data LightGBM + TF-IDF, hold-out ROC AUC 0.89, with a voyage-4-nano challenger | Synthetic, fictional entity |
 | **[Enron: Follow the Network](docs/scenarios/enron_fraud_network.md)** (`enron_fraud_network`) | `tabular_ml` — classification + network, domain `public_sector` | How closely an Enron insider's pay and e-mail-network profile resembles the 18 persons of interest — a **Network** tab: the real e-mail network (1999-2002) with the Powers Report partnerships as entities, out-of-fold scores, SHAP dossier, path tracing, communities, a month-by-month replay and a public-record reveal · small-data LightGBM, 5-fold CV ROC AUC ≈ 0.83, out-of-fold 0.81 | Enron insider-pay schedule (ud120) · FERC/CMU e-mail corpus · Powers Report (2002) |
+| **[Emergency Social Aid — rules, a model and a person](docs/scenarios/prestaciones_sociales.md)** (`prestaciones_sociales`) | `tabular_ml` — classification + business rules + a decision policy, free text in Spanish, domain `public_sector` | Whether a (synthetic) municipal emergency-aid application deserves a grant, after deterministic rules stop what is incomplete — the same rules and model for everyone, against fraud (undeclared income, repeated claims, aid for what the household can afford) and favouritism (aid approved by hand for acquaintances) — a **Mesa de valoración** tab: rules → model → grant / manual review / deny trays with live thresholds, an official paper sheet lit by per-box SHAP, scanned-document intake (OCR + LLM), an equity audit · small-data LightGBM + TF-IDF, hold-out ROC AUC 0.89, with a voyage-4-nano challenger | Synthetic, fictional entity |
 | **[Follow the Money](docs/scenarios/aml_money_trail.md)** (`aml_money_trail`) | `tabular_ml` — classification + a bank-consortium network, domain `banking_finance` | Which account holders — people and companies — behave like the ones a money-laundering scheme runs through, from ten days of payments at 13 banks in 13 countries — a **Money Trail** tab with two views — a world map replaying every payment hour by hour (shape = payment format), a ledger, a watchlist, a SHAP dossier per holder, and a force-directed **network graph** of holders and banks like Enron's — and a reveal of the eight laundering typologies and how many of each the model flags · LightGBM, 5-fold CV ROC AUC ≈ 0.83, out-of-fold 0.84 (≈ 0.81 without the ACH-heavy format mix) | IBM AMLworld HI-Small (synthetic, CDLA-Sharing-1.0) — Altman et al., NeurIPS 2023 |
 | **[AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md)** (`aml_regulation_kg`) | `conversational_rag` + a knowledge graph (GraphRAG), domain `banking_finance` | N/A — agentic Q&A over 18 articles of the EU Anti-Money Laundering Regulation through a knowledge graph of obliged entities, obligations, triggers, authorities, records and limits (135 nodes, 144 relations, each citing its article with a verbatim quote); HippoRAG 2-style retrieval (seed linking + Personalized PageRank) and a panel that lights up the subgraph behind each answer | Regulation (EU) 2024/1624 (AMLR), EUR-Lex — © European Union, reuse authorised |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
@@ -470,7 +460,7 @@ its generator script lives at `scripts/generate_<slug>.py`.
 `{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
 and `form-agent` does the same for every `assisted_form` scenario.
 
-**18 scenarios carry an opt-in showpiece tab** (`ui_extras` in `scenario.yaml`) — see them all in
+**Most scenarios carry an opt-in showpiece tab** (`ui_extras` in `scenario.yaml`) — see them all in
 the [Showcase](#showcase). Each `kind` is a generic renderer, so any scenario of the right shape can
 reuse it with a few lines of YAML and no UI code:
 
