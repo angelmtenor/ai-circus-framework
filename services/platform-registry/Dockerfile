@@ -23,6 +23,11 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \
 
 # ── Runtime stage ───────────────────────────────────────────────────────────────
 FROM python:3.14-slim AS runtime
+# Pull the Debian security fixes published since the base image was built, and drop the
+# base image's own pip: nothing installs at runtime, and its vendored urllib3/msgpack are
+# what CI's Trivy scan (HIGH/CRITICAL, fixed-only) flags.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall -y --root-user-action=ignore pip
 WORKDIR /app
 
 # tesseract-ocr + poppler-utils back document_extraction.py's OCR fallback for
