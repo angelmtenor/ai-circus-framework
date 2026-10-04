@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -44,7 +44,7 @@ class FakeMlflow(types.ModuleType):
         self.experiment = name
 
     @contextmanager
-    def start_run(self, **kwargs: Any) -> Iterator[None]:
+    def start_run(self, **kwargs: Any) -> Generator[None]:
         """Record the run's kwargs (run_name/tags) and yield like the real context manager."""
         self.runs.append(kwargs)
         yield

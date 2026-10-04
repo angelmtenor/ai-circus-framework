@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -43,7 +43,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Resolve SCENARIOS to their definitions, build the shared embedder, connect Qdrant/SeaweedFS/llm-gateway."""
     config = get_env_config()
     definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="assisted_form")

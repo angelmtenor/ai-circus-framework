@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Initialize the document-store database, cache connection, and Kafka
     producer on startup. The producer connects lazily — this succeeds
     immediately whether or not the optional Data Platform profile is actually
