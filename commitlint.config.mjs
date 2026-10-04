@@ -5,6 +5,9 @@
 // setup/release/clean instead) — see styleguide.md "Type" section.
 export default {
   extends: ["@commitlint/config-conventional"],
+  // Dependabot writes `build(deps)`/`chore(deps)` headers and table-sized bodies; its
+  // commits are signed off by the bot, so skip them rather than fail every bump PR.
+  ignores: [(message) => message.includes("Signed-off-by: dependabot[bot]")],
   rules: {
     "type-enum": [
       2,

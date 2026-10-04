@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -66,7 +66,7 @@ async def _prewarm_models(state: Any) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Kick off model pre-warming in the background: `/healthz` (liveness) answers at once,
     so a slow first model download is never liveness-killed, while `/readyz` holds traffic
     back until warming is done.
