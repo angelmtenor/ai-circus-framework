@@ -51,3 +51,4 @@ build/
 
 # Local demo/video assets (screenshots + narration script)
 demo/
+/demo.zip

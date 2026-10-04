@@ -1,48 +1,214 @@
-# AI Open Framework
-
-> Formerly known as **ai-circus-framework**.
-
-> **🚧 Work in progress.** This is a personal, evolving open-source project — architecture,
-> scenarios, and UI are all still moving. Expect rough edges, and treat anything here as a
-> snapshot rather than a finished product.
-
-A scalable, multi-tenant microservices platform for building and demoing data-science and
-GenAI **scenarios** (tabular ML dashboards, agentic RAG chatbots, assisted-form intake flows,
-...) behind a real login.
+<h1 align="center">🎪 AI Open Framework</h1>
 
 <p align="center">
-  <img src="docs/screenshots/scenarios.png" alt="AI Open Framework scenario gallery" width="850">
+  <b>Turn a dataset and a YAML file into a live, explained, multi-tenant AI product demo.</b><br>
+  Tabular ML · deep learning · agentic RAG & GraphRAG · assisted forms · voice — behind a real login, on Kubernetes.
 </p>
-
-### ✨ Featured scenario — 🚢 [Titanic Survival: an explained ML tutorial](docs/scenarios/titanic.md)
-
-All 891 passengers back aboard an illustrated RMS Titanic, each coloured by a cross-validated
-**ROC AUC 0.885** model. Reveal who really survived, filter any cohort, click a passenger to see
-*why* the model gave them their chance, and ask "what if?". Alongside it, an 11-chapter
-tutorial walks the whole ML workflow on live data. **[Read the scenario chapter →](docs/scenarios/titanic.md)**
 
 <p align="center">
-  <a href="docs/scenarios/titanic.md"><img src="docs/screenshots/titanic/voyage-model.png" alt="Titanic Voyage tab: all 891 passengers aboard an illustrated cutaway of the ship at night, coloured by the model's survival probability" width="850"></a>
+  <img alt="k3s" src="https://img.shields.io/badge/runs%20on-k3s%20%2F%20k3d-FFC61C?logo=k3s&logoColor=black">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=black">
+  <img alt="LiteLLM" src="https://img.shields.io/badge/LLMs-any%20provider%20via%20LiteLLM-7C3AED">
+  <img alt="AG-UI" src="https://img.shields.io/badge/chat-AG--UI%20%2B%20CopilotKit-0EA5E9">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-22C55E">
 </p>
-
-### ✨ New — 🚩 [Toxic Leadership: an NLP + ML tutorial](docs/scenarios/toxic_leadership.md)
-
-"People don't leave companies, they leave managers." 4,000 real reviews by software, data and AI
-engineers, read by a LightGBM model that combines the **words** (TF-IDF, explained word by word)
-with the facts of the job, then raced against a modern **sentence-transformer**. Every review is
-a desk in an illustrated office tower (the C-suite penthouse's lights are on; nobody is at
-their desk), and a **Leadership check** asks an LLM to read any description of a leader's
-behaviour against a research-based rubric. **[Read the scenario chapter →](docs/scenarios/toxic_leadership.md)**
 
 <p align="center">
-  <a href="docs/scenarios/toxic_leadership.md"><img src="docs/screenshots/toxic_leadership/office-model.png" alt="The Office tab: every engineer's review a desk in an illustrated office tower at night, coloured by the model's probability of bad leadership" width="850"></a>
+  <b>29 scenarios</b> · <b>4 kinds</b> · <b>18 with a showpiece dashboard</b> · every one of them just a <code>scenario.yaml</code>
 </p>
+
+<p align="center">
+  <a href="docs/scenarios/aml_money_trail.md"><img src="docs/screenshots/aml_money_trail/money-trail-overview.webp" alt="Follow the Money: ten days of payments at 13 banks replayed hour by hour on a world map, every account holder scored by the model" width="900"></a>
+  <br><sub><i>Follow the Money — ten days of payments at 13 banks, replayed hour by hour; every holder scored and explained.</i></sub>
+</p>
+
+> Formerly known as **ai-circus-framework**. **🚧 Work in progress** — a personal, evolving
+> open-source project: architecture, scenarios and UI are all still moving. Treat anything here as
+> a snapshot rather than a finished product.
+
+A scalable, multi-tenant microservices platform for building and demoing data-science and GenAI
+**scenarios**. A scenario is product content, not code: one YAML file picks the data, the model,
+the chat and — optionally — a **custom dashboard tab** that tells the scenario's story. One
+service instance per kind serves every scenario of that kind, every request is checked against
+the caller's tenant, and every prediction comes with its *why*.
+
+---
+
+<a id="whats-new"></a>
+
+## 🆕 What's new
+
+| | Scenario | The showpiece |
+|---|---|---|
+| 🏛️ | **[Emergency Social Aid — rules, a model and a person](docs/scenarios/prestaciones_sociales.md)** | *Mesa de valoración*: deterministic business rules → LightGBM → grant / manual review / deny trays, an official paper sheet lit by per-box SHAP, scanned-document intake (OCR + LLM) and an equity audit |
+| ⚖️ | **[AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md)** | GraphRAG over the EU AML Regulation — HippoRAG 2-style retrieval, and a graph that lights up the path behind every answer |
+| 💸 | **[Follow the Money](docs/scenarios/aml_money_trail.md)** | IBM AMLworld: a world map replaying every payment hour by hour, a network graph of holders and banks, a typology reveal |
+| 🕸️ | **[Enron: Follow the Network](docs/scenarios/enron_fraud_network.md)** | The real e-mail network of 1999-2002 with the Powers Report partnerships, an investigation workspace and a public-record reveal |
+| 🚚 | **[Dispatch Tower & Lifeline Globe](docs/scenarios/logistics.md)** | ETA isochrones and a carrier race with prediction intervals; a decade of HIV-medicine shipments on a rotating globe |
+| 🏦 | **Bank Distress Early Warning** | 8,196 real US banks on a supervisory watchlist map — then reveal who the regulator closed in 2009-10 |
+| 🧾 | **Sede Electrónica** | An official multi-model tax form the assistant fills from uploaded documents, printed as a PDF with a filing receipt |
+| 🔬 | **Screw & solar-cell inspection** | Two more computer-vision lines next to the PCB one — anomaly detection and EL grading with manual-review lanes |
+| 🎓 | **[Titanic](docs/scenarios/titanic.md) & [Toxic Leadership](docs/scenarios/toxic_leadership.md) tutorials** | The whole ML workflow (and NLP: TF-IDF vs. transformers) taught chapter by chapter on live data |
+
+---
+
+<a id="showcase"></a>
+
+## 🖼️ Showcase — a custom dashboard for every story
+
+Every scenario gets the generic tabs (Scenario · Data & BI · ML Predictions · ML Insights, or
+their deep-learning equivalents) **plus, optionally, a showpiece tab** picked with `ui_extras` in
+its `scenario.yaml`. Each tab is a generic renderer — a new scenario reuses any of them with no UI
+code — and each one is backed by the *real* deployed model: live `/predict` calls, SHAP, and
+honest out-of-fold scores wherever the tab reveals real outcomes.
+
+### 🔎 Investigations & finance
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/aml_money_trail.md"><img src="docs/screenshots/aml_money_trail/money-trail-graph.webp" alt="Money Trail network graph view: holders and banks as a force-directed network"></a>
+<b>💸 Money Trail</b> · <code>money_trail</code><br>
+<sub>Follow the Money — the same consortium as a force-directed network of holders and banks; replay the payments, open a holder's SHAP dossier, then reveal the eight laundering typologies.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/enron_fraud_network.md"><img src="docs/screenshots/enron_fraud_network/network-overview.webp" alt="Enron Network tab: the e-mail network with persons of interest glowing"></a>
+<b>🕸️ Network</b> · <code>network_explorer</code><br>
+<sub>Enron: Follow the Network — the real e-mail network and the Powers Report partnerships; path tracing, communities, a month-by-month replay and a person-centred <i>Investigate</i> workspace.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/watchlist.webp" alt="Bank Distress Early Warning watchlist: every US bank on a map coloured by failure probability, supervisory tiers and a ranked list">
+<b>🏦 Watchlist</b> · <code>risk_watchlist</code><br>
+<sub>Bank Distress Early Warning — 8,196 banks from their 2008 call reports in supervisory tiers, on a US map and a risk landscape; pillar-level SHAP, then reveal who actually failed.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/aml_regulation_kg.md"><img src="docs/screenshots/custom_tabs/knowledge-graph.webp" alt="AML Rulebook Knowledge Graph: a cited answer next to the regulation's knowledge graph with the walked subgraph highlighted"></a>
+<b>⚖️ Knowledge graph</b> · <code>knowledge_graph</code><br>
+<sub>AML Rulebook — GraphRAG over 18 articles of the EU AMLR: seed concepts + Personalized PageRank, every relation citing its article verbatim; the subgraph behind each answer lights up.</sub>
+</td>
+</tr>
+</table>
+
+### 🏛️ Public sector
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/prestaciones_sociales.md"><img src="docs/screenshots/prestaciones_sociales/circuit.png" alt="Mesa de valoración circuit: applications flow through business rules and the model into grant, manual review and deny trays"></a>
+<b>🏛️ Mesa de valoración</b> · <code>case_desk</code><br>
+<sub>Emergency Social Aid — 600 applications through rules → model → trays with live thresholds; open one on its official paper sheet with per-box SHAP heat, or drop in a scanned form.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/official-form.webp" alt="Sede Electrónica: the assistant read a census certificate and filled 15 numbered boxes of the change-of-address model">
+<b>🧾 Official form sheet</b> · <code>form.sections</code><br>
+<sub>Sede Electrónica — a family of official models with numbered boxes; the assistant picks the model, reads an uploaded certificate, fills every box it can and says where each value came from.</sub>
+</td>
+</tr>
+</table>
+
+### 🚚 Logistics
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/logistics.md#supply-chain-shipping-eta--the-dispatch-tower"><img src="docs/screenshots/logistics/dispatch-stage.webp" alt="Dispatch Tower: hubs with shipments in flight and an ETA isochrone landscape"></a>
+<b>📡 Dispatch Tower</b> · <code>dispatch_tower</code><br>
+<sub>Supply Chain ETA — 8 hubs with shipments in flight, each hub's ETA landscape drawn as isochrones, and a race of every carrier × priority with 90% prediction intervals.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/logistics.md#global-health-shipments--the-lifeline-globe"><img src="docs/screenshots/logistics/globe-overview.webp" alt="Lifeline Globe: a decade of HIV medicine shipments as arcs on a rotating globe, with a departures board"></a>
+<b>🌍 Lifeline Globe</b> · <code>shipment_globe</code><br>
+<sub>Global Health Shipments — 9,949 real deliveries of HIV/AIDS medicines replayed month by month, a split-flap departures board riskiest-first and a live one-change re-plan.</sub>
+</td>
+</tr>
+</table>
+
+### 🎓 Tutorials
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/titanic.md"><img src="docs/screenshots/titanic/voyage-model.png" alt="Titanic Voyage tab: all 891 passengers aboard an illustrated cutaway of the ship, coloured by survival probability"></a>
+<b>🚢 Voyage</b> · <code>voyage_explorer</code><br>
+<sub>Titanic — all 891 passengers back aboard, coloured by a ROC AUC 0.885 model; reveal who survived, find the model's surprises, explain anyone and ask "what if?". Plus an 11-chapter tutorial.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/toxic_leadership.md"><img src="docs/screenshots/toxic_leadership/office-model.png" alt="The Office tab: every engineer's review a desk in an illustrated office tower, coloured by probability of bad leadership"></a>
+<b>🏢 The Office</b> · <code>voyage_explorer</code> (<code>office_tower</code>)<br>
+<sub>Toxic Leadership — 4,000 engineers' reviews as desks in a tower; word-level SHAP, TF-IDF vs. a sentence-transformer challenger, and an LLM Leadership check. Plus a 13-chapter NLP tutorial.</sub>
+</td>
+</tr>
+</table>
+
+### 🏭 Industry & energy
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/live-plant.webp" alt="Live Plant: six presses scored every few seconds, some broken, some at risk">
+<b>🏭 Live Plant</b> · <code>live_plant</code><br>
+<sub>Predictive Maintenance — a simulated factory floor whose machines age every tick and are scored by the unmodified <code>/predict/mpm</code>; they break on their own predicted risk.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/optimizer-live-line.webp" alt="Optimizer live line: the auto-piloted line versus a static recipe, roughness over time and cumulative profit">
+<b>✨ Optimizer</b> · <code>process_optimizer</code><br>
+<sub>CNC Surface Finish — the <i>take-action</i> stage: an auto-piloted line re-optimizes the recipe as the tool wears, racing a static-recipe baseline on roughness and profit.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/optimizer-tradeoff.webp" alt="Optimizer quality vs throughput: every candidate recipe scored, in-spec ones green">
+<b>✨ Optimizer — every recipe scored</b><br>
+<sub>~200 candidate recipes scored by the real model and costed with a per-part economics model; the recommendation is the best in-spec point, explained with SHAP.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/regional-map.webp" alt="Regional Map: predicted electricity demand for all 50 Spanish provinces as bubbles on a map">
+<b>🗺️ Regional Map</b> · <code>region_map</code><br>
+<sub>Regional Electricity Demand (and Gas Prospects) — one shared context, batch-predicted for every region at once (Comunidad Autónoma or province here); click a bubble for its SHAP.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/inspection-line.webp" alt="PCB Inspection Line: boards routed to pass, reject and manual-inspection lanes by an anomaly detector">
+<b>🔬 Inspection Line</b> · <code>triage_board</code><br>
+<sub>PCB & Screw Visual Inspection — a DINOv2 + PatchCore anomaly detector trained on good parts only routes each part to pass / reject / manual inspection; drag the threshold, watch escapes.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/grading-line.webp" alt="Solar cell Grading Line: electroluminescence cells routed to stringer, scrap and manual review">
+<b>☀️ Grading Line</b> · <code>triage_board</code><br>
+<sub>Solar Cell EL Inspection — a fine-tuned ConvNeXt V2 grades electroluminescence images; expert labels include "possibly defective", so the manual lane earns its keep.</sub>
+</td>
+</tr>
+</table>
+
+### 🩺 Healthcare
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/triage-board.webp" alt="Triage Board: patient messages routed to urgent, primary care, dermatology, self-care and nurse review lanes">
+<b>🩺 Triage Board</b> · <code>triage_board</code><br>
+<sub>Patient Symptom Triage — a fine-tuned BioClinical ModernBERT routes patient messages to care lanes; anything under the confidence threshold goes to a nurse.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/custom_tabs/reading-room.webp" alt="Reading Room: an AI-prioritized worklist of chest X-rays with an occlusion heatmap and similar prior studies">
+<b>🫁 Reading Room</b> · <code>reading_room</code><br>
+<sub>Chest X-ray Pneumonia Screening — a simulated shift where AI prioritization cuts pneumonia time-to-report from 44 to 13 minutes; heatmaps and similar prior studies for every read.</sub>
+</td>
+</tr>
+</table>
+
+<sub>Demonstrations on public or synthetic data — not medical devices, not supervisory, legal or
+benefits decisions. Each scenario's chapter and <code>scenario.yaml</code> state its sources and limits.</sub>
 
 ---
 
 ## Table of contents
 
-- [Featured: Titanic tutorial](docs/scenarios/titanic.md) · [New: Toxic Leadership NLP tutorial](docs/scenarios/toxic_leadership.md)
+- [What's new](#whats-new) · [Showcase — every custom dashboard](#showcase)
 - [Tour of the platform](#tour-of-the-platform)
 - [Scenario catalog](#scenario-catalog)
 - [Getting started](#getting-started)
@@ -198,6 +364,12 @@ a question needs retrieval at all, grounded in the scenario's own reference docu
 
 <p align="center"><img src="docs/screenshots/rag-chat.png" alt="Conversational RAG chat" width="850"></p>
 
+A RAG scenario can also ship a **knowledge graph** (GraphRAG): the agent then searches concepts and
+cited relations instead of plain chunks, and the chat splits in two so the subgraph behind each
+answer lights up — see the [AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md).
+
+<p align="center"><img src="docs/screenshots/custom_tabs/knowledge-graph.webp" alt="AML Rulebook Knowledge Graph — a cited answer next to the regulation's knowledge graph, the walked subgraph highlighted" width="850"></p>
+
 Inside any `tabular_ml` scenario, that same assistant is also wired to the live model via
 **AG-UI** (CopilotKit) generative UI: it can call the real `prediction` API on your behalf and
 render the result as an actual chart or sortable table in the chat — not markdown pasted into
@@ -242,6 +414,9 @@ number, verification code, QR and barcode).
 
 <p align="center">
   <img src="docs/screenshots/assisted-form.png" alt="Assisted form workspace — the assistant fills in the Public Service Request Portal form live from conversation" width="850">
+</p>
+<p align="center">
+  <img src="docs/screenshots/custom_tabs/official-form.webp" alt="Sede Electrónica — the assistant read a census certificate, picked model DC-30 and filled 15 numbered boxes, citing the document" width="850">
 </p>
 
 ---
@@ -295,22 +470,25 @@ its generator script lives at `scripts/generate_<slug>.py`.
 `{scenario_slug}` path segment; `rag-agent` does the same for every `conversational_rag` scenario,
 and `form-agent` does the same for every `assisted_form` scenario.
 
-**Three scenarios carry an opt-in 5th workspace tab** (`ui_extras` in `scenario.yaml`, still no
-per-scenario UI code — see below): `luznova_regional_demand`'s "Regional Map" tab batch-predicts
-all 17 Comunidades Autónomas at once and plots them on a Spain bubble map; `mpm`'s "Live Plant" tab
-simulates a fictional factory floor of machines ticking every few seconds, each scored by the same
-unmodified `/predict/mpm`, with a client-side-only "Shut down" demo control; `cnc_surface_finish`'s
-"Optimizer" tab is the *take-action* stage after prediction — it searches the controllable cutting
-parameters (~200 candidate recipes scored by the unmodified `/predict/cnc_surface_finish`, two
-rounds), costs each with a fictional per-part economics model declared in the YAML (machine rate,
-rework cost, Taylor tool life), recommends the recipe that maximizes profit rate while the
-predicted Ra stays inside a selectable ISO 1302 grade, and lets you apply it — or run a simulated
-live line where the tool wears with real cutting time and an auto-pilot re-optimizes or changes the
-tool as the model's own predicted roughness drifts, side by side with a static-recipe baseline.
-`titanic`'s "Voyage" tab (`voyage_explorer`) berths every real passenger on an illustrated ocean
-liner, coloured by the model's survival probability, with a bow-to-stern "reveal the real fate"
-sweep, cohort filters, name search, a SHAP waterfall per passenger and a live what-if builder.
-The same engine draws `toxic_leadership`'s office tower (`scene: office_tower`).
+**18 scenarios carry an opt-in showpiece tab** (`ui_extras` in `scenario.yaml`) — see them all in
+the [Showcase](#showcase). Each `kind` is a generic renderer, so any scenario of the right shape can
+reuse it with a few lines of YAML and no UI code:
+
+| `ui_extras.kind` | Tab | Used by | What it does |
+|---|---|---|---|
+| `region_map` | Regional Map | `luznova_regional_demand`, `luznova_gas_prospects` | One shared context batch-predicted for every area of a level (Comunidad / Provincia, Municipio / census area), bubbles on a Spain map, SHAP per bubble |
+| `live_plant` | Live Plant | `mpm` | A simulated floor of machines that age every tick, scored by the unmodified `/predict/{slug}`; client-side-only Shut down / Replace |
+| `process_optimizer` | Optimizer | `cnc_surface_finish` | The *take-action* stage: ~200 candidate recipes scored and costed with a per-part economics model from the YAML, the best in-spec one recommended — then a live line where an auto-pilot re-optimizes as the tool wears, against a static baseline |
+| `voyage_explorer` | Voyage / The Office | `titanic` (`scene: ocean_liner`), `toxic_leadership` (`scene: office_tower`) | Every row placed in an illustrated scene, coloured by the model; reveal, surprises, cohort filters, SHAP waterfall, live what-if |
+| `risk_watchlist` | Watchlist | `bank_early_warning` | Every entity in risk tiers on a map and a risk landscape, pillar-level SHAP, a backtest reveal |
+| `network_explorer` | Network | `enron_fraud_network` | The scenario's `dataset.graph` drawn with d3-force: out-of-fold scores, dossier, paths, communities, replay, an *Investigate* workspace |
+| `money_trail` | Money Trail | `aml_money_trail` | Hourly payment flows on a world map plus a network view, ledger, watchlist and typology reveal |
+| `dispatch_tower` | Dispatch Tower | `supply_chain` | Hubs, an ETA isochrone landscape, a carrier × priority race with prediction intervals |
+| `shipment_globe` | Lifeline Globe | `global_health_shipments` | Shipments as arcs on a rotating globe, month-by-month replay, a departures board, a one-change re-plan |
+| `case_desk` | Mesa de valoración | `prestaciones_sociales` | Rules → model → trays with live thresholds, an official sheet with per-box SHAP, scanned-document intake, an equity panel |
+| `knowledge_graph` | (split RAG view) | `aml_regulation_kg` | The regulation's knowledge graph beside the chat, lighting up the subgraph each answer walked |
+| `triage_board` | Triage Board / Inspection Line / Grading Line | `symptom_triage`, `pcb_visual_inspection`, `screw_visual_inspection`, `solar_cell_inspection` | Held-out cases replayed into confident lanes and a human-review lane, with a draggable confidence threshold and the automation-vs-safety trade-off |
+| `reading_room` | Reading Room | `chest_xray_pneumonia` | An AI-prioritized worklist vs. first-in-first-out on a simulated shift, heatmaps and similar prior studies |
 
 **A tabular feature can be free text** (`type: text`): TF-IDF runs inside the model pipeline, SHAP
 explains predictions word by word (`/predict` with `explain_text`), and a scenario can add a
@@ -772,8 +950,8 @@ run (`make dl-data` does only that).
   card and an in-cluster **Train** button under **Platform → Deep Learning**. For a GPU inside
   the k3d cluster see [k8s/README.md](k8s/README.md#deep-learning-optional-and-gpus).
 
-All three are demonstrations — the healthcare ones are not medical devices and not clinically
-validated; the inspection model is not validated for production use.
+All five are demonstrations — the healthcare ones are not medical devices and not clinically
+validated; the inspection models are not validated for production use.
 
 ### Data Platform (optional profile)
 
