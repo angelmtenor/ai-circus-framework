@@ -2,6 +2,16 @@
 
 > Domain: **Public sector** · Kind: `tabular_ml` (binary classification, free text + structured data, **business rules before the model**) · Scenario: [`scenarios/prestaciones_sociales/scenario.yaml`](../../scenarios/prestaciones_sociales/scenario.yaml) · UI in **Spanish**
 
+**Why.** Emergency social aid is public money for people who cannot cover the basics — and in Spain
+its manual assessment has two well-known failure modes. **Fraud**: undeclared income, the same aid
+claimed again for the same expense, money requested for something that isn't a basic need or that
+the household can perfectly well afford. **Favouritism**: staff approving aid by hand for people they
+know. This scenario puts every application through **the same rules and the same model**, and gives
+every proposal its reasons box by box — so a grant or a denial has to be justified by the file, not
+by who the applicant is, and departing from the proposal has to be argued in writing. The aid reaches
+the people who actually need it; nobody is accused of anything by an algorithm (the rules and the
+model only say what to check — a social worker checks it and decides).
+
 The (fictional) Ayuntamiento de Villaclara gives *Ayudas Económicas de Emergencia Social* — up to
 1,500 € for rent, utility bills, food, school supplies or medical expenses. Every application is a
 basic form: **numbers** (income, household, months in the census), **categories** (employment, housing,
@@ -44,6 +54,10 @@ asked: *which applications can wait for a person, which can't, and which boxes e
   Act (Annex III) and an administrative act must state its reasons (art. 35 of Ley 39/2015).
 - **Fairness by exclusion, and by audit.** Sex and nationality are never model inputs
   (`protected_features_excluded`); they are kept (`audit_columns`) only to report outcome rates per group.
+- **A model learns the past, including its favours.** Trained on real resolutions, a model would
+  reproduce any favouritism hidden in them. That is why the requirements live in explicit, auditable
+  rules rather than in the model, why the decision policy keeps the uncertain middle for a person, and
+  why the *real resolution* overlay and the equity panel exist: to look for exactly that drift.
 
 ## The Mesa de valoración tab
 
