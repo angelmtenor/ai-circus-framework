@@ -7,10 +7,51 @@
 # Behavioral note for the human operator: merging this turns on automatic PRs going
 # forward. Don't auto-merge the first round — review grouping/schedule behavior
 # manually before trusting it.
+#
+# Every entry targets `develop` (git-flow: nothing lands on `main` except a release or
+# hotfix merge). Dependabot's own `build(deps)`/`chore(deps)` commits fall outside
+# styleguide.md's type list, so commitlint.config.mjs skips bot-signed commits.
 version: 2
 updates:
   - package-ecosystem: "uv"
+    directory: "/services/agui-voice"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
     directory: "/services/assistant"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/services/data-platform-manager"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/services/dl-inference"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/services/dl-training"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -19,6 +60,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/etl-tabular"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -27,6 +69,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/etl-vectorize"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -35,6 +78,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/form-agent"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -43,6 +87,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/llm-gateway"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -51,6 +96,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/platform-registry"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -59,6 +105,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/prediction"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -67,6 +114,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/rag-agent"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -75,6 +123,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/services/training"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -83,6 +132,7 @@ updates:
 
   - package-ecosystem: "uv"
     directory: "/libs/shared"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
@@ -91,6 +141,7 @@ updates:
 
   - package-ecosystem: "npm"
     directory: "/ui-react"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
     groups:
