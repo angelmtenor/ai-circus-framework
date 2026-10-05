@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ai_circus_shared.scenario_schema import ChatConfig, ScenarioDefinition, TabularServices
 
-from assistant.core.chat import build_system_prompt
+from assistant.core.chat import build_system_prompt, document_tool_instructions, documents_only_instructions
 
 DEFINITION = ScenarioDefinition(
     slug="churn",
@@ -17,6 +17,27 @@ DEFINITION = ScenarioDefinition(
     chat=ChatConfig(context="A retail bank's customer churn model."),
     services=TabularServices(etl="etl-tabular", training="training", prediction="prediction", assistant="assistant"),
 )
+
+# The same scenario with a document search (`documents.tool`) — the shape of
+# prestaciones_sociales' regulations tool.
+DEFINITION_WITH_DOCUMENTS = ScenarioDefinition.model_validate({
+    **DEFINITION.model_dump(),
+    "documents": {
+        "bucket": "scenario-churn",
+        "raw_prefix": "normativa/",
+        "seed_prefix": "sample_docs",
+        "chunking": {"strategy": "recursive_character", "chunk_size": 900, "chunk_overlap": 120},
+        "embedding": {"model": "voyageai/voyage-4-nano"},
+        "tool": {
+            "name": "consultar_normativa",
+            "label": "Normativa",
+            "description": "Busca en la normativa aplicable a las ayudas: requisitos, plazos y procedimiento.",
+            "sample_questions": ["¿Cuáles son los requisitos?"],
+            "max_calls_per_run": 2,
+        },
+    },
+    "vector_store": {"backend": "qdrant", "collection_prefix": "normativa_demo", "top_k": 4},
+})
 
 METADATA = {
     "model_name": "random_forest",
@@ -110,3 +131,20 @@ def test_build_system_prompt_cites_red_and_green_flag_terms_for_text_features() 
     assert "'upper management' (+0.310)" in prompt
     assert "'supportive' (-0.200)" in prompt
     assert "free text" not in build_system_prompt(DEFINITION, METADATA)
+
+
+def test_build_system_prompt_adds_the_document_tool_only_when_the_scenario_has_one() -> None:
+    """A scenario with documents.tool is told when to search, how to cite and to tag each source."""
+    prompt = build_system_prompt(DEFINITION_WITH_DOCUMENTS, METADATA)
+
+    assert "consultar_normativa" in prompt
+    assert "**[Normativa]**" in prompt and "**[Modelo]**" in prompt
+    assert "<retrieved_document>" in prompt  # the indirect-prompt-injection guard
+    assert document_tool_instructions(DEFINITION) == ""
+    assert "consultar_normativa" not in build_system_prompt(DEFINITION, METADATA)
+
+
+def test_documents_only_instructions_switch_off_the_data_and_model() -> None:
+    text = documents_only_instructions(DEFINITION_WITH_DOCUMENTS)
+
+    assert "DOCUMENTS-ONLY MODE" in text and "consultar_normativa" in text

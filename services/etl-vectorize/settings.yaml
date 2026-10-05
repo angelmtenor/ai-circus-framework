@@ -5,10 +5,11 @@
 # Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
 #
 # etl-vectorize is a one-shot job (not a long-running server): for every
-# conversational_rag scenario in SCENARIOS (empty/unset = all), it loads the tenant's
-# documents from SeaweedFS (bootstrapping them from a tracked sample_docs/ folder on
-# first run), chunks + embeds them, and upserts the result into a per-tenant Qdrant
-# collection for rag-agent to query.
+# conversational_rag scenario in SCENARIOS (empty/unset = all) — plus the assisted_form
+# and tabular_ml ones that set `documents` — it loads the tenant's documents from
+# SeaweedFS (bootstrapping them from a tracked sample_docs/ folder on first run), chunks
+# + embeds them, and upserts the result into a per-tenant Qdrant collection for
+# rag-agent / form-agent / assistant to query.
 
 env_variables:
   - name: LOG_LEVEL
@@ -18,7 +19,7 @@ env_variables:
     secret: false
 
   - name: SCENARIOS
-    description: "Comma-separated conversational_rag scenario slugs this run processes; empty/unset = every scenario"
+    description: "Comma-separated document-backed scenario slugs this run processes; empty/unset = every scenario"
     type: string
     mandatory: true
     secret: false
@@ -117,7 +118,7 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "admin"
     OBJECT_STORE_ACCESS_KEY: "ai_circus"
-    # Empty = every conversational_rag scenario under SCENARIOS_DIR — see
+    # Empty = every document-backed scenario under SCENARIOS_DIR — see
     # etl-tabular/settings.yaml for the same default and its residual-limitation caveat.
     SCENARIOS: ""
 

@@ -91,7 +91,7 @@ spec:
               valueFrom: {secretKeyRef: {name: mlflow-secrets, key: POSTGRES_USER}}
             - name: POSTGRES_PASSWORD
               valueFrom: {secretKeyRef: {name: mlflow-secrets, key: POSTGRES_PASSWORD}}
-            - {name: MLFLOW_BACKEND_STORE_URI, value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/mlflow"}
+            - {name: MLFLOW_BACKEND_STORE_URI, value: "postgresql+psycopg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/mlflow"}
             - {name: MLFLOW_ARTIFACTS_DESTINATION, value: "s3://mlflow"}
             # MLflow >= 3 rejects any Host header outside localhost/private IPs (DNS-rebinding
             # guard) — allow the Traefik hostname, the in-cluster Service name and the

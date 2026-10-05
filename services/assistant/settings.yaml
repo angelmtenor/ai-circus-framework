@@ -110,6 +110,12 @@ env_variables:
     mandatory: true
     secret: false
 
+  - name: QDRANT_URL
+    description: "Qdrant endpoint URL — only searched for a scenario with a `documents.tool` (document search)"
+    type: string
+    mandatory: true
+    secret: false
+
   - name: PREDICTION_SERVICE_URL
     description: "Base URL of the prediction service's dataset/predict API (backs the chat agent's data tools)"
     type: string
@@ -170,6 +176,34 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: EMBEDDING_PROVIDER
+    description: "Embedding backend: 'local', 'gemini', or 'voyage' — MUST match etl-vectorize's setting"
+    type: string
+    mandatory: false
+    default: "local"
+    secret: false
+    validation:
+      regex: "^(local|gemini|voyage)$"
+      error_message: "EMBEDDING_PROVIDER must be one of: local, gemini, voyage"
+
+  - name: EMBEDDING_MODEL
+    description: "Model override for EMBEDDING_PROVIDER; unset = its default — MUST match etl-vectorize's setting"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOOGLE_API_KEY
+    description: "Google API key (only needed if EMBEDDING_PROVIDER=gemini)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: VOYAGE_API_KEY
+    description: "Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage)"
+    type: string
+    mandatory: false
+    secret: true
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file
@@ -211,6 +245,7 @@ environments:
     LLM_GATEWAY_URL: "http://localhost:4000"
     PLATFORM_REGISTRY_URL: "http://localhost:8010"
     PREDICTION_SERVICE_URL: "http://prediction.localhost"
+    QDRANT_URL: "http://localhost:6333"
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
@@ -220,6 +255,7 @@ environments:
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
     PREDICTION_SERVICE_URL: "http://prediction:8000"
+    QDRANT_URL: "http://qdrant:6333"
 
   staging: {}
     # Staging environment profile — overrides go here

@@ -1,5 +1,5 @@
 """
-- Title:    Backend tools giving the chat agent real data/prediction access
+- Title:    Backend tools giving the chat agent real data/prediction/document access
 - Author:   Angel Martinez-Tenor
 
 Three LangChain tools built fresh per request (same per-request-construction shape as
@@ -9,6 +9,10 @@ entitlement-checked exactly like it would be if `ui-react` called `prediction` d
 — see core/prediction_client.py. Complements, not replaces, the frontend's
 `render_chart`/`render_table` generative-UI tools (ui-react/src/chatGenerativeUi.tsx):
 these fetch real numbers, the frontend tools render them.
+
+A scenario with `documents.tool` (e.g. the regulations its applications are judged by)
+gets a fourth: a search over the tenant's etl-vectorize collection, named and described
+by the scenario itself — see `build_document_tool`.
 """
 
 from __future__ import annotations
@@ -17,8 +21,12 @@ import json
 from typing import Any
 
 import httpx
+from ai_circus_shared.embeddings import EmbeddingProvider
+from ai_circus_shared.retrieval import VectorSearchClient, format_retrieved, retrieve
+from ai_circus_shared.scenario_schema import ScenarioDefinition
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from assistant.core.prediction_client import PredictionServiceClient
 
@@ -58,6 +66,14 @@ class _EvaluationArgs(BaseModel):
         ge=1,
         le=_MAX_EVALUATION_LIMIT,
         description="How many held-out rows' actual/predicted values to return.",
+    )
+
+
+class _DocumentSearchArgs(BaseModel):
+    query: str = Field(
+        min_length=3,
+        max_length=500,
+        description="What to look up, in the documents' language — a short, specific question or topic.",
     )
 
 
@@ -129,3 +145,48 @@ def build_prediction_tools(
             args_schema=_PredictArgs,
         ),
     ]
+
+
+def build_document_tool(
+    qdrant: VectorSearchClient,
+    embedder: EmbeddingProvider,
+    definition: ScenarioDefinition,
+    *,
+    org_id: str,
+) -> BaseTool:
+    """The scenario's `documents.tool`: top-k chunks of the caller's tenant collection.
+
+    Same per-request closure shape as rag_agent.core.agent.build_retrieve_tool (the
+    org is closed over, never a tool argument). The result is `<retrieved_document
+    source="…">`-delimited text, which is also where ui-react reads an answer's sources
+    from. Calls past `max_calls_per_run` return a stop notice instead of more text: each
+    result is prompt paid for again on every following model call.
+    """
+    documents, vector_store = definition.documents, definition.vector_store
+    assert documents is not None and documents.tool is not None and vector_store is not None
+    config = documents.tool
+    calls = [0]
+
+    def _search(query: str) -> tuple[str, list[dict[str, Any]]]:
+        calls[0] += 1
+        if calls[0] > config.max_calls_per_run:
+            return "Search limit reached for this question: answer from the excerpts already returned.", []
+        try:
+            chunks = retrieve(qdrant, embedder, vector_store, org_id, query)
+        except (httpx.HTTPError, ResponseHandlingException, UnexpectedResponse) as exc:
+            # Like the prediction tools: an outage becomes a tool result the model can
+            # report, not an exception that aborts the whole answer.
+            return f"Could not search the documents: the document index is unavailable ({exc}).", []
+        sources = [{"source": c.source, "score": c.score} for c in chunks]
+        if not chunks:
+            return "No relevant documents were found for this query.", sources
+        return format_retrieved(chunks), sources
+
+    tool = StructuredTool.from_function(
+        func=_search,
+        name=config.name,
+        description=config.description,
+        args_schema=_DocumentSearchArgs,
+        response_format="content_and_artifact",
+    )
+    return tool

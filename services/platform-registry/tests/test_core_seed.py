@@ -398,5 +398,10 @@ def test_seed_scenarios_populates_business_rules_and_the_decision_policy(session
     assert aid.decision_policy["deny_at"] == pytest.approx(0.3)
     assert {rule["key"] for rule in aid.business_rules["rules"]} >= {"C1", "V1", "R1", "P1"}
     assert aid.rule_columns["AportaDNI"]["type"] == "categorical"
+    # The regulations the assistant searches, named for the UI's documents-only chat mode.
+    assert aid.document_tool["name"] == "consultar_normativa"
+    assert aid.document_tool["label"] == "Normativa"
+    assert aid.document_tool["sample_questions"]
+    assert session.get(Scenario, "titanic").document_tool is None
     assert aid.ui_extras["kind"] == "case_desk"
     assert session.get(Scenario, "titanic").business_rules is None

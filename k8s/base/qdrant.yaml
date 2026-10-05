@@ -57,8 +57,9 @@ spec:
     - {port: 6333, targetPort: 6333}
 ---
 # Qdrant has no built-in auth at all (see comment above) — a NetworkPolicy is the only
-# thing standing between it and any other pod in the namespace. Only rag-agent and
-# form-agent query it at request time, and etl-vectorize (see k8s/jobs/) writes to it.
+# thing standing between it and any other pod in the namespace. Only rag-agent,
+# form-agent and assistant (a tabular scenario's `documents.tool`) query it at request
+# time, and etl-vectorize (see k8s/jobs/) writes to it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -72,6 +73,7 @@ spec:
     - from:
         - podSelector: {matchLabels: {app: rag-agent}}
         - podSelector: {matchLabels: {app: form-agent}}
+        - podSelector: {matchLabels: {app: assistant}}
         - podSelector: {matchLabels: {job-name: etl-vectorize}}
         # Read-only /healthz probe for the admin platform-status dashboard
         # (data_platform_manager.core.platform_status) — nothing else.

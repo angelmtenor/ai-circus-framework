@@ -331,6 +331,13 @@ class TabularModel(BaseModel):
         return self
 
 
+# Tools a tabular_ml assistant already has (its prediction tools and ui-react's
+# generative-UI ones) — a scenario's `documents.tool.name` must not shadow any of them.
+TABULAR_ASSISTANT_TOOL_NAMES = frozenset(
+    {"get_dataset_sample", "get_predictions_vs_actuals", "predict_records", "render_chart", "render_table"}
+)
+
+
 class TabularServices(BaseModel):
     """Names of the services that implement a `tabular_ml` scenario."""
 
@@ -1441,8 +1448,27 @@ class KnowledgeGraphConfig(BaseModel):
     hops: int = Field(default=2, ge=1, le=3)  # radius around the seed concepts
 
 
+class DocumentToolConfig(BaseModel):
+    """The document search a `tabular_ml` scenario's assistant gets as one more tool, next
+    to its dataset/prediction tools — e.g. the regulations an application is judged by.
+
+    `name`/`description` are what the model sees (so they say *when* to call it, in the
+    scenario's language); `label` is how ui-react names the source of an answer that used
+    it; `sample_questions` are the chat's suggestions in its documents-only mode, where the
+    assistant is given this tool alone. `max_calls_per_run` bounds the prompt each answer
+    pays for (every result is re-sent on each following model call).
+    """
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{2,40}$")
+    label: str = Field(min_length=1, max_length=40)
+    description: str = Field(min_length=20, max_length=800)
+    sample_questions: list[str] = Field(default_factory=list, max_length=20)
+    max_calls_per_run: int = Field(default=3, ge=1, le=4)
+
+
 class DocumentsConfig(BaseModel):
-    """Source-document config for a `conversational_rag` scenario.
+    """Source-document config for a `conversational_rag` scenario (or the document tool of
+    an `assisted_form`/`tabular_ml` one — see `tool`).
 
     At least one of `seed_prefix` (a tracked local folder, relative to the scenario's
     directory) or `github_source` (a public GitHub repo folder) must provide the demo
@@ -1460,6 +1486,8 @@ class DocumentsConfig(BaseModel):
     chunking: DocumentChunking
     embedding: DocumentEmbedding
     knowledge_graph: KnowledgeGraphConfig | None = None
+    # tabular_ml only (required there): the assistant tool that searches these documents.
+    tool: DocumentToolConfig | None = None
 
     @model_validator(mode="after")
     def _at_least_one_seed_source(self) -> DocumentsConfig:
@@ -2268,6 +2296,30 @@ class ScenarioDefinition(BaseModel):
                 "form.classification_field is set but documents/vector_store is missing — "
                 "classification needs a document catalog to retrieve against."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _documents_tool_is_a_tabular_assistant_tool(self) -> ScenarioDefinition:
+        """`documents.tool` is how a tabular_ml scenario's assistant searches documents —
+        and the only way it does: such a scenario's documents need the tool, a vector
+        store to search, and plain chunk retrieval (graph retrieval lives in rag-agent).
+        """
+        documents = self.documents
+        tool = documents.tool if documents is not None else None
+        if self.kind != "tabular_ml":
+            if tool is not None:
+                raise ValueError("documents.tool is only available for kind='tabular_ml' scenarios.")
+            return self
+        if documents is None:
+            if self.vector_store is not None:
+                raise ValueError("vector_store is set but documents is missing.")
+            return self
+        if tool is None or self.vector_store is None:
+            raise ValueError("A tabular_ml scenario's documents need documents.tool and a vector_store.")
+        if documents.knowledge_graph is not None:
+            raise ValueError("documents.knowledge_graph is not available for kind='tabular_ml' scenarios.")
+        if tool.name in TABULAR_ASSISTANT_TOOL_NAMES:
+            raise ValueError(f"documents.tool.name {tool.name!r} clashes with a built-in assistant tool.")
         return self
 
     @classmethod

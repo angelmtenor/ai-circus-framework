@@ -226,6 +226,17 @@ export const WORDS = {
     pass: "Cumple",
     fail: "No cumple",
     na: "No aplica",
+    seeLaw: "Ver norma",
+    official: "Texto oficial",
+    fictional: "Ficticio",
+    cited: "Citado en la última respuesta",
+    filterLaw: "Filtrar artículos…",
+    pickArticle: "Elige un artículo para leerlo entero.",
+    lawIntro:
+      "Lo que el asistente puede consultar: leyes reales, literales, y las bases y protocolos ficticios de la entidad. En este chat solo ve la normativa — ni los datos ni el modelo.",
+    askLegalBasis: (basis: string, rule: string, caseRef: string) =>
+      `Explica la base legal «${basis}» de la regla «${rule}» aplicada a ${caseRef}: qué exige la norma y qué debe aportar o hacer la persona. Cita los artículos.`,
+    thisCase: "esta solicitud",
   },
   en: {
     registry: "Registry",
@@ -268,5 +279,29 @@ export const WORDS = {
     pass: "Pass",
     fail: "Fail",
     na: "Not applicable",
+    seeLaw: "See the rule",
+    official: "Official text",
+    fictional: "Fictional",
+    cited: "Cited in the latest answer",
+    filterLaw: "Filter articles…",
+    pickArticle: "Pick an article to read it in full.",
+    lawIntro:
+      "What the assistant can look up: real laws, verbatim, and the organisation's fictional rules and protocols. In this chat it only sees these documents — neither the data nor the model.",
+    askLegalBasis: (basis: string, rule: string, caseRef: string) =>
+      `Explain the legal basis "${basis}" of the rule "${rule}" applied to ${caseRef}: what it requires and what the applicant must provide or do. Cite the articles.`,
+    thisCase: "this application",
   },
 } as const;
+
+/** The document a rule's `legal_basis` points at ("Bases AES, art. 4.2.a", "Art. 68.1 Ley 39/2015"):
+ * the law named in it, and the first document of that law containing the article. */
+export function documentForLegalBasis<D extends { title: string; text: string }>(docs: D[], basis: string): D | null {
+  const article = /art(?:ículo|\.)?\s*(\d+)/i.exec(basis)?.[1];
+  const law = basis
+    .replace(/,?\s*art(?:ículo|\.)?\s*[\d.]+[a-z]?(?:\.[a-z])?/gi, "")
+    .replace(/^[\s,]+|[\s,]+$/g, "")
+    .toLowerCase();
+  if (!article || !law) return null;
+  const pattern = new RegExp(`Artículos?\\s+(?:\\d+\\s*(?:a|y|,)\\s*)*${article}\\b`);
+  return docs.find((d) => d.title.toLowerCase().includes(law) && (pattern.test(d.title) || d.text.includes(`Artículo ${article}.`))) ?? null;
+}
