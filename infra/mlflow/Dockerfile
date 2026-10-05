@@ -10,7 +10,11 @@
 FROM python:3.12-slim
 
 ARG MLFLOW_VERSION=3.16.0
-RUN pip install --no-cache-dir "mlflow==${MLFLOW_VERSION}" "psycopg2-binary>=2.9" "boto3>=1.35" \
+# psycopg 3, not psycopg2: SQLAlchemy 2.1 (pulled in unpinned by MLflow) made it the
+# default `postgresql://` driver, and an image with only psycopg2 crash-looped on
+# `No module named 'psycopg'`. The store URIs also name the driver explicitly
+# (`postgresql+psycopg://`) so a future default change can't break it again.
+RUN pip install --no-cache-dir "mlflow==${MLFLOW_VERSION}" "psycopg[binary]>=3.2" "boto3>=1.35" \
     && useradd --create-home --shell /bin/bash --uid 1000 app
 
 USER app

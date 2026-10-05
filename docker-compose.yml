@@ -526,7 +526,7 @@ services:
       context: .
       dockerfile: infra/mlflow/Dockerfile
     environment:
-      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
       MLFLOW_ARTIFACTS_DESTINATION: s3://mlflow
       # MLflow >= 3 rejects Host headers outside localhost/private IPs — allow Traefik's.
       MLFLOW_SERVER_ALLOWED_HOSTS: mlflow.localhost,mlflow,mlflow:5000,localhost,127.0.0.1,10.*,172.*,192.168.*
