@@ -23,12 +23,14 @@ import uvicorn
 from ai_circus_shared.conversations import Base as ConversationsBase
 from ai_circus_shared.conversations import init_engine
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
+from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
+from qdrant_client import QdrantClient
 
 from assistant import get_env_config
 from assistant.api import router
@@ -58,12 +60,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
 
+    # A scenario whose assistant searches documents (`documents.tool`) reads them back
+    # from its documents bucket for the UI's reading list (GET /documents/...).
+    document_stores = {
+        slug: ObjectStore.connect(
+            bucket=definition.documents.bucket,
+            endpoint_url=config.OBJECT_STORE_ENDPOINT,
+            access_key=config.OBJECT_STORE_ACCESS_KEY,
+            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
+        )
+        for slug, definition in definitions.items()
+        if definition.documents is not None
+    }
+
     # This instance's own conversations/messages tables (persisted chat history for
     # the UI's conversation sidebar) — a dedicated database, not platform-registry's.
     conversations_engine = init_engine(config)
     ConversationsBase.metadata.create_all(conversations_engine)
 
     app.state.definitions = definitions
+    app.state.document_stores = document_stores
+    # Query embeddings for the document tool — only when a served scenario has one (the
+    # provider probes llm-gateway at start-up, which an instance without documents
+    # needn't wait for). A remote call (llm-gateway's `local-embed` by default), nothing
+    # loaded in-process; must be the provider/model etl-vectorize embedded the documents
+    # with, or retrieval silently breaks (see ai_circus_shared.embeddings' docstring).
+    app.state.embedder = (
+        build_embedding_provider(
+            provider=config.EMBEDDING_PROVIDER or "local",
+            model_name=config.EMBEDDING_MODEL,
+            google_api_key=config.GOOGLE_API_KEY.get_secret_value() if config.GOOGLE_API_KEY else None,
+            voyage_api_key=config.VOYAGE_API_KEY.get_secret_value() if config.VOYAGE_API_KEY else None,
+            llm_gateway_url=config.LLM_GATEWAY_URL,
+            llm_gateway_api_key=config.LLM_GATEWAY_API_KEY.get_secret_value(),
+        )
+        if document_stores
+        else None
+    )
+    app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
     app.state.prompt_cache = SystemPromptCache(stores, definitions, fallback_org_id=config.SHARED_MODEL_ORG_ID)
     # LangChain ChatOpenAI client backing the AG-UI route's create_agent (see
     # core/agent.py) — only a LangChain/LangGraph agent can participate in generative

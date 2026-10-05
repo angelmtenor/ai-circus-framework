@@ -50,6 +50,11 @@ class FakeEnvConfig:
         self.POSTGRES_DB = "assistant"
         self.POSTGRES_USER = "ai_circus"
         self.POSTGRES_PASSWORD = FakeSecret("postgres-secret")
+        self.QDRANT_URL = "http://qdrant:6333"
+        self.EMBEDDING_PROVIDER = "local"
+        self.EMBEDDING_MODEL = None
+        self.GOOGLE_API_KEY = None
+        self.VOYAGE_API_KEY = None
 
 
 def build_validation_error() -> ValidationError:
@@ -108,9 +113,11 @@ async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: p
 
     class FakeDefinition:
         dataset = FakeDataset()
+        documents = None
 
     connect_calls: list[dict[str, object]] = []
     create_all_calls: list[object] = []
+    monkeypatch.setattr(app, "QdrantClient", lambda **kwargs: f"qdrant:{kwargs['url']}")
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
@@ -125,6 +132,9 @@ async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: p
         # Empty until the AG-UI route's _chat_llm dependency lazily builds+caches a
         # ChatOpenAI client for whichever model_name the first request resolves to.
         assert app.app.state.chat_llm_clients == {}
+        # No scenario searches documents: no embedder, so start-up never waits on llm-gateway for one.
+        assert app.app.state.embedder is None
+        assert app.app.state.document_stores == {}
 
     assert connect_calls == [
         {
@@ -145,3 +155,46 @@ async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.Mon
     with pytest.raises(RuntimeError, match="No tabular_ml scenario matched"):
         async with app.lifespan(app.app):
             pass
+
+
+async def test_lifespan_builds_the_document_search_for_a_scenario_with_documents(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A scenario with documents gets its documents bucket connected and the shared query embedder built."""
+
+    class FakeDataset:
+        bucket = "scenario-aid"
+
+    class FakeDocuments:
+        bucket = "scenario-aid-docs"
+
+    class FakeDefinition:
+        dataset = FakeDataset()
+        documents = FakeDocuments()
+
+    provider_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
+    monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"aid": FakeDefinition()})
+    monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **kwargs: f"store:{kwargs['bucket']}"))
+    monkeypatch.setattr(app, "init_engine", lambda _config: "fake-conversations-engine")
+    monkeypatch.setattr(app.ConversationsBase.metadata, "create_all", lambda engine: None)
+    monkeypatch.setattr(app, "QdrantClient", lambda **kwargs: f"qdrant:{kwargs['url']}")
+    monkeypatch.setattr(
+        app, "build_embedding_provider", lambda **kwargs: provider_calls.append(kwargs) or "fake-embedder"
+    )
+
+    async with app.lifespan(app.app):
+        assert app.app.state.document_stores == {"aid": "store:scenario-aid-docs"}
+        assert app.app.state.embedder == "fake-embedder"
+        assert app.app.state.qdrant == "qdrant:http://qdrant:6333"
+
+    assert provider_calls == [
+        {
+            "provider": "local",
+            "model_name": None,
+            "google_api_key": None,
+            "voyage_api_key": None,
+            "llm_gateway_url": "http://llm-gateway:4000",
+            "llm_gateway_api_key": "master-key",
+        }
+    ]

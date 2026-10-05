@@ -28,6 +28,7 @@ from assistant import api as api_module
 from assistant.api import (
     _chat_llm,
     _conversation_store,
+    _document_search,
     _llm_display,
     _llm_model,
     _prompt_cache,
@@ -85,6 +86,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[_llm_model] = lambda: "gpt-4o-mini"
     app.dependency_overrides[_llm_display] = lambda: ("gpt-4o-mini", "OpenAI", True)
     app.dependency_overrides[_chat_llm] = lambda: SimpleNamespace()
+    app.dependency_overrides[_document_search] = lambda: None
     conversation_engine = _seeded_conversation_engine()
     app.dependency_overrides[_conversation_store] = lambda: ConversationStore(Session(conversation_engine))
     yield TestClient(app)
@@ -230,11 +232,12 @@ async def test_agui_endpoint_builds_prediction_tools_scoped_to_the_request(monke
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed"),
+        definition=SimpleNamespace(slug="motor_speed", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
+        document_search=None,
     )
 
     assert captured["base_url"] == "http://prediction:8000"
@@ -277,11 +280,12 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed"),
+        definition=SimpleNamespace(slug="motor_speed", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=FakeLlm(),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
+        document_search=None,
     )
 
     assert captured_model_kwargs == {"user": "org-1"}
@@ -319,11 +323,12 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed"),
+        definition=SimpleNamespace(slug="motor_speed", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
+        document_search=None,
     )
 
     body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
@@ -366,11 +371,12 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed"),
+        definition=SimpleNamespace(slug="motor_speed", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=_seeded_conversation_store(),
+        document_search=None,
     )
 
     body = "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
@@ -508,11 +514,12 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed"),
+        definition=SimpleNamespace(slug="motor_speed", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
         store=store,
+        document_search=None,
     )
 
     # Drain the stream — persistence happens in the generator's `finally` block.
@@ -524,3 +531,121 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ("user", "What's the churn risk?"),
         ("assistant", "Churn risk is 12%."),
     ]
+
+
+# --- documents.tool: chat scope + the reading list ---
+
+
+async def _run_agui_with_documents(monkeypatch: pytest.MonkeyPatch, forwarded_props: dict[str, Any]) -> dict[str, Any]:
+    """Run agui_endpoint for a scenario with a document tool; return the tools and prompt the agent got."""
+    from tests.test_core_chat import DEFINITION_WITH_DOCUMENTS
+
+    captured: dict[str, Any] = {}
+
+    def fake_build_agui_agent(llm: object, system_prompt: str, tools: list[Any]) -> str:
+        captured["tools"], captured["system_prompt"] = tools, system_prompt
+        return "fake-graph"
+
+    monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
+    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: ["prediction-tool"])
+    monkeypatch.setattr(api_module, "build_document_tool", lambda *_a, **kw: f"document-tool:{kw['org_id']}")
+    monkeypatch.setattr(api_module, "build_agui_agent", fake_build_agui_agent)
+    monkeypatch.setattr(
+        api_module,
+        "LangGraphAGUIAgent",
+        lambda *, name, graph, config=None: SimpleNamespace(run=lambda _input: iter(())),
+    )
+    await agui_endpoint(
+        scenario_slug="churn",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps=forwarded_props
+        ),
+        request=_fake_http_request("Bearer tok-1"),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:churn"})),
+        definition=DEFINITION_WITH_DOCUMENTS,
+        prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+        document_search=api_module.DocumentSearch(qdrant=SimpleNamespace(), embedder=SimpleNamespace()),  # type: ignore[arg-type]
+    )
+    return captured
+
+
+async def test_agui_full_scope_adds_the_document_tool_to_the_prediction_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a scope (or an unknown one) the agent gets every tool, the document search bound to the caller's org."""
+    for props in ({}, {"scope": "everything"}):
+        captured = await _run_agui_with_documents(monkeypatch, props)
+        assert captured["tools"] == ["prediction-tool", "document-tool:org-1"]
+        assert captured["system_prompt"] == "system prompt"
+
+
+async def test_agui_documents_scope_gives_the_document_tool_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Documents-only mode removes the dataset/prediction tools from the run itself, not just from the prompt."""
+    captured = await _run_agui_with_documents(monkeypatch, {"scope": "documents"})
+
+    assert captured["tools"] == ["document-tool:org-1"]
+    assert "DOCUMENTS-ONLY MODE" in captured["system_prompt"]
+
+
+def test_chat_scope_ignores_documents_mode_for_a_scenario_without_a_document_tool() -> None:
+    from tests.test_core_chat import DEFINITION
+
+    input_data = RunAgentInput(
+        threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps={"scope": "documents"}
+    )
+    assert api_module._chat_scope(input_data, DEFINITION) == "all"
+
+
+class _FakeDocumentStore:
+    """ObjectStore stand-in holding one tenant's documents."""
+
+    def __init__(self, files: dict[str, bytes]) -> None:
+        self.files = files
+        self.orgs: list[str] = []
+
+    def list(self, tenant_org_id: str, prefix: str = "") -> list[str]:
+        self.orgs.append(tenant_org_id)
+        return [key for key in self.files if key.startswith(prefix)]
+
+    def get(self, tenant_org_id: str, path: str) -> bytes:
+        return self.files[path]
+
+
+def _documents_client(definition: Any, store: _FakeDocumentStore) -> TestClient:
+    app = FastAPI()
+    app.include_router(router)
+    app.state.document_stores = {"churn": store}
+    app.dependency_overrides[resolve_identity] = lambda: Identity(
+        subject="user-1", org_id="org-1", roles=frozenset({"scenario:churn"})
+    )
+    app.dependency_overrides[_scenario_definition] = lambda: definition
+    return TestClient(app)
+
+
+def test_documents_endpoint_reads_the_callers_tenant_documents_with_title_and_note() -> None:
+    from tests.test_core_chat import DEFINITION_WITH_DOCUMENTS
+
+    store = _FakeDocumentStore({
+        "normativa/ley39_art68.md": "# Ley 39/2015 · Artículo 68\n> Fuente: BOE-A-2015-10565\n\n1. Diez días.".encode(),
+        "normativa/sin_titulo.md": b"Texto sin cabecera.",
+        "otra/carpeta.md": b"# No listado",
+    })
+
+    response = _documents_client(DEFINITION_WITH_DOCUMENTS, store).get("/documents/churn")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [d["name"] for d in body] == ["ley39_art68.md", "sin_titulo.md"]
+    assert body[0]["title"] == "Ley 39/2015 · Artículo 68"
+    assert body[0]["note"] == "Fuente: BOE-A-2015-10565"
+    assert body[1]["title"] == "sin_titulo.md" and body[1]["note"] == ""
+    assert store.orgs == ["org-1"]
+
+
+def test_documents_endpoint_404s_for_a_scenario_without_a_document_tool() -> None:
+    from tests.test_core_chat import DEFINITION
+
+    response = _documents_client(DEFINITION, _FakeDocumentStore({})).get("/documents/churn")
+
+    assert response.status_code == 404

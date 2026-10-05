@@ -743,17 +743,20 @@ services:
 
   # Long-running: chat-over-tabular-data for every tabular_ml scenario in SCENARIOS
   # (empty/unset = all), grounded in each scenario's chat.context and the trained
-  # model's metadata, answered via llm-gateway.
+  # model's metadata, answered via llm-gateway. A scenario with `documents.tool` also
+  # gets a document search over its etl-vectorize collection (hence qdrant + embedding).
   assistant:
     build:
       context: .
       dockerfile: services/assistant/Dockerfile
     environment:
-      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env]
+      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env, *embedding-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
       seaweedfs:
         condition: service_healthy
