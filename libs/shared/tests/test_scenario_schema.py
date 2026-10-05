@@ -1328,3 +1328,62 @@ def test_rule_columns_never_double_as_features_and_audit_columns_must_be_protect
         _with(aid, dataset={**dataset, "rule_columns": clash})
     with pytest.raises(ValidationError, match="protected_features_excluded"):
         _with(aid, dataset={**dataset, "audit_columns": ["Distrito"]})
+
+
+# --- documents.tool: a tabular_ml assistant's document search (prestaciones_sociales) ---
+
+
+def test_repo_prestaciones_sociales_searches_its_regulations() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    assert aid.documents is not None and aid.documents.tool is not None and aid.vector_store is not None
+    assert aid.documents.tool.name == "consultar_normativa"
+    assert aid.documents.tool.sample_questions
+    assert aid.documents.knowledge_graph is None
+
+
+def test_documents_tool_is_validated_for_tabular_scenarios_only() -> None:
+    aid = _repo_scenario("prestaciones_sociales")
+    documents = aid.documents.model_dump()  # type: ignore[union-attr]
+    tool = documents["tool"]
+    with pytest.raises(ValidationError, match=r"need documents\.tool and a vector_store"):
+        _with(aid, documents={**documents, "tool": None})
+    with pytest.raises(ValidationError, match=r"need documents\.tool and a vector_store"):
+        _with(aid, vector_store=None)
+    with pytest.raises(ValidationError, match="vector_store is set but documents is missing"):
+        _with(aid, documents=None)
+    with pytest.raises(ValidationError, match="clashes with a built-in assistant tool"):
+        _with(aid, documents={**documents, "tool": {**tool, "name": "predict_records"}})
+    with pytest.raises(ValidationError, match="knowledge_graph is not available"):
+        _with(aid, documents={**documents, "knowledge_graph": {"seed_file": "kg.json"}})
+    with pytest.raises(ValidationError, match="String should match pattern"):
+        _with(aid, documents={**documents, "tool": {**tool, "name": "Consultar normativa"}})
+    rag = _repo_scenario("aml_regulation_kg")
+    rag_documents = rag.documents.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
+        _with(rag, documents={**rag_documents, "tool": tool})
+
+
+def test_every_legal_basis_of_prestaciones_sociales_resolves_to_a_shipped_document() -> None:
+    """The rules engine and the regulations the assistant searches must not drift apart:
+    each rule's legal_basis names an article that one of the scenario's documents contains."""
+    import re
+    from pathlib import Path
+
+    aid = _repo_scenario("prestaciones_sociales")
+    docs_dir = Path(__file__).parents[3] / "scenarios/prestaciones_sociales" / aid.documents.seed_prefix  # type: ignore[union-attr, operator]
+    docs = {path.name: path.read_text(encoding="utf-8") for path in docs_dir.glob("*.md")}
+    prefixes = {"Bases AES": "villaclara-bases-aes-", "Ley 39/2015": "ley-39-2015-"}
+    rules = aid.dataset.business_rules.rules  # type: ignore[union-attr]
+    for rule in rules:
+        if rule.legal_basis is None:
+            continue
+        match = re.search(r"[Aa]rt\. (\d+)", rule.legal_basis)
+        law = next((name for name in prefixes if name in rule.legal_basis), None)
+        assert match and law, f"rule {rule.key}: unrecognised legal_basis {rule.legal_basis!r}"
+        article = int(match.group(1))
+        assert any(
+            name.startswith(prefixes[law]) and re.search(rf"Artículo {article}\b", text) for name, text in docs.items()
+        ), f"rule {rule.key}: {rule.legal_basis!r} has no document"
+    assert sum(rule.legal_basis is not None for rule in rules) == len(rules)  # every rule cites its basis
+    for name, text in docs.items():  # the reading list needs a title and a provenance line
+        assert text.startswith("# ") and "\n> " in text, name

@@ -12,6 +12,12 @@
 # the scanned sample applications in `sample_uploads/` by
 # `scripts/generate_prestaciones_sample_documents.py`. The challenger needs the
 # host-GPU embedding step: `make k3s-text-embeddings` (then re-run training).
+#
+# The assistant also searches the rules themselves (`documents.tool`): real Spanish/EU
+# law fetched verbatim by `scripts/prepare_prestaciones_normativa.py`, plus Villaclara's
+# FICTIONAL bases, internal instruction and citizen-service protocol (hand-written,
+# kept consistent with `business_rules` — libs/shared tests check every legal_basis).
+# etl-vectorize indexes them like any RAG scenario's documents.
 
 slug: prestaciones_sociales
 kind: tabular_ml
@@ -25,6 +31,15 @@ description: >
 role_required: "scenario:prestaciones_sociales"
 industry: public_sector
 icon: "🤝"
+
+credits:
+  source: "BOE · legislación consolidada (Leyes 39/2015, 40/2015, 38/2003 y 7/1985) y EUR-Lex (Reglamento (UE) 2024/1689)"
+  url: "https://www.boe.es/buscar/act.php?id=BOE-A-2015-10565"
+  note: >
+    Los artículos de las leyes se reproducen literalmente (los textos legales no tienen
+    derechos de autor, art. 13 LPI; los de la UE, © Unión Europea, Decisión 2011/833/UE).
+    Las bases de la ayuda, la instrucción interna y el protocolo de atención de Villaclara
+    son FICTICIOS, como el municipio y las solicitudes. No es asesoramiento jurídico.
 
 chat:
   context: >
@@ -64,16 +79,31 @@ chat:
     pesan más y en qué sentido, cita las palabras del texto que más influyen, y separa
     con claridad lo que dicen las reglas de lo que estima el modelo. Nunca prometas ni
     deniegues una ayuda real.
+    Además puedes consultar la normativa con la herramienta consultar_normativa: los
+    artículos reales de la Ley 39/2015 (plazos, documentos que no se pueden pedir,
+    motivación, subsanación, declaración responsable), la Ley 40/2015 (abstención y
+    recusación), la Ley 38/2003 General de Subvenciones (obligaciones y reintegro), la Ley
+    7/1985 (competencia municipal) y el Reglamento Europeo de IA (supervisión humana,
+    derecho a explicación, anexo III), y los documentos ficticios de Villaclara: las bases
+    de la AES, la Instrucción 1/2026 (señales de alerta, apartarse de la propuesta,
+    conflicto de intereses) y el protocolo de atención a la ciudadanía. Úsala para todo lo
+    que sea requisitos, procedimiento, comprobaciones, reintegro o cómo atender y
+    comunicar algo a la persona, y cita siempre el documento y el artículo. Cuando te
+    pregunten si un caso concreto cumple los requisitos, pásalo además por
+    predict_records (reglas y modelo) y separa lo que dice cada fuente. Si la persona
+    necesita algo más que esta ayuda, dilo: atender a la persona es parte del trabajo.
   sample_questions:
+    - "Una mujer de 88 años vive sola con una pensión de 1.100 € al mes y pide 900 € por la deuda de la luz. ¿Cumple los requisitos? Dime qué sale de las reglas, del modelo y de la norma."
     - "¿Cómo ayuda esto a evitar el fraude y el favoritismo?"
-    - "¿Por qué este expediente va a revisión manual?"
+    - "El expediente «Ingresos sin declarar»: ¿qué señales de alerta tiene, qué dice el modelo y qué comprobaciones permite la norma antes de resolver?"
+    - "¿Qué reglas paran más solicitudes y en qué artículo de las bases se apoya cada una?"
+    - "¿Cuántas solicitudes habían recibido ya dos ayudas en 12 meses y cuántas propone conceder el modelo? ¿Qué dice la norma sobre ayudas repetidas por el mismo concepto?"
+    - "Redacta el requerimiento de subsanación para la solicitud sin DNI, con su base legal."
     - "¿Qué casillas pesan más en las concesiones?"
-    - "¿Qué reglas paran más solicitudes antes del modelo?"
     - "¿Qué palabras del informe social empujan hacia la denegación?"
     - "Si subo el umbral de concesión a 0,8, ¿qué pasa con la carga de revisión?"
     - "¿El modelo trata igual a hombres y mujeres, y a españoles y extranjeros?"
     - "¿Por qué no se despliega el modelo con transformer?"
-    - "¿Qué falta en esta solicitud para poder valorarla?"
 
 dataset:
   bucket: "scenario-prestaciones-sociales"
@@ -209,10 +239,10 @@ dataset:
       - {key: V3, family: validez, label: "Mayoría de edad", field: EdadSolicitante, op: lt, value: 18, outcome: request_info,
          message: "La persona solicitante debe ser mayor de edad o estar emancipada.", legal_basis: "Bases AES, art. 4.1"}
       - {key: V4, family: validez, label: "Coherencia de la unidad", field: MenoresACargo, op: gte, value_field: MiembrosUnidad, outcome: request_info,
-         message: "Hay tantos menores como miembros: falta al menos una persona adulta en la unidad."}
+         message: "Hay tantos menores como miembros: falta al menos una persona adulta en la unidad.", legal_basis: "Bases AES, art. 7.3"}
       - {key: V5, family: validez, label: "Coherencia de la vivienda", field: GastoViviendaMensual, op: gt, value: 0,
          when: {field: RegimenVivienda, op: in, value: ["Cedida o familiar", "Sin hogar"]}, outcome: request_info,
-         message: "Se declara gasto de vivienda en una vivienda cedida o sin hogar."}
+         message: "Se declara gasto de vivienda en una vivienda cedida o sin hogar.", legal_basis: "Bases AES, art. 7.3"}
       - {key: R1, family: requisitos, label: "Empadronamiento", field: MesesEmpadronamiento, op: lt, value: 6, outcome: reject,
          message: "No se acreditan 6 meses de empadronamiento en Villaclara.", legal_basis: "Bases AES, art. 4.2.a"}
       - {key: R2, family: requisitos, label: "Requisito económico", field: RentaPerCapitaIPREM, op: gt, value: 1.5, outcome: reject,
@@ -221,10 +251,12 @@ dataset:
          message: "Ya se han recibido más de dos ayudas en los últimos 12 meses.", legal_basis: "Bases AES, art. 6"}
       - {key: P1, family: proteccion, label: "Especial protección (informe)", field: InformeSocial, op: contains_any,
          value: ["violencia de género", "orden de protección", "lanzamiento"], outcome: review,
-         message: "El informe social recoge una situación de especial protección: valoración prioritaria por una persona."}
+         message: "El informe social recoge una situación de especial protección: valoración prioritaria por una persona.",
+         legal_basis: "Bases AES, art. 10.3"}
       - {key: P2, family: proteccion, label: "Especial protección (solicitante)", field: ExposicionMotivos, op: contains_any,
          value: ["violencia de género", "maltrato", "orden de alejamiento", "lanzamiento"], outcome: review,
-         message: "La persona solicitante describe una situación de especial protección: valoración prioritaria."}
+         message: "La persona solicitante describe una situación de especial protección: valoración prioritaria.",
+         legal_basis: "Bases AES, art. 10.3"}
 
   default_charts:
     - {type: bar, x: ConceptoAyuda, y: Concedida, agg: mean, color_by: ConceptoAyuda}
@@ -234,6 +266,51 @@ dataset:
     - {type: bar, x: RegimenVivienda, y: Concedida, agg: mean, color_by: RegimenVivienda}
     - {type: bar, x: Distrito, y: Concedida, agg: mean, color_by: Distrito}
     - {type: heatmap}
+
+# The regulations the assistant searches — one more tool next to its dataset and model
+# tools, and the only one in the chat's «Solo normativa» mode.
+documents:
+  bucket: "scenario-prestaciones-sociales"
+  raw_prefix: "normativa/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 900
+    chunk_overlap: 120
+  embedding:
+    model: "voyageai/voyage-4-nano"
+  tool:
+    name: consultar_normativa
+    label: Normativa
+    description: >
+      Busca en la normativa de la Ayuda de Emergencia Social: artículos reales de las Leyes
+      39/2015, 40/2015, 38/2003 y 7/1985 y del Reglamento Europeo de IA, y las bases, la
+      Instrucción 1/2026 y el protocolo de atención (ficticios) de Villaclara. Úsala para
+      requisitos, documentación, plazos, comprobaciones antifraude, reintegro, abstención,
+      motivación, recursos y cómo comunicar algo a la persona. Escribe la consulta en
+      castellano y concreta (p. ej. «plazo de subsanación», «requisito económico IPREM»).
+    max_calls_per_run: 3
+    sample_questions:
+      - "¿Cuáles son los requisitos para recibir la Ayuda de Emergencia Social?"
+      - "¿Puedo comprobar los ingresos con Hacienda sin pedirle el documento a la persona?"
+      - "¿Qué señales de alerta obligan a comprobar una solicitud antes de proponerla?"
+      - "Si después de pagar se descubre que ocultó ingresos, ¿qué hay que hacer? ¿Hay reintegro?"
+      - "¿Qué consecuencias tiene falsear la declaración responsable?"
+      - "Conozco a la persona solicitante: ¿debo abstenerme?"
+      - "Quiero conceder una ayuda que el sistema propone denegar: ¿qué tengo que hacer?"
+      - "¿Puedo denegar sin motivarlo?"
+      - "¿Cuánto tiempo tiene la persona para subsanar y qué pasa si no lo hace?"
+      - "¿Qué documentos no puedo pedirle porque ya los tiene el Ayuntamiento?"
+      - "¿Qué plazo tiene el Ayuntamiento para resolver y qué ocurre si no lo hace?"
+      - "¿Qué recurso puede presentar la persona si se le deniega la ayuda?"
+      - "¿Es compatible esta ayuda con otra prestación por el mismo concepto?"
+      - "¿Qué dice el Reglamento europeo de IA sobre usar un modelo en estas ayudas?"
+
+vector_store:
+  backend: qdrant
+  # One collection per tenant: "{collection_prefix}__{tenant_org_id}"
+  collection_prefix: "prestaciones_sociales_normativa"
+  top_k: 4
 
 model:
   task_type: classification
