@@ -163,6 +163,9 @@ class ScenarioSummary(BaseModel):
     rule_columns: dict[str, Any] | None = None
     business_rules: dict[str, Any] | None = None
     decision_policy: dict[str, Any] | None = None
+    # tabular_ml whose assistant searches reference documents — the tool's name, label
+    # and documents-only sample questions (see scenario_schema.DocumentToolConfig).
+    document_tool: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
