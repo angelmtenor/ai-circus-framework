@@ -60,19 +60,17 @@ class EnvConfig(BaseSettings):
         default=None,
     )
     DEEPSEEK_API_KEY: SecretStr | None = Field(
-        description="DeepSeek API key (only needed if litellm_config.yaml routes to the deepseek-chat model)",
-        default=None,
+        description="DeepSeek API key (only needed if litellm_config.yaml routes to a deepseek/* model)", default=None
     )
     GROQ_API_KEY: SecretStr | None = Field(
-        description="GroqCloud API key (only needed if litellm_config.yaml routes to the groq-llama model)",
-        default=None,
+        description="GroqCloud API key (only needed if litellm_config.yaml routes to a groq/* model)", default=None
     )
     OPENROUTER_API_KEY: SecretStr | None = Field(
         description="OpenRouter API key (only needed if litellm_config.yaml routes to the openrouter model)",
         default=None,
     )
     ANTHROPIC_API_KEY: SecretStr | None = Field(
-        description="Anthropic API key (only needed if litellm_config.yaml routes to the claude-haiku model)",
+        description="Anthropic API key (only needed if litellm_config.yaml routes to an anthropic/* model)",
         default=None,
     )
     OLLAMA_API_BASE: str | None = Field(
@@ -116,7 +114,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "4245e7e20029cddf09ad9fa006d2eabbb94db7ffaa5e6079e526e5636d6e52ad"
+_SOURCE_YAML_HASH = "97bdcc60416e105241112fa182a31d5332bbd668f0676b77fa79d973e82fa34e"
 
 
 EnvConfig.model_rebuild()

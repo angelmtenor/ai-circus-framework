@@ -1055,10 +1055,17 @@ see [Reserved for later](#reserved-for-later-documented-not-built).
 |---|---|---|---|
 | `groq-llama` | GroqCloud (`gpt-oss-120b`) | `GROQ_API_KEY` | **Shipped default** (`LLM_MODEL` unset) — free tier, very low latency, accurate |
 | `groq-oss-20b` | GroqCloud (`gpt-oss-20b`) | `GROQ_API_KEY` | Same key — faster, higher free-tier quota |
-| `gemini-flash` | Google Gemini | `GOOGLE_API_KEY` | Free tier, vision-capable |
-| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | Vision-capable |
-| `claude-haiku` | Anthropic | `ANTHROPIC_API_KEY` | Fast/cheap Claude tier, vision-capable |
-| `deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` | |
+| `groq-qwen` | GroqCloud (`qwen3.8-27b`) | `GROQ_API_KEY` | Same key |
+| `gemini-flash` | Google Gemini (`gemini-3.1-flash-lite`) | `GOOGLE_API_KEY` | Free tier, vision-capable |
+| `gemini-3.8-flash` | Google Gemini | `GOOGLE_API_KEY` | Google's recommended default, vision-capable |
+| `gemini-3.1-pro` | Google Gemini (`gemini-3.1-pro-preview`) | `GOOGLE_API_KEY` | Most capable Gemini, vision-capable |
+| `gpt-4o-mini` | OpenAI | `OPENAI_API_KEY` | Legacy, vision-capable |
+| `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` | OpenAI | `OPENAI_API_KEY` | Flagship / balanced / fast-cheap, vision-capable |
+| `claude-haiku` | Anthropic (`claude-haiku-4-5`) | `ANTHROPIC_API_KEY` | Fast/cheap Claude tier, vision-capable |
+| `claude-sonnet-5.5` | Anthropic | `ANTHROPIC_API_KEY` | Balanced, vision-capable (price pinned in the config) |
+| `claude-opus-5.5` | Anthropic | `ANTHROPIC_API_KEY` | Frontier, vision-capable |
+| `claude-fable-5.1` | Anthropic | `ANTHROPIC_API_KEY` | Most capable and priciest, vision-capable |
+| `deepseek-v4-flash` / `deepseek-v4-pro` | DeepSeek | `DEEPSEEK_API_KEY` | Replace the retired `deepseek-chat` |
 | `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors |
 | `azure-gpt4o` | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_API_BASE` | Also edit the `azure/<deployment>` line in `litellm_config.yaml` |
 | `llama3` | Ollama (local) | none | **Optional**, off by default — see below |

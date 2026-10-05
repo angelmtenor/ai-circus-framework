@@ -69,7 +69,12 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "openai": ProviderSpec(
         key="openai",
         label="OpenAI",
-        models=(ProviderModel(model_name="gpt-4o-mini", label="gpt-4o-mini", vision=True),),
+        models=(
+            ProviderModel(model_name="gpt-4o-mini", label="gpt-4o-mini (legacy)", vision=True),
+            ProviderModel(model_name="gpt-5.6-sol", label="gpt-5.6-sol (flagship)", vision=True),
+            ProviderModel(model_name="gpt-5.6-terra", label="gpt-5.6-terra (balanced)", vision=True),
+            ProviderModel(model_name="gpt-5.6-luna", label="gpt-5.6-luna (fast, cheap)", vision=True),
+        ),
         needs_key=True,
         needs_base=False,
         env_vars=("OPENAI_API_KEY",),
@@ -78,7 +83,11 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "gemini": ProviderSpec(
         key="gemini",
         label="Google Gemini",
-        models=(ProviderModel(model_name="gemini-flash", label="gemini-3.1-flash-lite", vision=True),),
+        models=(
+            ProviderModel(model_name="gemini-flash", label="gemini-3.1-flash-lite (free-tier default)", vision=True),
+            ProviderModel(model_name="gemini-3.8-flash", label="gemini-3.8-flash (recommended)", vision=True),
+            ProviderModel(model_name="gemini-3.1-pro", label="gemini-3.1-pro-preview (most capable)", vision=True),
+        ),
         needs_key=True,
         needs_base=False,
         env_vars=("GOOGLE_API_KEY",),
@@ -87,7 +96,11 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "deepseek": ProviderSpec(
         key="deepseek",
         label="DeepSeek",
-        models=(ProviderModel(model_name="deepseek-chat", label="deepseek-chat"),),
+        # DeepSeek retired `deepseek-chat` on 2026-07-24 — see litellm_config.yaml.
+        models=(
+            ProviderModel(model_name="deepseek-v4-flash", label="deepseek-v4-flash (fast, cheap)"),
+            ProviderModel(model_name="deepseek-v4-pro", label="deepseek-v4-pro (most capable)"),
+        ),
         needs_key=True,
         needs_base=False,
         env_vars=("DEEPSEEK_API_KEY",),
@@ -104,6 +117,7 @@ PROVIDERS: dict[str, ProviderSpec] = {
         models=(
             ProviderModel(model_name="groq-llama", label="gpt-oss-120b (accurate, low free-tier quota)"),
             ProviderModel(model_name="groq-oss-20b", label="gpt-oss-20b (faster, higher free-tier quota)"),
+            ProviderModel(model_name="groq-qwen", label="qwen3.8-27b"),
         ),
         needs_key=True,
         needs_base=False,
@@ -122,7 +136,14 @@ PROVIDERS: dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         key="anthropic",
         label="Anthropic Claude",
-        models=(ProviderModel(model_name="claude-haiku", label="claude-haiku-4-5", vision=True),),
+        models=(
+            ProviderModel(model_name="claude-haiku", label="claude-haiku-4-5 (fast, cheap)", vision=True),
+            ProviderModel(model_name="claude-sonnet-5.5", label="claude-sonnet-5-5 (balanced)", vision=True),
+            ProviderModel(model_name="claude-opus-5.5", label="claude-opus-5-5 (frontier)", vision=True),
+            ProviderModel(
+                model_name="claude-fable-5.1", label="claude-fable-5-1 (most capable, priciest)", vision=True
+            ),
+        ),
         needs_key=True,
         needs_base=False,
         env_vars=("ANTHROPIC_API_KEY",),
@@ -244,7 +265,10 @@ def test_provider(base_url: str, master_key: str, provider: str, model_name: str
                 json={
                     "model": model_name,
                     "messages": [{"role": "user", "content": "Reply with exactly one word: ok"}],
-                    "max_tokens": 5,
+                    # Not 5: a reasoning model (GPT-5.x, Gemini Pro) spends part of the
+                    # budget thinking before it writes a word — too small a budget can
+                    # leave the reply empty, though the route itself works.
+                    "max_tokens": 32,
                 },
                 # 10s, not litellm's own (much longer) provider-level retry/timeout budget —
                 # an unreachable Ollama base is the common case this guards against: without
@@ -263,7 +287,9 @@ def test_provider(base_url: str, master_key: str, provider: str, model_name: str
             detail = response.text
         return {"ok": False, "error": detail[:400], "latency_ms": latency_ms}
 
-    reply = response.json()["choices"][0]["message"]["content"]
+    # `content` is null when a reasoning model used the whole budget on hidden
+    # reasoning — the round trip still succeeded, so that's a pass, not a crash.
+    reply = response.json()["choices"][0]["message"].get("content") or ""
     return {"ok": True, "error": None, "latency_ms": latency_ms, "reply": reply[:200]}
 
 

@@ -5,12 +5,16 @@ particular the nested provider -> models shape, since GroqCloud routes two model
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
+import yaml
 
 from platform_registry.core import llm_settings
+
+_LITELLM_CONFIG = Path(__file__).resolve().parents[3] / "services" / "llm-gateway" / "litellm_config.yaml"
 
 
 class _FakeResponse:
@@ -88,10 +92,10 @@ def test_list_providers_nests_models_per_provider_and_reports_route_exists(monke
     assert models_by_name["groq-oss-20b"]["route_exists"] is False
     assert models_by_name["groq-oss-20b"]["model"] is None
 
-    openai = next(p for p in providers if p["provider"] == "openai")
-    assert len(openai["models"]) == 1
-    assert openai["models"][0]["route_exists"] is True
-    assert openai["models"][0]["vision"] is True  # gpt-4o-mini is vision-capable
+    openai = {m["model_name"]: m for m in next(p for p in providers if p["provider"] == "openai")["models"]}
+    assert openai["gpt-4o-mini"]["route_exists"] is True
+    assert openai["gpt-4o-mini"]["vision"] is True
+    assert openai["gpt-5.6-sol"]["route_exists"] is False  # absent from the fake /model/info
     assert models_by_name["groq-llama"]["vision"] is False
 
 
@@ -127,6 +131,21 @@ def test_test_provider_reports_a_successful_round_trip(monkeypatch: pytest.Monke
 
     assert result == {"ok": True, "error": None, "latency_ms": pytest.approx(0, abs=10_000), "reply": "ok"}
     assert fake_client.post_calls[0]["model"] == "groq-oss-20b"
+
+
+def test_test_provider_treats_a_null_reply_as_a_successful_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reasoning model that spends the whole probe budget thinking returns
+    `content: null` — the route works, so that's a pass, not a TypeError.
+    """
+    fake_client = _FakeHttpClient(
+        post_response=_FakeResponse({"choices": [{"message": {"role": "assistant", "content": None}}]}),
+    )
+    monkeypatch.setattr(llm_settings, "_client", lambda base_url, master_key: fake_client)
+
+    result = llm_settings.test_provider("http://llm-gateway:4000", "master-key", "openai", "gpt-5.6-sol")
+
+    assert result["ok"] is True
+    assert result["reply"] == ""
 
 
 def test_test_provider_reports_a_provider_error_response(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -181,3 +200,21 @@ def test_find_model_locates_the_owning_provider_and_model() -> None:
 
 def test_find_model_returns_none_for_an_unrouted_alias() -> None:
     assert llm_settings.find_model("not-a-real-model") is None
+
+
+def test_model_names_are_unique_across_providers() -> None:
+    """find_model and the active-model allow-list key on the bare alias — a duplicate
+    would make one provider's model unreachable.
+    """
+    names = [model.model_name for spec in llm_settings.PROVIDERS.values() for model in spec.models]
+    assert len(names) == len(set(names))
+
+
+def test_providers_match_the_gateway_routing_table() -> None:
+    """PROVIDERS and llm-gateway's litellm_config.yaml are both hand-maintained: every
+    chat route must be selectable in Settings, and every selectable model must be routed.
+    """
+    config = yaml.safe_load(_LITELLM_CONFIG.read_text())
+    routed = {entry["model_name"] for entry in config["model_list"]} - {"local-embed"}
+    selectable = {model.model_name for spec in llm_settings.PROVIDERS.values() for model in spec.models}
+    assert selectable == routed
