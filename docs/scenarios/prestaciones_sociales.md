@@ -35,7 +35,8 @@ asked: *which applications can wait for a person, which can't, and which boxes e
 | **Ablation** | structured only 0.838 · text only 0.770 · **both 0.884** (5-fold CV, the same rows) |
 | **Transformer challenger** | voyage-4-nano embeddings of the three boxes + the same LightGBM: CV 0.863 ± 0.034 · hold-out 0.885 — **+0.008, below the 0.01 bar**, so TF-IDF stays deployed |
 | **Tabs** | Scenario · Data & BI · ML Predictions · ML Insights · **Mesa de valoración** |
-| **New platform capabilities** | `business_rules` + `decision_policy`, `text_language`, multi-box challenger, `ui_extras: case_desk`, scanned intake (`/extract-record`) |
+| **Regulations (RAG)** | 24 short documents the assistant searches as **one more tool** (`consultar_normativa`): 15 real articles quoted verbatim (Leyes 39/2015, 40/2015, 38/2003, 7/1985; EU AI Act) + Villaclara's fictional bases, internal instruction and citizen-service protocol |
+| **New platform capabilities** | `business_rules` + `decision_policy`, `text_language`, multi-box challenger, `ui_extras: case_desk`, scanned intake (`/extract-record`), **`documents.tool`** (a tabular assistant's document search, with a documents-only chat scope and per-reply provenance) |
 
 ## Design: why rules, a binary model and a policy
 
@@ -98,6 +99,43 @@ asked: *which applications can wait for a person, which can't, and which boxes e
 The dock **assistant** reads what is on screen (the open application's boxes, fired rules, probability,
 decision and thresholds) and answers in Spanish — *"¿por qué va a revisión manual?"*, *"¿qué falta aquí?"*.
 
+## The regulations: RAG as one more tool
+
+BI (the data), ML (the rules and the model) and GenAI (the assistant) answer *what happened* and *what
+the model proposes*; a case worker also needs *what the rules are* — and the anti-fraud and
+anti-favouritism checks only work if everybody applies the same ones. So the scenario ships the
+regulations its applications are judged by, and the assistant searches them **as one more tool**, next
+to its dataset and prediction tools. Nothing about it is specific to this scenario: any `tabular_ml`
+scenario gets one by adding a `documents` block with a `tool` (name, label, description the model reads,
+documents-only suggestions) and a `vector_store`; etl-vectorize indexes it like any RAG scenario.
+
+| Kind | Documents | Why they are here |
+|---|---|---|
+| **Real, verbatim** (BOE consolidated text / EUR-Lex) | Ley 39/2015 arts. 21, 28, 35, 53, 66, 68, 69 · Ley 40/2015 arts. 23–24 · Ley 38/2003 arts. 14, 37 · Ley 7/1985 art. 25 · AI Act arts. 14, 86 and Annex III(5) | Deadlines, motivation, *subsanación*; **checking data by interoperability instead of asking for paper** (art. 28) and the consequences of a false *declaración responsable* (art. 69); **refunds** when aid was obtained by hiding income (LGS art. 37); **abstention** when you know the applicant (Ley 40/2015 art. 23); human oversight and the right to an explanation (AI Act) |
+| **Fictional** (Villaclara) | *Bases reguladoras* (arts. 1–16) · *Instrucción 1/2026* · *Protocolo de atención a la ciudadanía* | The requirements the rules engine enforces (every `legal_basis` resolves to one of them — a test checks it), the **red flags** that call for a reinforced check (undeclared income, repeated aid, several applicants at one address, non-basic expenses, inconsistent receipts), departing from the proposal in writing, and how to ask for a check or communicate a denial **without accusing anyone** |
+
+- **Where an answer comes from.** Every reply carries chips computed from the tools the agent really
+  called — 📚 Normativa (with the articles it returned), ⚖️ Reglas + 🧮 Modelo (`predict_records`),
+  🎯 Evaluación, 📊 Datos, 📈 Gráfico — and the prompt asks the model to tag each paragraph
+  **[Normativa] / [Reglas] / [Modelo] / [Datos]** and never blend them: a rule is not a probability.
+  *"88 years old, lives alone, 1,100 €/month pension, asks for 900 € of electricity debt: does she
+  qualify?"* → `predict_records` (rule R2: 1,100 / 1 / 600 = 1.83 × IPREM > 1.5 → *inadmisión*) +
+  `consultar_normativa` (Bases art. 4.2.b) → an answer that says which part is the rule, which the norm,
+  and what else the person may need.
+- **Documents-only mode.** The chat's *Todas las fuentes · Solo normativa* switch is sent as AG-UI
+  `forwardedProps.scope`; in documents mode the assistant is **built with that one tool** — the data and
+  the model are not hidden by the prompt, they are absent from the run.
+- **The reading room.** The Mesa de valoración gains a **📚 Normativa** mode: the documents grouped by law
+  and marked *Texto oficial* / *Ficticio*, a paper-like reading pane, and a documents-only chat whose cited
+  articles light up in the index. Any fired rule's legal basis has a **📖 Ver norma** button that opens
+  its article and asks the chat about it for that application.
+
+<p align="center">
+  <img src="../screenshots/prestaciones_sociales/chat-provenance.png" alt="The dock assistant answering whether an 88-year-old living alone on a 1,100 € pension qualifies: tagged [Reglas], [Modelo] and [Normativa] paragraphs with short citations, then chips naming the sources it really used — Normativa, Reglas, Modelo, Datos — and the articles retrieved" width="420">
+  <img src="../screenshots/prestaciones_sociales/reading-room.png" alt="The reading room: the documents grouped by law and marked Ficticio or Texto oficial, article 68 of Ley 39/2015 on a paper-like pane, and the documents-only chat explaining the legal basis of a missing-ID rule, with the cited articles lit in the index" width="900">
+</p>
+<p align="center"><sub>Left: the 88-year-old case, answered from the rules, the model and the norms — each one tagged. Right: «📖 Ver norma» on a missing-ID rule opens Ley 39/2015 art. 68 and asks the documents-only chat about it.</sub></p>
+
 ## The data science
 
 - **Why text and numbers together.** Structured data alone reaches 0.838, text alone 0.770, both 0.884:
@@ -130,13 +168,27 @@ decision and thresholds) and answers in Spanish — *"¿por qué va a revisión 
 | Scanned intake | `assistant` `core/extraction.py` (`POST /extract-record/{slug}`, `GET /intake-samples/{slug}/{file}`) |
 | The tab | `ui-react` `CaseDeskView.tsx`, `CaseDeskCircuit.tsx`, `CaseSheet.tsx`, `caseDeskLogic.ts` |
 | Corpus + scans | `scripts/generate_prestaciones_sociales_dataset.py`, `scripts/generate_prestaciones_sample_documents.py` |
+| Regulations | `scenarios/prestaciones_sociales/sample_docs/` — real texts by `scripts/prepare_prestaciones_normativa.py` (BOE open-data API + Cellar, SHA-pinned), fictional ones hand-written |
+| Document tool, scope, reading list | `assistant` `core/tools.py` (`build_document_tool`), `core/chat.py`, `api.py` (`_chat_scope`, `GET /documents/{slug}`); shared retrieval in `ai_circus_shared/retrieval.py` |
+| Provenance chips, reading room | `ui-react` `chatProvenance.ts`, `ChatPanel.tsx`, `NormativaDesk.tsx` |
 
 ## Run it yourself
 
 ```bash
 make k3s-pipeline                                    # ETL (rules before the model) + training
 make k3s-text-embeddings SCENARIOS=prestaciones_sociales   # host GPU: embeds the 3 boxes, retrains the challenger
+# index the regulations (the same job as every RAG scenario)
+kubectl -n ai-circus delete job etl-vectorize --ignore-not-found && kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
 ```
+
+Refresh the real legal texts (cached under `~/.cache/ai-circus/prestaciones_normativa/`):
+
+```bash
+uv run --with httpx python scripts/prepare_prestaciones_normativa.py
+```
+
+etl-vectorize only bootstraps a tenant's documents when its `normativa/` prefix is empty — after editing
+them, delete that prefix in SeaweedFS (or the tenant keeps its copy) and re-run the job.
 
 Regenerate the corpus (the texts need the cluster's llm-gateway on `localhost:4000`):
 
@@ -151,5 +203,7 @@ cd ../form-agent && uv run python ../../scripts/generate_prestaciones_sample_doc
 ## Credits
 
 Original content: the entity, its rules ("bases reguladoras"), every application and every scanned
-document are **fictional**. The IPREM (600 €/month in 2026) is the real Spanish public-income indicator;
-the legal references (Ley 39/2015, EU AI Act) are real, the rules built on them are invented for the demo.
+document are **fictional**, and so are its bases, internal instruction and citizen-service protocol. The
+IPREM (600 €/month) is the real Spanish public-income indicator. The 15 legal texts are real and quoted
+verbatim: Spanish laws from the BOE's consolidated legislation (no copyright on legal texts, art. 13 LPI),
+the AI Act from EUR-Lex (© European Union, reuse authorised by Decision 2011/833/EU). Not legal advice.

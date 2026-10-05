@@ -1,14 +1,13 @@
-"""Tests for retrieval over a tenant's vectorized document catalog."""
+"""Tests for ai_circus_shared.retrieval (top-k retrieval over a tenant's vectorized documents)."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
+from ai_circus_shared.retrieval import RetrievedChunk, format_retrieved, retrieve
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 
-from form_agent.core.retrieval import RetrievedChunk, retrieve
-
-VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="service_request", top_k=3)
+VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3)
 
 
 class FakeEmbeddingModel:
@@ -39,10 +38,10 @@ class FakeQdrantClient:
 
 
 def test_retrieve_returns_empty_list_when_collection_missing() -> None:
-    """A tenant with no vectorized catalog yet (no collection) gets no results, not an error."""
+    """A tenant with no vectorized documents yet (no collection) gets no results, not an error."""
     qdrant = FakeQdrantClient(has_collection=False)
 
-    chunks = retrieve(qdrant, FakeEmbeddingModel(), VECTOR_STORE, "org-1", "broken streetlight")
+    chunks = retrieve(qdrant, FakeEmbeddingModel(), VECTOR_STORE, "org-1", "what is the overdraft fee?")
 
     assert chunks == []
     assert qdrant.query_calls == []
@@ -54,19 +53,28 @@ def test_retrieve_queries_the_tenant_scoped_collection_with_top_k() -> None:
 
     retrieve(qdrant, FakeEmbeddingModel(), VECTOR_STORE, "org-1", "question")
 
-    assert qdrant.query_calls == [{"collection_name": "service_request__org-1", "query": [0.1, 0.2, 0.3], "limit": 3}]
+    assert qdrant.query_calls == [{"collection_name": "docs_rag__org-1", "query": [0.1, 0.2, 0.3], "limit": 3}]
 
 
 def test_retrieve_maps_qdrant_points_to_retrieved_chunks() -> None:
     """Qdrant's payload/score fields are mapped onto RetrievedChunk."""
-    payload = {"text": "Streetlight outages: routed to Public Works, 3-day SLA.", "source": "streetlight_outage.md"}
+    payload = {"text": "Overdraft fee is $25.", "source": "raw/account_policies.md"}
     fake_point = SimpleNamespace(payload=payload, score=0.87)
     qdrant = FakeQdrantClient(has_collection=True, points=[fake_point])
 
-    chunks = retrieve(qdrant, FakeEmbeddingModel(), VECTOR_STORE, "org-1", "streetlight is out")
+    chunks = retrieve(qdrant, FakeEmbeddingModel(), VECTOR_STORE, "org-1", "overdraft fee?")
 
-    assert chunks == [
-        RetrievedChunk(
-            text="Streetlight outages: routed to Public Works, 3-day SLA.", source="streetlight_outage.md", score=0.87
-        )
+    assert chunks == [RetrievedChunk(text="Overdraft fee is $25.", source="raw/account_policies.md", score=0.87)]
+
+
+def test_format_retrieved_wraps_each_chunk_in_source_tags() -> None:
+    """Each chunk is delimited with its source — the tags ui-react's ChatPanel reads sources from."""
+    chunks = [
+        RetrievedChunk(text="Art. 68: diez días.", source="ley39_2015_art068.md", score=0.9),
+        RetrievedChunk(text="Art. 4: requisitos.", source="bases_aes_art04.md", score=0.8),
     ]
+
+    assert format_retrieved(chunks) == (
+        '<retrieved_document source="ley39_2015_art068.md">\nArt. 68: diez días.\n</retrieved_document>\n\n'
+        '<retrieved_document source="bases_aes_art04.md">\nArt. 4: requisitos.\n</retrieved_document>'
+    )

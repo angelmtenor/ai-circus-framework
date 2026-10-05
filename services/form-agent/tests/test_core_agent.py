@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from ai_circus_shared.retrieval import RetrievedChunk
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from form_agent.core.agent import build_agui_agent, build_catalog_retrieve_tool
-from form_agent.core.retrieval import RetrievedChunk
 
 VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="service_request", top_k=3)
 

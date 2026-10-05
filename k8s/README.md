@@ -64,7 +64,7 @@ artifacts in SeaweedFS. Skipping it doesn't fail loudly at deploy time: `k3s-up`
 scenario actually has a model — the first real prediction request 503s instead, with `No trained
 model artifacts for scenario='<slug>' (org='<org>', fallback org='demo' also has none — has
 `training` run for it?)`. There's no equivalent `make k3s-*` target yet for
-`k8s/jobs/etl-vectorize-job.yaml` (the `conversational_rag`/`assisted_form` counterpart, seeding
+`k8s/jobs/etl-vectorize-job.yaml` (the `conversational_rag` counterpart — plus every `assisted_form`/`tabular_ml` scenario with `documents` — seeding
 each scenario's document catalog into Qdrant) — apply it the same way as the other Jobs when a
 RAG-backed scenario needs its documents seeded on a fresh cluster:
 ```bash

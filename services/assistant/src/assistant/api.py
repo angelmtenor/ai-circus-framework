@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from ag_ui.core import CustomEvent, EventType, RunAgentInput, RunErrorEvent
 from ag_ui.encoder import EventEncoder
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
+from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
@@ -23,21 +25,32 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
+from qdrant_client import QdrantClient
 
 from assistant import get_env_config
 from assistant.core.agent import ModelUsageCallback, build_agui_agent
+from assistant.core.chat import documents_only_instructions
 from assistant.core.extraction import MAX_OCR_CHARS, build_extraction_prompt, parse_extraction
 from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
 from assistant.core.prediction_client import PredictionServiceClient
 from assistant.core.prompt_cache import SystemPromptCache
 from assistant.core.rubric import build_rubric_prompt, parse_rubric_response
-from assistant.core.tools import build_prediction_tools
+from assistant.core.tools import build_document_tool, build_prediction_tools
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+# The chat's two scopes (ui-react sends one as AG-UI `forwardedProps.scope`): every tool,
+# or — for a scenario with a `documents.tool` — that document search alone.
+SCOPE_ALL = "all"
+SCOPE_DOCUMENTS = "documents"
+# GET /documents/{scenario_slug} bounds: a reading list, not a bulk export.
+MAX_LISTED_DOCUMENTS = 80
+MAX_DOCUMENT_BYTES = 64 * 1024
 
 
 class ModelResponse(BaseModel):
@@ -121,6 +134,26 @@ class ExtractedFieldOut(BaseModel):
     verified: bool
 
 
+class DocumentOut(BaseModel):
+    """One reference document of a scenario's `documents.tool`, read back in full: its
+    `# ` heading as title and its first `> ` line as provenance note (source, or that it
+    is fictional).
+    """
+
+    name: str
+    title: str
+    note: str
+    text: str
+
+
+@dataclass(frozen=True)
+class DocumentSearch:
+    """What the document tool searches with: Qdrant plus the query embedder."""
+
+    qdrant: QdrantClient
+    embedder: EmbeddingProvider
+
+
 class ExtractRecordOut(BaseModel):
     """The boxes read from a scan (see core/extraction.py): `rejected` holds values that
     didn't fit their box (not an option, out of range), `missing` the boxes not found.
@@ -199,6 +232,30 @@ def _scenario_definition(scenario_slug: str, request: Request) -> ScenarioDefini
     if definition is None:
         raise HTTPException(status_code=404, detail=f"Scenario {scenario_slug!r} is not served by this instance.")
     return definition
+
+
+def _document_search(request: Request) -> DocumentSearch | None:
+    """None when no served scenario has a document tool (app.py builds no embedder then)."""
+    embedder = request.app.state.embedder
+    return None if embedder is None else DocumentSearch(qdrant=request.app.state.qdrant, embedder=embedder)
+
+
+def _chat_scope(input_data: RunAgentInput, definition: ScenarioDefinition) -> str:
+    """The run's scope from `forwardedProps.scope` — documents-only only when asked for
+    *and* the scenario has a document tool; anything else is the full toolset.
+    """
+    props = input_data.forwarded_props
+    requested = props.get("scope") if isinstance(props, dict) else None
+    has_tool = definition.documents is not None and definition.documents.tool is not None
+    return SCOPE_DOCUMENTS if requested == SCOPE_DOCUMENTS and has_tool else SCOPE_ALL
+
+
+def _parse_document(name: str, data: bytes) -> DocumentOut:
+    text = data[:MAX_DOCUMENT_BYTES].decode("utf-8", errors="replace")
+    lines = [line.strip() for line in text.splitlines()]
+    title = next((line[2:].strip() for line in lines if line.startswith("# ")), name)
+    note = next((line[1:].strip() for line in lines if line.startswith(">")), "")
+    return DocumentOut(name=name, title=title, note=note, text=text)
 
 
 @router.get("/healthz")
@@ -341,6 +398,25 @@ def intake_sample_endpoint(
     return FileResponse(path, filename=filename, headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/documents/{scenario_slug}", response_model=list[DocumentOut])
+def documents_endpoint(
+    request: Request,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> list[DocumentOut]:
+    """The caller's tenant's reference documents for this scenario's `documents.tool` —
+    the same files etl-vectorize indexed for its search, read whole for the UI's reading
+    list. 404 for a scenario without a document tool.
+    """
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    documents = definition.documents
+    if documents is None or documents.tool is None:
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no reference documents.")
+    store = request.app.state.document_stores[definition.slug]
+    keys = sorted(store.list(identity.org_id, documents.raw_prefix))[:MAX_LISTED_DOCUMENTS]
+    return [_parse_document(key.removeprefix(documents.raw_prefix), store.get(identity.org_id, key)) for key in keys]
+
+
 @router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])
 def list_conversations_endpoint(
     identity: Identity = Depends(resolve_identity),
@@ -444,6 +520,7 @@ async def agui_endpoint(
     llm: ChatOpenAI = Depends(_chat_llm),
     model_name: str = Depends(_llm_model),
     store: ConversationStore = Depends(_conversation_store),
+    document_search: DocumentSearch | None = Depends(_document_search),
 ) -> StreamingResponse:
     """AG-UI (CopilotKit) streaming endpoint — same `resolve_identity`/
     `_scenario_definition` dependency chain as every other route in this service; see
@@ -462,10 +539,21 @@ async def agui_endpoint(
     # tenant stalls every other tenant's concurrent request on this instance.
     system_prompt = await run_in_threadpool(prompt_cache.get, identity.org_id, definition.slug)
     config = get_env_config()
-    prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
-    tools = build_prediction_tools(
-        prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")
-    )
+    # Documents-only mode drops the dataset/prediction tools from the run itself (not
+    # just from the prompt), so the model cannot reach the data or the model there.
+    scope = _chat_scope(input_data, definition)
+    tools: list[BaseTool] = []
+    if scope == SCOPE_ALL:
+        prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
+        tools = build_prediction_tools(
+            prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")
+        )
+    else:
+        system_prompt += documents_only_instructions(definition)
+    if definition.documents is not None and definition.documents.tool is not None and document_search is not None:
+        tools.append(
+            build_document_tool(document_search.qdrant, document_search.embedder, definition, org_id=identity.org_id)
+        )
     # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
     # client (see _chat_llm) without mutating it — per-request only, so concurrent
     # calls from other orgs through the same cached client never see this one's

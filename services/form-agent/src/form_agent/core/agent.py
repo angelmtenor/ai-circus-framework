@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_circus_shared.embeddings import EmbeddingProvider
+from ai_circus_shared.retrieval import retrieve
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
@@ -26,8 +27,6 @@ from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
-
-from form_agent.core.retrieval import retrieve
 
 
 class ModelUsageCallback(BaseCallbackHandler):

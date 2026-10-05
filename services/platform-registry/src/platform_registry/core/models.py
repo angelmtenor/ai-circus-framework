@@ -92,6 +92,9 @@ class Scenario(Base):
     rule_columns: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     business_rules: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     decision_policy: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml whose assistant searches reference documents — see
+    # scenario_schema.DocumentToolConfig (auto-added by ensure_added_columns, like tutorial).
+    document_tool: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

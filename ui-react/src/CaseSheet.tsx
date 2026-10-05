@@ -284,7 +284,8 @@ export function DecisionPanel({
   mode,
   state,
   stampKey,
-}: Common & { state: SheetState; stampKey: string }) {
+  onLegalBasis,
+}: Common & { state: SheetState; stampKey: string; onLegalBasis?: (rule: RuleResult) => void }) {
   const w = words(extras);
   const palette = DESK_PALETTE[mode];
   const rules = state.rules ?? [];
@@ -343,7 +344,17 @@ export function DecisionPanel({
                         </span>
                         <span>
                           <b>{r.label}</b>
-                          {state_ === "fail" && <small>{r.message}{r.legal_basis ? ` · ${r.legal_basis}` : ""}</small>}
+                          {state_ === "fail" && (
+                            <small>
+                              {r.message}
+                              {r.legal_basis ? ` · ${r.legal_basis}` : ""}
+                              {r.legal_basis && onLegalBasis && (
+                                <button type="button" className="cd-law-link" onClick={() => onLegalBasis(r)}>
+                                  📖 {w.seeLaw}
+                                </button>
+                              )}
+                            </small>
+                          )}
                         </span>
                       </li>
                     );

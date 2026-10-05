@@ -526,7 +526,7 @@ services:
       context: .
       dockerfile: infra/mlflow/Dockerfile
     environment:
-      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
       MLFLOW_ARTIFACTS_DESTINATION: s3://mlflow
       # MLflow >= 3 rejects Host headers outside localhost/private IPs — allow Traefik's.
       MLFLOW_SERVER_ALLOWED_HOSTS: mlflow.localhost,mlflow,mlflow:5000,localhost,127.0.0.1,10.*,172.*,192.168.*
@@ -743,17 +743,20 @@ services:
 
   # Long-running: chat-over-tabular-data for every tabular_ml scenario in SCENARIOS
   # (empty/unset = all), grounded in each scenario's chat.context and the trained
-  # model's metadata, answered via llm-gateway.
+  # model's metadata, answered via llm-gateway. A scenario with `documents.tool` also
+  # gets a document search over its etl-vectorize collection (hence qdrant + embedding).
   assistant:
     build:
       context: .
       dockerfile: services/assistant/Dockerfile
     environment:
-      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env]
+      <<: [*service-auth-env, *object-store-env, *postgres-env, *agent-llm-env, *embedding-env]
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
       seaweedfs:
         condition: service_healthy

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_circus_shared.embeddings import EmbeddingProvider
+from ai_circus_shared.retrieval import format_retrieved, retrieve
 from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
@@ -27,7 +28,6 @@ from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
 
 from rag_agent.core.graph_retrieval import GraphTrace, KnowledgeGraphCache, graph_path, graph_search
-from rag_agent.core.retrieval import retrieve
 
 
 class ModelUsageCallback(BaseCallbackHandler):
@@ -128,10 +128,7 @@ def build_retrieve_tool(
         # Delimited so the LLM can distinguish retrieved (untrusted) document text
         # from its own instructions — see SYSTEM_PROMPT_TEMPLATE's indirect-prompt-
         # injection guard. A document's content should never be treated as a command.
-        content = "\n\n".join(
-            f'<retrieved_document source="{c.source}">\n{c.text}\n</retrieved_document>' for c in chunks
-        )
-        return content, sources
+        return format_retrieved(chunks), sources
 
     tool = StructuredTool.from_function(
         func=_retrieve,

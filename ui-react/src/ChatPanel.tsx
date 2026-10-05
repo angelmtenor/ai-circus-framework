@@ -9,7 +9,17 @@ function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): 
   return zodToJsonSchemaImpl(schema as never, options as never) as Record<string, unknown>;
 }
 import { AttachButton } from "./AttachButton";
-import { chatModel, extractDocument, type ChatModel, type SampleUpload } from "./apiClient";
+import { chatModel, extractDocument, type ChatModel, type DocumentTool, type SampleUpload } from "./apiClient";
+import {
+  CHAT_WORDS,
+  FRONTEND_TOOL_ANSWER,
+  PROVENANCE_ICONS,
+  replyProvenance,
+  sourceName,
+  type ChatLocale,
+  type ChatScope,
+  type Provenance,
+} from "./chatProvenance";
 import { config } from "./config";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
@@ -168,33 +178,6 @@ function messageImages(content: unknown): { mimeType: string; value: string }[] 
     .map((s) => ({ mimeType: s.mimeType, value: s.value }));
 }
 
-// rag-agent's retrieve_docs delimits each chunk as `<retrieved_document source="file">`
-// (see its build_retrieve_tool — the XML form is the indirect-prompt-injection guard);
-// the older `[Source: file]` marker is still accepted for any agent that emits it.
-// form-agent's retrieve_catalog marks its chunks `<catalog_entry source="file">` the same way.
-const SOURCE_TAG = /<(?:retrieved_document|catalog_entry)\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
-// The synthetic answer answerUnansweredFrontendToolCalls (below) writes for a frontend
-// tool — not a retrieval, so it must not turn the badge into "answered directly".
-const FRONTEND_TOOL_ANSWER = "Displayed to the user.";
-
-/** Best-effort: retrieve_docs' tool result content embeds per-chunk source markers
- * (see rag-agent's build_retrieve_tool) — extracted here rather than carried as a
- * separate structured field, since AG-UI's ToolMessage only has a plain `content`
- * string. Returns null if no tool ran at all (message list has no tool results yet),
- * vs. an empty array if retrieve_docs ran but found nothing — same distinction the
- * old REST response made. */
-function extractSources(messages: AguiMessage[]): string[] | null {
-  const toolResults = messages.filter(
-    (m): m is AguiMessage & { role: "tool"; content: string } => m.role === "tool" && m.content !== FRONTEND_TOOL_ANSWER,
-  );
-  if (toolResults.length === 0) return null;
-  const sources = new Set<string>();
-  for (const m of toolResults) {
-    for (const match of m.content.matchAll(SOURCE_TAG)) sources.add((match[1] ?? match[2]).trim());
-  }
-  return [...sources];
-}
-
 /**
  * Frontend tools (render_chart/render_table, registered in chatGenerativeUi.tsx) are
  * dispatched by ChatPanel itself, not by CopilotKit's own runtime (see that file's
@@ -249,8 +232,38 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   render_table: "Building table…",
 };
 
-function toolActivityLabel(name: string): string {
+function toolActivityLabel(name: string, documentTool: DocumentTool | null | undefined, locale: ChatLocale): string {
+  if (documentTool && name === documentTool.name) return CHAT_WORDS[locale].searching(documentTool.label);
   return TOOL_ACTIVITY_LABELS[name] ?? `Calling ${name}…`;
+}
+
+/** The chips under a reply naming each source it drew on (see chatProvenance.ts). */
+function ProvenanceRow({
+  provenance,
+  documentTool,
+  locale,
+}: {
+  provenance: Provenance;
+  documentTool?: DocumentTool | null;
+  locale: ChatLocale;
+}) {
+  const t = CHAT_WORDS[locale];
+  return (
+    <div className="chat-provenance">
+      <span className="chat-provenance-label">{t.basedOn}</span>
+      {provenance.keys.map((key) => (
+        <span key={key} className={`chat-provenance-chip chat-provenance-chip--${key}`}>
+          {PROVENANCE_ICONS[key]} {key === "documents" ? (documentTool?.label ?? t.documents) : t[key]}
+          {key === "documents" && provenance.documentsEmpty && <em> · {t.noDocuments}</em>}
+        </span>
+      ))}
+      {provenance.sources.length > 0 && (
+        <span className="chat-provenance-sources" title={provenance.sources.join("\n")}>
+          📎 {provenance.sources.map(sourceName).join(" · ")}
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function ChatPanel({
@@ -268,6 +281,11 @@ export function ChatPanel({
   onRunFinished,
   sampleUploads = [],
   onLoadSample,
+  documentTool,
+  locale = "en",
+  lockedScope,
+  prompt,
+  onReplySources,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -307,6 +325,18 @@ export function ChatPanel({
   // through exactly the same attach path (vision block or OCR) as a real upload.
   sampleUploads?: SampleUpload[];
   onLoadSample?: (file: string) => Promise<File>;
+  // A tabular scenario's document search (`documents.tool`): adds an "All sources ·
+  // <label> only" switch — sent as AG-UI `forwardedProps.scope`, and enforced by the
+  // assistant, which then builds that tool alone — and names it in each reply's chips.
+  documentTool?: DocumentTool | null;
+  locale?: ChatLocale;
+  // Pins the scope (no switch shown) — e.g. the case desk's reading room, documents only.
+  lockedScope?: ChatScope;
+  // A question to send as soon as the chat is ready, once per `id` (e.g. the case
+  // desk's "📖" button on a rule's legal basis).
+  prompt?: { id: number; text: string } | null;
+  // The document sources the latest reply cited — lets a reading list light them up.
+  onReplySources?: (sources: string[]) => void;
 }) {
   const { copilotkit } = useCopilotKit();
   const [messages, setMessages] = useState<AguiMessage[]>(initialMessages ?? agent.messages);
@@ -335,6 +365,9 @@ export function ChatPanel({
   const [activity, setActivity] = useState<string | null>(null);
   const [vision, setVision] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [scopeChoice, setScopeChoice] = useState<ChatScope>("all");
+  const scope: ChatScope = documentTool ? (lockedScope ?? scopeChoice) : "all";
+  const words = CHAT_WORDS[locale];
   // Keyed by assistant message id — set only when the backend's ModelUsageCallback
   // (see rag-agent/assistant/form-agent api.py) detects that the model which actually
   // answered differs from the one requested, i.e. litellm_config.yaml's
@@ -386,7 +419,7 @@ export function ChatPanel({
       // Live "what the agent is doing" status, straight off the AG-UI event stream —
       // fires as soon as a tool call starts/resolves, well before the final reply
       // (which may be seconds away for a multi-tool-call turn) starts streaming.
-      onToolCallStartEvent: ({ event }) => setActivity(toolActivityLabel(event.toolCallName)),
+      onToolCallStartEvent: ({ event }) => setActivity(toolActivityLabel(event.toolCallName, documentTool, locale)),
       onToolCallResultEvent: () => setActivity("Thinking…"),
       onTextMessageStartEvent: () => setActivity(null),
       onRunFinishedEvent: () => setActivity(null),
@@ -403,7 +436,7 @@ export function ChatPanel({
     });
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agent]);
+  }, [agent, documentTool, locale]);
 
   async function send(text: string) {
     const trimmed = text.trim();
@@ -419,7 +452,7 @@ export function ChatPanel({
       agent.addMessage({ id: randomUUID(), role: "user", content });
       const tools = toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]);
       const context = contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>);
-      await agent.runAgent({ tools, context });
+      await agent.runAgent({ tools, context, ...(documentTool ? { forwardedProps: { scope } } : {}) });
       const frontendToolNames = new Set(
         (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
       );
@@ -433,7 +466,31 @@ export function ChatPanel({
     }
   }
 
-  const sources = useMemo(() => extractSources(messages), [messages]);
+  const provenance = useMemo(() => replyProvenance(messages, documentTool), [messages, documentTool]);
+  // The turn still being answered (everything after the last user message) gets its
+  // chips once the run ends, not on an intermediate message mid-answer.
+  const answering = new Set<string>();
+  if (sending) {
+    for (let i = messages.length - 1; i >= 0 && messages[i].role !== "user"; i--) answering.add(messages[i].id);
+  }
+  const latestSourcesKey = useMemo(() => {
+    const last = [...provenance.values()].at(-1);
+    return last ? last.sources.join("|") : "";
+  }, [provenance]);
+  useEffect(() => {
+    onReplySources?.(latestSourcesKey ? latestSourcesKey.split("|") : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- latestSourcesKey stands for the sources list
+  }, [latestSourcesKey]);
+
+  // An outside question (see `prompt`) — sent once per id, as soon as the chat can send.
+  const sentPromptId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!prompt || sentPromptId.current === prompt.id || !conversationReady || sending) return;
+    sentPromptId.current = prompt.id;
+    void send(prompt.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- send() reads the latest state itself
+  }, [prompt, conversationReady, sending]);
+  const shownQuestions = scope === "documents" && documentTool?.sample_questions.length ? documentTool.sample_questions : sampleQuestions;
   // An assistant message with neither content nor a tool call is an intermediate
   // placeholder from the agent's own multi-step loop (e.g. the turn where it only
   // decided to call a tool, before the tool result and final reply arrived) — not
@@ -485,6 +542,9 @@ export function ChatPanel({
                     )}
                   </div>
                 )}
+                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && (
+                  <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
+                )}
                 {turn.role === "assistant" && fallbackByMessageId[turn.id] && (
                   <div className="chat-fallback-note">
                     ⚠️ Answered by {fallbackByMessageId[turn.id].servedModel} — {fallbackByMessageId[turn.id].requestedModel} was
@@ -524,15 +584,27 @@ export function ChatPanel({
           </div>
         )}
       </div>
-      {sources !== null &&
-        (sources.length > 0 ? (
-          <div className="chat-sources">📎 Sources: {sources.join(", ")}</div>
-        ) : (
-          <div className="chat-sources">(answered directly, without consulting the documents)</div>
-        ))}
-      {sampleQuestions.length > 0 && visible.length === 0 && (
+      {documentTool && !lockedScope && (
+        <div className="chat-scope" role="radiogroup" aria-label={words.basedOn}>
+          {(["all", "documents"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={scope === key}
+              className={scope === key ? "active" : ""}
+              onClick={() => setScopeChoice(key)}
+              disabled={sending}
+            >
+              {key === "all" ? `✨ ${words.allSources}` : `${PROVENANCE_ICONS.documents} ${words.only(documentTool.label)}`}
+            </button>
+          ))}
+          {scope === "documents" && <small>{words.scopeHint(documentTool.label)}</small>}
+        </div>
+      )}
+      {shownQuestions.length > 0 && visible.length === 0 && (
         <div className="chat-samples">
-          {sampleQuestions.map((question) => (
+          {shownQuestions.map((question) => (
             <button
               key={question}
               className="chat-sample"

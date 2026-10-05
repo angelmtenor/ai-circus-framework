@@ -13,6 +13,7 @@ import {
   type ExtractedRecord,
   type PredictionResult,
   type RuleOutcome,
+  type RuleResult,
   type ScenarioSummary,
 } from "./apiClient";
 import { CaseDeskCircuit } from "./CaseDeskCircuit";
@@ -33,6 +34,7 @@ import {
 } from "./caseDeskLogic";
 import { CaseSheet, DecisionPanel, type ExtractionView, type SheetState } from "./CaseSheet";
 import { config } from "./config";
+import { NormativaDesk, type LawFocus } from "./NormativaDesk";
 import { initialRecord, type Record_ } from "./predictUtils";
 import { surfaceMode } from "./riskPalette";
 import { scoreTextRecord, type TextScore } from "./textModels";
@@ -50,6 +52,8 @@ import "./caseDesk.css";
  * proposal, words highlighted — or a new application is typed, started from a persona,
  * or read from a scanned document (OCR + LLM extraction). Outcome rates are audited per
  * protected group. The wording is the scenario's; the desk's chrome follows its locale.
+ * A scenario whose assistant searches its regulations (`documents.tool`) adds a reading
+ * room (NormativaDesk.tsx), reachable from any fired rule's legal basis ("📖").
  */
 
 type Loaded = {
@@ -96,7 +100,7 @@ function decideLocal(policy: Pick<DecisionPolicy, "approve_at" | "deny_at">, p: 
   return p >= policy.approve_at ? "approve" : p <= policy.deny_at ? "deny" : "review";
 }
 
-type Mode = "portfolio" | "fresh" | "scan";
+type Mode = "portfolio" | "fresh" | "scan" | "normativa";
 type ScanPhase = "idle" | "ocr" | "llm" | "reading" | "done" | "error";
 
 const EMPTY_SCORE: TextScore | null = null;
@@ -131,7 +135,9 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
     revealedBoxes: 0,
   });
   const [stampSeq, setStampSeq] = useState(0);
+  const [lawFocus, setLawFocus] = useState<LawFocus | null>(null);
   const workbench = useRef<HTMLDivElement>(null);
+  const documentTool = scenario.document_tool ?? null;
 
   const policy: DecisionPolicy = useMemo(() => ({ ...basePolicy, approve_at: approveAt, deny_at: denyAt }), [basePolicy, approveAt, denyAt]);
 
@@ -162,6 +168,7 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
 
   // ── the record on the sheet, and its live score ───────────────────────────────
   const sheetRecord: Record_ | null = useMemo(() => {
+    if (view === "normativa") return null;
     if (view === "portfolio") return selected ? selected.record : null;
     if (view === "scan" && scan.phase !== "done" && scan.phase !== "reading") return null;
     return fresh;
@@ -231,6 +238,15 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
     setSelectedId(id);
     workbench.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+
+  // "📖" on a fired rule: open the reading room on its legal basis and ask about it.
+  const openLegalBasis = (rule: RuleResult) => {
+    if (!rule.legal_basis) return;
+    const caseRef = view === "portfolio" && selected ? `${extras.case_noun} ${selected.id}` : w.thisCase;
+    setLawFocus({ id: Date.now(), basis: rule.legal_basis, question: w.askLegalBasis(rule.legal_basis, rule.label, caseRef) });
+    setView("normativa");
+    workbench.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const openFromTray = (tray: Tray) => {
     const pool = cases.filter((c) => trayOf(policy, c) === tray);
@@ -460,6 +476,7 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
               ["portfolio", w.portfolio],
               ["fresh", w.fresh],
               ["scan", w.scan],
+              ...(documentTool ? ([["normativa", `📚 ${documentTool.label}`]] as const) : []),
             ] as const
           ).map(([key, label]) => (
             <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>
@@ -564,7 +581,9 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
           </div>
         )}
 
-        {sheet ? (
+        {view === "normativa" && documentTool ? (
+          <NormativaDesk scenario={scenario} documentTool={documentTool} locale={extras.locale} accessToken={accessToken} focus={lawFocus} />
+        ) : sheet ? (
           <div className="cd-sheet-grid">
             <CaseSheet
               {...panelProps}
@@ -574,7 +593,7 @@ export function CaseDeskView({ scenario, accessToken }: { scenario: ScenarioSumm
               extraction={extraction}
               stampKey={stampKey}
             />
-            <DecisionPanel {...panelProps} state={sheet} stampKey={stampKey} />
+            <DecisionPanel {...panelProps} state={sheet} stampKey={stampKey} onLegalBasis={documentTool ? openLegalBasis : undefined} />
           </div>
         ) : (
           <div className="cd-empty cd-empty--inline">{view === "scan" ? (scan.phase === "idle" ? "📄" : "") : w.noCase}</div>
