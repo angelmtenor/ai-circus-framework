@@ -169,3 +169,14 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert exc_info.value.code == 1
     assert fake_logger.error_messages
+
+
+def test_documented_scenarios_adds_document_backed_forms_and_tabular_scenarios() -> None:
+    """Every conversational_rag scenario, plus the assisted_form/tabular_ml ones with documents."""
+    scenarios_dir = app.Path(__file__).parents[3] / "scenarios"
+
+    slugs = set(app.documented_scenarios(scenarios_dir, ""))
+
+    assert {"aml_regulation_kg", "sede_electronica", "prestaciones_sociales"} <= slugs
+    assert "titanic" not in slugs  # tabular_ml without documents
+    assert app.documented_scenarios(scenarios_dir, "prestaciones_sociales").keys() == {"prestaciones_sociales"}

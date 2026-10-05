@@ -4,7 +4,8 @@ app.py
 
 Entry point for etl-vectorize: a one-shot job that, for every conversational_rag
 scenario in SCENARIOS (empty/unset = all) plus every assisted_form scenario that
-configures a document catalog (`form.classification_field` set), extracts the
+configures a document catalog (`form.classification_field` set) and every tabular_ml
+scenario whose assistant searches documents (`documents.tool`), extracts the
 tenant's documents from SeaweedFS
 (bootstrapping them on first run from either a tracked sample_docs/ folder or a public
 GitHub repo folder — see `documents.seed_prefix`/`documents.github_source`), chunks and
@@ -20,7 +21,7 @@ import sys
 from pathlib import Path
 
 from ai_circus_shared.embeddings import build_embedding_provider
-from ai_circus_shared.scenario_schema import resolve_scenarios
+from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from pydantic import ValidationError
 from qdrant_client import QdrantClient
@@ -30,6 +31,19 @@ from etl_vectorize.core.logger import configure_logger, get_logger
 from etl_vectorize.core.vectorize import run_vectorize
 
 logger = get_logger(__name__)
+
+
+def documented_scenarios(scenarios_dir: Path, raw_scenarios: str) -> dict[str, ScenarioDefinition]:
+    """Every scenario this job vectorizes: all conversational_rag ones, plus the
+    assisted_form/tabular_ml ones that set `documents` — a plain slot-filling form or a
+    tabular scenario without a document tool has nothing to vectorize.
+    """
+    definitions = resolve_scenarios(scenarios_dir, raw_scenarios, kind="conversational_rag")
+    for kind in ("assisted_form", "tabular_ml"):
+        definitions |= {
+            slug: d for slug, d in resolve_scenarios(scenarios_dir, raw_scenarios, kind=kind).items() if d.documents
+        }
+    return definitions
 
 
 def main() -> None:
@@ -45,18 +59,11 @@ def main() -> None:
         sys.exit(1)
 
     scenarios_dir = Path(config.SCENARIOS_DIR)
-    # assisted_form scenarios are optional here: only those that configure RAG
-    # classification (`form.classification_field`) set `documents` at all — a plain
-    # slot-filling assisted_form scenario has nothing for this job to vectorize.
-    form_definitions = {
-        slug: d
-        for slug, d in resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="assisted_form").items()
-        if d.documents is not None
-    }
-    definitions = {**resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="conversational_rag"), **form_definitions}
+    definitions = documented_scenarios(scenarios_dir, config.SCENARIOS)
     if not definitions:
         logger.error(
-            "No conversational_rag or documents-configured assisted_form scenario matched SCENARIOS={!r} under {!r}.",
+            "No conversational_rag or documents-configured assisted_form/tabular_ml scenario matched"
+            " SCENARIOS={!r} under {!r}.",
             config.SCENARIOS,
             config.SCENARIOS_DIR,
         )
@@ -75,7 +82,9 @@ def main() -> None:
     )
 
     for slug, definition in definitions.items():
-        assert definition.documents is not None and definition.vector_store is not None  # guaranteed by kind filter
+        assert (
+            definition.documents is not None and definition.vector_store is not None
+        )  # guaranteed by documented_scenarios
         store = ObjectStore.connect(
             bucket=definition.documents.bucket,
             endpoint_url=config.OBJECT_STORE_ENDPOINT,
