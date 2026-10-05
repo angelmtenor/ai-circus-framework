@@ -89,13 +89,13 @@ env_variables:
     secret: false
 
   - name: DEEPSEEK_API_KEY
-    description: "DeepSeek API key (only needed if litellm_config.yaml routes to the deepseek-chat model)"
+    description: "DeepSeek API key (only needed if litellm_config.yaml routes to a deepseek/* model)"
     type: string
     mandatory: false
     secret: true
 
   - name: GROQ_API_KEY
-    description: "GroqCloud API key (only needed if litellm_config.yaml routes to the groq-llama model)"
+    description: "GroqCloud API key (only needed if litellm_config.yaml routes to a groq/* model)"
     type: string
     mandatory: false
     secret: true
@@ -107,7 +107,7 @@ env_variables:
     secret: true
 
   - name: ANTHROPIC_API_KEY
-    description: "Anthropic API key (only needed if litellm_config.yaml routes to the claude-haiku model)"
+    description: "Anthropic API key (only needed if litellm_config.yaml routes to an anthropic/* model)"
     type: string
     mandatory: false
     secret: true

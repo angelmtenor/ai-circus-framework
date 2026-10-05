@@ -25,6 +25,30 @@ model_list:
       rpm: 60
       tpm: 150000
 
+  # GPT-5.6 family — same OPENAI_API_KEY; Sol is OpenAI's flagship, Terra the mid tier,
+  # Luna the cheap/fast tier. All three are reasoning models that reject `temperature`
+  # other than 1 — see litellm_settings.drop_params below for why that's harmless here.
+  - model_name: gpt-5.6-sol
+    litellm_params:
+      model: openai/gpt-5.6-sol
+      api_key: os.environ/OPENAI_API_KEY
+      rpm: 30
+      tpm: 200000
+
+  - model_name: gpt-5.6-terra
+    litellm_params:
+      model: openai/gpt-5.6-terra
+      api_key: os.environ/OPENAI_API_KEY
+      rpm: 60
+      tpm: 200000
+
+  - model_name: gpt-5.6-luna
+    litellm_params:
+      model: openai/gpt-5.6-luna
+      api_key: os.environ/OPENAI_API_KEY
+      rpm: 60
+      tpm: 200000
+
   # Default free-tier pick. Google has been retiring 2.x-generation models early for
   # *newly created* API keys/projects (404 "no longer available to new users" well
   # before the documented shutdown date — see
@@ -39,12 +63,39 @@ model_list:
       rpm: 15
       tpm: 1000000
 
-  # DeepSeek's own API (not a proxy of another provider) — cheap, OpenAI-compatible.
-  - model_name: deepseek-chat
+  # Same GOOGLE_API_KEY, more capable tiers. 3.8 Flash is Google's recommended default
+  # for new projects (stable, Sept 2026); 3.1 Pro is the newest Pro, still a preview
+  # model id — swap in the stable id once https://ai.google.dev/gemini-api/docs/models
+  # lists one.
+  - model_name: gemini-3.8-flash
     litellm_params:
-      model: deepseek/deepseek-chat
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GOOGLE_API_KEY
+      rpm: 30
+      tpm: 1000000
+
+  - model_name: gemini-3.1-pro
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GOOGLE_API_KEY
+      rpm: 15
+      tpm: 1000000
+
+  # DeepSeek's own API (not a proxy of another provider) — cheap, OpenAI-compatible.
+  # DeepSeek retired the legacy `deepseek-chat`/`deepseek-reasoner` names on 2026-07-24
+  # (any request naming them errors) — they were aliases of V4 Flash, hence these two.
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: deepseek/deepseek-v4-flash
       api_key: os.environ/DEEPSEEK_API_KEY
       rpm: 60
+      tpm: 150000
+
+  - model_name: deepseek-v4-pro
+    litellm_params:
+      model: deepseek/deepseek-v4-pro
+      api_key: os.environ/DEEPSEEK_API_KEY
+      rpm: 30
       tpm: 150000
 
   # GroqCloud — free tier, LPU-hosted, very low latency. Groq retired every Llama 3.x
@@ -73,6 +124,14 @@ model_list:
       rpm: 30
       tpm: 60000
 
+  # Third model on the same free GROQ_API_KEY — Alibaba's Qwen 3.8 (27B dense).
+  - model_name: groq-qwen
+    litellm_params:
+      model: groq/qwen/qwen3.8-27b
+      api_key: os.environ/GROQ_API_KEY
+      rpm: 30
+      tpm: 30000
+
   # OpenRouter — one key routes to many vendors' models. Individual ":free"-suffixed
   # model slugs (e.g. meta-llama/llama-3.3-70b-instruct:free) get delisted/relisted
   # within weeks, so this points at OpenRouter's own "Free Models Router"
@@ -89,13 +148,42 @@ model_list:
 
   # Anthropic's own API (not a proxy of another provider). Haiku is the
   # fast/cheap tier — matches the cost-conscious default picked for the other
-  # providers above (gemini-flash, groq-llama). Switch to claude-sonnet-4-5 or
-  # claude-opus-4-1 here if you want a more capable (pricier) default instead.
+  # providers above (gemini-flash, groq-llama); Sonnet, Opus and Fable below share
+  # the same ANTHROPIC_API_KEY, in rising order of capability and price.
   - model_name: claude-haiku
     litellm_params:
       model: anthropic/claude-haiku-4-5
       api_key: os.environ/ANTHROPIC_API_KEY
       rpm: 50
+      tpm: 100000
+
+  # litellm 1.104.0's bundled cost map has no `claude-sonnet-5-5` entry yet, so the
+  # price is pinned here (Anthropic's list price, per token) — without it every call
+  # would cost $0 to budget_hook and a tenant's spend cap would never trip. Drop the
+  # two cost lines once a litellm bump knows the model.
+  - model_name: claude-sonnet-5.5
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+      rpm: 50
+      tpm: 100000
+
+  - model_name: claude-opus-5.5
+    litellm_params:
+      model: anthropic/claude-opus-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      rpm: 30
+      tpm: 100000
+
+  # Most capable — and at $10/$50 per million tokens the priciest route here, hence
+  # the lowest ceiling.
+  - model_name: claude-fable-5.1
+    litellm_params:
+      model: anthropic/claude-fable-5-1
+      api_key: os.environ/ANTHROPIC_API_KEY
+      rpm: 10
       tpm: 100000
 
   # Optional — unreachable (no default model selected) until an operator sets
@@ -143,6 +231,11 @@ model_list:
       model: local-embed/voyageai/voyage-4-nano
 
 litellm_settings:
+  # Reasoning models (GPT-5.x) reject parameters such as `temperature: 0`, which
+  # assistant sends for its repeatable rubric/extraction calls — drop a parameter the
+  # target provider doesn't support instead of failing the whole request with a 400.
+  drop_params: true
+
   custom_provider_map:
     - provider: "local-embed"
       custom_handler: llm_gateway.custom_handler.local_embedding_llm
