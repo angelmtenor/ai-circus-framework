@@ -1273,8 +1273,70 @@ select:focus {
   font-size: 0.78rem;
 }
 
-.chat-sources {
+/* Where a reply came from (chatProvenance.ts): one chip per source it really used. */
+.chat-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+
+.chat-provenance-label {
+  margin-right: 0.1rem;
+}
+
+.chat-provenance-chip {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.chat-provenance-chip--documents {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+}
+
+.chat-provenance-chip em {
+  color: var(--dim);
+}
+
+.chat-provenance-sources {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* All sources · <documents> only (a tabular scenario with documents.tool). */
+.chat-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chat-scope button {
   font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.chat-scope button.active {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.chat-scope small {
+  flex-basis: 100%;
+  font-size: 0.7rem;
   color: var(--dim);
 }
 

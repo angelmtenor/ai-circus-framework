@@ -577,7 +577,25 @@ export type ScenarioSummary = {
   rule_columns?: Record<string, FeatureSpec> | null;
   business_rules?: BusinessRulesConfig | null;
   decision_policy?: DecisionPolicy | null;
+  // tabular_ml whose assistant also searches reference documents (see DocumentTool).
+  document_tool?: DocumentTool | null;
 };
+
+// Mirrors scenario_schema.py's DocumentToolConfig: the assistant's document search
+// (e.g. prestaciones_sociales' regulations) — its tool name (to recognise it in a
+// reply's tool calls), how answers that used it are labelled, and the suggestions
+// of the chat's documents-only mode.
+export type DocumentTool = {
+  name: string;
+  label: string;
+  description: string;
+  sample_questions: string[];
+  max_calls_per_run: number;
+};
+
+// One of those documents, read whole (assistant's GET /documents/{slug}): `title` is
+// its `# ` heading and `note` its provenance line (source, or that it is fictional).
+export type ReferenceDocument = { name: string; title: string; note: string; text: string };
 
 // Mirrors scenario_schema.py's RubricCheckConfig / TextChallenger.
 export type RubricBehaviour = { key: string; name: string; description: string };
@@ -969,6 +987,16 @@ export async function listConversations(
 ): Promise<ConversationSummary[]> {
   const response = await fetch(`${baseUrl}/conversations/${scenarioSlug}`, { headers: headers(accessToken) });
   return asJson<ConversationSummary[]>(response);
+}
+
+/** Every reference document the scenario's assistant can search (`documents.tool`). */
+export async function referenceDocuments(
+  baseUrl: string,
+  scenarioSlug: string,
+  accessToken: string | null,
+): Promise<ReferenceDocument[]> {
+  const response = await fetch(`${baseUrl}/documents/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson<ReferenceDocument[]>(response);
 }
 
 /** The sidebar's "+ New conversation" button. */

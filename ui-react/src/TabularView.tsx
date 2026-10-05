@@ -218,6 +218,8 @@ function TabularViewContent({
                 initialMessages={conversation.initialMessages}
                 conversationReady={conversation.ready}
                 onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
+                documentTool={scenario.document_tool}
+                locale={scenario.ui_extras && "locale" in scenario.ui_extras ? (scenario.ui_extras.locale ?? "en") : "en"}
               />
             </div>
           </div>

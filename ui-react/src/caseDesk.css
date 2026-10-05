@@ -867,7 +867,182 @@
   min-width: 0;
 }
 
+/* ── the reading room (NormativaDesk.tsx): index · article · documents-only chat ── */
+.cd-modes {
+  flex-wrap: wrap;
+}
+.cd-law-link {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent-2);
+  font-size: 0.72rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cd-law-link:hover {
+  color: var(--text-h);
+}
+.nd-intro {
+  margin: 0 0 0.8rem;
+}
+.nd-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr) minmax(20rem, 26rem);
+  gap: 1rem;
+  align-items: stretch;
+  height: min(78vh, 46rem);
+}
+.nd-index {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+}
+.nd-index input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.nd-group h6 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.74rem;
+  color: var(--text-h);
+}
+.nd-badge {
+  font-size: 0.62rem;
+  font-weight: 500;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  white-space: nowrap;
+}
+.nd-badge--fictional {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.nd-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.nd-group button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.78rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.nd-group button:hover {
+  background: var(--panel-2);
+}
+.nd-group button.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--text-h);
+}
+.nd-group button.cited {
+  font-weight: 600;
+}
+.nd-group button.cited span {
+  color: var(--accent);
+  animation: nd-pulse 1.6s ease-in-out 2;
+}
+@keyframes nd-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+/* An article reads like the paper it comes from, in both themes. */
+.nd-reader {
+  overflow-y: auto;
+  min-width: 0;
+}
+.nd-article {
+  background: var(--cd-paper);
+  color: var(--cd-ink);
+  border: 1px solid var(--cd-line);
+  border-radius: 6px;
+  padding: 1.2rem 1.4rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.nd-article-group {
+  color: var(--cd-ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+.cd .nd-article h4 {
+  margin: 0.2rem 0 0.5rem;
+  color: var(--cd-ink);
+  font-size: 1.02rem;
+}
+.cd .nd-article h5 {
+  margin: 1rem 0 0.3rem;
+  color: var(--cd-ink);
+  font-size: 0.9rem;
+}
+.nd-article p {
+  margin: 0 0 0.6rem;
+}
+.nd-note {
+  font-size: 0.72rem;
+  color: var(--cd-ink-dim);
+  border-left: 3px solid var(--cd-line);
+  padding-left: 0.6rem;
+}
+.nd-note--fictional {
+  border-left-color: #b7791f;
+}
+.nd-chat {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.nd-chat .chat-panel {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 1200px) {
+  .nd-grid {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+    height: auto;
+  }
+  .nd-index,
+  .nd-reader {
+    max-height: 32rem;
+  }
+  .nd-chat {
+    grid-column: 1 / -1;
+    height: 34rem;
+  }
+}
+
 @media (max-width: 1000px) {
+  .nd-grid {
+    grid-template-columns: 1fr;
+  }
   .cd-controls,
   .cd-sheet-grid {
     grid-template-columns: 1fr;
