@@ -62,6 +62,27 @@ def _get_model(model_name: str) -> Any:
         return _loaded_models[model_name]
 
 
+def _encode(model: Any, texts: list[str]) -> list[Any]:
+    """Normalized vectors for `texts`, an all-zero vector for each empty one.
+
+    Some tokenizers (voyage-4-nano's) add no special tokens, so "" is zero tokens: alone
+    in a batch it crashes the forward pass, padded among other texts it mean-pools to the
+    zero vector. Always answering zeros makes "" batch-independent and matches the
+    host-GPU embedding caches the text challengers were trained on.
+    """
+    filled = [i for i, text in enumerate(texts) if text != ""]
+    if len(filled) == len(texts):
+        return list(model.encode(texts, normalize_embeddings=True))
+    # All empty: one throwaway encode gives the output width — get_sentence_embedding_dimension()
+    # reports voyage-4-nano's backbone (2048), not the 1024 its pipeline actually returns.
+    encoded = model.encode([texts[i] for i in filled] or ["."], normalize_embeddings=True)
+    dimension = len(encoded[0])
+    vectors: list[Any] = [[0.0] * dimension for _ in texts]
+    for i, vector in zip(filled, encoded[: len(filled)], strict=True):
+        vectors[i] = vector
+    return vectors
+
+
 class LocalEmbeddingLLM(CustomLLM):
     """Runs a sentence-transformers model in-process to answer litellm embedding calls."""
 
@@ -79,7 +100,7 @@ class LocalEmbeddingLLM(CustomLLM):
         litellm_params: Any = None,
     ) -> EmbeddingResponse:
         """Embed `input` with the sentence-transformers model, normalized like the OpenAI API."""
-        vectors = _get_model(model or DEFAULT_MODEL).encode(input, normalize_embeddings=True)
+        vectors = _encode(_get_model(model or DEFAULT_MODEL), input)
         model_response.data = [
             {"object": "embedding", "index": i, "embedding": [float(v) for v in vector]}
             for i, vector in enumerate(vectors)
