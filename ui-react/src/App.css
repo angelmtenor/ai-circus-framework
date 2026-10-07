@@ -314,6 +314,57 @@ select:focus {
   gap: 2rem;
 }
 
+.scenario-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+}
+
+.scenario-search {
+  position: relative;
+  flex: 0 1 320px;
+  min-width: 220px;
+}
+
+.scenario-search-icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.scenario-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 2rem;
+}
+
+.scenario-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+
+.scenario-filter-clear {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--accent-2);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.7rem;
+  cursor: pointer;
+}
+
+.scenario-filter-clear:hover {
+  border-color: var(--accent-border);
+}
+
 .scenario-industry-filter {
   display: flex;
   align-items: center;
