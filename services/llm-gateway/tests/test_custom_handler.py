@@ -21,7 +21,13 @@ class _FakeSentenceTransformer:
 
     def encode(self, texts: list[str], normalize_embeddings: bool = True) -> list[list[float]]:
         """Return one fixed vector per input text."""
+        if "" in texts and len(set(texts)) == 1:
+            raise RuntimeError("cannot reshape tensor of 0 elements")  # voyage-4-nano on an all-empty batch
         return [[0.1, 0.2, 0.3, 0.4] for _ in texts]
+
+    def get_sentence_embedding_dimension(self) -> int:
+        """Like voyage-4-nano: the backbone's width, not encode()'s (must not be trusted)."""
+        return 8
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +71,18 @@ def test_embedding_falls_back_to_default_model_when_model_is_empty() -> None:
 
     assert response.model == custom_handler.DEFAULT_MODEL
     assert custom_handler.DEFAULT_MODEL in custom_handler._loaded_models
+
+
+def test_embedding_answers_empty_texts_with_zero_vectors() -> None:
+    """An empty text is zero tokens for some tokenizers: an all-empty batch must not reach
+    the model, and an empty text gets the zero vector wherever it sits (what the training caches hold).
+    """
+    alone = custom_handler.local_embedding_llm.embedding(**_call_kwargs("fake-model", ["", ""]))
+    mixed = custom_handler.local_embedding_llm.embedding(**_call_kwargs("fake-model", ["a", "", "b"]))
+
+    assert [d["embedding"] for d in alone.data] == [[0.0] * 4, [0.0] * 4]
+    assert [d["embedding"] for d in mixed.data] == [[0.1, 0.2, 0.3, 0.4], [0.0] * 4, [0.1, 0.2, 0.3, 0.4]]
+    assert [d["index"] for d in mixed.data] == [0, 1, 2]
 
 
 def test_aembedding_delegates_to_embedding() -> None:
