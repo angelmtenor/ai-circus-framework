@@ -44,16 +44,50 @@ data:
         <background_schedule_pool_size>16</background_schedule_pool_size>
         <background_fetches_pool_size>2</background_fetches_pool_size>
         <background_common_pool_size>4</background_common_pool_size>
+        <!-- ClickHouse's own diagnostics tables (trace_log, text_log, part_log, metric_log, …) are
+             on by default and, on an idle Langfuse, grew to ~2 GiB on disk against ~15 MiB of real
+             traces while their inserts/merges kept the server near one full core. Nobody reads
+             them here, so every one is removed (crash_log stays: it only writes on a crash).
+             After a config change an existing cluster keeps the old tables until they are dropped. -->
+        <aggregated_zookeeper_log remove="1"/>
+        <asynchronous_insert_log remove="1"/>
+        <asynchronous_metric_log remove="1"/>
+        <background_schedule_pool_log remove="1"/>
+        <backup_log remove="1"/>
+        <blob_storage_log remove="1"/>
+        <delta_lake_metadata_log remove="1"/>
+        <error_log remove="1"/>
+        <histogram_metric_log remove="1"/>
+        <iceberg_metadata_log remove="1"/>
+        <instrumentation_trace_log remove="1"/>
+        <latency_log remove="1"/>
+        <metric_log remove="1"/>
+        <opentelemetry_span_log remove="1"/>
+        <part_log remove="1"/>
+        <processors_profile_log remove="1"/>
+        <query_log remove="1"/>
+        <query_metric_log remove="1"/>
+        <query_thread_log remove="1"/>
+        <query_views_log remove="1"/>
+        <session_log remove="1"/>
+        <text_log remove="1"/>
+        <trace_log remove="1"/>
+        <zookeeper_connection_log remove="1"/>
+        <zookeeper_log remove="1"/>
     </clickhouse>
   # Per-query ceiling for the default profile (Langfuse's user is `default`-profiled).
   low-memory-users.xml: |
     <clickhouse>
         <profiles>
             <default>
-                <max_memory_usage>536870912</max_memory_usage>
+                <max_memory_usage>268435456</max_memory_usage>
                 <max_threads>2</max_threads>
-                <max_bytes_before_external_group_by>268435456</max_bytes_before_external_group_by>
-                <max_bytes_before_external_sort>268435456</max_bytes_before_external_sort>
+                <max_bytes_before_external_group_by>134217728</max_bytes_before_external_group_by>
+                <max_bytes_before_external_sort>134217728</max_bytes_before_external_sort>
+                <!-- The sampling query profiler only fed system.trace_log (removed in low-memory.xml). -->
+                <query_profiler_real_time_period_ns>0</query_profiler_real_time_period_ns>
+                <query_profiler_cpu_time_period_ns>0</query_profiler_cpu_time_period_ns>
+                <log_queries>0</log_queries>
             </default>
         </profiles>
     </clickhouse>
@@ -114,7 +148,7 @@ spec:
             failureThreshold: 6
           resources:
             requests: {memory: "256Mi", cpu: "100m"}
-            limits: {memory: "1Gi"}
+            limits: {memory: "512Mi"}  # ~300 MiB peak once its system logs were removed
       volumes:
         - name: clickhouse-config
           configMap: {name: clickhouse-config}
