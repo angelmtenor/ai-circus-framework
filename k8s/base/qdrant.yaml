@@ -26,12 +26,22 @@ spec:
             allowPrivilegeEscalation: false
           ports:
             - {containerPort: 6333}
+          env:
+            # Qdrant otherwise sizes every collection to the node's CPU count (8 segments on a
+            # 16-core laptop), and each segment holds ~15 MiB of its own buffers however few
+            # points it has: 6 collections of a few hundred chunks cost ~750 MiB. One segment
+            # per collection is plenty at this scale. etl-vectorize recreates collections on
+            # every run, so this server default covers them.
+            - {name: QDRANT__STORAGE__OPTIMIZERS__DEFAULT_SEGMENT_NUMBER, value: "1"}
+            # Worker/search pools also default to the CPU count.
+            - {name: QDRANT__SERVICE__MAX_WORKERS, value: "2"}
+            - {name: QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS, value: "2"}
           volumeMounts:
             - {name: qdrant-storage, mountPath: /qdrant/storage}
-          # Idle ~100Mi; grows with the number of vectorized documents.
+          # Grows by a few MiB per collection (one segment each, see env above).
           resources:
             requests: {cpu: 25m, memory: 64Mi}
-            limits: {memory: 1Gi}
+            limits: {memory: 384Mi}  # ~150 MiB peak re-indexing every collection
           readinessProbe:
             tcpSocket: {port: 6333}
             initialDelaySeconds: 2

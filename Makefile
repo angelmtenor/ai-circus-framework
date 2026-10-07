@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
-	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
+	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
@@ -411,6 +411,13 @@ k3s-demo-off: ## Undo `k3s-demo` — scale K3S_DEMO_SKIP (minus K3S_DEMO_KEEP_OF
 	done
 	@$(MAKE) --no-print-directory k3s-full K3S_LITE_SKIP="$(filter-out $(K3S_DEMO_KEEP_OFF),$(K3S_DEMO_SKIP))"
 	@$(MAKE) --no-print-directory k3s-wait
+
+k3s-clickhouse-drop-system-logs: ## One-shot for a cluster created before ClickHouse's system logs were disabled (k8s/base/langfuse.yaml): drop the leftover system.*_log tables — ClickHouse's own self-telemetry, never Langfuse data — whose merges otherwise retry at the memory limit forever (~1 CPU)
+	@kubectl -n ai-circus exec clickhouse-0 -- sh -c '\
+		q() { clickhouse-client --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD" -d system --param_e=MergeTree --param_keep=crash_log -q "$$1"; }; \
+		for t in $$(q "SELECT name FROM system.tables WHERE database = currentDatabase() AND engine = {e:String} AND name != {keep:String}"); do \
+			q "DROP TABLE $$t SYNC" && echo "dropped system.$$t" || exit 1; \
+		done'
 
 k3s-portforward: ## Standing port-forward to platform-registry (the browser reaches it directly) — a systemd user service where available, so it survives reboots and pod restarts (scripts/k3s_portforward.sh); auto-run by k3s-wait, safe to re-run
 	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${PLATFORM_REGISTRY_PORT:-8010}"

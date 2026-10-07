@@ -211,6 +211,11 @@ services:
   # ── Vector store (conversational_rag scenarios; one collection per tenant) ────
   qdrant:
     image: qdrant/qdrant:v1.19.0
+    # One segment per collection + small thread pools — see k8s/base/qdrant.yaml.
+    environment:
+      QDRANT__STORAGE__OPTIMIZERS__DEFAULT_SEGMENT_NUMBER: "1"
+      QDRANT__SERVICE__MAX_WORKERS: "2"
+      QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS: "2"
     volumes:
       - qdrant-storage:/qdrant/storage
     ports:
@@ -223,7 +228,7 @@ services:
       - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 384m
     healthcheck:
       # No curl/wget in this image — a bare TCP connect is enough to know the gRPC/HTTP
       # port is accepting connections.
@@ -416,7 +421,7 @@ services:
       - ./infra/clickhouse/low-memory-users.xml:/etc/clickhouse-server/users.d/low-memory-users.xml:ro
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
       interval: 10s
