@@ -3,7 +3,7 @@ import { config } from "./config";
 import { useIdentity } from "./useIdentity";
 import { useTheme } from "./useTheme";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
-import { ScenarioPicker } from "./ScenarioPicker";
+import { DEFAULT_SCENARIO_FILTERS, ScenarioPicker, type ScenarioFilters } from "./ScenarioPicker";
 import { Icon } from "./Icon";
 import "./App.css";
 
@@ -159,7 +159,7 @@ export default function App() {
   const [showPlatform, setShowPlatform] = useState(false);
   // Owned here (not inside ScenarioPicker) so it survives ScenarioPicker unmounting
   // while a scenario is open — otherwise picking a scenario and coming back resets it.
-  const [scenarioIndustry, setScenarioIndustry] = useState<string>("all");
+  const [scenarioFilters, setScenarioFilters] = useState<ScenarioFilters>(DEFAULT_SCENARIO_FILTERS);
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenariosError, setScenariosError] = useState<string | null>(null);
 
@@ -283,8 +283,8 @@ export default function App() {
                 <ScenarioPicker
                   scenarios={scenarios}
                   onSelect={setSelected}
-                  industry={scenarioIndustry}
-                  onIndustryChange={setScenarioIndustry}
+                  filters={scenarioFilters}
+                  onFiltersChange={setScenarioFilters}
                 />
               )}
               {!scenariosLoading && selected?.kind === "tabular_ml" && (

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { ScenarioSummary } from "./apiClient";
 
 type Category = {
@@ -87,23 +87,89 @@ function mlSubtype(scenario: ScenarioSummary): string | null {
   return null;
 }
 
+// Techniques a scenario uses — orthogonal to both `kind` (the gallery section) and
+// `industry` (the Domain filter), all derived from fields the summary already carries
+// so a new scenario.yaml lands in the right buckets without UI changes. A scenario can
+// carry several (e.g. a tabular model with a free-text feature is NLP *and* has an
+// LLM assistant tool). Order here is the dropdown's display order.
+type Technique = { key: string; label: string; match: (scenario: ScenarioSummary) => boolean };
+
+const GRAPH_EXTRAS = new Set(["network_explorer", "money_trail", "knowledge_graph"]);
+const isTabular = (s: ScenarioSummary) => s.kind === "tabular_ml" || s.kind === "tabular_ml_timeseries";
+const hasTextFeature = (s: ScenarioSummary) =>
+  Object.values(s.feature_schema ?? {}).some((spec) => spec.type === "text");
+
+const TECHNIQUES: Technique[] = [
+  { key: "tabular_only", label: "Tabular ML only", match: (s) => isTabular(s) && !hasTextFeature(s) },
+  {
+    key: "nlp",
+    label: "NLP / text",
+    match: (s) => hasTextFeature(s) || (s.kind === "deep_learning" && s.deep_learning?.modality === "text"),
+  },
+  {
+    key: "vision",
+    label: "Computer vision",
+    match: (s) => s.kind === "deep_learning" && s.deep_learning?.modality === "image",
+  },
+  {
+    key: "llm",
+    label: "LLM & RAG",
+    match: (s) =>
+      s.kind === "conversational_rag" || s.kind === "assisted_form" || !!s.document_tool || !!s.rubric_check,
+  },
+  { key: "graph", label: "Graphs & networks", match: (s) => GRAPH_EXTRAS.has(s.ui_extras?.kind ?? "") },
+  { key: "time_series", label: "Time series", match: (s) => s.kind === "tabular_ml_timeseries" },
+  { key: "custom_tab", label: "With a showcase tab", match: (s) => !!s.ui_extras || !!s.tutorial },
+];
+
+// Case- and accent-insensitive ("prestacion" finds "prestación").
+function normalize(text: string): string {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+}
+
+function searchText(scenario: ScenarioSummary): string {
+  return normalize(
+    [
+      scenario.title,
+      scenario.description,
+      scenario.slug.replaceAll("_", " "),
+      domainLabel(scenario.industry),
+      categoryFor(scenario).label,
+      mlSubtype(scenario) ?? "",
+      ...TECHNIQUES.filter((t) => t.match(scenario)).map((t) => t.label),
+    ].join(" "),
+  );
+}
+
+// The picker's filters — owned by App.tsx (not local state) so they survive this
+// component unmounting when the user opens a scenario and comes back.
+export type ScenarioFilters = { industry: string; technique: string; query: string };
+export const DEFAULT_SCENARIO_FILTERS: ScenarioFilters = { industry: "all", technique: "all", query: "" };
+
 export function ScenarioPicker({
   scenarios,
   onSelect,
-  industry,
-  onIndustryChange,
+  filters,
+  onFiltersChange,
 }: {
   scenarios: ScenarioSummary[];
   onSelect: (scenario: ScenarioSummary) => void;
-  // Owned by the parent (not local state) so the filter survives this component
-  // unmounting when the user opens a scenario and comes back — see App.tsx.
-  industry: string;
-  onIndustryChange: (industry: string) => void;
+  filters: ScenarioFilters;
+  onFiltersChange: (filters: ScenarioFilters) => void;
 }) {
+  const { industry, technique, query } = filters;
+  const searchRef = useRef<HTMLInputElement>(null);
   const availableIndustries = useMemo(
     () => Object.keys(INDUSTRY_LABELS).filter((key) => scenarios.some((s) => s.industry === key)),
     [scenarios],
   );
+  // Only techniques at least one entitled scenario uses, with how many do.
+  const availableTechniques = useMemo(
+    () =>
+      TECHNIQUES.map((t) => ({ ...t, count: scenarios.filter(t.match).length })).filter((t) => t.count > 0),
+    [scenarios],
+  );
+  const haystacks = useMemo(() => new Map(scenarios.map((s) => [s.slug, searchText(s)])), [scenarios]);
 
   if (scenarios.length === 0) {
     return (
@@ -114,8 +180,17 @@ export function ScenarioPicker({
     );
   }
 
-  const filteredScenarios =
-    industry === "all" ? scenarios : scenarios.filter((s) => s.industry === industry);
+  const setFilter = (patch: Partial<ScenarioFilters>) => onFiltersChange({ ...filters, ...patch });
+  const activeTechnique = TECHNIQUES.find((t) => t.key === technique);
+  // Every word must appear somewhere (title, description, domain, technique…).
+  const words = normalize(query).split(/\s+/).filter(Boolean);
+  const filteredScenarios = scenarios.filter(
+    (s) =>
+      (industry === "all" || s.industry === industry) &&
+      (!activeTechnique || activeTechnique.match(s)) &&
+      words.every((word) => haystacks.get(s.slug)?.includes(word)),
+  );
+  const filtering = industry !== "all" || !!activeTechnique || words.length > 0;
 
   const groups = CATEGORIES.map((category) => ({
     ...category,
@@ -124,32 +199,88 @@ export function ScenarioPicker({
 
   return (
     <div className="scenario-groups">
-      {availableIndustries.length > 1 && (
-        <div className="scenario-industry-filter">
-          <label htmlFor="scenario-industry-select">Domain</label>
-          <select id="scenario-industry-select" value={industry} onChange={(e) => onIndustryChange(e.target.value)}>
-            <option value="all">All domains</option>
-            {[
-              { label: "Industries", keys: availableIndustries.filter((key) => !LEARNING_DOMAINS.has(key)) },
-              { label: "Learning & society", keys: availableIndustries.filter((key) => LEARNING_DOMAINS.has(key)) },
-            ]
-              .filter((group) => group.keys.length > 0)
-              .map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.keys.map((key) => (
-                    <option key={key} value={key}>
-                      {INDUSTRY_LABELS[key]}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-          </select>
+      <div className="scenario-toolbar">
+        <div className="scenario-search">
+          <span className="scenario-search-icon" aria-hidden="true">
+            🔍
+          </span>
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder="Find a scenario…"
+            aria-label="Find a scenario"
+            value={query}
+            onChange={(e) => setFilter({ query: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setFilter({ query: "" });
+            }}
+          />
         </div>
-      )}
+        {availableIndustries.length > 1 && (
+          <div className="scenario-industry-filter">
+            <label htmlFor="scenario-industry-select">Domain</label>
+            <select
+              id="scenario-industry-select"
+              value={industry}
+              onChange={(e) => setFilter({ industry: e.target.value })}
+            >
+              <option value="all">All domains</option>
+              {[
+                { label: "Industries", keys: availableIndustries.filter((key) => !LEARNING_DOMAINS.has(key)) },
+                { label: "Learning & society", keys: availableIndustries.filter((key) => LEARNING_DOMAINS.has(key)) },
+              ]
+                .filter((group) => group.keys.length > 0)
+                .map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.keys.map((key) => (
+                      <option key={key} value={key}>
+                        {INDUSTRY_LABELS[key]}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+            </select>
+          </div>
+        )}
+        {availableTechniques.length > 1 && (
+          <div className="scenario-industry-filter">
+            <label htmlFor="scenario-technique-select">Technique</label>
+            <select
+              id="scenario-technique-select"
+              value={technique}
+              onChange={(e) => setFilter({ technique: e.target.value })}
+            >
+              <option value="all">All techniques</option>
+              {availableTechniques.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label} ({t.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {filtering && (
+          <div className="scenario-filter-status">
+            <span>
+              {filteredScenarios.length} of {scenarios.length}
+            </span>
+            <button
+              type="button"
+              className="scenario-filter-clear"
+              onClick={() => {
+                onFiltersChange(DEFAULT_SCENARIO_FILTERS);
+                searchRef.current?.focus();
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
       {groups.length === 0 && (
         <div className="scenario-empty">
           <span className="scenario-empty-icon">🗂️</span>
-          <p>No scenarios match this domain.</p>
+          <p>No scenarios match these filters.</p>
         </div>
       )}
       {groups.map((group) => (
