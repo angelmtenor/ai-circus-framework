@@ -74,11 +74,16 @@ service instance serves every scenario of its kind**, routed by a `{scenario_slu
 (assisted_form), optional `dl-inference` (deep_learning; onnxruntime only, models from the
 one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`). A
 `deep_learning` scenario is `task: classification` (fine-tune) or `task: anomaly_detection`
-(frozen DINOv2 + patch memory bank; same ONNX interface plus an `anomaly_map` output). `ui-react`
+(frozen DINOv2 + patch memory bank; same ONNX interface plus an `anomaly_map` output). A classification scenario may read **frame sequences** (`source.type: http_frame_sequences`: per-camera `.tgz` of
+`<ts>_<±offset s>.jpg`, label from the offset, split by camera/station so test cameras are never seen; `clear_only`
+archives are no-event controls): dl-training publishes each sample's `group` (camera) and `seq` in recording order,
+and `ui_extras: camera_wall` (`wildfire_smoke_watch`, `CameraWallView.tsx` + `cameraWallLogic.ts`) plays a pool of them on
+one clock, really scoring every frame through dl-inference (`live` vs `replay`), with an in-app camera picker, an alert
+rule (threshold, N frames, `early_grace_seconds`) and `control_margin_seconds` for controls. `ui-react`
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
 scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 An `assisted_form` whose `form` has `sections` renders as an official paper sheet

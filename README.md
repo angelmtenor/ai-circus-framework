@@ -93,6 +93,23 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 </tr>
 </table>
 
+### 🔥 Public safety
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/wildfire_smoke_watch.md"><img src="docs/screenshots/wildfire_smoke_watch/watch-wall.webp" alt="Watch Wall: six fire-lookout cameras scored live, with per-tile verdicts and an alert feed"></a>
+<b>📹 Watch Wall</b> · <code>camera_wall</code><br>
+<sub>Wildfire Smoke Watch — held-out HPWREN lookout cameras replayed side by side and scored live as each frame arrives; alerts timed against the moment the plume first appeared, false alarms counted, threshold sliders, occlusion heatmap on click.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/wildfire_smoke_watch.md"><img src="docs/screenshots/wildfire_smoke_watch/picker.webp" alt="Camera picker: eleven held-out lookouts, each tagged fire or no fire"></a>
+<b>🎛 Change cameras</b> · <code>camera_wall</code><br>
+<sub>Pick any six of 11 held-out lookouts — fires, fainter fires, and <b>no-fire controls</b> where every alert is a false alarm. Images courtesy of <a href="https://www.hpwren.ucsd.edu/">HPWREN</a>, UC San Diego.</sub>
+</td>
+</tr>
+</table>
+
 ### 🎓 Tutorials
 
 <table>
@@ -447,7 +464,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |
 | **Machined Screw Inspection (CV Anomaly Detection — hard)** (`screw_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective machined screw (thread, head, neck, tip) — the same detector as the PCB line on a much harder part (random pose, fine thread texture, defects a few pixels wide), so the **Inspection Line** shows real escapes and a manual-inspection lane | MVTec AD — Screw (Bergmann et al., CVPR 2019; CC BY-NC-SA 4.0) |
 | **Solar Cell EL Inspection (CV)** (`solar_cell_inspection`) | `deep_learning` — image | Functional vs. defective photovoltaic cell from its electroluminescence image — fine-tuned ConvNeXt V2, occlusion heatmaps, a live **Grading Line** tab; expert labels include "possibly defective" cells, so it is genuinely hard | ELPV — ZAE Bayern (Buerhop-Lutz et al., 2018; CC BY-NC-SA 4.0) |
-| **Wildfire Smoke Watch (CV)** (`wildfire_smoke_watch`) | `deep_learning` — image, frame sequences | Held-out fire-lookout cameras (fires and **no-fire controls**, six at a time, swappable with an in-app picker) play side by side, one frame a minute from 40 min before a smoke plume to 40 min after; a fine-tuned ConvNeXt V2 scores every frame live, raises an alert after consecutive smoke frames and reports the minutes it took (or the false alarm) against the recording's ground truth — a **Watch Wall** tab; tested on 11 lookouts never seen in training | HPWREN FIgLib — UC San Diego (images courtesy of [HPWREN](https://www.hpwren.ucsd.edu/); credit reference required) |
+| **[Wildfire Smoke Watch (CV)](docs/scenarios/wildfire_smoke_watch.md)** (`wildfire_smoke_watch`) | `deep_learning` — image, frame sequences | Held-out fire-lookout cameras (fires and **no-fire controls**, six at a time, swappable with an in-app picker) play side by side, one frame a minute from 40 min before a smoke plume to 40 min after; a fine-tuned ConvNeXt V2 scores every frame live, raises an alert after consecutive smoke frames and reports the minutes it took (or the false alarm) against the recording's ground truth — a **Watch Wall** tab; tested on 11 lookouts never seen in training | HPWREN FIgLib — UC San Diego (images courtesy of [HPWREN](https://www.hpwren.ucsd.edu/); credit reference required) |
 
 Most `tabular_ml` scenarios above are ported from a real public dataset — full credit/link lives in
 each `scenarios/<slug>/scenario.yaml`'s `credits` field and is surfaced in the Data tab. A few
@@ -906,7 +923,7 @@ dependency.
 
 ### Deep learning — NLP & computer vision (optional)
 
-Five scenarios are `kind: deep_learning`, all on public data and Hugging Face models. In
+Six scenarios are `kind: deep_learning`, all on public data and Hugging Face models. In
 `healthcare`, two fine-tunes: `thomas-sounack/BioClinical-ModernBERT-base` (150M, 2025 clinical
 encoder) on patient symptom texts and `facebook/convnextv2-nano-22k-224` (15.6M) on PneumoniaMNIST
 chest X-rays; the same ConvNeXt V2 is fine-tuned in `manufacturing_industry` on electroluminescence
@@ -918,10 +935,14 @@ by their distance to the nearest normal one (AnomalyDINO); backbone, bank and kN
 ONNX graph whose `anomaly_map` output is the explanation. `screw_visual_inspection` is the same
 detector on a deliberately harder part (MVTec AD Screw: machined screws in random poses, fine
 thread texture, defects a few pixels wide) — no code of its own, only a YAML, and an Inspection
-Line where the model can no longer work alone. No data file is committed: each
+Line where the model can no longer work alone. The sixth, `wildfire_smoke_watch` (public safety), classifies
+frames of fixed fire-lookout cameras (HPWREN FIgLib, the same ConvNeXt V2) and plays six held-out recordings
+at once on a **Watch Wall**: every frame is scored live, alerts are timed against the ground-truth moment the
+plume appeared, and some feeds are no-fire controls — see [its page](docs/scenarios/wildfire_smoke_watch.md).
+No data file is committed: each
 `scenario.yaml` pins its public source (Hugging Face commit + SHA-256 — JSON Lines text or Parquet
 images; a Hub folder of one-file-per-image classes + one manifest SHA-256, `huggingface_image_folder`;
-or Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS on first
+per-camera `.tgz` frame sequences, one SHA-256 each, `http_frame_sequences`; or Zenodo + MD5) and `dl-training` downloads, verifies and stores it in SeaweedFS on first
 run (`make dl-data` does only that).
 
 - **`dl-training`** (one-shot job): device auto-detect — the host/cluster GPU gets each scenario's
