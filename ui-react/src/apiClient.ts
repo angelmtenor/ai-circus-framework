@@ -202,6 +202,8 @@ export type CameraWallExtra = {
   alert_threshold: number;
   consecutive_frames_to_alert: number;
   tick_ms: number;
+  early_grace_seconds: number;
+  control_margin_seconds: number;
   wall_size: number;
   default_cameras: string[];
   tab_label: string;

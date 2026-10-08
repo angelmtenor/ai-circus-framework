@@ -738,6 +738,15 @@ def test_camera_wall_pool_default_cameras_and_clear_only_controls() -> None:
         )
 
 
+def test_camera_wall_grace_and_control_margin_defaults_and_bounds() -> None:
+    wall = CameraWallExtra(positive_label="b")
+    assert (wall.early_grace_seconds, wall.control_margin_seconds) == (300, 900)
+    with pytest.raises(ValidationError):
+        CameraWallExtra(positive_label="b", early_grace_seconds=-1)
+    with pytest.raises(ValidationError):
+        CameraWallExtra(positive_label="b", control_margin_seconds=99999)
+
+
 def test_wildfire_scenario_keeps_every_lookout_in_exactly_one_split() -> None:
     """A station seen in training would turn "a camera the model never saw" into a leak."""
     from pathlib import Path

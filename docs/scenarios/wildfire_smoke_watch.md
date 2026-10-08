@@ -19,7 +19,7 @@ every alert on one is a false alarm), and you choose which six of the eleven hel
 |---|---|
 | **Question** | Is there a smoke plume anywhere in this lookout frame — and how quickly does a live alarm catch a fire that nobody has reported yet? |
 | **Data** | **HPWREN Fire Ignition images Library (FIgLib)** — fixed lookout cameras in Southern California. Each recording is **81 frames, one a minute, from 40 minutes before to 40 minutes after** the plume first becomes visible; the frame file name (`<unix_ts>_<±offset seconds>.jpg`) *is* the ground truth. 25 recordings are used, one per lookout station (~1.7 GB, downloaded once, pinned by SHA-256, **never committed**). |
-| **Split** | **By lookout, not by frame.** 12 lookouts train (843 frames), 2 validate/calibrate (140), and **11 are held out (757 frames) — stations the model has never seen**: 8 fires plus 3 **no-fire controls** (the pre-ignition half of a lookout, `clear_only`, 31–40 frames). The Watch Wall shows six at a time. The scenario's own tests refuse a YAML in which a station appears in two places. |
+| **Split** | **By lookout, not by frame.** 12 lookouts train (843 frames), 2 validate/calibrate (140), and **11 are held out (757 frames) — stations the model has never seen**: 8 fires plus 3 **no-fire controls** (the pre-ignition half of a lookout, `clear_only`; the wall shows only the first 25 frames, stopping 15 minutes before the annotated start). The Watch Wall shows six at a time. The scenario's own tests refuse a YAML in which a station appears in two places. |
 | **Model** | `facebook/convnextv2-nano-22k-224` fine-tuned (15.0 M parameters) at 320 px, **60 MB ONNX**, served by the same CPU-only `dl-inference` pod as the other vision scenarios — no extra container, no extra memory ceiling. |
 | **Target** | `Clear` / `Smoke` per frame |
 
@@ -35,9 +35,11 @@ tile says honestly where its number came from:
   UI never claims an inference it didn't make.
 
 An **alert** is the alarm switching on after *N* consecutive frames at or above the threshold
-(defaults: 50 %, 2 frames). It is timed against the recording's ground truth: **minutes after the
-plume first became visible** (the detection delay), or a **false alarm** if it fires before the plume
-exists — on a control, any alert is one. **🎛 Change cameras** opens a picker over all eleven held-out
+(defaults: 70 %, 3 frames; both are sliders). It is timed against the recording's ground truth:
+**minutes after the plume first became visible** (the detection delay). An alert up to 5 minutes
+*before* that is an **early detection** — the annotation is when a person first saw the plume, so
+the model may fairly see it sooner — and anything earlier is a **false alarm**; on a control, any
+alert is one. Each tile ends with a one-line verdict (`✓ flagged T+11 min`, `✓ correctly quiet`, …). **🎛 Change cameras** opens a picker over all eleven held-out
 lookouts (fires tagged `fire`, controls `no fire`); the default wall is four fires and two controls.
 Drag the threshold and every KPI recomputes instantly; tick *Show each camera's whole
 recording* to overlay the entire probability curve; click a tile to pause the wall and trace where
@@ -60,17 +62,25 @@ ignition, when the plume is a few pixels and no model (or person) can tell:
 |---|---|
 | Frame accuracy / macro-F1 | **89.3 %** / 0.890 |
 | AUROC | **0.914** |
-| Default wall (4 fires + 2 controls), threshold 50 %, 2 frames | **4 / 4 fires detected**, mean **4.5 min** after the plume first appeared; **both controls silent**; but **4 false alarms**, all on `syp-n` (Whittier) before ignition at P 51–73 % |
+| Default wall (4 fires + 2 controls), 70 %, 3 frames | **4 / 4 fires detected**, mean **5.2 min** after the plume first appeared; **both controls silent; 0 false alarms**, 1 early detection (`syp-n`, 4 min before its annotation) |
+| Same wall at the old 50 %, 2 frames | the same fires, but **4 false alarms** on `syp-n` before its ignition |
 | Calibration | ECE 0.076 — the temperature fit on two validation lookouts made it *worse* than the raw model (0.045); read the probabilities as a ranking, not as frequencies |
 
-Two caveats on those wall numbers:
+Things to know about those wall numbers:
 
+- **The alert rule was tuned on what you see.** I chose 70 % / 3 frames *after* watching `syp-n` raise
+  false alarms at 50 % / 2, on the same held-out cameras the wall shows. So the wall is optimistic;
+  an honest estimate needs a threshold fixed on the two validation lookouts, or a fresh set of cameras.
+- **`syp-n` is a hard lookout.** A white cumulus-like puff sits on its left horizon for the whole
+  recording (already there at −36 min) and a bird crosses the sky at −22 min, where the model hits 99 %.
+  The model does see real haze rising from about −7 min, a few minutes before the annotation.
+- **`ml-n` is not a clean control after −15 min.** Its smoke probability jumps to 83 % at −14 min and
+  98 % at −1 min: a real plume was visible before the annotated start. The wall therefore stops every
+  control 15 minutes before the annotation (`control_margin_seconds`), so none can reach a fire.
 - **They move between training runs.** GPU training is not bit-for-bit repeatable. An earlier run of
-  the same recipe, scored on a different six-fire wall, detected 6 / 6 with no false alarms and a
-  10.2 min mean. Treat the wall as an illustration of how the system behaves, not as a benchmark.
-- **A camera already ringing at ignition counts as detected at once.** `syp-n` raised its false
-  alarms before the plume appeared and was still alarming when it did, which pulls the mean time to
-  alert down. Drag the threshold up and watch the false alarms trade against the delay.
+  the same recipe, on a different six-fire wall, detected 6 / 6 with no false alarms and a 10.2 min mean.
+- **A camera already ringing at ignition counts as detected at once**, and an early alert counts as a
+  detection with a negative delay, which pulls the mean down.
 
 Why the model is not better, and why that is the honest answer:
 
