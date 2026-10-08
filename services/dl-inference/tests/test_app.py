@@ -109,6 +109,7 @@ async def test_lifespan_sets_up_model_cache_from_resolved_scenarios(monkeypatch:
 
     class FakeDefinition:
         deep_learning = FakeDeepLearning()
+        ui_extras = None
 
     connect_calls: list[dict[str, object]] = []
 
@@ -180,3 +181,15 @@ async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.Mon
     with pytest.raises(RuntimeError, match="No deep_learning scenario matched"):
         async with app.lifespan(app.app):
             pass
+
+
+def test_preload_order_warms_a_camera_wall_first_then_the_rest_by_slug() -> None:
+    """A wall scores a frame per camera per tick, so it must be among the (capped) warm models."""
+    definitions = {
+        "chest": SimpleNamespace(ui_extras=SimpleNamespace(kind="reading_room")),
+        "alpha": SimpleNamespace(ui_extras=None),
+        "wildfire": SimpleNamespace(ui_extras=SimpleNamespace(kind="camera_wall")),
+        "beta": SimpleNamespace(ui_extras=SimpleNamespace(kind="triage_board")),
+    }
+
+    assert app.preload_order(definitions) == ["wildfire", "alpha", "beta", "chest"]

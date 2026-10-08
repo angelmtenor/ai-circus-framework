@@ -585,6 +585,31 @@ class ReadingRoomExtra(BaseModel):
     worklist_size: int = Field(default=40, ge=5, le=200)
 
 
+class CameraWallExtra(BaseModel):
+    """Opt-in 5th workspace tab for an image `deep_learning` scenario whose source is
+    `http_frame_sequences`: a wall with one live tile per held-out camera. All feeds advance
+    on one clock (`tick_ms` per frame); each tick every tile's current frame is scored by the
+    deployed model, and an alert is raised once `consecutive_frames_to_alert` frames in a row
+    reach `alert_threshold` for `positive_label`. Alerts are timed against the recording's
+    ground-truth event (frame offset 0). See ui-react's CameraWallView.tsx.
+    """
+
+    kind: Literal["camera_wall"] = "camera_wall"
+    positive_label: str  # a key from deep_learning.labels, e.g. "1" (smoke)
+    event_noun: str = "event"  # singular, used in alerts: "smoke plume"
+    alert_threshold: float = Field(default=0.5, gt=0, lt=1)
+    consecutive_frames_to_alert: int = Field(default=2, ge=1, le=10)
+    tick_ms: int = Field(default=700, ge=100, le=5000)
+    # The wall shows `wall_size` of the held-out cameras at once; the viewer can swap which ones
+    # (a pool bigger than the wall, fires and no-fire controls alike). `default_cameras` (camera
+    # names, in tile order) is what it opens with; empty = the first `wall_size`.
+    wall_size: int = Field(default=6, ge=2, le=9)
+    default_cameras: list[str] = []
+    tab_label: str = "Watch Wall"
+    title: str = "Live watch wall"
+    note: str | None = None
+
+
 class ExampleRecord(BaseModel):
     """A named, complete input record (every `feature_columns` entry) — a preset the
     UI scores live against `/predict/{slug}`, e.g. the notebook's "Boy, 3rd class" or
@@ -1121,6 +1146,7 @@ UiExtras = Annotated[
     | CaseDeskExtra
     | TriageBoardExtra
     | ReadingRoomExtra
+    | CameraWallExtra
     | KnowledgeGraphExtra,
     Field(discriminator="kind"),
 ]
@@ -1139,7 +1165,7 @@ _TABULAR_UI_EXTRAS = (
     MoneyTrailExtra,
     CaseDeskExtra,
 )
-_DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra)
+_DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
 _RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
 
 
@@ -1228,8 +1254,66 @@ class NpzImagesSource(BaseModel):
     md5: str
 
 
+class FrameSequenceArchive(BaseModel):
+    """One camera's recording inside an `http_frame_sequences` source: a `.tgz` of JPEG frames."""
+
+    file: str  # file name under the source's base_url, e.g. "20170708_Whittier_syp-n-mobo-c.tgz"
+    split: Literal["train", "validation", "test"]
+    camera: str = Field(min_length=1, max_length=40)  # tile/feed name; unique per archive
+    # A no-event control: only the frames *before* the event are used (all negative) — a feed in
+    # which any alert is a false alarm. Test split only; a camera wall shows it without a marker.
+    clear_only: bool = False
+
+
+class HttpFrameSequencesSource(BaseModel):
+    """Fixed-camera recordings published as one `.tgz` per sequence of JPEG frames named
+    `<unix_ts>_<signed offset seconds>.jpg` — offset 0 is the instant the event becomes
+    visible (HPWREN FIgLib: 81 frames, one a minute, 40 min either side of a fire ignition).
+    Frame-level ground truth is therefore free: offset >= `positive_from_offset` is the
+    event (`positive_label`), earlier frames are clear (`negative_label`). Splits are
+    assigned per *camera archive*, so train / validation / test never share a camera and the
+    test score means "a camera the model has never seen".
+
+    The first minutes after the event are ambiguous (a plume of a few pixels): frames in
+    `[positive_from_offset, positive_from_offset + ambiguous_seconds)` are left out of
+    train and validation — they would teach the model to see the event where nothing is
+    visible — but stay in the test split, so a camera wall replays the whole recording and
+    the detection delay it reports is honest.
+
+    Every archive carries its own SHA-256 (a changed file fails loudly, never silently).
+    """
+
+    type: Literal["http_frame_sequences"] = "http_frame_sequences"
+    base_url: str = Field(pattern=r"^https://")
+    archives: list[FrameSequenceArchive] = Field(min_length=3)
+    sha256: dict[str, str]  # archive file -> expected hex digest
+    positive_from_offset: int = 0
+    ambiguous_seconds: int = Field(default=0, ge=0)
+    negative_label: str
+    positive_label: str
+
+    @model_validator(mode="after")
+    def _archives_and_checksums(self) -> HttpFrameSequencesSource:
+        files = [a.file for a in self.archives]
+        if len(set(files)) != len(files):
+            raise ValueError("http_frame_sequences archives must be unique files.")
+        cameras = [a.camera for a in self.archives]
+        if len(set(cameras)) != len(cameras):
+            raise ValueError("http_frame_sequences cameras must be unique (one feed per archive).")
+        if not {"train", "test"} <= {a.split for a in self.archives}:
+            raise ValueError("http_frame_sequences source needs at least one 'train' and one 'test' archive.")
+        if missing := set(files) - set(self.sha256):
+            raise ValueError(f"http_frame_sequences source has no sha256 for {sorted(missing)}.")
+        if self.negative_label == self.positive_label:
+            raise ValueError("http_frame_sequences negative_label and positive_label must differ.")
+        if any(a.clear_only and a.split != "test" for a in self.archives):
+            raise ValueError("http_frame_sequences clear_only archives must be in the 'test' split.")
+        return self
+
+
 DlDataSource = Annotated[
-    HuggingFaceFilesSource | HuggingFaceImageFolderSource | NpzImagesSource, Field(discriminator="type")
+    HuggingFaceFilesSource | HuggingFaceImageFolderSource | NpzImagesSource | HttpFrameSequencesSource,
+    Field(discriminator="type"),
 ]
 
 
@@ -1345,8 +1429,14 @@ class DeepLearningConfig(BaseModel):
             ok = isinstance(source, HuggingFaceFilesSource) and source.text_field is not None
             expected = "a huggingface_files source with text_field"
         else:
-            ok = isinstance(source, NpzImagesSource | HuggingFaceImageFolderSource) or source.image_field is not None
-            expected = "an npz_images or huggingface_image_folder source, or huggingface_files with image_field"
+            ok = (
+                isinstance(source, NpzImagesSource | HuggingFaceImageFolderSource | HttpFrameSequencesSource)
+                or source.image_field is not None
+            )
+            expected = (
+                "an npz_images, huggingface_image_folder or http_frame_sequences source, "
+                "or huggingface_files with image_field"
+            )
         if not ok:
             raise ValueError(f"modality={self.modality!r} needs {expected}.")
         keys = [label.key for label in self.labels]
@@ -1356,6 +1446,10 @@ class DeepLearningConfig(BaseModel):
             unknown = set(source.label_map.values()) - set(keys)
             if unknown:
                 raise ValueError(f"{source.type} label_map values {sorted(unknown)} are not label keys.")
+        if isinstance(source, HttpFrameSequencesSource):
+            unknown = {source.negative_label, source.positive_label} - set(keys)
+            if unknown:
+                raise ValueError(f"http_frame_sequences labels {sorted(unknown)} are not label keys.")
         return self
 
     @model_validator(mode="after")
@@ -1832,6 +1926,19 @@ class ScenarioDefinition(BaseModel):
                 raise ValueError("ui_extras.reading_room requires modality='image'.")
             if extras.positive_label not in keys:
                 raise ValueError(f"ui_extras.reading_room positive_label {extras.positive_label!r} is not a label key.")
+        if isinstance(extras, CameraWallExtra):
+            if not isinstance(dl.source, HttpFrameSequencesSource):
+                raise ValueError("ui_extras.camera_wall requires an http_frame_sequences source.")
+            if extras.positive_label != dl.source.positive_label:
+                raise ValueError("ui_extras.camera_wall positive_label must be the source's positive_label.")
+            test_cameras = [a.camera for a in dl.source.archives if a.split == "test"]
+            if len(test_cameras) < 2:
+                raise ValueError("ui_extras.camera_wall needs at least two held-out 'test' camera archives.")
+            unknown = [c for c in extras.default_cameras if c not in test_cameras]
+            if unknown or len(set(extras.default_cameras)) != len(extras.default_cameras):
+                raise ValueError(f"ui_extras.camera_wall default_cameras must be distinct test cameras: {unknown}")
+            if len(extras.default_cameras) > extras.wall_size:
+                raise ValueError("ui_extras.camera_wall default_cameras is longer than wall_size.")
         return self
 
     @model_validator(mode="after")

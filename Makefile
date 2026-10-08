@@ -439,7 +439,7 @@ k3s-portforward-uninstall: ## Remove the port-forward's systemd user service —
 
 DL_SCENARIO_NLP ?= symptom_triage
 # Comma-separated: the fine-tuned image classifiers (chest X-ray, solar-cell EL).
-DL_SCENARIO_CV  ?= chest_xray_pneumonia,solar_cell_inspection
+DL_SCENARIO_CV  ?= chest_xray_pneumonia,solar_cell_inspection,wildfire_smoke_watch
 # Comma-separated: both manufacturing anomaly detectors (PCB, and the harder machined screw).
 DL_SCENARIO_ANOMALY ?= pcb_visual_inspection,screw_visual_inspection
 

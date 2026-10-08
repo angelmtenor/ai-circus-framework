@@ -1,0 +1,159 @@
+# Seed definition for the "wildfire_smoke_watch" scenario — a `deep_learning` computer vision
+# scenario (`task: classification`, the chest X-ray / solar-cell code path) in public safety:
+# six fixed fire-lookout cameras play side by side, the deployed model scores every frame as it
+# arrives, and an alert is raised when smoke persists — measured against the moment the plume
+# first became visible. Loaded into the registry by services/platform-registry at bootstrap;
+# dl-training and dl-inference also read the `deep_learning` block directly.
+#
+# No image lives in this repo: dl-training downloads the pinned per-camera archives (SHA-256
+# checked) into the scenario's SeaweedFS bucket on first run (`make dl-data`). Regenerate the
+# `source:` block with scripts/prepare_figlib_sequences.py.
+
+slug: wildfire_smoke_watch
+kind: deep_learning
+title: "Wildfire Smoke Watch (CV)"
+description: >
+  A wall of fire-lookout cameras that watches for the first smoke of a wildfire. Mountain-top
+  cameras from Southern California's HPWREN network replay real recordings, one
+  frame a minute from forty minutes before a plume appears to forty minutes after, and a
+  ConvNeXt V2 network fine-tuned on twelve other lookouts scores every frame as it arrives.
+  An alert fires when smoke persists for consecutive frames, and the wall reports how many
+  minutes after the plume first became visible each camera raised it — and whether any camera
+  cried wolf first. Some feeds are controls — a lookout before any fire, where every alert is a
+  false alarm — and the viewer picks which six of the eleven held-out cameras play. The test cameras were never seen in training, so the numbers are what
+  a newly installed camera would get. Hard on purpose: a fresh plume is a few pixels against
+  haze, cloud and glare, and the first minutes are genuinely ambiguous.
+role_required: "scenario:wildfire_smoke_watch"
+industry: public_sector
+icon: "🔥"
+
+credits:
+  source: "HPWREN Fire Ignition images Library (FIgLib) — UC San Diego"
+  url: "https://www.hpwren.ucsd.edu/FIgLib/"
+  note: >
+    Images courtesy of the High Performance Wireless Research and Education Network
+    (https://www.hpwren.ucsd.edu/), UC San Diego; credit reference required for derivative
+    work, data provided as-is. Dobbins et al., "FIgLib & SmokeyNet: Dataset and Deep Learning
+    Model for Real-Time Wildland Fire Smoke Detection", Remote Sensing 2022. Each recording is
+    81 frames, one a minute, from 40 minutes before to 40 minutes after the plume first
+    becomes visible (frame offset 0, read from the file name). 25 recordings of
+    25 lookouts, none in more than one split; three test feeds use only the pre-ignition half of
+    their recording (controls). Frames within 10 minutes after offset 0 are left
+    out of training and validation (a plume of a few pixels teaches the model to see smoke
+    where there is none) but stay in the wall. Base model: facebook/convnextv2-nano-22k-224
+    (Apache-2.0). Not validated for operational use — never a substitute for a lookout, a
+    911 call or an official fire detection system.
+
+chat:
+  context: >
+    A wildfire smoke detector watching six fixed lookout cameras. It scores each frame as clear
+    or smoke, raises an alert after consecutive smoke frames, and shows an occlusion heatmap of
+    the part of the image that drove the call.
+  sample_questions: []
+
+deep_learning:
+  modality: image
+  bucket: "scenario-wildfire-smoke-watch"
+  source:
+    type: http_frame_sequences
+    base_url: "https://cdn.hpwren.ucsd.edu/HPWREN-FIgLib-Data/Tar"
+    positive_from_offset: 0
+    ambiguous_seconds: 600
+    negative_label: "0"
+    positive_label: "1"
+    archives:
+      - {file: "20250107_PalisadesFire_dwpgm-s-mobo-c.tgz", split: test, camera: "dwpgm-s"}
+      - {file: "20200611_skyline_lp-n-mobo-c.tgz", split: test, camera: "lp-n"}
+      - {file: "20240909_BridgeFire_starr-n-mobo-c.tgz", split: test, camera: "starr-n"}
+      - {file: "20260715_ThornFire_ws-n-mobo-c.tgz", split: test, camera: "ws-n"}
+      - {file: "20240719_ForkFire_wilson-e-mobo-c.tgz", split: test, camera: "wilson-e"}
+      - {file: "20170708_Whittier_syp-n-mobo-c.tgz", split: test, camera: "syp-n"}
+      - {file: "20201127_Hawkfire_pi-w-mobo-c.tgz", split: test, camera: "pi-w"}
+      - {file: "20240828_KeysFire_bh-w-mobo-c.tgz", split: test, camera: "bh-w"}
+      - {file: "20180602_Alison_sp-s-mobo-c.tgz", split: test, camera: "sp-s", clear_only: true}
+      - {file: "20190716_FIRE_so-w-mobo-c.tgz", split: test, camera: "so-w", clear_only: true}
+      - {file: "20250501_FelipeFire_ml-n-mobo-c.tgz", split: test, camera: "ml-n", clear_only: true}
+      - {file: "20240825_TenajaFire_buff-n-mobo-c.tgz", split: validation, camera: "buff-n"}
+      - {file: "20250709_SteeleFire_om-n-mobo-c.tgz", split: validation, camera: "om-n"}
+      - {file: "20250801_BernardoFire_bl-n-mobo-c.tgz", split: train, camera: "bl-n"}
+      - {file: "20251102_ScissorsFire_mp-n-mobo-c.tgz", split: train, camera: "mp-n"}
+      - {file: "20240909_BridgeFire_stgo-e-mobo-c.tgz", split: train, camera: "stgo-e"}
+      - {file: "20250107_PalisadesFire_69bravo-e-mobo-c.tgz", split: train, camera: "69bravo-e"}
+      - {file: "20180704_Benton_hp-n-mobo-c.tgz", split: train, camera: "hp-n"}
+      - {file: "20260722_CreelmanFire_cp-w-mobo-c.tgz", split: train, camera: "cp-w"}
+      - {file: "20200829_inside-Mexico_mlo-s-mobo-c.tgz", split: train, camera: "mlo-s"}
+      - {file: "20240625_DelMarFire_tdlln-n-mobo-c.tgz", split: train, camera: "tdlln-n"}
+      - {file: "20241108_GardenFire_rm-s-mobo-c.tgz", split: train, camera: "rm-s"}
+      - {file: "20241031_QuarryFire_sm-w-mobo-c.tgz", split: train, camera: "sm-w"}
+      - {file: "20240927_86Fire_tp-e-mobo-c.tgz", split: train, camera: "tp-e"}
+      - {file: "20240718_EggStructureFire_bm-s-mobo-c.tgz", split: train, camera: "bm-s"}
+    sha256:
+      "20250107_PalisadesFire_dwpgm-s-mobo-c.tgz": "aea8543c4b14749af8fe026b0366ea4954154e42f1d63c898c8357875c85ba30"
+      "20200611_skyline_lp-n-mobo-c.tgz": "1c7faad28f9b1ebe3e0a482c31d8521e3ab53d387965af2058e976a8734337f2"
+      "20240909_BridgeFire_starr-n-mobo-c.tgz": "9a1d03d07dc3fd554f866ef8a8aa3469b081f5b84fa94ed412e191b245910270"
+      "20260715_ThornFire_ws-n-mobo-c.tgz": "33ff1c8821568120fb5cd9611298f8949073c4845f556e9fd7dddb97799f6d4c"
+      "20240719_ForkFire_wilson-e-mobo-c.tgz": "0cfe8bf93d6b379f4d2d2ccdf2de85dbbcfaa7769783aeb71b14761c6e25f310"
+      "20170708_Whittier_syp-n-mobo-c.tgz": "e0af04bf3f541623afc0aa1347d9e820e252520f90410c97b6b8049d246273f8"
+      "20201127_Hawkfire_pi-w-mobo-c.tgz": "805954102e072cc1ebd215397ffa17fcb5f8e8cb97ca187873f449f8ef4e3b5e"
+      "20240828_KeysFire_bh-w-mobo-c.tgz": "519ab50129517564e55960c2b42d5f3159cabf471da66111219eb12aa87b3ed4"
+      "20180602_Alison_sp-s-mobo-c.tgz": "bf58ada450fc7df41d017ca8968c93bb36aa2403d87f4d112e343e9e10cbf9a6"
+      "20190716_FIRE_so-w-mobo-c.tgz": "b46cf326ea53fe1f93ab5515c41ce17d2c15fa62797d3538ee748b47eb63c953"
+      "20250501_FelipeFire_ml-n-mobo-c.tgz": "a9412c7e29a48d13e9233d29a660a11caa25fa7ce6c0dfc960fdc4e031db7033"
+      "20240825_TenajaFire_buff-n-mobo-c.tgz": "880fda3f2342cd87127b6e0a3b6f44c999b6957b1406b11caa80ed8a2aafe109"
+      "20250709_SteeleFire_om-n-mobo-c.tgz": "b81ba5e48ae22f6149b73739626d654e1e0e8d921f3e07b64589a41ff4b4d6c8"
+      "20250801_BernardoFire_bl-n-mobo-c.tgz": "ed5981043fee41cd03b1fa6f51d0b2762886c3c9606524770332a505b2e8d5b0"
+      "20251102_ScissorsFire_mp-n-mobo-c.tgz": "be64ecf7216c82d0a1e9b248c3d017e1bdfd605ac1a2fc9a36222733dc151094"
+      "20240909_BridgeFire_stgo-e-mobo-c.tgz": "d1b2da1c775f4acaf7be21185b3f8f38b95f50429da08fdeceb5bbab044b9a39"
+      "20250107_PalisadesFire_69bravo-e-mobo-c.tgz": "3bd818ae1f66be7c55c5ec934e31b63aff811735307f4c3295ecd9ecaba4b2d2"
+      "20180704_Benton_hp-n-mobo-c.tgz": "6a17a3f50fc7c553aab7326c26c58149d536401e3faaf10a62817713f034baac"
+      "20260722_CreelmanFire_cp-w-mobo-c.tgz": "7abf1a02c336e25ba6f8ddee0dc5d3100f2e3777fb854c70fd638108cbe4851d"
+      "20200829_inside-Mexico_mlo-s-mobo-c.tgz": "3df8702a39265f34a84e7772223569793de57201e563eaee05ea71e99a457acc"
+      "20240625_DelMarFire_tdlln-n-mobo-c.tgz": "841aa3606393bb1d5d907eecb6cc3dcdbe68e7fd6bb114956bc81c13e5cbbade"
+      "20241108_GardenFire_rm-s-mobo-c.tgz": "7a5642627e534e7b5c78974ca3e5f2f2be2fd377cdd2a999679fdef2a1dd3eb0"
+      "20241031_QuarryFire_sm-w-mobo-c.tgz": "ee1a61c5eeac46a4a630d47869e01cac336bd341ebfb3f7ee0d9fc762cc3e61d"
+      "20240927_86Fire_tp-e-mobo-c.tgz": "737fd3ceb603a7b40264c5e51c16ed24cdb8861934390cef5a3a8604cf4edb5d"
+      "20240718_EggStructureFire_bm-s-mobo-c.tgz": "09b6769bc9091b22bccf1c0237f9e2d12e118fa1b18f193f56b030ddb24d14be"
+  base_model: "facebook/convnextv2-nano-22k-224"
+  base_model_revision: "755dacbc560ac81ac8eb39249eab691dab85506c"
+  base_model_params: "15.6M"
+  input_label: "Frame from a fixed lookout camera"
+  target_label: "Sky condition"
+  target_description: "Whether a wildfire smoke plume is visible anywhere in the frame — the first minutes of a plume are a few pixels, so the model is judged on how quickly it catches one, not only on frame accuracy."
+  disclaimer: "Demonstration only — not an operational fire detection system."
+  # Wide frames squashed to a square: a distant plume is tens of pixels, so more than the 224 px
+  # of the other ConvNeXt scenarios — still a 15.6M-parameter model that serves from a CPU pod.
+  image_size: 320
+  occlusion_grid: 8
+  quantize: false
+  training:
+    gpu: {epochs: 10, batch_size: 32, learning_rate: 1.0e-4}
+    # CPU: a 500-frame subset for 2 epochs — a working model in a few minutes.
+    cpu: {epochs: 2, batch_size: 16, learning_rate: 2.0e-4, max_train_samples: 500}
+    seed: 42
+    class_weighted_loss: true
+  # Every test frame (8 fires x 81 + 3 controls x 40): the wall plays whole recordings, in order.
+  gallery_size: 900
+  reference_size: 400
+  labels:
+    - {key: "0", label: "Clear", description: "No smoke plume visible — haze, cloud, dust and glare included."}
+    - {key: "1", label: "Smoke", description: "A wildfire smoke plume is visible (from the frame where it first appears)."}
+
+# The Watch Wall tab: six cameras advance on one clock; the deployed model scores each frame as
+# it arrives and an alert fires after `consecutive_frames_to_alert` smoke frames in a row.
+ui_extras:
+  kind: camera_wall
+  positive_label: "1"
+  event_noun: "smoke plume"
+  alert_threshold: 0.5
+  consecutive_frames_to_alert: 2
+  tick_ms: 700
+  # Opens with four fires and two no-fire controls; the viewer can swap in any of the 11 held-out cameras.
+  wall_size: 6
+  default_cameras: [dwpgm-s, lp-n, syp-n, ws-n, sp-s, so-w]
+  tab_label: "Watch Wall"
+  title: "Live lookout wall"
+  note: "Held-out HPWREN recordings from lookouts the model never saw in training, one frame a minute replayed at speed. Controls show a lookout before any fire: an alert there is a false alarm."
+
+services:
+  training: dl-training
+  inference: dl-inference

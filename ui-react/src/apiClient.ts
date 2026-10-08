@@ -195,6 +195,19 @@ export type ReadingRoomExtra = {
   arrival_minutes: number;
   worklist_size: number;
 };
+export type CameraWallExtra = {
+  kind: "camera_wall";
+  positive_label: string;
+  event_noun: string;
+  alert_threshold: number;
+  consecutive_frames_to_alert: number;
+  tick_ms: number;
+  wall_size: number;
+  default_cameras: string[];
+  tab_label: string;
+  title: string;
+  note?: string | null;
+};
 // Mirrors scenario_schema.py's ExampleRecord — a named, complete feature record.
 export type ExampleRecord = { label: string; description?: string | null; record: Record<string, number | string> };
 export type VoyageZone = { key: string; label: string; description?: string | null };
@@ -439,6 +452,7 @@ export type UiExtras =
   | CaseDeskExtra
   | TriageBoardExtra
   | ReadingRoomExtra
+  | CameraWallExtra
   | KnowledgeGraphExtra;
 
 // Mirrors ai_circus_shared.network_graph.NetworkGraph — prediction's GET /graph/{slug}.
@@ -1615,7 +1629,9 @@ export type DlAnomalySummary = {
   decision_score: number | null;
 };
 // has_mask: a ground-truth defect mask is published for it (dlMaskBlob).
-export type DlSample = { id: string; label: string; probs: number[]; text?: string; has_mask?: boolean };
+// group / seq: frame-sequence scenarios only — the camera feed and the frame's offset in seconds
+// from the recorded event (see ai_circus_shared.deep_learning, the camera_wall extra).
+export type DlSample = { id: string; label: string; probs: number[]; text?: string; has_mask?: boolean; group?: string; seq?: number };
 export type DlTokenWeight = { text: string; start: number; end: number; weight: number | null };
 export type DlExplanation =
   | { type: "tokens"; method: string; tokens: DlTokenWeight[] }

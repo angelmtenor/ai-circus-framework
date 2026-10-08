@@ -5,7 +5,8 @@
 No dataset file is committed to this repo: each scenario.yaml pins a public source
 (Hugging Face dataset files — JSON Lines text or Parquet images — at a commit + SHA-256;
 a Hub folder of one-file-per-image classes at a commit + one manifest SHA-256, packed
-into a single tar; or a MedMNIST .npz + MD5). The first
+into a single tar; a MedMNIST .npz + MD5; or per-camera .tgz frame sequences, one
+SHA-256 each). The first
 run downloads it, verifies the digest, and uploads it to the scenario's SeaweedFS bucket
 under the tenant prefix (raw/…) — every later run (any host, any pod) reads it from
 there. A local cache (DL_CACHE_DIR) avoids re-transferring a 200 MB archive between
@@ -18,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 import tarfile
 import tempfile
 from collections.abc import Callable, Collection, Iterable
@@ -31,6 +33,7 @@ import numpy as np
 from ai_circus_shared.deep_learning import DL_RAW_PREFIX
 from ai_circus_shared.scenario_schema import (
     DeepLearningConfig,
+    HttpFrameSequencesSource,
     HuggingFaceFilesSource,
     HuggingFaceImageFolderSource,
     NpzImagesSource,
@@ -51,6 +54,12 @@ IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".
 # (folder_manifest_digest), not of the tar bytes — so it is independent of how it was packed.
 MANIFEST = "sha256-manifest"
 _PARALLEL_DOWNLOADS = 8
+# Frame sequence archives (http_frame_sequences): `<unix_ts>_<signed offset seconds>.jpg`, anything
+# else in the archive (the time-lapse .mp4, directory entries) is ignored. Bounded: a hostile or
+# broken archive can't make the trainer decode an unbounded number of / unboundedly large frames.
+_FRAME_NAME = re.compile(r"^(\d{9,11})_([+-]\d{1,6})\.(?:jpe?g|png)$")
+MAX_FRAMES_PER_SEQUENCE = 400
+MAX_FRAME_BYTES = 16 << 20
 
 
 class DataIntegrityError(RuntimeError):
@@ -93,6 +102,16 @@ def raw_files(dl: DeepLearningConfig) -> list[RawFile]:
                 digest=source.sha256[name],
             )
             for name in dict.fromkeys(source.files.values())
+        ]
+    if isinstance(source, HttpFrameSequencesSource):
+        return [
+            RawFile(
+                name=archive.file,
+                url=f"{source.base_url.rstrip('/')}/{quote(archive.file)}",
+                algorithm="sha256",
+                digest=source.sha256[archive.file],
+            )
+            for archive in source.archives
         ]
     assert isinstance(source, NpzImagesSource)
     name = Path(urlparse(source.url).path).name
@@ -267,11 +286,16 @@ class Split:
     (N, H, W) / (N, H, W, 3) (image); `labels` holds class *indices* into
     `DeepLearningConfig.labels`; `masks` (image sources with a `mask_field` only) is a
     bool (N, H, W) array of ground-truth defect pixels — all False for good samples.
+    `cameras` / `offsets` (frame-sequence sources only) say which feed each row came from
+    and its frame offset in seconds from the recorded event, so the gallery can be
+    published in recording order.
     """
 
     inputs: list[str] | np.ndarray
     labels: np.ndarray
     masks: np.ndarray | None = None
+    cameras: list[str] | None = None
+    offsets: np.ndarray | None = None
 
     def __len__(self) -> int:
         return len(self.labels)
@@ -279,9 +303,19 @@ class Split:
     def take(self, indices: np.ndarray) -> Split:
         """A new Split with only the given rows."""
         masks = None if self.masks is None else self.masks[indices]
+        cameras = None if self.cameras is None else [self.cameras[i] for i in indices]
+        offsets = None if self.offsets is None else self.offsets[indices]
         if isinstance(self.inputs, list):
-            return Split([self.inputs[i] for i in indices], self.labels[indices], masks)
-        return Split(self.inputs[indices], self.labels[indices], masks)
+            return Split([self.inputs[i] for i in indices], self.labels[indices], masks, cameras, offsets)
+        return Split(self.inputs[indices], self.labels[indices], masks, cameras, offsets)
+
+    def recording_order(self, indices: np.ndarray) -> np.ndarray:
+        """`indices` re-sorted camera by camera, each camera in frame order (unchanged when
+        this split has no frame sequence).
+        """
+        if self.cameras is None or self.offsets is None:
+            return indices
+        return np.asarray(sorted(indices, key=lambda i: (self.cameras[i], int(self.offsets[i]))), dtype=np.int64)
 
 
 @dataclass(frozen=True)
@@ -448,9 +482,75 @@ def _load_npz(dl: DeepLearningConfig, path: Path) -> Dataset:
         return Dataset(train=read("train"), val=read("val"), test=read("test"))
 
 
+def _load_frame_sequences(dl: DeepLearningConfig, source: HttpFrameSequencesSource, paths: dict[str, Path]) -> Dataset:
+    """http_frame_sequences: one tgz per camera. A frame's label comes from the offset in its
+    file name (>= positive_from_offset is the event); rows keep their camera + offset.
+    """
+    size = dl.image_size
+    positive = _label_index(dl, "frames", source.positive_label)
+    negative = _label_index(dl, "frames", source.negative_label)
+
+    def read_archive(path: Path, camera: str) -> tuple[list[np.ndarray], list[int], list[int]]:
+        frames: dict[int, np.ndarray] = {}
+        with tarfile.open(path, "r:gz") as tar:
+            for member in tar:
+                match = _FRAME_NAME.match(Path(member.name).name) if member.isfile() else None
+                if match is None:
+                    continue
+                if member.size > MAX_FRAME_BYTES:
+                    raise ValueError(f"{camera}: frame {member.name!r} is {member.size} bytes (cap {MAX_FRAME_BYTES}).")
+                handle = tar.extractfile(member)
+                assert handle is not None
+                frames[int(match.group(2))] = decode_square(handle.read(), size, "RGB")
+                if len(frames) > MAX_FRAMES_PER_SEQUENCE:
+                    raise ValueError(f"{camera}: more than {MAX_FRAMES_PER_SEQUENCE} frames in {path.name}.")
+        if not frames:
+            raise ValueError(f"{camera}: no <timestamp>_<offset>.jpg frames in {path.name}.")
+        offsets = sorted(frames)
+        labels = [positive if offset >= source.positive_from_offset else negative for offset in offsets]
+        return [frames[o] for o in offsets], labels, offsets
+
+    def read(split: str) -> Split:
+        images: list[np.ndarray] = []
+        labels: list[int] = []
+        offsets: list[int] = []
+        cameras: list[str] = []
+        for archive in (a for a in source.archives if a.split == split):
+            frames, frame_labels, frame_offsets = read_archive(paths[archive.file], archive.camera)
+            if archive.clear_only:  # a no-event control: nothing at/after the event is ever shown
+                before = [o < source.positive_from_offset for o in frame_offsets]
+                frames = [f for f, keep in zip(frames, before, strict=True) if keep]
+                frame_labels = [x for x, keep in zip(frame_labels, before, strict=True) if keep]
+                frame_offsets = [x for x, keep in zip(frame_offsets, before, strict=True) if keep]
+            if split != "test" and source.ambiguous_seconds:
+                clear = [
+                    not source.positive_from_offset <= o < source.positive_from_offset + source.ambiguous_seconds
+                    for o in frame_offsets
+                ]
+                frames = [f for f, keep in zip(frames, clear, strict=True) if keep]
+                frame_labels = [x for x, keep in zip(frame_labels, clear, strict=True) if keep]
+                frame_offsets = [x for x, keep in zip(frame_offsets, clear, strict=True) if keep]
+            images += frames
+            labels += frame_labels
+            offsets += frame_offsets
+            cameras += [archive.camera] * len(frames)
+        if not images:
+            raise ValueError(f"{split}: no frame sequences.")
+        return Split(
+            np.stack(images),
+            np.asarray(labels, dtype=np.int64),
+            cameras=cameras,
+            offsets=np.asarray(offsets, dtype=np.int64),
+        )
+
+    return _with_validation(dl, {a.split for a in source.archives}, read)
+
+
 def load_dataset(dl: DeepLearningConfig, paths: dict[str, Path]) -> Dataset:
     """Parse the verified raw files into train/val/test splits of class indices."""
     source = dl.source
+    if isinstance(source, HttpFrameSequencesSource):
+        return _load_frame_sequences(dl, source, paths)
     if isinstance(source, HuggingFaceImageFolderSource):
         (path,) = paths.values()
         return _load_image_folder(dl, source, path)
