@@ -7,8 +7,11 @@ export type WallFrame = { id: string; seq: number; pPre: number };
 /** `control`: the recording holds no event at all (ignition = past the last frame) — a feed where every alert is a false alarm. */
 export type WallCamera = { name: string; frames: WallFrame[]; ignition: number; control: boolean };
 
-/** Group the published samples (recording order, tagged `group`/`seq`) into one camera each. */
-export function groupCameras(samples: DlSample[], positiveIndex: number): WallCamera[] {
+/** Group the published samples (recording order, tagged `group`/`seq`) into one camera each.
+ * A no-event control stops `controlMarginSeconds` before the recording's annotated event: the
+ * annotation is when a person first saw the plume, so the footage just before it can already
+ * hold the event (a control must never show one). */
+export function groupCameras(samples: DlSample[], positiveIndex: number, controlMarginSeconds = 0): WallCamera[] {
   const byCamera = new Map<string, WallFrame[]>();
   for (const s of samples) {
     if (s.group == null || s.seq == null) continue;
@@ -16,29 +19,42 @@ export function groupCameras(samples: DlSample[], positiveIndex: number): WallCa
     frames.push({ id: s.id, seq: s.seq, pPre: s.probs[positiveIndex] ?? 0 });
     byCamera.set(s.group, frames);
   }
-  return [...byCamera].map(([name, frames]) => {
-    frames.sort((a, b) => a.seq - b.seq);
+  return [...byCamera].map(([name, all]) => {
+    all.sort((a, b) => a.seq - b.seq);
+    const control = !all.some((f) => f.seq >= 0);
+    const kept = control && controlMarginSeconds > 0 ? all.filter((f) => f.seq < -controlMarginSeconds) : all;
+    const frames = kept.length >= 8 ? kept : all; // never trim a feed down to nothing
     const first = frames.findIndex((f) => f.seq >= 0);
-    const ignition = first === -1 ? frames.length : first;
-    return { name, frames, ignition, control: ignition === frames.length };
+    return { name, frames, ignition: first === -1 ? frames.length : first, control };
   });
 }
 
-export type WallAlert = { camera: string; index: number; seq: number; p: number; falseAlarm: boolean };
+export type WallAlert = {
+  camera: string;
+  index: number;
+  seq: number;
+  p: number;
+  /** Raised before the event and outside the grace window: a false alarm. */
+  falseAlarm: boolean;
+  /** Raised within the grace window before the event: the plume was probably already there. */
+  early: boolean;
+};
 export type CameraAnalysis = {
   /** Alarm state of every frame up to `upto` (inclusive). */
   alarmOn: boolean[];
   /** Rising edges of the alarm: a new alert each time smoke persists after a clear spell. */
   alerts: WallAlert[];
-  /** Index of the first frame at/after the event at which the alarm was on, or null. */
+  /** Index of the first frame at/after the start of the grace window with the alarm on, or null. */
   detectedAt: number | null;
 };
 
 /**
  * Alerting rule: the alarm is on once `consecutive` frames in a row reach `threshold`, and
- * off as soon as a frame falls below it. An alert is the alarm switching on; it is a *false
- * alarm* when that happens before the event (negative `seq`). Detection = the first frame
- * at/after the event with the alarm on — so a camera already ringing at ignition counts as
+ * off as soon as a frame falls below it. An alert is the alarm switching on. Before the event
+ * (negative `seq`) it is *early* within `graceSeconds` of it — the annotation is when a person
+ * first saw the plume, so the model may fairly see it a little sooner — and a *false alarm*
+ * earlier than that (always, on a control). Detection = the first frame at/after the start of
+ * the grace window with the alarm on, so a camera already ringing at ignition counts as
  * detected at once, never as "missed". `p[i]` of null = not scored (the run is broken).
  */
 export function analyseCamera(
@@ -47,21 +63,25 @@ export function analyseCamera(
   threshold: number,
   consecutive: number,
   upto: number,
+  graceSeconds = 0,
 ): CameraAnalysis {
   const alarmOn: boolean[] = [];
   const alerts: WallAlert[] = [];
   let run = 0;
   let detectedAt: number | null = null;
   const last = Math.min(upto, camera.frames.length - 1);
+  const grace = camera.control ? 0 : graceSeconds;
   for (let i = 0; i <= last; i++) {
     const v = p[i];
+    const seq = camera.frames[i].seq;
     run = v != null && v >= threshold ? run + 1 : 0;
     const on = run >= consecutive;
     alarmOn.push(on);
     if (on && !alarmOn[i - 1]) {
-      alerts.push({ camera: camera.name, index: i, seq: camera.frames[i].seq, p: v ?? 0, falseAlarm: camera.frames[i].seq < 0 });
+      const early = !camera.control && seq < 0 && seq >= -grace;
+      alerts.push({ camera: camera.name, index: i, seq, p: v ?? 0, falseAlarm: seq < 0 && !early, early });
     }
-    if (on && detectedAt === null && camera.frames[i].seq >= 0) detectedAt = i;
+    if (on && detectedAt === null && !camera.control && seq >= -grace) detectedAt = i;
   }
   return { alarmOn, alerts, detectedAt };
 }
@@ -69,10 +89,12 @@ export function analyseCamera(
 export type WallSummary = {
   alerts: number;
   falseAlarms: number;
+  /** Alerts raised just before the annotated event (probably a genuinely earlier plume). */
+  early: number;
   detected: number;
   /** Cameras whose event has already happened at `upto` without an alarm. */
   undetected: number;
-  /** Mean minutes from the event first being visible to the alarm, over detected cameras. */
+  /** Mean minutes from the event first being visible to the alarm (negative = before), over detected cameras. */
   meanDelayMinutes: number | null;
 };
 
@@ -81,11 +103,13 @@ export function summarise(cameras: WallCamera[], analyses: CameraAnalysis[], upt
   let undetected = 0;
   let delay = 0;
   let falseAlarms = 0;
+  let early = 0;
   let alerts = 0;
   cameras.forEach((camera, c) => {
     const a = analyses[c];
     alerts += a.alerts.length;
     falseAlarms += a.alerts.filter((x) => x.falseAlarm).length;
+    early += a.alerts.filter((x) => x.early).length;
     if (a.detectedAt !== null) {
       detected += 1;
       delay += camera.frames[a.detectedAt].seq / 60;
@@ -93,7 +117,7 @@ export function summarise(cameras: WallCamera[], analyses: CameraAnalysis[], upt
       undetected += 1;
     }
   });
-  return { alerts, falseAlarms, detected, undetected, meanDelayMinutes: detected ? delay / detected : null };
+  return { alerts, falseAlarms, early, detected, undetected, meanDelayMinutes: detected ? delay / detected : null };
 }
 
 /** "T−12 min" / "T+0" / "T+7 min": time relative to the event first being visible. */

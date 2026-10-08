@@ -600,6 +600,12 @@ class CameraWallExtra(BaseModel):
     alert_threshold: float = Field(default=0.5, gt=0, lt=1)
     consecutive_frames_to_alert: int = Field(default=2, ge=1, le=10)
     tick_ms: int = Field(default=700, ge=100, le=5000)
+    # The recording's "event at offset 0" is when an annotator first saw it, so a plume can be there
+    # minutes earlier. An alert up to `early_grace_seconds` before offset 0 is an *early detection*,
+    # not a false alarm; and a no-event control stops `control_margin_seconds` before offset 0 so it
+    # never reaches footage where the event has already begun.
+    early_grace_seconds: int = Field(default=300, ge=0, le=1800)
+    control_margin_seconds: int = Field(default=900, ge=0, le=2400)
     # The wall shows `wall_size` of the held-out cameras at once; the viewer can swap which ones
     # (a pool bigger than the wall, fires and no-fire controls alike). `default_cameras` (camera
     # names, in tile order) is what it opens with; empty = the first `wall_size`.

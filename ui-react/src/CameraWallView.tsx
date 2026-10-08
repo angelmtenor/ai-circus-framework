@@ -43,7 +43,10 @@ export function CameraWallView({
     0,
     labelsOf(scenario).findIndex((l) => l.key === extra.positive_label),
   );
-  const pool = useMemo(() => groupCameras(samples.data ?? [], positiveIndex), [samples.data, positiveIndex]);
+  const pool = useMemo(
+    () => groupCameras(samples.data ?? [], positiveIndex, extra.control_margin_seconds),
+    [samples.data, positiveIndex, extra.control_margin_seconds],
+  );
   // Which of the held-out cameras are on the wall: the scenario's default until the viewer swaps them.
   const [picked, setPicked] = useState<string[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -59,6 +62,7 @@ export function CameraWallView({
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [threshold, setThreshold] = useState(extra.alert_threshold);
+  const [consecutive, setConsecutive] = useState(extra.consecutive_frames_to_alert);
   const [showCurve, setShowCurve] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
@@ -105,7 +109,7 @@ export function CameraWallView({
   const scored = cameras.map((camera) => {
     const last = Math.min(step, camera.frames.length - 1);
     const ps = camera.frames.slice(0, last + 1).map((f) => live.current.get(f.id)?.p ?? f.pPre);
-    return { camera, last, ps, analysis: analyseCamera(camera, ps, threshold, extra.consecutive_frames_to_alert, step) };
+    return { camera, last, ps, analysis: analyseCamera(camera, ps, threshold, consecutive, step, extra.early_grace_seconds) };
   });
   const summary = summarise(cameras, scored.map((s) => s.analysis), step);
   const feed = scored
@@ -200,15 +204,19 @@ export function CameraWallView({
           <StatTile
             label="False alarms"
             value={String(summary.falseAlarms)}
-            sub={`of ${summary.alerts} alert${summary.alerts === 1 ? "" : "s"}`}
+            sub={`of ${summary.alerts} alert${summary.alerts === 1 ? "" : "s"}${summary.early ? ` · ${summary.early} early` : ""}`}
             color={summary.falseAlarms ? "var(--red)" : "var(--green)"}
-            info={`An alert raised before the ${noun} had appeared in that recording.`}
+            info={`An alert raised more than ${Math.round(extra.early_grace_seconds / 60)} min before the ${noun} appeared in that recording (or at all, on a no-fire control). An alert within ${Math.round(extra.early_grace_seconds / 60)} min before it is counted as an early detection instead: the annotation is when a person first saw the plume.`}
           />
         </div>
         <div className="dl-threshold">
           <label>
-            Alert when P({noun}) ≥ <strong>{pct(threshold, 0)}</strong> for {extra.consecutive_frames_to_alert} frames in a row
+            Alert when P({noun}) ≥ <strong>{pct(threshold, 0)}</strong>
             <input type="range" min={0.1} max={0.95} step={0.05} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
+          </label>
+          <label>
+            for <strong>{consecutive}</strong> frame{consecutive === 1 ? "" : "s"} in a row
+            <input type="range" min={1} max={6} step={1} value={consecutive} onChange={(e) => setConsecutive(Number(e.target.value))} />
           </label>
           <label className="dl-check">
             <input type="checkbox" checked={showCurve} onChange={(e) => setShowCurve(e.target.checked)} /> Show each camera's whole recording
@@ -294,10 +302,12 @@ export function CameraWallView({
           {feed.length === 0 && <p className="panel-hint">No alerts yet — every camera is quiet.</p>}
           <ul>
             {feed.map((a) => (
-              <li key={`${a.camera}-${a.index}`} className={a.falseAlarm ? "wall-alert wall-alert--false" : "wall-alert"}>
+              <li key={`${a.camera}-${a.index}`} className={`wall-alert${a.falseAlarm ? " wall-alert--false" : a.early ? " wall-alert--early" : ""}`}>
                 <strong>{a.camera}</strong> <span className="wall-when">{offsetLabel(a.seq)}</span>
                 <div>
-                  {a.falseAlarm
+                  {a.early
+                    ? `Early — ${noun} flagged ${Math.round(-a.seq / 60)} min before it was annotated as visible`
+                    : a.falseAlarm
                     ? isControl(a.camera)
                       ? `False alarm — ${noun} flagged, but this lookout has no fire`
                       : `False alarm — ${noun} flagged before it had appeared`
@@ -324,6 +334,26 @@ export function CameraWallView({
       )}
     </div>
   );
+}
+
+/** One line under a tile: what this camera has done so far. */
+function tileVerdict(camera: WallCamera, analysis: CameraAnalysis, index: number, noun: string): { text: string; tone: "ok" | "warn" | "bad" | "idle" } {
+  const falseAlarms = analysis.alerts.filter((a) => a.falseAlarm).length;
+  const early = analysis.alerts.find((a) => a.early);
+  if (camera.control) {
+    if (falseAlarms) return { text: `✗ ${falseAlarms} false alarm${falseAlarms === 1 ? "" : "s"} — there is no fire here`, tone: "bad" };
+    return { text: index > 0 ? "✓ no alerts — correctly quiet" : "watching a lookout with no fire", tone: index > 0 ? "ok" : "idle" };
+  }
+  const parts: string[] = [];
+  if (analysis.detectedAt !== null) {
+    const m = Math.round(camera.frames[analysis.detectedAt].seq / 60);
+    parts.push(m < 0 ? `✓ ${noun} flagged ${-m} min early` : m === 0 ? `✓ ${noun} flagged at T+0` : `✓ ${noun} flagged T+${m} min`);
+  } else if (index >= camera.ignition) {
+    parts.push(`… ${noun} not flagged yet`);
+  }
+  if (falseAlarms) parts.push(`${falseAlarms} false alarm${falseAlarms === 1 ? "" : "s"}`);
+  else if (early && analysis.detectedAt === null) parts.push("early alert");
+  return { text: parts.join(" · ") || "watching", tone: falseAlarms ? "warn" : analysis.detectedAt !== null ? "ok" : "idle" };
 }
 
 function CameraTile({
@@ -367,6 +397,7 @@ function CameraTile({
   const missed = index >= camera.ignition && analysis.detectedAt === null;
   const state = alarm ? "alarm" : missed ? "missed" : "clear";
   const last = camera.frames.length - 1;
+  const verdict = tileVerdict(camera, analysis, index, noun);
   const x = (i: number) => (last ? (i / last) * 100 : 0);
   const y = (v: number) => 30 - Math.min(1, Math.max(0, v)) * 28;
   const path = (values: number[]) => values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
@@ -394,6 +425,7 @@ function CameraTile({
           <circle cx={x(index)} cy={y(p)} r="1.8" className="wall-spark-dot" />
         </svg>
       </div>
+      <div className={`wall-verdict wall-verdict--${verdict.tone}`}>{verdict.text}</div>
     </button>
   );
 }

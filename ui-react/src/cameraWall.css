@@ -261,3 +261,21 @@
 .wall-pick .wall-when {
   margin-left: auto;
 }
+.wall-verdict {
+  padding: 0.3rem 0.6rem 0.45rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+.wall-verdict--ok {
+  color: var(--green);
+}
+.wall-verdict--warn {
+  color: var(--amber);
+}
+.wall-verdict--bad {
+  color: var(--red);
+}
+.wall-alert--early {
+  border-left-color: var(--amber);
+  background: rgba(255, 207, 77, 0.08);
+}

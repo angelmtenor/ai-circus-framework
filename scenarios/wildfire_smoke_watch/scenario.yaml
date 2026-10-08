@@ -144,9 +144,14 @@ ui_extras:
   kind: camera_wall
   positive_label: "1"
   event_noun: "smoke plume"
-  alert_threshold: 0.5
-  consecutive_frames_to_alert: 2
+  # Stricter than 50% / 2 frames: a white cloud or a bird on a hard lookout crosses 50% for a frame or two.
+  alert_threshold: 0.7
+  consecutive_frames_to_alert: 3
   tick_ms: 700
+  # An alert up to 5 min before offset 0 is an early detection (the annotation is when a person first saw the
+  # plume); a control stops 15 min before it, where a real plume can already be visible (ml-n's is by -1 min).
+  early_grace_seconds: 300
+  control_margin_seconds: 900
   # Opens with four fires and two no-fire controls; the viewer can swap in any of the 11 held-out cameras.
   wall_size: 6
   default_cameras: [dwpgm-s, lp-n, syp-n, ws-n, sp-s, so-w]
