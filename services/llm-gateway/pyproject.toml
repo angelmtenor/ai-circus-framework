@@ -28,7 +28,7 @@ dependencies = [
     # fastapi.dependencies.utils.get_flat_dependant, which litellm[proxy]'s own
     # internal imports still depend on — bumping this crashes the proxy server at
     # startup with an ImportError, not just a resolver warning. See DEP002 below.
-    "fastapi==0.136.3",
+    "fastapi==0.142.2",
     "httpx>=0.28.1",
     "litellm[proxy]>=1.95.0",
     "loguru>=0.7.3",
