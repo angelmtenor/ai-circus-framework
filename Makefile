@@ -305,8 +305,8 @@ k3s-up: ## Apply every manifest under k8s/base (namespace, infra, backend servic
 	@$(MAKE) --no-print-directory k3s-gpu-telemetry
 	@echo "✓ k8s/base applied — 'make k3s-wait' to wait for it to actually be ready"
 
-k3s-gpu-telemetry: ## GPU clusters only (no-op otherwise): give data-platform-manager read-only GPU access (k8s/gpu/) for the admin Platform → Monitor tab — never requests nvidia.com/gpu
-	@if kubectl get runtimeclass nvidia >/dev/null 2>&1; then \
+k3s-gpu-telemetry: ## GPU clusters only (no-op otherwise; k3s creates the `nvidia` RuntimeClass even without a GPU, so detect a node with allocatable nvidia.com/gpu): give data-platform-manager read-only GPU access (k8s/gpu/) for the admin Platform → Monitor tab — never requests nvidia.com/gpu
+	@if kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null | awk '{s+=$$1} END {exit !(s>0)}'; then \
 		kubectl -n ai-circus patch deployment data-platform-manager --patch-file k8s/gpu/data-platform-manager-gpu-telemetry.yaml \
 		&& echo "⚡ GPU cluster — data-platform-manager can read GPU telemetry (Platform → Monitor)"; \
 	fi
