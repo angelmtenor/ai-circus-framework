@@ -19,6 +19,7 @@ import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
@@ -37,6 +38,16 @@ from dl_inference.core.logger import configure_logger, get_logger
 from dl_inference.core.model_cache import DlModelCache, ModelUnavailableError
 
 logger = get_logger(__name__)
+
+
+def preload_order(definitions: dict[str, Any]) -> list[str]:
+    """Scenario slugs in the order they are warmed at start-up (only the first MAX_CACHED_MODELS
+    are). A `camera_wall` scores a frame per camera every tick, so it goes first — otherwise,
+    with more scenarios than cache slots, slug order would decide which demo starts cold.
+    """
+    return sorted(
+        definitions, key=lambda slug: (getattr(definitions[slug].ui_extras, "kind", None) != "camera_wall", slug)
+    )
 
 
 @asynccontextmanager
@@ -65,7 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     # Before serving (so readiness only passes once models are warm): never make a demo's
     # first prediction pay for the download + ONNX session build + warm-up. Off the loop.
-    await run_in_threadpool(app.state.model_cache.preload, list(definitions))
+    await run_in_threadpool(app.state.model_cache.preload, preload_order(definitions))
 
     yield
 

@@ -392,12 +392,15 @@ def test_process_optimizer_extra_requires_at_least_one_controllable_and_spec() -
 
 from ai_circus_shared.deep_learning import gallery_sample_id, image_key, mask_key, reference_sample_id  # noqa: E402
 from ai_circus_shared.scenario_schema import (  # noqa: E402
+    CameraWallExtra,
     DeepLearningConfig,
     DeepLearningServices,
     DlAnomalyDetection,
     DlLabel,
     DlTrainBudget,
     DlTraining,
+    FrameSequenceArchive,
+    HttpFrameSequencesSource,
     HuggingFaceFilesSource,
     HuggingFaceImageFolderSource,
     NpzImagesSource,
@@ -473,7 +476,7 @@ def test_deep_learning_kind_requires_deep_learning_services() -> None:
 
 
 def test_modality_must_match_the_source_type() -> None:
-    with pytest.raises(ValidationError, match="npz_images or huggingface_image_folder source"):
+    with pytest.raises(ValidationError, match="huggingface_image_folder or http_frame_sequences source"):
         DeepLearningConfig(**{**_dl_config().model_dump(), "modality": "image"})
     with pytest.raises(ValidationError, match="needs a huggingface_files source with text_field"):
         DeepLearningConfig(**{**_dl_config("image").model_dump(), "modality": "text"})
@@ -641,6 +644,116 @@ def test_reading_room_needs_an_image_scenario_and_a_real_positive_label() -> Non
         _dl_scenario(ui_extras=ReadingRoomExtra(positive_label="b"))
 
 
+def _frames_source(**overrides: object) -> HttpFrameSequencesSource:
+    fields: dict[str, object] = {
+        "base_url": "https://example.org/Tar",
+        "archives": [
+            FrameSequenceArchive(file="a.tgz", split="train", camera="a"),
+            FrameSequenceArchive(file="t1.tgz", split="test", camera="t1"),
+            FrameSequenceArchive(file="t2.tgz", split="test", camera="t2"),
+        ],
+        "sha256": {"a.tgz": "1", "t1.tgz": "2", "t2.tgz": "3"},
+        "negative_label": "a",
+        "positive_label": "b",
+    }
+    return HttpFrameSequencesSource(**{**fields, **overrides})  # type: ignore[arg-type]
+
+
+def _wall_config(**overrides: object) -> DeepLearningConfig:
+    return DeepLearningConfig(**{**_dl_config("image").model_dump(), "source": _frames_source(), **overrides})
+
+
+def test_frame_sequences_source_validates_archives_checksums_and_labels() -> None:
+    assert _wall_config().source.type == "http_frame_sequences"
+    archive = FrameSequenceArchive
+    with pytest.raises(ValidationError, match="unique files"):
+        _frames_source(archives=[archive(file="a.tgz", split="train", camera=c) for c in "xyz"])
+    with pytest.raises(ValidationError, match="cameras must be unique"):
+        _frames_source(archives=[archive(file=f"{c}.tgz", split="train", camera="x") for c in "xyz"])
+    with pytest.raises(ValidationError, match="at least one 'train' and one 'test'"):
+        _frames_source(archives=[archive(file=f"{c}.tgz", split="train", camera=c) for c in "xyz"])
+    with pytest.raises(ValidationError, match=r"no sha256 for \['t2.tgz'\]"):
+        _frames_source(sha256={"a.tgz": "1", "t1.tgz": "2"})
+    with pytest.raises(ValidationError, match="must differ"):
+        _frames_source(negative_label="b")
+    with pytest.raises(ValidationError, match="String should match pattern"):
+        _frames_source(base_url="http://insecure.example.org")
+    with pytest.raises(ValidationError, match="are not label keys"):
+        _wall_config(source=_frames_source(positive_label="zzz"))
+    with pytest.raises(ValidationError, match="needs"):  # a frame source is images, never text
+        DeepLearningConfig(**{**_dl_config().model_dump(), "source": _frames_source()})
+
+
+def test_camera_wall_needs_a_frame_sequence_source_and_its_positive_label() -> None:
+    wall = CameraWallExtra(positive_label="b")
+    assert _dl_scenario(deep_learning=_wall_config(), ui_extras=wall).ui_extras == wall
+    with pytest.raises(ValidationError, match="requires an http_frame_sequences source"):
+        _dl_scenario(deep_learning=_dl_config("image"), ui_extras=wall)
+    with pytest.raises(ValidationError, match="must be the source's positive_label"):
+        _dl_scenario(deep_learning=_wall_config(), ui_extras=CameraWallExtra(positive_label="a"))
+    one_test_camera = _frames_source(
+        archives=[
+            FrameSequenceArchive(file="a.tgz", split="train", camera="a"),
+            FrameSequenceArchive(file="t1.tgz", split="test", camera="t1"),
+            FrameSequenceArchive(file="v.tgz", split="validation", camera="v"),
+        ],
+        sha256={"a.tgz": "1", "t1.tgz": "2", "v.tgz": "3"},
+    )
+    with pytest.raises(ValidationError, match="at least two held-out 'test' camera archives"):
+        _dl_scenario(deep_learning=_wall_config(source=one_test_camera), ui_extras=wall)
+
+
+def test_camera_wall_pool_default_cameras_and_clear_only_controls() -> None:
+    archive = FrameSequenceArchive
+    pool = _frames_source(
+        archives=[
+            archive(file="a.tgz", split="train", camera="a"),
+            archive(file="t1.tgz", split="test", camera="t1"),
+            archive(file="t2.tgz", split="test", camera="t2"),
+            archive(file="c1.tgz", split="test", camera="c1", clear_only=True),
+        ],
+        sha256={"a.tgz": "1", "t1.tgz": "2", "t2.tgz": "3", "c1.tgz": "4"},
+    )
+    config = _wall_config(source=pool)
+    ok = CameraWallExtra(positive_label="b", wall_size=3, default_cameras=["t1", "c1"])
+    assert _dl_scenario(deep_learning=config, ui_extras=ok).ui_extras == ok
+    assert CameraWallExtra(positive_label="b").wall_size == 6  # the default wall
+
+    with pytest.raises(ValidationError, match="default_cameras must be distinct test cameras"):
+        _dl_scenario(deep_learning=config, ui_extras=CameraWallExtra(positive_label="b", default_cameras=["a"]))
+    with pytest.raises(ValidationError, match="default_cameras must be distinct test cameras"):
+        _dl_scenario(deep_learning=config, ui_extras=CameraWallExtra(positive_label="b", default_cameras=["t1"] * 2))
+    with pytest.raises(ValidationError, match="longer than wall_size"):
+        _dl_scenario(
+            deep_learning=config,
+            ui_extras=CameraWallExtra(positive_label="b", wall_size=2, default_cameras=["t1", "t2", "c1"]),
+        )
+    with pytest.raises(ValidationError, match="clear_only archives must be in the 'test' split"):
+        _frames_source(
+            archives=[
+                archive(file="a.tgz", split="train", camera="a", clear_only=True),
+                archive(file="t1.tgz", split="test", camera="t1"),
+                archive(file="t2.tgz", split="test", camera="t2"),
+            ]
+        )
+
+
+def test_wildfire_scenario_keeps_every_lookout_in_exactly_one_split() -> None:
+    """A station seen in training would turn "a camera the model never saw" into a leak."""
+    from pathlib import Path
+
+    from ai_circus_shared.scenario_schema import resolve_scenarios
+
+    scenario = resolve_scenarios(Path(__file__).parents[3] / "scenarios", "wildfire_smoke_watch", kind="deep_learning")
+    source = scenario["wildfire_smoke_watch"].deep_learning.source  # type: ignore[union-attr]
+    assert isinstance(source, HttpFrameSequencesSource)
+    stations = [a.camera.split("-")[0] for a in source.archives]
+    assert len(stations) == len(set(stations))
+    test = [a for a in source.archives if a.split == "test"]
+    assert len(test) == 11 and sum(a.clear_only for a in test) == 3  # 8 fires + 3 no-fire controls
+    assert source.ambiguous_seconds > 0 and set(source.sha256) == {a.file for a in source.archives}
+
+
 def test_ui_extras_kinds_are_scoped_to_their_scenario_kind() -> None:
     with pytest.raises(ValidationError, match="not available for kind='deep_learning'"):
         _dl_scenario(ui_extras=LivePlantExtra())
@@ -671,6 +784,7 @@ def test_repo_deep_learning_scenarios_load() -> None:
         "pcb_visual_inspection",
         "screw_visual_inspection",
         "solar_cell_inspection",
+        "wildfire_smoke_watch",
     }
 
 

@@ -25,7 +25,9 @@ DL_TOKENIZER_KEY = "model/tokenizer.json"
 # Written last — manifest with metrics, history, device, preprocessing and checksums.
 DL_METADATA_KEY = "model/metadata.json"
 # Held-out test samples published for the UI, each with the deployed model's own
-# precomputed class probabilities (gallery, reading-room worklist, triage stream).
+# precomputed class probabilities (gallery, reading-room worklist, triage stream). Frame-sequence
+# sources (a camera wall) also tag each sample with `group` (the camera feed) and `seq` (frame
+# offset in seconds from the recorded event) and are listed in recording order.
 DL_SAMPLES_KEY = "model/samples.json"
 # Training samples indexed for similar-case retrieval: metadata JSON + float16 matrix
 # (row i = embedding of reference sample i, L2-normalized), saved with numpy.save.

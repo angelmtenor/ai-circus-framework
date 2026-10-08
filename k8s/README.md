@@ -77,7 +77,7 @@ kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=3
 
 The `kind: deep_learning` scenarios — `symptom_triage` (NLP) and `chest_xray_pneumonia` (computer
 vision) in healthcare; `solar_cell_inspection` (computer vision), `pcb_visual_inspection` and the harder
-`screw_visual_inspection` (computer-vision anomaly detection) in manufacturing — are served by a separate, opt-in `dl-inference` pod (onnxruntime only, no torch) and trained by
+`screw_visual_inspection` (computer-vision anomaly detection) in manufacturing; and `wildfire_smoke_watch` (a six-camera lookout wall) in public safety — are served by a separate, opt-in `dl-inference` pod (onnxruntime only, no torch) and trained by
 `dl-training`. **Training is never part of `make all`/`k3s-all`** — minutes on a GPU, far longer
 on a CPU:
 

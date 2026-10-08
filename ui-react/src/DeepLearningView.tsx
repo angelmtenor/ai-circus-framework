@@ -7,6 +7,7 @@ import { DlPredictView } from "./DlPredictView";
 import { DlInsightsView } from "./DlInsightsView";
 import { TriageBoardView } from "./TriageBoardView";
 import { ReadingRoomView } from "./ReadingRoomView";
+import { CameraWallView } from "./CameraWallView";
 import { domainLabel } from "./ScenarioPicker";
 import { DlModelUnavailable, isAnomaly, labelsOf, pct, useDlModel } from "./dlShared";
 import "./deepLearning.css";
@@ -18,6 +19,7 @@ type Tab = "scenario" | "data" | "predict" | "insights" | "extra";
 function extraTab(extra: UiExtras | null | undefined, isImage: boolean): { icon: IconName; label: string } | undefined {
   if (extra?.kind === "triage_board") return { icon: isImage ? "factory" : "chat", label: extra.tab_label };
   if (extra?.kind === "reading_room") return { icon: "scan", label: "Reading Room" };
+  if (extra?.kind === "camera_wall") return { icon: "camera", label: extra.tab_label };
   return undefined;
 }
 
@@ -29,7 +31,7 @@ function extraTab(extra: UiExtras | null | undefined, isImage: boolean): { icon:
  * (the published held-out samples — images or texts — and their class mix), Try the
  * model (live inference + explanation + similar cases), Model insights (learning
  * curves, held-out evaluation, calibration, selective prediction) and an optional 5th
- * tab from `ui_extras` (TriageBoardView / ReadingRoomView).
+ * tab from `ui_extras` (TriageBoardView / ReadingRoomView / CameraWallView).
  */
 export function DeepLearningView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [tab, setTab] = useState<Tab>("scenario");
@@ -73,6 +75,9 @@ export function DeepLearningView({ scenario, accessToken }: { scenario: Scenario
           )}
           {tab === "extra" && scenario.ui_extras?.kind === "reading_room" && (
             <ReadingRoomView scenario={scenario} extra={scenario.ui_extras} model={model.data} accessToken={accessToken} />
+          )}
+          {tab === "extra" && scenario.ui_extras?.kind === "camera_wall" && (
+            <CameraWallView scenario={scenario} extra={scenario.ui_extras} model={model.data} accessToken={accessToken} />
           )}
         </>
       )}

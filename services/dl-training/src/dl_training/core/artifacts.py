@@ -76,7 +76,9 @@ class Published:
 
 
 def samples_document(published: Published, label_keys: list[str]) -> dict[str, Any]:
-    """samples.json — each gallery sample's true label and the deployed model's probabilities."""
+    """samples.json — each gallery sample's true label and the deployed model's probabilities
+    (plus `group` / `seq`: camera and frame offset, for frame-sequence sources).
+    """
     samples = []
     for i in range(len(published.gallery)):
         sample: dict[str, Any] = {
@@ -88,6 +90,9 @@ def samples_document(published: Published, label_keys: list[str]) -> dict[str, A
             sample["text"] = published.gallery.inputs[i]
         if published.gallery.masks is not None and published.gallery.masks[i].any():
             sample["has_mask"] = True
+        if published.gallery.cameras is not None and published.gallery.offsets is not None:
+            sample["group"] = published.gallery.cameras[i]  # the camera feed this frame belongs to
+            sample["seq"] = int(published.gallery.offsets[i])  # seconds from the recorded event
         samples.append(sample)
     return {"samples": samples}
 

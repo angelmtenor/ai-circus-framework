@@ -49,6 +49,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "pcb_visual_inspection",
         "screw_visual_inspection",
         "solar_cell_inspection",
+        "wildfire_smoke_watch",
         "titanic",
         "toxic_leadership",
         "bank_early_warning",
@@ -237,6 +238,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "pcb_visual_inspection",
         "screw_visual_inspection",
         "solar_cell_inspection",
+        "wildfire_smoke_watch",
         "titanic",
         "toxic_leadership",
         "bank_early_warning",
@@ -262,8 +264,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 29
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 29
+    assert session.query(Scenario).count() == 30
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 30
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

@@ -669,6 +669,7 @@ def test_deep_learning_status_lists_every_dl_scenario_with_cluster_gpus(
         "pcb_visual_inspection",
         "screw_visual_inspection",
         "solar_cell_inspection",
+        "wildfire_smoke_watch",
     }
     assert by_slug["chest_xray_pneumonia"]["job_name"] == "dl-training-chest-xray-pneumonia"
     assert by_slug["chest_xray_pneumonia"]["modality"] == "image"
