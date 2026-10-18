@@ -632,18 +632,34 @@ make k3s-import     # import them into the cluster's containerd
 make k3s-secrets    # generate k8s Secrets from .env/infra
 make k3s-up         # kubectl apply -k k8s/base
 make k3s-wait       # wait for every pod to actually be Ready
-make k3s-verify     # curl-check the admin tenant end-to-end, same as `make verify` below
-make k3s-pipeline   # optional: (re)runs the ETL -> training pipeline for the tabular_ml scenarios
+make k3s-pipeline   # REQUIRED on a fresh cluster: etl-tabular -> training Jobs, then restarts prediction
+make k3s-verify     # curl-check the admin + engineering-demo tenants end-to-end
 ```
 
-Or run the first six of those (cluster through wait) in one shot: `make k3s-all`.
+Or run the first six of those (cluster through wait) in one shot: `make k3s-all` — then
+`make k3s-pipeline` (until it has run, every `tabular_ml` scenario answers 503 "No trained model
+artifacts") and `make k3s-verify`.
 
-Not working the demo but staying in WSL? Pause the cluster's containers (frees CPU/RAM, keeps all
-state) instead of tearing it down:
+On a 16 GB machine, `make k3s-all-lite` does the same without the rarely-used MLflow and
+`agui-voice` pods (~1.2 GB less RAM; images are still built, so `make k3s-full` brings them back).
+For a live demo, `make k3s-demo` also scales Langfuse/ClickHouse and the admin Platform dashboard
+to 0 (~2.5 GB) — undo with `make k3s-demo-off`, and verify meanwhile with
+`VERIFY_SKIP="langfuse mlflow" make k3s-verify`.
+
+Not working the demo? Pause the cluster's containers (frees CPU/RAM, keeps all state) instead of
+tearing it down:
 
 ```bash
-make k3s-pause      # stop the cluster — resume later with `make k3s-resume`
-make k3s-resume     # start it back up
+make k3s-pause         # stop the cluster — resume later with `make k3s-resume`
+make k3s-resume        # start it back up
+make k3s-resume-lite   # ...or start it back up without MLflow/agui-voice
+```
+
+After a code change, rebuild and restart what changed (importing an image under the same tag
+never restarts its pods):
+
+```bash
+make k3s-build k3s-import && kubectl -n ai-circus rollout restart deployment/<svc>
 ```
 
 **The browser also needs a standing port-forward** to `platform-registry` (its browser-facing API
