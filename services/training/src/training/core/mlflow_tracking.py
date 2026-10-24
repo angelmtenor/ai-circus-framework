@@ -20,12 +20,23 @@ Author: Angel Martinez-Tenor
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Any, Protocol
 
 from training.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+# mlflow's own defaults (7 retries, exponential backoff, 120 s timeout) turn an unreachable
+# tracker into ~4 minutes of waiting *per scenario* — `k3s-all-lite` scales MLflow to 0, so a
+# 20-scenario pipeline blew its 10-minute budget on retries alone. The mirror is optional, so
+# fail fast; an operator who sets these variables explicitly keeps full control.
+_MLFLOW_FAIL_FAST = {
+    "MLFLOW_HTTP_REQUEST_MAX_RETRIES": "1",
+    "MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR": "1",
+    "MLFLOW_HTTP_REQUEST_TIMEOUT": "10",
+}
 
 
 class ScoredCandidate(Protocol):
@@ -62,6 +73,9 @@ def log_training_run(
     if not tracking_uri:
         logger.info("MLFLOW_TRACKING_URI unset — not mirroring the run for scenario={} org={}", scenario_slug, org_id)
         return
+
+    for name, value in _MLFLOW_FAIL_FAST.items():
+        os.environ.setdefault(name, value)
 
     try:
         import mlflow
