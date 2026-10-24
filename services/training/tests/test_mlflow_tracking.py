@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 from collections.abc import Generator
@@ -123,3 +124,17 @@ def test_tracker_errors_never_propagate(monkeypatch: pytest.MonkeyPatch) -> None
 
     _log("http://mlflow:5000")  # must not raise
     assert fake.runs == []
+
+
+def test_an_unreachable_tracker_fails_fast_but_explicit_settings_win(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mlflow's default retry budget is ~4 min per run, so the mirror caps it unless the operator set it."""
+    monkeypatch.delenv("MLFLOW_HTTP_REQUEST_MAX_RETRIES", raising=False)
+    monkeypatch.delenv("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", raising=False)
+    monkeypatch.setenv("MLFLOW_HTTP_REQUEST_TIMEOUT", "99")  # explicit operator choice
+    monkeypatch.setitem(sys.modules, "mlflow", FakeMlflow())
+
+    _log("http://mlflow:5000")
+
+    assert os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] == "1"
+    assert os.environ["MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR"] == "1"
+    assert os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"] == "99"
