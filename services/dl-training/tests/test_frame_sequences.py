@@ -44,7 +44,7 @@ def _archive(offsets: list[int], extra: dict[str, bytes] | None = None) -> bytes
     return buffer.getvalue()
 
 
-def _config(blobs: dict[str, bytes], **overrides: object):  # type: ignore[no-untyped-def]
+def _config(blobs: dict[str, bytes], **overrides: object):  # type: ignore[no-untyped-def]  # ruff: ignore[missing-return-type-private-function]
     splits = {"a.tgz": "train", "b.tgz": "train", "v.tgz": "validation", "t1.tgz": "test", "t2.tgz": "test"}
     source = HttpFrameSequencesSource(
         base_url="https://example.org/Tar",
@@ -61,7 +61,7 @@ def _blobs() -> dict[str, bytes]:
     return {f: _archive(OFFSETS) for f in ("a.tgz", "b.tgz", "v.tgz", "t1.tgz", "t2.tgz")}
 
 
-def _fetch(blobs: dict[str, bytes], calls: list[str] | None = None):  # type: ignore[no-untyped-def]
+def _fetch(blobs: dict[str, bytes], calls: list[str] | None = None):  # type: ignore[no-untyped-def]  # ruff: ignore[missing-return-type-private-function]
     def download(url: str, dest: Path) -> None:
         if calls is not None:
             calls.append(url)
@@ -89,7 +89,7 @@ def test_a_changed_archive_fails_loudly(tmp_path: Path) -> None:
     dl = _config(blobs)
     blobs["t1.tgz"] = _archive(OFFSETS[:-1])  # the CDN now serves different bytes
 
-    with pytest.raises(data.DataIntegrityError, match="t1.tgz"):
+    with pytest.raises(data.DataIntegrityError, match=r"t1\.tgz"):
         data.ensure_raw(MemoryStore(), "demo", dl, tmp_path, **_fetch(blobs))  # type: ignore[arg-type]
 
 
@@ -124,12 +124,14 @@ def test_ambiguous_seconds_are_dropped_from_train_and_validation_but_kept_in_tes
     assert 0 in dataset.test.offsets.tolist()  # type: ignore[union-attr]
 
 
-def test_an_archive_without_frames_or_with_too_many_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_archive_without_frames_or_with_too_many_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     blobs = _blobs()
     blobs["a.tgz"] = _archive([])
     dl = _config(blobs)
     paths = data.ensure_raw(MemoryStore(), "demo", dl, tmp_path, **_fetch(blobs))  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="no <timestamp>_<offset>.jpg frames"):
+    with pytest.raises(ValueError, match=r"no <timestamp>_<offset>\.jpg frames"):
         data.load_dataset(dl, paths)
 
     blobs = _blobs()
@@ -165,9 +167,12 @@ def test_a_split_without_frame_sequences_is_untouched() -> None:
 
     assert split.recording_order(indices) is indices
     assert split.take(indices).cameras is None
-    assert "group" not in artifacts.samples_document(
-        artifacts.Published(split, np.full((3, 2), 0.5), split, np.zeros((3, 2))), ["0", "1"]
-    )["samples"][0]
+    assert (
+        "group"
+        not in artifacts.samples_document(
+            artifacts.Published(split, np.full((3, 2), 0.5), split, np.zeros((3, 2))), ["0", "1"]
+        )["samples"][0]
+    )
 
 
 def test_a_clear_only_control_keeps_just_the_frames_before_the_event(tmp_path: Path) -> None:
