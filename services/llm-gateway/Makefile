@@ -53,10 +53,16 @@ generate-data-model: ## Generate Pydantic data model from settings.yaml
 ssl-check: ## Detect and configure SSL CA bundle (for networks with SSL inspection)
 	@uv run python scripts/ssl_setup.py
 
+# GHSA-v4x8-3wr5-3wq8, GHSA-9vhv-jxww-xfm5, GHSA-567q-5qvw-pf92 (filelock < 4.2.1): litellm 1.104 requires
+# filelock<4, and 4.2.1 is the first fix. The flaws sit in ReadWriteLock/SoftFileLock (planted symlinks,
+# Windows oplocks) — nothing here locks files on caller input. Drop these --ignore flags (and revisit
+# the audit) once a litellm release accepts filelock 4.
+AUDIT_ACCEPTED = --ignore GHSA-v4x8-3wr5-3wq8 --ignore GHSA-9vhv-jxww-xfm5 --ignore GHSA-567q-5qvw-pf92
+
 qa: ## Run all pre-commit checks (ruff, ruff-format, etc.) plus config drift check
 	@set -a && [ -f .env ] && . ./.env; uv run pre-commit run --all-files || { echo "↻ Autofixers modified files — re-running pre-commit to verify..."; uv run pre-commit run --all-files || { echo "❌ qa failed."; exit 1; }; }
 	@uv run llm-gateway-config-drift-check || { echo "❌ qa failed: settings.yaml/data_model.py drift."; exit 1; }
-	@uv audit || { echo "❌ qa failed: known CVEs in dependency tree."; exit 1; }
+	@uv audit $(AUDIT_ACCEPTED) || { echo "❌ qa failed: known CVEs in dependency tree."; exit 1; }
 	@echo "✓ qa complete"
 
 test: ## Run test suite
