@@ -21,7 +21,7 @@
     "d3-selection": "^3.0.0",
     "d3-zoom": "^3.0.0",
     "oidc-client-ts": "^3.5.0",
-    "plotly.js-dist-min": "^3.7.0",
+    "plotly.js-dist-min": "^4.1.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-oidc-context": "^3.3.1",
