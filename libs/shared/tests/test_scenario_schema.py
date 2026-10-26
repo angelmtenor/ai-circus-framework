@@ -1371,6 +1371,25 @@ def test_repo_aml_regulation_kg_ships_a_valid_cited_knowledge_graph() -> None:
     assert {c.key for c in kg.ui_extras.classes} >= {n.type for n in graph.nodes}
 
 
+def test_repo_aml_regulation_kg_links_the_record_retention_period() -> None:
+    """Regression: the extraction missed Art. 77(3), so "how long must CDD records be kept?"
+    had no answer in the graph. The reviewed addition links retention to its 5-year limit."""
+    from pathlib import Path
+
+    from ai_circus_shared.network_graph import parse_graph
+
+    graph = parse_graph((Path(__file__).parents[3] / "scenarios/aml_regulation_kg/knowledge_graph.json").read_bytes())
+    labels = {n.id: n.label for n in graph.nodes}
+    retention = [
+        e for e in graph.edges if e.source == "obligation:retain-documents-and-information" and e.kind == "has_limit"
+    ]
+    assert [labels[e.target] for e in retention] == ["5 years after the relationship ends"]
+    assert retention[0].citation == "AMLR Art. 77(3)"
+    assert "5 years commencing on the date of the termination of the business relationship" in (
+        retention[0].evidence or ""
+    )
+
+
 def test_knowledge_graph_panel_is_rag_only_and_needs_a_graph() -> None:
     from ai_circus_shared.scenario_schema import KnowledgeGraphExtra, kg_collection_name
 
