@@ -155,6 +155,39 @@ REVIEWED_ADDITIONS: dict[int, dict[str, list[dict[str, str]]]] = {
     },
 }
 
+# Entities the review found mislabelled, renamed in that article's LLM answer (entity and
+# relation endpoints alike) before anything merges. Art. 45(2)'s "not less than 12 months"
+# came back as "1 year", which merged it into Art. 26's *maximum* 1-year update period for
+# higher-risk customers — so the graph read a PEP's post-office minimum as a maximum.
+REVIEWED_RELABELS: dict[int, dict[str, dict[str, str]]] = {
+    45: {
+        "1 year": {
+            "label": "At least 12 months after leaving office",
+            "description": "Minimum period the measures keep applying once a PEP is no longer entrusted with a "
+            "prominent public function; longer while the person still poses a higher risk.",
+        },
+    },
+}
+
+
+def _apply_relabels(answer: dict[str, object], relabels: dict[str, dict[str, str]]) -> dict[str, object]:
+    """`answer` with each reviewed old label (entity, relation source/target) renamed."""
+    if not relabels:
+        return answer
+    entities = [
+        {**e, **relabels[str(e.get("label", "")).strip()]} if str(e.get("label", "")).strip() in relabels else e
+        for e in answer.get("entities", [])  # type: ignore[union-attr]
+    ]
+    relations = []
+    for rel in answer.get("relations", []):  # type: ignore[union-attr]
+        rel = dict(rel)
+        for end in ("source", "target"):
+            fix = relabels.get(str(rel.get(end, "")).strip())
+            if fix:
+                rel[end] = fix["label"]
+        relations.append(rel)
+    return {**answer, "entities": entities, "relations": relations}
+
 
 # --- fetch -------------------------------------------------------------------------
 
@@ -395,6 +428,7 @@ def extract(model: str) -> None:
             tokens += used
             cached.write_text(json.dumps(answer, indent=1, ensure_ascii=False))
             print(f"Art. {number}: {used:,} tokens")
+        answer = _apply_relabels(answer, REVIEWED_RELABELS.get(number, {}))
         reviewed = REVIEWED_ADDITIONS.get(number, {})
         answer = {
             "entities": [*answer.get("entities", []), *reviewed.get("entities", [])],  # type: ignore[misc]
