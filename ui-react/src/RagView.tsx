@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import type { ChatModel, KnowledgeGraphTrace, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
@@ -10,6 +10,22 @@ import { useScenarioAgent } from "./useScenarioAgent";
 
 // Canvas + d3-force: loaded only for a scenario that ships a knowledge graph.
 const KnowledgeGraphView = lazy(() => import("./KnowledgeGraphView"));
+
+// The chat | graph split: the chat's share of the width, dragged on the divider and
+// remembered per browser.
+const SPLIT_STORAGE_KEY = "ai-circus.rag-split-chat-pct";
+const SPLIT_DEFAULT = 40;
+const SPLIT_MIN = 24;
+const SPLIT_MAX = 70;
+
+function storedSplit(): number {
+  try {
+    const v = Number(localStorage.getItem(SPLIT_STORAGE_KEY));
+    return v >= SPLIT_MIN && v <= SPLIT_MAX ? v : SPLIT_DEFAULT;
+  } catch {
+    return SPLIT_DEFAULT;
+  }
+}
 
 /**
  * conversational_rag workspace — a full-page ChatGPT-style window grounded in the
@@ -61,6 +77,37 @@ function RagViewContent({
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
   const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
+  const [chatPct, setChatPct] = useState(storedSplit);
+  const splitRef = useRef<HTMLDivElement>(null);
+
+  function startResize(e: ReactPointerEvent<HTMLDivElement>) {
+    const split = splitRef.current;
+    if (!split) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const rect = split.getBoundingClientRect();
+    let pct = chatPct;
+    const onMove = (ev: PointerEvent) => {
+      pct = Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, ((ev.clientX - rect.left) / rect.width) * 100));
+      setChatPct(pct);
+    };
+    const onUp = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      saveSplit(pct);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
+  }
+
+  function nudgeSplit(delta: number | null) {
+    const pct = delta === null ? SPLIT_DEFAULT : Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, chatPct + delta));
+    setChatPct(pct);
+    saveSplit(pct);
+  }
 
   // rag-agent reports the subgraph each answer used as a `knowledge_graph_trace`
   // custom event (see its api.py); switching conversations clears the highlight.
@@ -93,8 +140,9 @@ function RagViewContent({
   );
 
   return (
-    <div className="workspace workspace--rag">
+    <div className={`workspace workspace--rag${graphExtras ? " workspace--kg" : ""}`}>
       <ConversationSidebar
+        collapsible
         baseUrl={config.ragAgentUrl}
         scenarioSlug={scenario.slug}
         accessToken={accessToken}
@@ -105,7 +153,7 @@ function RagViewContent({
         refreshKey={sidebarRefreshKey}
       />
       <div className="rag-main">
-        <div className="rag-hero">
+        <div className={`rag-hero${graphExtras ? " rag-hero--compact" : ""}`}>
           <div className="rag-hero-icon">{scenario.icon}</div>
           <div>
             <h2>
@@ -117,12 +165,29 @@ function RagViewContent({
                 </span>
               )}
             </h2>
-            <p>{scenario.description}</p>
+            <p title={graphExtras ? scenario.description : undefined}>{scenario.description}</p>
           </div>
         </div>
         {graphExtras ? (
-          <div className="rag-split">
+          <div className="rag-split" ref={splitRef} style={{ gridTemplateColumns: `minmax(300px, ${chatPct}fr) 0.75rem minmax(320px, ${100 - chatPct}fr)` }}>
             {chat}
+            <div
+              className="rag-split-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the chat and the knowledge graph"
+              aria-valuemin={SPLIT_MIN}
+              aria-valuemax={SPLIT_MAX}
+              aria-valuenow={Math.round(chatPct)}
+              tabIndex={0}
+              title="Drag to resize · double-click to reset"
+              onPointerDown={startResize}
+              onDoubleClick={() => nudgeSplit(null)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") nudgeSplit(-4);
+                else if (e.key === "ArrowRight") nudgeSplit(4);
+              }}
+            />
             <Suspense fallback={<div className="kg-panel panel-card">Loading the knowledge graph…</div>}>
               <KnowledgeGraphView scenarioSlug={scenario.slug} extras={graphExtras} accessToken={accessToken} trace={trace} />
             </Suspense>
@@ -133,4 +198,12 @@ function RagViewContent({
       </div>
     </div>
   );
+}
+
+function saveSplit(pct: number) {
+  try {
+    localStorage.setItem(SPLIT_STORAGE_KEY, String(Math.round(pct)));
+  } catch {
+    // Storage blocked (private window): the split still works for this page.
+  }
 }

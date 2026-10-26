@@ -1390,6 +1390,20 @@ def test_repo_aml_regulation_kg_links_the_record_retention_period() -> None:
     )
 
 
+def test_repo_aml_regulation_kg_keeps_the_pep_minimum_apart_from_the_update_maximum() -> None:
+    """Regression: Art. 45(2)'s "not less than 12 months" came back as "1 year" and merged into
+    Art. 26's maximum update period, so a PEP's post-office minimum read as a maximum."""
+    from pathlib import Path
+
+    from ai_circus_shared.network_graph import parse_graph
+
+    graph = parse_graph((Path(__file__).parents[3] / "scenarios/aml_regulation_kg/knowledge_graph.json").read_bytes())
+    labels = {n.id: n.label for n in graph.nodes}
+    limits = {e.citation: labels[e.target] for e in graph.edges if e.kind == "has_limit"}
+    assert limits["AMLR Art. 45(2)"] == "At least 12 months after leaving office"
+    assert limits["AMLR Art. 26(2)(a)"] == "1 year"
+
+
 def test_knowledge_graph_panel_is_rag_only_and_needs_a_graph() -> None:
     from ai_circus_shared.scenario_schema import KnowledgeGraphExtra, kg_collection_name
 

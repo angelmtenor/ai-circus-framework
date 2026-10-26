@@ -9,7 +9,8 @@
  * (the seeds rag-agent linked and the relations it retrieved) lights up: everything
  * else dims, the seeds pulse, particles run along each retrieved relation in its
  * direction, and the camera frames the subgraph. The loop only runs while something
- * moves; with reduced motion the highlight is static.
+ * moves — the camera, or the motion for its first `MOTION_MS` at 30 fps over a cached
+ * still layer — then the highlight rests; with reduced motion it is static.
  */
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type SimulationNodeDatum } from "d3-force";
 import { interpolateZoom } from "d3-interpolate";
@@ -123,8 +124,8 @@ function lcg(seed: number): () => number {
   };
 }
 
-function shapePath(ctx: CanvasRenderingContext2D, shape: KnowledgeGraphShape, x: number, y: number, r: number): void {
-  ctx.beginPath();
+/** Appends one node glyph as a closed subpath (callers batch many into one Path2D). */
+function shapePath(ctx: Path2D, shape: KnowledgeGraphShape, x: number, y: number, r: number): void {
   switch (shape) {
     case "square":
       ctx.roundRect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8, r * 0.3);
@@ -153,12 +154,15 @@ function shapePath(ctx: CanvasRenderingContext2D, shape: KnowledgeGraphShape, x:
       ctx.roundRect(x - r * 1.35, y - r * 0.7, r * 2.7, r * 1.4, r * 0.7);
       break;
     default:
+      ctx.moveTo(x + r, y);
       ctx.arc(x, y, r, 0, Math.PI * 2);
   }
 }
 
 const WARM_TICKS = 360;
 const CAMERA_MS = 900;
+const MOTION_MS = 12_000; // particles run this long after a trace or a selection, then rest
+const FRAME_MS = 1000 / 30; // the motion needs no more than 30 fps
 
 export class KnowledgeGraphScene {
   private readonly canvas: HTMLCanvasElement;
@@ -174,6 +178,9 @@ export class KnowledgeGraphScene {
   private dpr = 1;
   private raf = 0;
   private dirty = true;
+  private lastFrame = 0;
+  private wasMoving = false;
+  private readonly base = document.createElement("canvas"); // drawBase's cached layer
   private hoverId: string | null = null;
   private press: { x: number; y: number } | null = null;
   private camera: { start: number; interp: ReturnType<typeof interpolateZoom> } | null = null;
@@ -214,6 +221,7 @@ export class KnowledgeGraphScene {
 
   resize(width: number, height: number): void {
     const first = this.width <= 1;
+    const changed = Math.abs(width - this.width) > 2 || Math.abs(height - this.height) > 2;
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -221,7 +229,9 @@ export class KnowledgeGraphScene {
     this.canvas.height = Math.round(this.height * this.dpr);
     this.canvas.style.width = `${this.width}px`;
     this.canvas.style.height = `${this.height}px`;
+    // A new size (the split dragged, the panel maximised) keeps what is shown in view.
     if (first && this.model) this.frame(null, false);
+    else if (changed && this.model) this.frame(this.litNodes.size ? this.litNodes : null, false, this.view.selected ? 0.8 : 0.35);
     this.invalidate();
   }
 
@@ -372,11 +382,16 @@ export class KnowledgeGraphScene {
 
   private invalidate = () => {
     this.dirty = true;
-    if (!this.raf) this.raf = requestAnimationFrame(this.tick);
+    this.schedule();
   };
 
-  private animating(): boolean {
-    return !this.view.reducedMotion && (this.litLinks.size > 0 || this.camera !== null);
+  private schedule(): void {
+    if (!this.raf) this.raf = requestAnimationFrame(this.tick);
+  }
+
+  /** Particles and seed pulses run for a while after a trace or a selection, then rest. */
+  private animating(now: number): boolean {
+    return !this.view.reducedMotion && this.litLinks.size > 0 && now - this.traceStart < MOTION_MS;
   }
 
   private tick = (now: number) => {
@@ -389,17 +404,40 @@ export class KnowledgeGraphScene {
       this.selection.call(this.zoomBehavior.transform, zoomIdentity.translate(this.width / 2 - cx * k, this.height / 2 - cy * k).scale(k));
       if (t >= 1) this.camera = null;
     }
-    if (this.dirty || this.animating()) {
+    const moving = this.animating(now);
+    if (this.dirty) {
       this.dirty = false;
-      this.draw(now);
+      this.drawBase(now);
+      this.compose(now, moving);
+      this.lastFrame = now;
+    } else if (moving && now - this.lastFrame >= FRAME_MS) {
+      this.compose(now, true);
+      this.lastFrame = now;
+    } else if (this.wasMoving && !moving) {
+      this.compose(now, false); // the last frame of the motion: leave a still highlight
     }
-    if (this.animating() && document.visibilityState === "visible") this.raf = requestAnimationFrame(this.tick);
+    this.wasMoving = moving;
+    if ((moving || this.camera) && document.visibilityState === "visible") this.schedule();
   };
 
-  private draw(now: number): void {
-    const { ctx, model } = this;
+  /**
+   * Everything but the motion, painted to an offscreen layer only when the camera, the
+   * view or the hover change. Strokes and fills are batched by style — one path per
+   * bucket instead of one per link or node: a canvas pays per draw call, and per-call
+   * work made a lit graph repaint at ~1 fps on a CPU-rasterised browser, starving the
+   * streaming chat beside it.
+   */
+  private drawBase(now: number): void {
+    const { model } = this;
+    const layer = this.base;
+    if (layer.width !== this.canvas.width || layer.height !== this.canvas.height) {
+      layer.width = this.canvas.width;
+      layer.height = this.canvas.height;
+    }
+    const ctx = layer.getContext("2d")!;
     const palette = NETWORK_PALETTE[this.view.mode];
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.globalAlpha = 1;
     const bg = ctx.createRadialGradient(this.width / 2, this.height / 2, 0, this.width / 2, this.height / 2, Math.max(this.width, this.height) * 0.75);
     bg.addColorStop(0, palette.stage);
     bg.addColorStop(1, palette.stageEdge);
@@ -411,74 +449,86 @@ export class KnowledgeGraphScene {
     ctx.setTransform(this.dpr * k, 0, 0, this.dpr * k, this.dpr * tx, this.dpr * ty);
     const focus = this.litNodes.size > 0;
     const hover = this.hoverId;
-    const elapsed = now - this.traceStart;
     const motion = !this.view.reducedMotion;
+    const sk = Math.sqrt(k);
 
     // Links: document links faint and straight, relations gently curved.
+    type Stroke = { alpha: number; color: string; width: number; dash: number[]; path: Path2D };
+    const strokes = new Map<string, Stroke>();
+    const arrows = new Map<string, Path2D>();
     for (const link of model.links) {
       const lit = this.litLinks.has(link.key);
       const touched = hover !== null && (link.source.id === hover || link.target.id === hover);
       const faint = link.document || link.synonym;
       const alpha = lit || touched ? (faint ? 0.45 : 0.95) : focus ? 0.05 : faint ? 0.1 : 0.32;
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = lit || touched ? (faint ? palette.dim : palette.ink) : palette.link;
-      ctx.lineWidth = (lit ? (faint ? 1 : 2) : faint ? 0.6 : 1) / Math.sqrt(k);
-      ctx.setLineDash(link.document ? [3 / k, 4 / k] : link.synonym ? [1 / k, 3 / k] : []);
+      const color = lit || touched ? (faint ? palette.dim : palette.ink) : palette.link;
+      const width = (lit ? (faint ? 1 : 2) : faint ? 0.6 : 1) / sk;
+      const dashKind = link.document ? "d" : link.synonym ? "s" : "";
+      const bucketKey = `${alpha}|${color}|${width}|${dashKind}`;
+      let bucket = strokes.get(bucketKey);
+      if (!bucket) {
+        const dash = link.document ? [3 / k, 4 / k] : link.synonym ? [1 / k, 3 / k] : [];
+        bucket = { alpha, color, width, dash, path: new Path2D() };
+        strokes.set(bucketKey, bucket);
+      }
       const { sx, sy, cx, cy, ex, ey } = this.curve(link);
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.quadraticCurveTo(cx, cy, ex, ey);
-      ctx.stroke();
-      if (!faint && (lit || touched)) this.arrow(ex, ey, cx, cy, ctx.strokeStyle as string, 5 / Math.sqrt(k));
-    }
-    ctx.setLineDash([]);
-
-    // Particles along each lit relation, source -> target.
-    if (focus && motion) {
-      ctx.globalAlpha = 1;
-      for (const link of model.links) {
-        if (link.document || link.synonym || !this.litLinks.has(link.key)) continue;
-        const { sx, sy, cx, cy, ex, ey } = this.curve(link);
-        const phase = (hashOf(link.key) % 1000) / 1000;
-        for (const offset of [0, 0.5]) {
-          const t = (elapsed / 1600 + phase + offset) % 1;
-          const x = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * ex;
-          const y = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey;
-          ctx.fillStyle = roleColor(this.view.mode, link.source.role);
-          ctx.beginPath();
-          ctx.arc(x, y, 2.2 / Math.sqrt(k), 0, Math.PI * 2);
-          ctx.fill();
-        }
+      bucket.path.moveTo(sx, sy);
+      bucket.path.quadraticCurveTo(cx, cy, ex, ey);
+      if (!faint && (lit || touched)) {
+        let head = arrows.get(color);
+        if (!head) arrows.set(color, (head = new Path2D()));
+        arrowPath(head, ex, ey, cx, cy, 5 / sk);
       }
     }
+    for (const b of strokes.values()) {
+      ctx.globalAlpha = b.alpha;
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = b.width;
+      ctx.setLineDash(b.dash);
+      ctx.stroke(b.path);
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.95;
+    for (const [color, head] of arrows) {
+      ctx.fillStyle = color;
+      ctx.fill(head);
+    }
 
-    // Nodes.
+    // Nodes: a soft halo under the lit ones (in place of a per-node shadowBlur), then one
+    // fill + one outline per (colour, dimmed, outline) bucket.
+    type NodeBucket = { color: string; alpha: number; outline: string; path: Path2D };
+    const halos = new Map<string, Path2D>();
+    const nodes = new Map<string, NodeBucket>();
     for (const node of model.nodes) {
       const lit = this.litNodes.has(node.id);
       const dimmed = focus && !lit && node.id !== hover;
       const color = roleColor(this.view.mode, node.role);
-      ctx.globalAlpha = dimmed ? 0.16 : 1;
-      if (lit && motion) {
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 16 * k;
+      if (lit) {
+        let halo = halos.get(color);
+        if (!halo) halos.set(color, (halo = new Path2D()));
+        halo.moveTo(node.x! + node.r + 5, node.y!);
+        halo.arc(node.x!, node.y!, node.r + 5, 0, Math.PI * 2);
       }
-      shapePath(ctx, node.shape, node.x!, node.y!, node.r);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.lineWidth = 1.5 / k;
-      ctx.strokeStyle = node.id === this.view.selected || node.id === hover ? palette.ink : palette.stage;
-      ctx.stroke();
-      if (this.seeds.has(node.id)) {
-        const pulse = motion ? (Math.sin(elapsed / 260) + 1) / 2 : 0.5;
-        ctx.globalAlpha = 0.85 - pulse * 0.5;
-        ctx.strokeStyle = palette.ink;
-        ctx.lineWidth = 1.6 / k;
-        ctx.beginPath();
-        ctx.arc(node.x!, node.y!, node.r + 5 + pulse * 4, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      const outline = node.id === this.view.selected || node.id === hover ? palette.ink : palette.stage;
+      const bucketKey = `${color}|${dimmed}|${outline}`;
+      let bucket = nodes.get(bucketKey);
+      if (!bucket) nodes.set(bucketKey, (bucket = { color, alpha: dimmed ? 0.16 : 1, outline, path: new Path2D() }));
+      shapePath(bucket.path, node.shape, node.x!, node.y!, node.r);
     }
+    ctx.globalAlpha = 0.22;
+    for (const [color, halo] of halos) {
+      ctx.fillStyle = color;
+      ctx.fill(halo);
+    }
+    ctx.lineWidth = 1.5 / k;
+    for (const b of nodes.values()) {
+      ctx.globalAlpha = b.alpha;
+      ctx.fillStyle = b.color;
+      ctx.fill(b.path);
+      ctx.strokeStyle = b.outline;
+      ctx.stroke(b.path);
+    }
+    if (!motion || !this.animating(now)) this.drawSeedRings(ctx, 0.5);
 
     // Labels: lit / hovered / selected; otherwise hubs, and everything when zoomed in. Placed
     // greedily by priority (hovered, selected, seeds, then by degree); one that would
@@ -489,6 +539,8 @@ export class KnowledgeGraphScene {
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.lineJoin = "round";
+    ctx.strokeStyle = palette.halo;
+    ctx.lineWidth = 3.5 / k;
     const priority = (n: KgNode) =>
       n.id === hover ? 1e6 : n.id === this.view.selected ? 1e5 : (this.seeds.has(n.id) ? 1e3 : 0) + n.degree;
     const wanted = model.nodes
@@ -510,12 +562,69 @@ export class KnowledgeGraphScene {
         continue;
       }
       placed.push(box);
-      ctx.strokeStyle = palette.halo;
-      ctx.lineWidth = 3.5 / k;
       ctx.strokeText(text, node.x!, y);
       ctx.fillStyle = node.role === "document" && !lit ? palette.dim : palette.ink;
       ctx.fillText(text, node.x!, y);
     }
+    ctx.globalAlpha = 1;
+  }
+
+  /** The visible frame: the cached layer, plus particles and seed pulses while in motion. */
+  private compose(now: number, moving: boolean): void {
+    const { ctx, model } = this;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(this.base, 0, 0);
+    if (!model || !moving) {
+      if (model && this.litLinks.size > 0 && !this.view.reducedMotion) {
+        const { k, x: tx, y: ty } = this.transform;
+        ctx.setTransform(this.dpr * k, 0, 0, this.dpr * k, this.dpr * tx, this.dpr * ty);
+        this.drawSeedRings(ctx, 0.5);
+      }
+      return;
+    }
+    const { k, x: tx, y: ty } = this.transform;
+    ctx.setTransform(this.dpr * k, 0, 0, this.dpr * k, this.dpr * tx, this.dpr * ty);
+    const elapsed = now - this.traceStart;
+    // Particles along each lit relation, source -> target: one path per colour.
+    const dots = new Map<string, Path2D>();
+    const r = 2.2 / Math.sqrt(k);
+    for (const link of model.links) {
+      if (link.document || link.synonym || !this.litLinks.has(link.key)) continue;
+      const { sx, sy, cx, cy, ex, ey } = this.curve(link);
+      const phase = (hashOf(link.key) % 1000) / 1000;
+      const color = roleColor(this.view.mode, link.source.role);
+      let path = dots.get(color);
+      if (!path) dots.set(color, (path = new Path2D()));
+      for (const offset of [0, 0.5]) {
+        const t = (elapsed / 1600 + phase + offset) % 1;
+        const x = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * ex;
+        const y = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * ey;
+        path.moveTo(x + r, y);
+        path.arc(x, y, r, 0, Math.PI * 2);
+      }
+    }
+    for (const [color, path] of dots) {
+      ctx.fillStyle = color;
+      ctx.fill(path);
+    }
+    this.drawSeedRings(ctx, (Math.sin(elapsed / 260) + 1) / 2);
+  }
+
+  private drawSeedRings(ctx: CanvasRenderingContext2D, pulse: number): void {
+    if (!this.model || this.seeds.size === 0) return;
+    const ring = new Path2D();
+    for (const id of this.seeds) {
+      const node = this.model.byId.get(id);
+      if (!node) continue;
+      const radius = node.r + 5 + pulse * 4;
+      ring.moveTo(node.x! + radius, node.y!);
+      ring.arc(node.x!, node.y!, radius, 0, Math.PI * 2);
+    }
+    ctx.globalAlpha = 0.85 - pulse * 0.5;
+    ctx.strokeStyle = NETWORK_PALETTE[this.view.mode].ink;
+    ctx.lineWidth = 1.6 / this.transform.k;
+    ctx.stroke(ring);
     ctx.globalAlpha = 1;
   }
 
@@ -535,17 +644,14 @@ export class KnowledgeGraphScene {
     return { sx, sy, cx, cy, ex: tx - (dx / d) * rim, ey: ty - (dy / d) * rim };
   }
 
-  private arrow(x: number, y: number, fromX: number, fromY: number, color: string, size: number): void {
-    const a = Math.atan2(y - fromY, x - fromX);
-    const { ctx } = this;
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x - size * Math.cos(a - 0.45), y - size * Math.sin(a - 0.45));
-    ctx.lineTo(x - size * Math.cos(a + 0.45), y - size * Math.sin(a + 0.45));
-    ctx.closePath();
-    ctx.fill();
-  }
+}
+
+function arrowPath(path: Path2D, x: number, y: number, fromX: number, fromY: number, size: number): void {
+  const a = Math.atan2(y - fromY, x - fromX);
+  path.moveTo(x, y);
+  path.lineTo(x - size * Math.cos(a - 0.45), y - size * Math.sin(a - 0.45));
+  path.lineTo(x - size * Math.cos(a + 0.45), y - size * Math.sin(a + 0.45));
+  path.closePath();
 }
 
 function hashOf(text: string): number {
