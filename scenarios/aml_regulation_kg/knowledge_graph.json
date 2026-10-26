@@ -857,11 +857,39 @@
    "description": "Obliged entity may retain references instead of copies, provided immediate provision to authorities."
   },
   {
+   "id": "obligation:require-further-retention",
+   "kind": "entity",
+   "label": "Require further retention",
+   "type": "Obligation",
+   "description": "Competent authorities may require additional retention of information."
+  },
+  {
    "id": "authority:member-state",
    "kind": "entity",
    "label": "Member State",
    "type": "Authority",
    "description": "National authority of an EU Member State."
+  },
+  {
+   "id": "limit:5-years-after-the-relationship-ends",
+   "kind": "entity",
+   "label": "5 years after the relationship ends",
+   "type": "Limit",
+   "description": "Retention period for CDD documents and records, counted from the end of the business relationship, the occasional transaction or the refusal to enter into either."
+  },
+  {
+   "id": "authority:competent-authority",
+   "kind": "entity",
+   "label": "Competent authority",
+   "type": "Authority",
+   "description": "A public authority competent under the regulation, e.g. a supervisor or FIU."
+  },
+  {
+   "id": "limit:at-most-5-further-years",
+   "kind": "entity",
+   "label": "At most 5 further years",
+   "type": "Limit",
+   "description": "Cap on the further retention a competent authority can require."
   },
   {
    "id": "article:79",
@@ -2805,6 +2833,54 @@
   },
   {
    "source": "obligation:may-replace-copies-with-references",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:retain-documents-and-information",
+   "target": "limit:5-years-after-the-relationship-ends",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 77(3)",
+   "evidence": "shall be retained for a period of 5 years commencing on the date of the termination of the business relationship or on the date of the carrying out of the occasional transaction"
+  },
+  {
+   "source": "limit:5-years-after-the-relationship-ends",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "authority:competent-authority",
+   "target": "obligation:require-further-retention",
+   "kind": "may",
+   "label": "may",
+   "citation": "AMLR Art. 77(3)",
+   "evidence": "Competent authorities may require further retention of the information referred to in the first subparagraph on a case-by-case basis"
+  },
+  {
+   "source": "authority:competent-authority",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:require-further-retention",
+   "target": "article:77",
+   "kind": "cited_in",
+   "label": "cited in"
+  },
+  {
+   "source": "obligation:require-further-retention",
+   "target": "limit:at-most-5-further-years",
+   "kind": "has_limit",
+   "label": "has limit",
+   "citation": "AMLR Art. 77(3)",
+   "evidence": "That further retention period shall not exceed 5 years."
+  },
+  {
+   "source": "limit:at-most-5-further-years",
    "target": "article:77",
    "kind": "cited_in",
    "label": "cited in"

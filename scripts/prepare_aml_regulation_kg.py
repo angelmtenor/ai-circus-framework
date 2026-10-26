@@ -98,6 +98,63 @@ SIGNATURES: dict[str, tuple[str | None, str | None]] = {
 }
 MAX_RELATIONS_PER_ARTICLE = 14
 
+# What the human review found the extraction missed, merged into that article's LLM answer
+# (same shape) and run through the same guards — so a re-run of `extract` keeps it. Art. 77's
+# answer stopped at paragraph (2): the retention period itself, (3), was never linked, and
+# rag-agent rightly answered that the sources did not say how long records are kept.
+REVIEWED_ADDITIONS: dict[int, dict[str, list[dict[str, str]]]] = {
+    77: {
+        "entities": [
+            {
+                "class": "Limit",
+                "label": "5 years after the relationship ends",
+                "description": "Retention period for CDD documents and records, counted from the end of the business "
+                "relationship, the occasional transaction or the refusal to enter into either.",
+            },
+            {
+                "class": "Authority",
+                "label": "Competent authority",
+                "description": "A public authority competent under the regulation, e.g. a supervisor or FIU.",
+            },
+            {
+                "class": "Obligation",
+                "label": "Require further retention",
+                "description": "Competent authorities may require the records to be kept longer, case by case.",
+            },
+            {
+                "class": "Limit",
+                "label": "At most 5 further years",
+                "description": "Cap on the further retention a competent authority can require.",
+            },
+        ],
+        "relations": [
+            {
+                "source": "Retain documents and information",
+                "relation": "has_limit",
+                "target": "5 years after the relationship ends",
+                "paragraph": "3",
+                "evidence": "shall be retained for a period of 5 years commencing on the date of the termination of the "
+                "business relationship or on the date of the carrying out of the occasional transaction",
+            },
+            {
+                "source": "Competent authority",
+                "relation": "may",
+                "target": "Require further retention",
+                "paragraph": "3",
+                "evidence": "Competent authorities may require further retention of the information referred to in the "
+                "first subparagraph on a case-by-case basis",
+            },
+            {
+                "source": "Require further retention",
+                "relation": "has_limit",
+                "target": "At most 5 further years",
+                "paragraph": "3",
+                "evidence": "That further retention period shall not exceed 5 years.",
+            },
+        ],
+    },
+}
+
 
 # --- fetch -------------------------------------------------------------------------
 
@@ -338,6 +395,11 @@ def extract(model: str) -> None:
             tokens += used
             cached.write_text(json.dumps(answer, indent=1, ensure_ascii=False))
             print(f"Art. {number}: {used:,} tokens")
+        reviewed = REVIEWED_ADDITIONS.get(number, {})
+        answer = {
+            "entities": [*answer.get("entities", []), *reviewed.get("entities", [])],  # type: ignore[misc]
+            "relations": [*answer.get("relations", [])[:MAX_RELATIONS_PER_ARTICLE], *reviewed.get("relations", [])],  # type: ignore[index, misc]
+        }
 
         article = f"article:{number}"
         nodes[article] = GraphNode(
@@ -365,7 +427,7 @@ def extract(model: str) -> None:
                 )
 
         normalised_body = _normalise(body)
-        for rel in answer.get("relations", [])[:MAX_RELATIONS_PER_ARTICLE]:  # type: ignore[union-attr]
+        for rel in answer["relations"]:
             kind, evidence = str(rel.get("relation", "")), str(rel.get("evidence", "")).strip()
             src_label, dst_label = str(rel.get("source", "")).strip(), str(rel.get("target", "")).strip()
             # An endpoint the answer forgot to list as an entity takes the class the
