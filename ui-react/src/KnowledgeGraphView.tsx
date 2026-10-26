@@ -12,7 +12,8 @@ import "./knowledgeGraph.css";
  * report it as a `knowledge_graph_trace` event (RagView passes the latest one in): the
  * stage lights that subgraph up, so the reader sees *which* relations — each citing
  * its article — the answer was built from. Clicking a concept shows its relations with
- * their citation and the verbatim quote that backs them.
+ * their citation and the verbatim quote that backs them. The panel can be maximised
+ * over the page (Esc restores it) when the split beside the chat is not enough.
  */
 export default function KnowledgeGraphView({
   scenarioSlug,
@@ -30,6 +31,7 @@ export default function KnowledgeGraphView({
   const [selected, setSelected] = useState<string | null>(null);
   const [dismissedTrace, setDismissedTrace] = useState<KnowledgeGraphTrace | null>(null);
   const [hover, setHover] = useState<{ node: KgNode; x: number; y: number } | null>(null);
+  const [maximised, setMaximised] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<KnowledgeGraphScene | null>(null);
@@ -77,6 +79,15 @@ export default function KnowledgeGraphView({
     sceneRef.current?.setView({ mode, reducedMotion, trace: activeTrace, selected });
   }, [mode, reducedMotion, activeTrace, selected, model]);
 
+  useEffect(() => {
+    if (!maximised) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMaximised(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [maximised]);
+
   // A new answer's trace takes over from a node the reader had selected.
   useEffect(() => {
     if (trace) setSelected(null);
@@ -93,25 +104,36 @@ export default function KnowledgeGraphView({
   }, [activeTrace, model]);
 
   return (
-    <section className="kg-panel panel-card">
+    <section className={`kg-panel panel-card${maximised ? " kg-panel--max" : ""}`}>
       <header className="kg-head">
-        <div>
+        <div className="kg-head-text">
           <h3>{extras.title}</h3>
-          {extras.subtitle && <p>{extras.subtitle}</p>}
+          {extras.subtitle && <p title={extras.subtitle}>{extras.subtitle}</p>}
         </div>
-        {(selected || activeTrace) && (
+        <div className="kg-head-actions">
+          {(selected || activeTrace) && (
+            <button
+              type="button"
+              className="kg-reset"
+              onClick={() => {
+                setSelected(null);
+                setDismissedTrace(trace);
+                sceneRef.current?.frame(null, true);
+              }}
+            >
+              Show all
+            </button>
+          )}
           <button
             type="button"
-            className="kg-reset"
-            onClick={() => {
-              setSelected(null);
-              setDismissedTrace(trace);
-              sceneRef.current?.frame(null, true);
-            }}
+            className="kg-reset kg-max-toggle"
+            onClick={() => setMaximised((m) => !m)}
+            aria-pressed={maximised}
+            title={maximised ? "Restore beside the chat (Esc)" : "Maximise the graph"}
           >
-            Show all
+            {maximised ? "⤡ Restore" : "⤢ Maximise"}
           </button>
-        )}
+        </div>
       </header>
 
       <div className="kg-stage" ref={stageRef}>
@@ -135,15 +157,21 @@ export default function KnowledgeGraphView({
         )}
       </div>
 
-      <ul className="kg-legend" aria-label="Legend">
-        {extras.classes.map((c) => (
-          <li key={c.key}>
-            <Glyph shape={c.shape} color={roleColor(mode, c.role)} />
-            {c.label}
-          </li>
-        ))}
-      </ul>
-      {extras.disclaimer && <p className="kg-disclaimer">{extras.disclaimer}</p>}
+      <footer className="kg-foot">
+        <ul className="kg-legend" aria-label="Legend">
+          {extras.classes.map((c) => (
+            <li key={c.key}>
+              <Glyph shape={c.shape} color={roleColor(mode, c.role)} />
+              {c.label}
+            </li>
+          ))}
+        </ul>
+        {extras.disclaimer && (
+          <p className="kg-disclaimer" title={extras.disclaimer}>
+            {extras.disclaimer}
+          </p>
+        )}
+      </footer>
     </section>
   );
 }

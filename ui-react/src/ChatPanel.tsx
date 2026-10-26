@@ -467,6 +467,10 @@ export function ChatPanel({
   }
 
   const provenance = useMemo(() => replyProvenance(messages, documentTool), [messages, documentTool]);
+  // History keeps only each message's role and text (ai_circus_shared.conversations), not its
+  // tool calls: a restored reply's sources are unknown, so it gets no chips rather than a
+  // false "No tools".
+  const restoredIds = useMemo(() => new Set((initialMessages ?? []).map((m) => m.id)), [initialMessages]);
   // The turn still being answered (everything after the last user message) gets its
   // chips once the run ends, not on an intermediate message mid-answer.
   const answering = new Set<string>();
@@ -542,7 +546,7 @@ export function ChatPanel({
                     )}
                   </div>
                 )}
-                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && (
+                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && !restoredIds.has(turn.id) && (
                   <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
                 )}
                 {turn.role === "assistant" && fallbackByMessageId[turn.id] && (
