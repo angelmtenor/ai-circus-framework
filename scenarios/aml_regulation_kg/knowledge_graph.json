@@ -599,6 +599,13 @@
    "description": "Apply measures referred to in Article 34(4) to mitigate risks."
   },
   {
+   "id": "limit:at-least-12-months-after-leaving-office",
+   "kind": "entity",
+   "label": "At least 12 months after leaving office",
+   "type": "Limit",
+   "description": "Minimum period the measures keep applying once a PEP is no longer entrusted with a prominent public function; longer while the person still poses a higher risk."
+  },
+  {
    "id": "article:46",
    "kind": "entity",
    "label": "Art. 46 — Family members and persons known to be close associates of politically exposed persons",
@@ -2221,14 +2228,14 @@
   },
   {
    "source": "obligation:apply-mitigation-measures",
-   "target": "limit:1-year",
+   "target": "limit:at-least-12-months-after-leaving-office",
    "kind": "has_limit",
    "label": "has limit",
    "citation": "AMLR Art. 45(2)",
    "evidence": "but in any case for not less than 12 months following the time"
   },
   {
-   "source": "limit:1-year",
+   "source": "limit:at-least-12-months-after-leaving-office",
    "target": "article:45",
    "kind": "cited_in",
    "label": "cited in"

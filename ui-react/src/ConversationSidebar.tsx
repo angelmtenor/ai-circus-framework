@@ -10,6 +10,16 @@ import {
 // `body.title or "New conversation"` and ai_circus_shared.conversations.DEFAULT_TITLE)
 // — a conversation still carrying this title has never had a message sent in it.
 const DEFAULT_CONVERSATION_TITLE = "New conversation";
+// A collapsible sidebar remembers, per browser, whether the reader folded it away.
+const COLLAPSED_STORAGE_KEY = "ai-circus.conversations-collapsed";
+
+function storedCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * A lite ChatGPT/Claude-style conversation manager: a vertical left-hand column
@@ -17,7 +27,8 @@ const DEFAULT_CONVERSATION_TITLE = "New conversation";
  * above, shared across all three scenario kinds (see RagView.tsx/TabularView.tsx/
  * AssistedFormView.tsx, which each own the `activeConversationId` state this
  * component reports into via `onSelect`/`onCreate`). `compact` shrinks it for
- * TabularView's narrower chat dock overlay.
+ * TabularView's narrower chat dock overlay; `collapsible` lets the full vertical column
+ * fold into a slim rail (New + show) so the chat beside it gets the width.
  */
 export function ConversationSidebar({
   baseUrl,
@@ -29,6 +40,7 @@ export function ConversationSidebar({
   onDeleteActive,
   refreshKey,
   compact = false,
+  collapsible = false,
 }: {
   baseUrl: string;
   scenarioSlug: string;
@@ -44,15 +56,30 @@ export function ConversationSidebar({
   // (see ai_circus_shared.conversations.ConversationStore.append_messages).
   refreshKey?: unknown;
   compact?: boolean;
+  collapsible?: boolean;
 }) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [busy, setBusy] = useState(false);
   // TabularView's chat dock stacks this as a horizontal strip above the chat (see
   // App.css's `.chat-dock-body--stacked`) — collapsed by default there so the past-
   // conversations list doesn't permanently eat into the dock's already-tight
-  // vertical space; the full vertical sidebar (RagView/AssistedFormView) always
-  // shows its list, so this only applies when `compact`.
-  const [collapsed, setCollapsed] = useState(compact);
+  // vertical space. The full vertical sidebar folds into a rail only when `collapsible`
+  // (RagView), remembering the choice; AssistedFormView's always shows its list.
+  const [collapsed, setCollapsed] = useState(() => compact || (collapsible && storedCollapsed()));
+  const rail = collapsible && !compact && collapsed;
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      if (collapsible && !compact) {
+        try {
+          localStorage.setItem(COLLAPSED_STORAGE_KEY, c ? "0" : "1");
+        } catch {
+          // Storage blocked (private window): the toggle still works for this page.
+        }
+      }
+      return !c;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +124,33 @@ export function ConversationSidebar({
 
   const pastConversations = conversations.filter((c) => c.title !== DEFAULT_CONVERSATION_TITLE);
 
+  if (rail) {
+    return (
+      <div className="conversation-sidebar conversation-sidebar--rail">
+        <button
+          type="button"
+          className="conversation-rail-button"
+          onClick={toggleCollapsed}
+          aria-label="Show past conversations"
+          title={`Show past conversations (${pastConversations.length})`}
+        >
+          <span aria-hidden="true">☰</span>
+          {pastConversations.length > 0 && <span className="conversation-rail-count">{pastConversations.length}</span>}
+        </button>
+        <button
+          type="button"
+          className="conversation-rail-button"
+          onClick={handleNew}
+          disabled={busy || activeIsEmpty}
+          aria-label="New conversation"
+          title={activeIsEmpty ? "You're already on a new, empty conversation" : "New conversation"}
+        >
+          +
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`conversation-sidebar${compact ? " conversation-sidebar--compact" : ""}`}>
       <div className="conversation-header-row">
@@ -108,11 +162,22 @@ export function ConversationSidebar({
         >
           + New conversation
         </button>
+        {collapsible && !compact && (
+          <button
+            type="button"
+            className="conversation-collapse-toggle"
+            onClick={toggleCollapsed}
+            aria-label="Hide past conversations"
+            title="Hide past conversations"
+          >
+            «
+          </button>
+        )}
         {compact && pastConversations.length > 0 && (
           <button
             type="button"
             className="conversation-collapse-toggle"
-            onClick={() => setCollapsed((c) => !c)}
+            onClick={toggleCollapsed}
             aria-label={collapsed ? "Show past conversations" : "Hide past conversations"}
             title={collapsed ? `Show ${pastConversations.length} past conversation(s)` : "Hide past conversations"}
           >
