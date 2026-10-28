@@ -7,8 +7,8 @@
  * a weak pull towards per-community anchors keeps communities readable; rows with no
  * link at all sit on an outer orbit. Modes recolour, they never move nodes (the mental
  * map stays put). Rendering is dirty-flag driven — the animation loop only runs while
- * something moves (camera, particles, pulse, reveal, drag) and pauses when the page
- * or the stage is hidden.
+ * something moves (camera, particles, pulse, reveal, drag), lets the ambient motion rest
+ * `REST_AFTER_MS` after the last input, and pauses when the page or the stage is hidden.
  */
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation } from "d3-force";
 import { interpolateZoom } from "d3-interpolate";
@@ -46,6 +46,12 @@ type LabelBox = { x: number; y: number; w: number; h: number };
 const WARM_TICKS = 320;
 const REVEAL_STEP_MS = 110;
 const INTRO_MS = 1900;
+// Ambient motion (the top tier's breathing glow, particles on a focused node's ties) rests
+// after this long without input or a new view: a stage left on screen while the presenter
+// talks otherwise keeps a laptop's core busy rasterising frames nobody needs.
+const REST_AFTER_MS = 15_000;
+// The breathing glow is slow; 20 fps is plenty for it.
+const AMBIENT_FRAME_MS = 50;
 
 function lcg(seed: number): () => number {
   let s = seed >>> 0;
@@ -114,6 +120,12 @@ export class NetworkScene {
   private pathLinks = new Set<NxLink>();
   private hulls: { color: string; name: string; size: number; hull: [number, number][] }[] = [];
   private hullsStale = true;
+  // The still layer (background, hulls, links, relations) — cached between frames whose
+  // only motion is the nodes' glow or particles, and rebuilt when its key changes: the
+  // view, the camera, the canvas, or the layout (`staticSeq`, bumped with hullsStale).
+  private readonly still = document.createElement("canvas");
+  private stillKey: string | null = null;
+  private staticSeq = 0;
   private camera: { start: number; duration: number; interp: ReturnType<typeof interpolateZoom> } | null = null;
   private drag: { node: NxNode; moved: boolean; x0: number; y0: number } | null = null;
   private press: { x: number; y: number } | null = null;
@@ -122,12 +134,18 @@ export class NetworkScene {
   private bg: { key: string; canvas: HTMLCanvasElement } | null = null;
   private grid: { key: string; pattern: CanvasPattern | null } | null = null;
   private drawMs = 8; // moving average of draw() time, for frame pacing
-  private gapMs = 16; // moving average of the gap between animated frames
+  // Moving average of a drawn frame's real cost — from draw() to the next frame, so the
+  // rasterising and compositing that follow draw() count too (in a software canvas they
+  // dwarf it: draw() alone under-paced a GPU-less laptop to a saturated main thread).
+  private frameMs = 16;
+  private drawnAt = 0;
+  private gapMs = 0; // moving average of how late animated frames come, past their pace
   private gapSamples = 0;
   private dprCap = 2; // lowered to 1 once if a (GPU-less) machine can't keep up
   private readonly textWidths = new Map<string, number>();
   private readonly observer: IntersectionObserver | null;
   private lastFrame = 0;
+  private lastActivity = performance.now();
   // The opening: the settled layout spirals out from the centre (skipped with reduced motion).
   private targets = new Map<NxNode, [number, number]>();
   private intro: { start: number } | null = null;
@@ -260,6 +278,7 @@ export class NetworkScene {
     }
     this.sim.on("tick", () => {
       this.hullsStale = true;
+      this.staticSeq += 1;
       this.invalidate();
     });
 
@@ -286,12 +305,14 @@ export class NetworkScene {
     const positives = net.rows.filter((n) => n.row?.actual === 1).sort((a, b) => (b.row?.probability ?? 0) - (a.row?.probability ?? 0));
     this.revealOrder = new Map(positives.map((n, i) => [n.id, i]));
     this.hullsStale = true;
+    this.staticSeq += 1;
     this.fit(false);
   }
 
   setView(view: SceneView): void {
     const previous = this.view;
     this.view = view;
+    this.staticSeq += 1;
     if (!this.net) return;
     const focus = view.hoveredId ?? view.selectedId;
     this.focusIds = new Set(focus ? [focus, ...(this.net.adjacency.get(focus) ?? []).map((x) => x.node.id)] : []);
@@ -408,6 +429,7 @@ export class NetworkScene {
   };
 
   private readonly onPointerMove = (event: PointerEvent) => {
+    this.wake();
     const [wx, wy, sx, sy] = this.pointerWorld(event);
     if (this.drag) {
       if (!this.drag.moved && Math.hypot(sx - this.drag.x0, sy - this.drag.y0) < 4) return;
@@ -424,6 +446,7 @@ export class NetworkScene {
         if (this.sim && this.sim.alpha() < 0.05) this.sim.alphaTarget(0.12).restart();
       }
       this.hullsStale = true;
+      this.staticSeq += 1;
       this.invalidate();
       return;
     }
@@ -467,35 +490,50 @@ export class NetworkScene {
 
   private readonly invalidate = () => {
     this.dirty = true;
-    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
+    this.wake();
   };
+
+  /** The reader did something (or the view changed): run the loop, ambient motion included. */
+  private wake(): void {
+    this.lastActivity = performance.now();
+    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
+  }
 
   private animating(now: number): boolean {
     const v = this.view;
     if (!v) return false;
     if (this.intro || this.camera || this.drag || (this.sim && this.sim.alpha() > this.sim.alphaMin())) return true;
     if (v.reducedMotion) return false;
-    if (v.playing || v.selectedId || v.hoveredId || v.path.length) return true;
+    if (v.playing) return true;
     if (v.revealAt !== null && now - v.revealAt < REVEAL_STEP_MS * (this.revealOrder.size + 4)) return true;
+    if (now - this.lastActivity > REST_AFTER_MS) return false;
+    if (v.selectedId || v.hoveredId || v.path.length) return true;
     return v.mode !== "communities"; // the top tier's glow breathes
   }
 
   private readonly loop = (now: number) => {
     this.raf = 0;
+    if (this.drawnAt) {
+      const cost = performance.now() - this.drawnAt;
+      if (cost < 1000) this.frameMs = 0.8 * this.frameMs + 0.2 * cost;
+      this.drawnAt = 0;
+    }
     if (document.visibilityState === "hidden" || !this.visible) return;
     const animating = this.animating(now);
-    // Ambient-only motion (the breathing glow) runs at ~30 fps; any animation leaves the
+    // Ambient-only motion (the breathing glow) runs at ~20 fps; any animation leaves the
     // main thread at least half idle on a slow (e.g. GPU-less) machine.
     const ambient = animating && !this.camera && !this.drag && !this.view?.playing && !this.view?.selectedId && !this.view?.hoveredId;
-    const interval = Math.max(ambient ? 32 : 0, Math.min(250, 2 * this.drawMs));
+    const cost = Math.max(2 * this.drawMs, 1.5 * (this.frameMs - 17)); // ~0 at 60 fps
+    const interval = Math.max(ambient ? AMBIENT_FRAME_MS : 0, Math.min(250, cost));
     if (this.dirty || (animating && now - this.lastFrame >= interval)) {
       const gap = now - this.lastFrame;
       if (animating && this.lastFrame && gap < 800) {
-        this.gapMs = 0.9 * this.gapMs + 0.1 * gap;
+        // The overrun past the intended pace (the ambient pace is slow on purpose).
+        this.gapMs = 0.9 * this.gapMs + 0.1 * Math.max(0, gap - Math.max(interval, 32));
         this.gapSamples += 1;
         // Rasterising a HiDPI canvas in software (no GPU) can take hundreds of ms a frame:
         // trade sharpness for fluidity, once.
-        if (this.gapSamples > 30 && this.gapMs > 55 && this.dprCap > 1 && this.dpr > 1) {
+        if (this.gapSamples > 30 && this.gapMs > 23 && this.dprCap > 1 && this.dpr > 1) {
           this.dprCap = 1;
           this.bg = null;
           this.grid = null;
@@ -509,12 +547,14 @@ export class NetworkScene {
       this.stepCamera(now);
       this.draw(now);
       this.drawMs = 0.8 * this.drawMs + 0.2 * (performance.now() - started);
+      this.drawnAt = started;
       if (!this.readyFired && this.net && !this.intro) {
         this.readyFired = true;
         this.callbacks.onReady?.();
       }
     }
     if (animating || this.dirty) this.raf = requestAnimationFrame(this.loop);
+    else this.drawnAt = 0; // no next frame to time this one against
   };
 
   private stepIntro(now: number): void {
@@ -543,6 +583,7 @@ export class NetworkScene {
     if (p >= 1) {
       this.intro = null;
       this.hullsStale = true;
+      this.staticSeq += 1;
     }
   }
 
@@ -667,7 +708,83 @@ export class NetworkScene {
     const t = this.transform;
     const k = t.k;
     const dpr = this.dpr;
+    const focusId = view.hoveredId ?? view.selectedId;
+    const period = view.period;
 
+    // The focus node's ties and the traced path are drawn over the still layer.
+    const highlighted = net.links.filter(
+      (link) =>
+        link.flow &&
+        (period === null ? link.weight : windowWeight(link, period)) > 0 &&
+        ((focusId !== null && (link.source.id === focusId || link.target.id === focusId)) || this.pathLinks.has(link)),
+    );
+    const settled = !this.intro && !this.drag && !(this.sim && this.sim.alpha() > this.sim.alphaMin());
+    const key = settled ? `${this.staticSeq}|${t.k}|${t.x}|${t.y}|${this.canvas.width}x${this.canvas.height}` : null;
+    if (key === null || key !== this.stillKey) {
+      if (this.still.width !== this.canvas.width || this.still.height !== this.canvas.height) {
+        this.still.width = this.canvas.width;
+        this.still.height = this.canvas.height;
+      }
+      this.drawStill(this.still.getContext("2d")!, net, view, palette, dark);
+      this.stillKey = key;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.globalAlpha = 1;
+    ctx.drawImage(this.still, 0, 0);
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * t.x, dpr * t.y);
+    const focus = this.focusIds.size > 0;
+    const pathOn = this.pathLinks.size > 0;
+    const logMax = Math.log1p(period === null ? net.maxWeight : this.maxWindow);
+
+    // Highlighted flow links (the focus node's ties, the traced path).
+    ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+    for (const link of highlighted) {
+      const weight = period === null ? link.weight : windowWeight(link, period);
+      const w = Math.log1p(weight) / logMax;
+      const onPath = this.pathLinks.has(link);
+      const [cx, cy] = this.linkControl(link);
+      ctx.beginPath();
+      ctx.moveTo(link.source.x ?? 0, link.source.y ?? 0);
+      ctx.quadraticCurveTo(cx, cy, link.target.x ?? 0, link.target.y ?? 0);
+      ctx.strokeStyle = rgba(onPath ? palette.path : palette.ink, onPath ? 0.95 : 0.35 + 0.5 * w);
+      ctx.lineWidth = (onPath ? 2.6 : 0.9 + 2 * w) / k;
+      ctx.stroke();
+    }
+
+    // Particles: messages flowing sender -> recipient (replay, or the focus node's ties).
+    if (!view.reducedMotion) this.drawParticles(now, palette, highlighted);
+    ctx.globalCompositeOperation = "source-over";
+
+    // Nodes: context, then rows (low tiers first), then entities on top.
+    const time = now / 1000;
+    const order = [...net.nodes].sort((a, b) => this.drawRank(a) - this.drawRank(b));
+    this.drawNodes(order, palette, time, focus || pathOn);
+
+    this.drawOverlays(now, palette);
+    if (!this.intro) this.drawLabels(palette, focus);
+
+    // The replay month, large and quiet.
+    if (period !== null) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = "700 44px system-ui, -apple-system, 'Segoe UI', sans-serif";
+      ctx.fillStyle = rgba(palette.ink, dark ? 0.16 : 0.12);
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(this.periodCaption(period), 20, this.height - 22);
+    }
+  }
+
+  /** The still layer: everything under the highlighted ties, particles and nodes. */
+  private drawStill(
+    ctx: CanvasRenderingContext2D,
+    net: NonNullable<NetworkScene["net"]>,
+    view: SceneView,
+    palette: (typeof NETWORK_PALETTE)[SurfaceMode],
+    dark: boolean,
+  ): void {
+    const t = this.transform;
+    const k = t.k;
+    const dpr = this.dpr;
     // Background: surface + vignette (cached), a faint evidence-board dot grid.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
@@ -721,16 +838,12 @@ export class NetworkScene {
     ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
     const buckets = new Map<string, { path: Path2D; alpha: number; width: number; color: string }>();
     const logMax = Math.log1p(period === null ? net.maxWeight : this.maxWindow);
-    const highlighted: NxLink[] = [];
     for (const link of net.links) {
       if (!link.flow) continue;
       const weight = period === null ? link.weight : windowWeight(link, period);
       if (weight <= 0) continue;
       const incident = focusId !== null && (link.source.id === focusId || link.target.id === focusId);
-      if (incident || this.pathLinks.has(link)) {
-        highlighted.push(link);
-        continue;
-      }
+      if (incident || this.pathLinks.has(link)) continue; // drawn over the still layer
       const w = Math.log1p(weight) / logMax;
       let alpha = (dark ? 0.06 : 0.09) + (dark ? 0.26 : 0.3) * w;
       if (focus || pathOn) alpha *= 0.22;
@@ -763,54 +876,26 @@ export class NetworkScene {
     // Relations (e.g. "general partner of"): dashed, in the entity hue.
     ctx.globalCompositeOperation = "source-over";
     ctx.setLineDash([4 / k, 3 / k]);
+    const relations = new Map<string, Path2D>(); // one dashed stroke per style
     for (const link of net.links) {
       if (link.flow) continue;
       const on = this.pathLinks.has(link) || (focusId !== null && (link.source.id === focusId || link.target.id === focusId));
+      const style = `${rgba(this.pathLinks.has(link) ? palette.path : this.entityColor(palette), on ? 0.95 : focus || pathOn ? 0.18 : 0.62)}|${on ? 2 : 1.2}`;
+      let path = relations.get(style);
+      if (!path) relations.set(style, (path = new Path2D()));
       const [cx, cy] = this.linkControl(link);
-      ctx.beginPath();
-      ctx.moveTo(link.source.x ?? 0, link.source.y ?? 0);
-      ctx.quadraticCurveTo(cx, cy, link.target.x ?? 0, link.target.y ?? 0);
-      ctx.strokeStyle = rgba(this.pathLinks.has(link) ? palette.path : this.entityColor(palette), on ? 0.95 : focus || pathOn ? 0.18 : 0.62);
-      ctx.lineWidth = (on ? 2 : 1.2) / k;
-      ctx.stroke();
+      path.moveTo(link.source.x ?? 0, link.source.y ?? 0);
+      path.quadraticCurveTo(cx, cy, link.target.x ?? 0, link.target.y ?? 0);
+    }
+    for (const [style, path] of relations) {
+      const [color, width] = style.split("|");
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Number(width) / k;
+      ctx.stroke(path);
     }
     ctx.setLineDash([]);
 
-    // Highlighted flow links (the focus node's ties, the traced path).
-    ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
-    for (const link of highlighted) {
-      const weight = period === null ? link.weight : windowWeight(link, period);
-      const w = Math.log1p(weight) / logMax;
-      const onPath = this.pathLinks.has(link);
-      const [cx, cy] = this.linkControl(link);
-      ctx.beginPath();
-      ctx.moveTo(link.source.x ?? 0, link.source.y ?? 0);
-      ctx.quadraticCurveTo(cx, cy, link.target.x ?? 0, link.target.y ?? 0);
-      ctx.strokeStyle = rgba(onPath ? palette.path : palette.ink, onPath ? 0.95 : 0.35 + 0.5 * w);
-      ctx.lineWidth = (onPath ? 2.6 : 0.9 + 2 * w) / k;
-      ctx.stroke();
-    }
-
-    // Particles: messages flowing sender -> recipient (replay, or the focus node's ties).
-    if (!view.reducedMotion) this.drawParticles(now, palette, highlighted);
     ctx.globalCompositeOperation = "source-over";
-
-    // Nodes: context, then rows (low tiers first), then entities on top.
-    const time = now / 1000;
-    const order = [...net.nodes].sort((a, b) => this.drawRank(a) - this.drawRank(b));
-    for (const node of order) this.drawNode(node, palette, time, focus || pathOn);
-
-    this.drawOverlays(now, palette);
-    if (!this.intro) this.drawLabels(palette, focus);
-
-    // The replay month, large and quiet.
-    if (period !== null) {
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.font = "700 44px system-ui, -apple-system, 'Segoe UI', sans-serif";
-      ctx.fillStyle = rgba(palette.ink, dark ? 0.16 : 0.12);
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(this.periodCaption(period), 20, this.height - 22);
-    }
   }
 
   private periodCaption(period: number): string {
@@ -869,79 +954,108 @@ export class NetworkScene {
     ctx.globalAlpha = 1;
   }
 
-  private drawNode(node: NxNode, palette: (typeof NETWORK_PALETTE)[SurfaceMode], time: number, dimOthers: boolean): void {
+  /**
+   * Context and row nodes are batched — one fill() (and one outline) per (colour, alpha)
+   * bucket, glows first — so a 1,000-row board costs a handful of canvas calls a frame
+   * instead of two per node; buckets keep the low-to-high rank order. Entities (few) are
+   * drawn one by one, on top.
+   */
+  private drawNodes(order: NxNode[], palette: (typeof NETWORK_PALETTE)[SurfaceMode], time: number, dimOthers: boolean): void {
     const ctx = this.ctx;
     const view = this.view!;
+    const k = this.transform.k;
+    const dark = view.surface === "dark";
+    const alphaOf = (node: NxNode) => {
+      let alpha = 1;
+      if (this.filteredOut(node)) alpha = 0.14;
+      if (dimOthers && !this.focusIds.has(node.id) && !view.path.includes(node.id)) alpha *= 0.3;
+      if (view.period !== null && node.kind !== "entity" && !this.activeIn(node, view.period)) alpha *= 0.4;
+      return Math.round(alpha * 100) / 100;
+    };
+    type Bucket = { fill: string; alpha: number; path: Path2D; outline: boolean };
+    const buckets = new Map<string, Bucket>();
+    const bucket = (fill: string, alpha: number, outline: boolean) => {
+      const key = `${fill}|${alpha}|${outline}`;
+      let b = buckets.get(key);
+      if (!b) buckets.set(key, (b = { fill, alpha, path: new Path2D(), outline }));
+      return b.path;
+    };
+    const entities: [NxNode, number][] = [];
+    // Glows under the tiered rows (the top tier's breathes), drawn as they come in rank order.
+    ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+    for (const node of order) {
+      const alpha = alphaOf(node);
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+      const color = this.nodeColor(node, palette);
+      if (node.kind === "entity") {
+        entities.push([node, alpha]);
+        continue;
+      }
+      if (node.kind === "context") {
+        const path = bucket(rgba(color, 0.55), alpha, false);
+        path.moveTo(x + node.r, y);
+        path.arc(x, y, node.r, 0, 2 * Math.PI);
+        continue;
+      }
+      const tier = node.row?.tier ?? 0;
+      const p = node.row?.probability ?? 0;
+      if (view.mode !== "communities" && tier > 0 && alpha >= 0.5) {
+        const breathe = tier >= view.flagTier && !view.reducedMotion ? 1 + 0.1 * Math.sin(time * 2.2 + hash01(node.id) * 6) : 1;
+        const g = node.r * (1.9 + 2.6 * p) * breathe;
+        ctx.globalAlpha = alpha * (dark ? 1 : 0.55);
+        ctx.drawImage(this.sprite(color), x - g, y - g, 2 * g, 2 * g);
+      }
+      const path = bucket(tier === 0 && view.mode !== "communities" ? rgba(color, 0.8) : color, alpha, true);
+      path.moveTo(x + node.r, y);
+      path.arc(x, y, node.r, 0, 2 * Math.PI);
+    }
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = 1.2 / k;
+    ctx.strokeStyle = palette.stage;
+    for (const b of buckets.values()) {
+      ctx.globalAlpha = b.alpha;
+      ctx.fillStyle = b.fill;
+      ctx.fill(b.path);
+      if (b.outline) ctx.stroke(b.path);
+    }
+    for (const [node, alpha] of entities) this.drawEntity(node, palette, alpha);
+    ctx.globalAlpha = 1;
+  }
+
+  private drawEntity(node: NxNode, palette: (typeof NETWORK_PALETTE)[SurfaceMode], alpha: number): void {
+    const ctx = this.ctx;
     const k = this.transform.k;
     const x = node.x ?? 0;
     const y = node.y ?? 0;
     const color = this.nodeColor(node, palette);
-    const dark = view.surface === "dark";
-    let alpha = 1;
-    if (this.filteredOut(node)) alpha = 0.14;
-    if (dimOthers && !this.focusIds.has(node.id) && !view.path.includes(node.id)) alpha *= 0.3;
-    if (view.period !== null && node.kind !== "entity" && !this.activeIn(node, view.period)) alpha *= 0.4;
     ctx.globalAlpha = alpha;
-
-    if (node.kind === "context") {
-      ctx.beginPath();
-      ctx.arc(x, y, node.r, 0, 2 * Math.PI);
-      ctx.fillStyle = rgba(color, 0.55);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      return;
-    }
-
-    if (node.kind === "entity") {
-      if (dark && alpha > 0.5) {
-        const g = node.r * 3.2;
-        ctx.globalCompositeOperation = "lighter";
-        ctx.drawImage(this.sprite(color), x - g, y - g, 2 * g, 2 * g);
-        ctx.globalCompositeOperation = "source-over";
-      }
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = Math.PI / 6 + (i * Math.PI) / 3;
-        const px = x + Math.cos(a) * node.r;
-        const py = y + Math.sin(a) * node.r;
-        if (i) ctx.lineTo(px, py);
-        else ctx.moveTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fillStyle = palette.stage;
-      ctx.fill();
-      ctx.fillStyle = rgba(color, 0.3);
-      ctx.fill();
-      ctx.lineWidth = 2 / k;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, 1.8, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      return;
-    }
-
-    const tier = node.row?.tier ?? 0;
-    const p = node.row?.probability ?? 0;
-    const dimmed = alpha < 0.5;
-    if (view.mode !== "communities" && tier > 0 && !dimmed) {
-      const breathe = tier >= view.flagTier && !view.reducedMotion ? 1 + 0.1 * Math.sin(time * 2.2 + hash01(node.id) * 6) : 1;
-      const g = node.r * (1.9 + 2.6 * p) * breathe;
-      ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
-      ctx.globalAlpha = alpha * (dark ? 1 : 0.55);
+    if (this.view!.surface === "dark" && alpha > 0.5) {
+      const g = node.r * 3.2;
+      ctx.globalCompositeOperation = "lighter";
       ctx.drawImage(this.sprite(color), x - g, y - g, 2 * g, 2 * g);
       ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = alpha;
     }
     ctx.beginPath();
-    ctx.arc(x, y, node.r, 0, 2 * Math.PI);
-    ctx.fillStyle = tier === 0 && view.mode !== "communities" ? rgba(color, 0.8) : color;
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 6 + (i * Math.PI) / 3;
+      const px = x + Math.cos(a) * node.r;
+      const py = y + Math.sin(a) * node.r;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = palette.stage;
     ctx.fill();
-    ctx.lineWidth = 1.2 / k;
-    ctx.strokeStyle = palette.stage;
+    ctx.fillStyle = rgba(color, 0.3);
+    ctx.fill();
+    ctx.lineWidth = 2 / k;
+    ctx.strokeStyle = color;
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 1.8, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 

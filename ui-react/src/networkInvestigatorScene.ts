@@ -32,6 +32,9 @@ type Particle = { edge: number; dir: 1 | -1; t: number; speed: number };
 type Placed = { x: number; y: number; alpha: number };
 
 const TRANSITION_MS = 650;
+// The ambient motion (particles along the ties) rests after this long without input or a
+// new view, so a stage left on screen during a talk stops costing the laptop a core.
+const REST_AFTER_MS = 15_000;
 const DEFAULT_VIEW: EgoView = { surface: "dark", period: null, hoveredId: null, selectedId: null, highlight: new Set(), targetIds: new Set(), reducedMotion: false };
 
 function easeInOut(t: number): number {
@@ -54,6 +57,7 @@ export class EgoScene {
   private view: EgoView = DEFAULT_VIEW;
   private from = new Map<string, Placed>();
   private started = 0;
+  private lastActivity = performance.now();
   private particles: Particle[] = [];
   private windowMax = 1;
   private raf = 0;
@@ -73,7 +77,7 @@ export class EgoScene {
     canvas.addEventListener("pointermove", this.onMove);
     canvas.addEventListener("pointerleave", this.onLeave);
     canvas.addEventListener("click", this.onClick);
-    this.raf = requestAnimationFrame(this.frame);
+    this.wake();
   }
 
   destroy() {
@@ -93,6 +97,7 @@ export class EgoScene {
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.dirty = true;
+    this.wake();
   }
 
   setLayout(layout: EgoLayout, subject: Subject, periodCount: number) {
@@ -111,11 +116,19 @@ export class EgoScene {
     }
     this.particles = [];
     this.dirty = true;
+    this.wake();
   }
 
   setView(view: EgoView) {
     this.view = view;
     this.dirty = true;
+    this.wake();
+  }
+
+  /** Something changed or the reader moved: (re)start the loop and the ambient motion. */
+  private wake() {
+    this.lastActivity = performance.now();
+    if (!this.raf && !this.disposed) this.raf = requestAnimationFrame(this.frame);
   }
 
   // ── geometry ─────────────────────────────────────────────────────────────
@@ -164,6 +177,7 @@ export class EgoScene {
     const id = this.hit(x, y);
     this.canvas.style.cursor = id ? "pointer" : "default";
     this.cb.onHover(id, x, y);
+    this.wake();
   };
   private onLeave = () => this.cb.onHover(null, 0, 0);
   private onClick = (e: MouseEvent) => {
@@ -193,14 +207,17 @@ export class EgoScene {
   // ── frame ────────────────────────────────────────────────────────────────
 
   private frame = (now: number) => {
-    if (this.disposed) return;
-    this.raf = requestAnimationFrame(this.frame);
+    this.raf = 0;
+    if (this.disposed || document.hidden) return; // wake() restarts it on the next input or view
     const dt = Math.min(64, now - (this.last || now));
     this.last = now;
-    const animating = !this.view.reducedMotion && this.layout !== null;
-    if (!animating && !this.dirty && now - this.started > TRANSITION_MS) return;
-    this.dirty = false;
-    this.draw(now, dt);
+    const animating = !this.view.reducedMotion && this.layout !== null && now - this.lastActivity < REST_AFTER_MS;
+    const transition = now - this.started <= TRANSITION_MS;
+    if (animating || this.dirty || transition) {
+      this.dirty = false;
+      this.draw(now, dt);
+    }
+    if (animating || transition) this.raf = requestAnimationFrame(this.frame);
   };
 
   /** Flow weight of a tie in the current window, 0..1 of the strongest. */

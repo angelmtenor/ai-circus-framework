@@ -1,7 +1,8 @@
 /**
  * The knowledge-graph stage next to a conversational_rag chat: an imperative canvas
  * renderer (d3-force layout, d3-zoom camera) KnowledgeGraphView drives through
- * `setModel` / `setView`.
+ * `setModel` / `setView`. The layout warms up in `SLICE_MS` slices and is cached per
+ * graph, so opening the panel (again) never blocks the page.
  *
  * Colour is a node's *role* (actor / action / condition — the three network hues that
  * validate for a spatial graph — and a recessive grey for source documents); the glyph
@@ -160,6 +161,9 @@ function shapePath(ctx: Path2D, shape: KnowledgeGraphShape, x: number, y: number
 }
 
 const WARM_TICKS = 360;
+const SLICE_MS = 8; // the warm-up runs in slices this long, so opening the panel never blocks
+// Settled positions per graph (by its node and link ids), so reopening it skips the warm-up.
+const layoutCache = new Map<string, Map<string, [number, number]>>();
 const CAMERA_MS = 900;
 const MOTION_MS = 12_000; // particles run this long after a trace or a selection, then rest
 const FRAME_MS = 1000 / 30; // the motion needs no more than 30 fps
@@ -178,6 +182,7 @@ export class KnowledgeGraphScene {
   private dpr = 1;
   private raf = 0;
   private dirty = true;
+  private layoutJob = 0;
   private lastFrame = 0;
   private wasMoving = false;
   private readonly base = document.createElement("canvas"); // drawBase's cached layer
@@ -211,6 +216,7 @@ export class KnowledgeGraphScene {
   }
 
   destroy(): void {
+    this.layoutJob += 1; // abandons a warm-up still running
     cancelAnimationFrame(this.raf);
     this.selection.on(".zoom", null);
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
@@ -236,7 +242,14 @@ export class KnowledgeGraphScene {
   }
 
   setModel(model: KgModel): void {
-    this.model = model;
+    const job = ++this.layoutJob;
+    const key = String(hashOf(model.nodes.map((n) => n.id).join("\n") + "\n" + model.links.map((l) => l.key).join("\n")));
+    const cached = layoutCache.get(key);
+    if (cached && model.nodes.every((n) => cached.has(n.id))) {
+      for (const node of model.nodes) [node.x, node.y] = cached.get(node.id)!;
+      this.placed(model);
+      return;
+    }
     const random = lcg(42);
     for (const node of model.nodes) {
       node.x = (random() - 0.5) * 400;
@@ -255,11 +268,37 @@ export class KnowledgeGraphScene {
       .force("x", forceX<KgNode>(0).strength(0.09))
       .force("y", forceY<KgNode>(0).strength(0.09))
       .stop();
-    for (let i = 0; i < WARM_TICKS; i++) sim.tick();
+    let ticks = 0;
+    const slice = () => {
+      if (job !== this.layoutJob) return; // a newer model, or destroyed
+      const until = performance.now() + SLICE_MS;
+      while (ticks < WARM_TICKS && performance.now() < until) {
+        sim.tick();
+        ticks += 1;
+      }
+      if (ticks < WARM_TICKS) {
+        setTimeout(slice, 0);
+        return;
+      }
+      layoutCache.set(key, new Map(model.nodes.map((n) => [n.id, [n.x!, n.y!]])));
+      this.placed(model);
+    };
+    slice();
+  }
+
+  /** The model's nodes have their positions: show it. */
+  private placed(model: KgModel): void {
+    this.model = model;
     // Always-on labels: the most connected concepts and every document.
     const ranked = model.nodes.filter((n) => n.role !== "document").sort((a, b) => b.degree - a.degree);
     this.topLabels = new Set(ranked.slice(0, 9).map((n) => n.id));
     this.frame(null, false);
+    // A trace or selection that arrived during the warm-up lights up now.
+    const view = this.view;
+    if (view.trace || view.selected) {
+      this.view = { ...view, trace: null, selected: null };
+      this.setView(view);
+    }
     this.invalidate();
   }
 

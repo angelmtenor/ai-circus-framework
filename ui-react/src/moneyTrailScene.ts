@@ -11,7 +11,8 @@
  *   payer to payee (its *shape* is the payment format — never colour alone); paused, the
  *   hour's flows as static arcs. A selected holder shows all of its flows, arrowheaded.
  *
- * Renders on demand; animates only while playing, visible and not under reduced motion.
+ * Renders on demand; animates only while playing (or, for `REST_AFTER_MS` after the last
+ * input, while a holder is selected), visible and not under reduced motion.
  * Software canvases are slow, so the pixel ratio drops to 1 when frames run long.
  */
 import { forceCollide, forceSimulation, forceX, forceY, type SimulationNodeDatum } from "d3-force";
@@ -23,6 +24,9 @@ import type { MoneyTrailExtra } from "./apiClient";
 import { rgba, sizeCanvas } from "./logisticsViz";
 import type { Model, MtFlow, MtNode } from "./moneyTrailModel";
 import type { SurfaceMode } from "./riskPalette";
+
+// A selected holder's motion rests after this long without input, like networkScene.ts.
+const REST_AFTER_MS = 15_000;
 
 export type MtColors = {
   oceanTop: string;
@@ -142,6 +146,7 @@ export class MoneyTrailScene {
   private particles: Particle[] = [];
   private lastHour: number | null = null;
   private slowFrames = 0;
+  private lastActivity = performance.now();
   private hover: MtNode | null = null;
   private glow = new Map<string, HTMLCanvasElement>();
   private observer: IntersectionObserver;
@@ -197,6 +202,7 @@ export class MoneyTrailScene {
     if (view.playing && !view.reducedMotion && view.hour !== null && view.hour !== this.lastHour) this.spawn(view.hour, view.tickMs);
     if (!view.playing || view.hour === null) this.particles = [];
     this.lastHour = view.hour;
+    this.lastActivity = performance.now();
     this.kick();
   }
 
@@ -360,7 +366,7 @@ export class MoneyTrailScene {
       }
     } else this.slowFrames = Math.max(0, this.slowFrames - 1);
     const view = this.view;
-    const animate = !!view && !view.reducedMotion && this.visible && !document.hidden && (view.playing || view.selectedId !== null || this.particles.length > 0);
+    const animate = !!view && !view.reducedMotion && this.visible && !document.hidden && (view.playing || this.particles.length > 0 || (view.selectedId !== null && now - this.lastActivity < REST_AFTER_MS));
     if (animate) this.raf = requestAnimationFrame(this.loop);
   };
 
@@ -608,6 +614,8 @@ export class MoneyTrailScene {
   }
 
   private onMove = (e: PointerEvent): void => {
+    this.lastActivity = performance.now();
+    if (this.view?.selectedId != null) this.kick();
     const rect = this.canvas.getBoundingClientRect();
     const node = this.nodeAt(e.clientX - rect.left, e.clientY - rect.top);
     if (node !== this.hover) {
