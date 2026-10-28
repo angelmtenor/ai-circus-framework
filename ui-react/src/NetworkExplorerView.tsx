@@ -473,6 +473,33 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
       : null,
   });
 
+  // The accessible list view: built only while its <details> is open (a 1,000-row graph
+  // made ~20k DOM nodes), and memoised so hovering the stage never reconciles it.
+  const [tableOpen, setTableOpen] = useState(false);
+  const tableRows = useMemo(
+    () =>
+      tableOpen
+        ? ranked
+            .filter((n) => tierFilter.size === 0 || tierFilter.has(n.row!.tier))
+            .map((node, rank) => (
+              <tr key={node.id} className={node.id === selectedId ? "nx-row--on" : ""} tabIndex={0} onClick={() => select(node.id)} onKeyDown={(k) => k.key === "Enter" && select(node.id)}>
+                <td className="nx-num">{rank + 1}</td>
+                <td className="nx-id">{node.id}</td>
+                <td>
+                  <span className="nx-glyph" style={{ color: tierColor(surface, node.row!.tier) }}>
+                    {TIER_GLYPHS[node.row!.tier]}
+                  </span>{" "}
+                  {node.label} <span className="nx-muted">{node.detail}</span>
+                </td>
+                <td className="nx-num">{pct(node.row!.probability, 1)}</td>
+                <td className="nx-num">{node.degree}</td>
+                {revealed && <td>{node.row!.actual ? `◯ ${extras.outcome_label}` : ""}</td>}
+              </tr>
+            ))
+        : null,
+    [tableOpen, ranked, tierFilter, selectedId, select, surface, revealed, extras.outcome_label],
+  );
+
   if (error) return <div className="nx-empty">Could not load the network: {error}</div>;
   if (!loaded || !net) {
     return (
@@ -815,41 +842,25 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
 
       {extras.disclaimer && <p className="nx-disclaimer">{extras.disclaimer}</p>}
 
-      <details className="nx-table">
+      <details className="nx-table" onToggle={(e) => setTableOpen(e.currentTarget.open)}>
         <summary>
           All {net.rows.length} {plural(noun)}, ranked by score — the accessible list view
         </summary>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Id</th>
-              <th>{noun[0].toUpperCase() + noun.slice(1)}</th>
-              <th className="nx-num">Score</th>
-              <th className="nx-num">Contacts</th>
-              {revealed && <th>Record</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {ranked
-              .filter((n) => tierFilter.size === 0 || tierFilter.has(n.row!.tier))
-              .map((node, rank) => (
-                <tr key={node.id} className={node.id === selectedId ? "nx-row--on" : ""} tabIndex={0} onClick={() => select(node.id)} onKeyDown={(k) => k.key === "Enter" && select(node.id)}>
-                  <td className="nx-num">{rank + 1}</td>
-                  <td className="nx-id">{node.id}</td>
-                  <td>
-                    <span className="nx-glyph" style={{ color: tierColor(surface, node.row!.tier) }}>
-                      {TIER_GLYPHS[node.row!.tier]}
-                    </span>{" "}
-                    {node.label} <span className="nx-muted">{node.detail}</span>
-                  </td>
-                  <td className="nx-num">{pct(node.row!.probability, 1)}</td>
-                  <td className="nx-num">{node.degree}</td>
-                  {revealed && <td>{node.row!.actual ? `◯ ${extras.outcome_label}` : ""}</td>}
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        {tableOpen && (
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Id</th>
+                <th>{noun[0].toUpperCase() + noun.slice(1)}</th>
+                <th className="nx-num">Score</th>
+                <th className="nx-num">Contacts</th>
+                {revealed && <th>Record</th>}
+              </tr>
+            </thead>
+            <tbody>{tableRows}</tbody>
+          </table>
+        )}
       </details>
     </div>
   );
