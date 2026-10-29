@@ -17,7 +17,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
-	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-data-showcase k3s-data-showcase-off \
+	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
 
@@ -606,6 +606,25 @@ k3s-data-catalog-sync: ## Re-run the catalogue sync (after a new data product, a
 
 k3s-data-governance-down: ## Remove the governance tier (the catalogue stays in Postgres database `openmetadata`; the search index PVC is kept)
 	@kubectl delete -k k8s/data-platform/governance --ignore-not-found
+
+# Governance (docs/governance/): the optional OPA policy decision point for llm-gateway. Its
+# policy and data are ConfigMaps built from infra/opa/; after the first `up`, point the gateway
+# at it with POLICY_DECIDER=opa and POLICY_OPA_URL=http://opa:8181 (see docs/governance/policy.md).
+k3s-governance-opa-up: ## Optional: deploy Open Policy Agent (policy from infra/opa/) as the gateway's policy decision point
+	@docker image inspect openpolicyagent/opa:1.21.4-static >/dev/null 2>&1 || docker pull -q openpolicyagent/opa:1.21.4-static >/dev/null
+	@k3d image import openpolicyagent/opa:1.21.4-static -c "$(K3S_CLUSTER)" >/dev/null
+	@kubectl -n ai-circus create configmap opa-policy --from-file=aicircus.rego=infra/opa/policy/aicircus.rego --dry-run=client -o yaml | kubectl apply -f -
+	@kubectl -n ai-circus create configmap opa-data --from-file=data.json=infra/opa/data/data.json --dry-run=client -o yaml | kubectl apply -f -
+	@kubectl apply -k k8s/governance
+	@kubectl -n ai-circus rollout restart deployment/opa >/dev/null
+	@kubectl -n ai-circus rollout status deployment/opa --timeout=120s
+
+k3s-governance-opa-down: ## Remove the optional OPA policy decision point (and its ConfigMaps)
+	@kubectl delete -k k8s/governance --ignore-not-found
+	@kubectl -n ai-circus delete configmap opa-policy opa-data --ignore-not-found
+
+k3s-governance-opa-test: ## Run the reference Rego policy's unit tests (needs only Docker)
+	@docker run --rm -v "$(CURDIR)/infra/opa:/policies:ro" openpolicyagent/opa:1.21.4-static test /policies -v
 
 # Everything a data showcase never touches, scaled to 0 by `k3s-data-showcase` (on top of
 # K3S_DEMO_SKIP): the other kinds' services. The assistant, llm-gateway and Keycloak stay.

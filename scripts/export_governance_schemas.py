@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from ai_circus_shared.governance import GovernanceConfig
 from ai_circus_shared.governance_audit import AuditRecord, AuditVerification
 from ai_circus_shared.governance_events import EVENT_DATA_MODELS, CloudEventEnvelope
+from ai_circus_shared.governance_policy import PolicyDecision, PolicyInput
 
 SCHEMAS_DIR = Path(__file__).resolve().parents[1] / "docs" / "governance" / "schemas"
 
@@ -30,6 +31,8 @@ def schema_files() -> dict[str, type[BaseModel]]:
         "cloudevent-envelope.json": CloudEventEnvelope,
         "audit-record.json": AuditRecord,
         "audit-verification.json": AuditVerification,
+        "policy-input.json": PolicyInput,
+        "policy-decision.json": PolicyDecision,
     }
     for name, model in EVENT_DATA_MODELS.items():
         files[f"event-{name.replace('.', '-')}.v1.json"] = model

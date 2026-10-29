@@ -228,6 +228,14 @@ TARGETS: tuple[Target, ...] = (
         app_label="om-search",
         optional=True,
     ),
+    Target(
+        "opa",
+        "services",
+        "http://opa:8181/health",
+        "Governance — optional policy decision point for llm-gateway (POLICY_DECIDER=opa)",
+        app_label="opa",
+        optional=True,
+    ),
     # ── Observability ──────────────────────────────────────────────────────────
     Target(
         "langfuse",

@@ -21,6 +21,8 @@ from ai_circus_shared.governance_events import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
     AdminChangeData,
+    AiSystemStatusData,
+    BudgetExhaustedData,
     CloudEventEnvelope,
     GovernanceEvents,
     GovernanceEventSettings,
@@ -28,6 +30,7 @@ from ai_circus_shared.governance_events import (
     ModelTrainedData,
     OutboxDeliverer,
     OutboxSink,
+    PolicyDecisionData,
     assert_content_free,
     build_event,
     env_flag,
@@ -55,6 +58,24 @@ def _admin_change(**overrides: Any) -> AdminChangeData:
         "after": {"entitled": True},
     }
     return AdminChangeData(**(base | overrides))
+
+
+_SAMPLES: dict[type, Any] = {
+    AdminChangeData: lambda: _admin_change(),
+    ModelTrainedData: lambda: ModelTrainedData(
+        scenario_slug="churn", ai_system_id="churn", org_id="org-1", model_name="lgbm", metrics={"auc": 0.9}
+    ),
+    PolicyDecisionData: lambda: PolicyDecisionData(
+        tenant_id="org-1",
+        ai_system_id="churn",
+        model="gpt-4o-mini",
+        call_type="completion",
+        decision="deny",
+        reason_code="ai_system_suspended",
+    ),
+    BudgetExhaustedData: lambda: BudgetExhaustedData(org_id="org-1", period="2026-10", spent_usd=10.0, cap_usd=10.0),
+    AiSystemStatusData: lambda: AiSystemStatusData(ai_system_id="churn", status="suspended"),
+}
 
 
 def test_event_types_are_reverse_dns_versioned_and_namespaced() -> None:
@@ -125,13 +146,7 @@ def test_events_validate_against_the_published_json_schemas() -> None:
     for name, model in EVENT_DATA_MODELS.items():
         data_schema = json.loads((schemas / f"event-{name.replace('.', '-')}.v1.json").read_text())
         assert data_schema == json.loads(json.dumps(model.model_json_schema(), sort_keys=True))
-        sample = (
-            _admin_change()
-            if model is AdminChangeData
-            else ModelTrainedData(
-                scenario_slug="churn", ai_system_id="churn", org_id="org-1", model_name="lgbm", metrics={"auc": 0.9}
-            )
-        )
+        sample = _SAMPLES[model]()
         event = build_event(name, sample, source="/test")
         Draft202012Validator(envelope).validate(event)
         Draft202012Validator(data_schema).validate(event["data"])

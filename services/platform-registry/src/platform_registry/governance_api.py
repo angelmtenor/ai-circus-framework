@@ -44,7 +44,7 @@ class ExternalAuditIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["gateway.budget.set", "gateway.budget.deleted"]
+    action: Literal["gateway.budget.set", "gateway.budget.deleted", "policy.invalidated", "policy.overwritten"]
     target_type: str = Field(max_length=64)
     target_id: str = Field(max_length=128)
     org_id: str | None = Field(default=None, max_length=64)

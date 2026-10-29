@@ -215,6 +215,8 @@ def test_providers_match_the_gateway_routing_table() -> None:
     chat route must be selectable in Settings, and every selectable model must be routed.
     """
     config = yaml.safe_load(_LITELLM_CONFIG.read_text())
-    routed = {entry["model_name"] for entry in config["model_list"]} - {"local-embed"}
+    # Embedding routes (local + hosted, see ai_circus_shared.embeddings) are not chat models.
+    embedding_routes = {"local-embed", "gemini-embedding-001", "voyage-3.5-lite"}
+    routed = {entry["model_name"] for entry in config["model_list"]} - embedding_routes
     selectable = {model.model_name for spec in llm_settings.PROVIDERS.values() for model in spec.models}
     assert selectable == routed

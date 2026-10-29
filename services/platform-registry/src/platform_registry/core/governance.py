@@ -13,6 +13,7 @@ exactly as before. The flow in a mutating route is:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -25,11 +26,12 @@ from ai_circus_shared.governance_events import (
     OutboxDeliverer,
     env_flag,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from platform_registry import get_env_config, get_logger
 from platform_registry.core.audit import append_audit
-from platform_registry.core.models import AuditLog
+from platform_registry.core.models import AuditLog, Scenario
 
 logger = get_logger(__name__)
 
@@ -44,6 +46,8 @@ EVENT_FOR_ACTION: dict[str, str] = {
     "voice_settings.active.set": "voice.active_settings.changed",
     "gateway.budget.set": "budget.changed",
     "gateway.budget.deleted": "budget.changed",
+    "policy.invalidated": "policy.changed",
+    "policy.overwritten": "policy.changed",
 }
 
 
@@ -149,3 +153,43 @@ def start_outbox_deliverer() -> OutboxDeliverer | None:
     deliverer.start()
     logger.info("Governance event deliverer started (webhook sink)")
     return deliverer
+
+
+CATALOG_KEY_PREFIX = "governance:ai-system"
+
+
+def catalog_enabled() -> bool:
+    """Whether the AI-system catalogue is published to Valkey (GOVERNANCE_CATALOG_ENABLED)."""
+    return env_flag(getattr(_config(), "GOVERNANCE_CATALOG_ENABLED", None))
+
+
+def publish_catalog(session: Session, client: redis.Redis | None = None) -> int:
+    """Write each AI system's declared risk category to Valkey at `governance:ai-system:{id}`.
+
+    llm-gateway's `POLICY_FAIL_MODE=by_risk` reads it to decide, when the policy decision point is
+    unreachable, whether to refuse (high / prohibited) or let the call through. The catalogue is
+    system metadata, not tenant data, so the keys are global. Best-effort: a Valkey outage logs and
+    never blocks start-up. Returns how many systems were published.
+    """
+    cache_url = getattr(_config(), "CACHE_URL", None)
+    if client is None:
+        if not cache_url:
+            logger.warning("GOVERNANCE_CATALOG_ENABLED is on but CACHE_URL is unset — catalogue not published")
+            return 0
+        client = redis.Redis.from_url(cache_url, decode_responses=True)
+    published = 0
+    try:
+        pipe = client.pipeline()
+        for scenario in session.scalars(select(Scenario)):
+            record = scenario.governance or {}
+            ai_system_id = str(record.get("ai_system_id") or scenario.slug)
+            risk = (record.get("ai_act") or {}).get("risk_category", "unassessed")
+            pipe.set(f"{CATALOG_KEY_PREFIX}:{ai_system_id}", json.dumps({"risk_category": risk}))
+            published += 1
+        pipe.execute()
+    except redis.RedisError as exc:
+        logger.warning(
+            "AI-system catalogue not published ({}): by_risk will treat systems as unassessed", type(exc).__name__
+        )
+        return 0
+    return published

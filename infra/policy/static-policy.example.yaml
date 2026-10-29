@@ -1,0 +1,21 @@
+# Example rules for llm-gateway's `static` policy decision point (POLICY_DECIDER=static).
+# Author: Angel Martinez-Tenor
+# See docs/governance/policy.md. First matching rule wins; no match = allow.
+# Mount as a ConfigMap at /policy/policy.yaml (POLICY_STATIC_PATH=/policy/policy.yaml).
+version: "2026-10-29-example"
+rules:
+  # Cheaper models only, capped, and rate limited, for one tenant's churn scoring.
+  - tenant: org-1
+    ai_system: churn
+    decision: degrade
+    reason_code: cost_control
+    obligations:
+      allowed_models: [gpt-5.6-luna]
+      max_tokens: 400
+      rpm: 30
+  # Suspend an AI system for everyone.
+  - tenant: "*"
+    ai_system: titanic
+    reason_code: suspended_by_governance
+    obligations:
+      status: suspended

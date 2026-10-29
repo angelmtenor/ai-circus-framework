@@ -38,28 +38,30 @@ def audit_enabled() -> bool:
     return env_flag(getattr(_config(), "GOVERNANCE_AUDIT_ENABLED", None))
 
 
-def record_budget_change(
+def record_change(
     *,
     authorization: str | None,
     action: str,
-    org_id: str,
+    target_type: str,
+    target_id: str,
+    org_id: str | None,
     before: dict[str, Any] | None,
     after: dict[str, Any] | None,
 ) -> bool:
-    """Report one budget mutation; returns True when platform-registry recorded it.
+    """Report one admin-relevant mutation to platform-registry; returns True when it was recorded.
 
-    `action` is `gateway.budget.set` or `gateway.budget.deleted`. Never raises.
+    `action` must be one platform-registry accepts (budget or policy actions). Never raises.
     """
     if not audit_enabled():
         return False
     base_url = getattr(_config(), "PLATFORM_REGISTRY_URL", None)
     if not base_url or not authorization:
-        logger.warning("Budget change for org={} not audited: PLATFORM_REGISTRY_URL or credentials missing", org_id)
+        logger.warning("Change {} on {} not audited: PLATFORM_REGISTRY_URL or credentials missing", action, target_id)
         return False
     body = {
         "action": action,
-        "target_type": "budget",
-        "target_id": org_id,
+        "target_type": target_type,
+        "target_id": target_id,
         "org_id": org_id,
         "before": before,
         "after": after,
@@ -73,6 +75,26 @@ def record_budget_change(
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        logger.warning("Budget change for org={} NOT audited (fail-open): {}", org_id, type(exc).__name__)
+        logger.warning("Change {} on {} NOT audited (fail-open): {}", action, target_id, type(exc).__name__)
         return False
     return True
+
+
+def record_budget_change(
+    *,
+    authorization: str | None,
+    action: str,
+    org_id: str,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+) -> bool:
+    """Report one budget mutation (`gateway.budget.set` / `gateway.budget.deleted`). Never raises."""
+    return record_change(
+        authorization=authorization,
+        action=action,
+        target_type="budget",
+        target_id=org_id,
+        org_id=org_id,
+        before=before,
+        after=after,
+    )

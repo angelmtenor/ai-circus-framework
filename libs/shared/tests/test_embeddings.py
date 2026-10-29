@@ -8,8 +8,6 @@ import pytest
 from ai_circus_shared import embeddings
 from ai_circus_shared.embeddings import (
     GatewayEmbeddingProvider,
-    GeminiEmbeddingProvider,
-    VoyageEmbeddingProvider,
     build_embedding_provider,
 )
 
@@ -31,49 +29,57 @@ def _mock_httpx_client(monkeypatch: pytest.MonkeyPatch, handler: object) -> None
     monkeypatch.setattr(embeddings.httpx, "Client", fake_client)
 
 
-def test_gemini_embedding_provider_encodes_documents_and_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    """encode_documents hits batchEmbedContents, encode_query hits embedContent, and the
-    dimension is inferred from a live probe call rather than hardcoded.
-    """
-    calls: list[httpx.Request] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        if str(request.url).endswith(":batchEmbedContents"):
-            return httpx.Response(200, json={"embeddings": [{"values": [1.0, 2.0]}, {"values": [3.0, 4.0]}]})
-        return httpx.Response(200, json={"embedding": {"values": [0.5, 0.6]}})
-
-    _mock_httpx_client(monkeypatch, handler)
-
-    provider = GeminiEmbeddingProvider("fake-key", "gemini-embedding-001")
-
-    assert provider.dimension == 2  # from the constructor's probe call
-    assert provider.encode_documents(["doc a", "doc b"]) == [[1.0, 2.0], [3.0, 4.0]]
-    assert provider.encode_query("a query") == [0.5, 0.6]
-    assert all(r.headers["x-goog-api-key"] == "fake-key" for r in calls)
-
-
-def test_voyage_embedding_provider_encodes_documents_and_query(monkeypatch: pytest.MonkeyPatch) -> None:
-    """encode_documents/encode_query both hit /v1/embeddings with input_type=document|query."""
-    seen_bodies: list[dict[str, object]] = []
-
+def _echo_vectors(seen_bodies: list[dict[str, object]], seen_hosts: list[str]) -> object:
     def handler(request: httpx.Request) -> httpx.Response:
         import json
 
         body = json.loads(request.content)
         seen_bodies.append(body)
-        vectors = [[float(i), float(i) + 1] for i in range(len(body["input"]))]
-        return httpx.Response(200, json={"data": [{"embedding": v} for v in vectors]})
+        seen_hosts.append(request.headers.get("authorization", ""))
+        return httpx.Response(200, json={"data": [{"embedding": [float(i), 1.0]} for i in range(len(body["input"]))]})
 
-    _mock_httpx_client(monkeypatch, handler)
+    return handler
 
-    provider = VoyageEmbeddingProvider("fake-key", "voyage-3.5-lite")
 
-    assert provider.dimension == 2  # from the constructor's probe call
-    assert provider.encode_documents(["doc a", "doc b"]) == [[0.0, 1.0], [1.0, 2.0]]
-    assert provider.encode_query("a query") == [0.0, 1.0]
-    assert seen_bodies[-1]["input_type"] == "query"
-    assert seen_bodies[0]["input_type"] == "query"  # the constructor's own probe call
+def test_gemini_embeddings_go_through_the_gateway_with_retrieval_task_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    """provider='gemini' calls llm-gateway's /embeddings (never Google directly), tagging documents and
+    queries with the task types Gemini distinguishes; the dimension still comes from a live probe.
+    """
+    bodies: list[dict[str, object]] = []
+    auth: list[str] = []
+    _mock_httpx_client(monkeypatch, _echo_vectors(bodies, auth))
+
+    provider = build_embedding_provider("gemini", None, "ignored", None, "http://llm-gateway:4000", "gw-key")
+
+    assert isinstance(provider, GatewayEmbeddingProvider)
+    assert provider.dimension == 2
+    provider.encode_documents(["doc a", "doc b"])
+    provider.encode_query("a query")
+    assert {b["model"] for b in bodies} == {embeddings.DEFAULT_GEMINI_MODEL}
+    assert bodies[-2]["task_type"] == "RETRIEVAL_DOCUMENT" and bodies[-1]["task_type"] == "RETRIEVAL_QUERY"
+    assert set(auth) == {"Bearer gw-key"}
+
+
+def test_voyage_embeddings_go_through_the_gateway_with_input_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    """provider='voyage' calls llm-gateway's /embeddings with input_type=document|query."""
+    bodies: list[dict[str, object]] = []
+    _mock_httpx_client(monkeypatch, _echo_vectors(bodies, []))
+
+    provider = build_embedding_provider("voyage", "voyage-3.5", None, "ignored", "http://llm-gateway:4000", "gw-key")
+
+    provider.encode_documents(["doc a"])
+    provider.encode_query("a query")
+    assert {b["model"] for b in bodies} == {"voyage-3.5"}
+    assert bodies[-2]["input_type"] == "document" and bodies[-1]["input_type"] == "query"
+
+
+def test_local_embeddings_send_no_provider_specific_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    bodies: list[dict[str, object]] = []
+    _mock_httpx_client(monkeypatch, _echo_vectors(bodies, []))
+
+    build_embedding_provider("local", None, None, None, "http://llm-gateway:4000", "gw-key").encode_query("q")
+
+    assert all(set(b) == {"model", "input"} for b in bodies)
 
 
 def test_gateway_embedding_provider_hits_llm_gateway_embeddings_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,7 +128,7 @@ def test_build_embedding_provider_local_requires_gateway_config() -> None:
 
 
 def test_build_embedding_provider_gemini_requires_api_key() -> None:
-    """Selecting gemini without GOOGLE_API_KEY fails fast with a clear error, not a confusing 401 later."""
+    """Selecting gemini without a gateway fails fast, naming the key the gateway needs."""
     with pytest.raises(RuntimeError, match="GOOGLE_API_KEY"):
         build_embedding_provider("gemini", None, None, None)
 

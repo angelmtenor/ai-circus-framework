@@ -43,6 +43,7 @@ from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.utils import CallTypesLiteral
 
 from llm_gateway import get_env_config, get_logger
+from llm_gateway.governance_events import GatewayEvents
 
 logger = get_logger(__name__)
 
@@ -74,7 +75,10 @@ class BudgetEnforcer(CustomLogger):
     def __init__(self) -> None:
         """Connect to Valkey once, at import time."""
         super().__init__()
-        self._client = redis.Redis.from_url(get_env_config().CACHE_URL, decode_responses=True)
+        config = get_env_config()
+        self._client = redis.Redis.from_url(config.CACHE_URL, decode_responses=True)
+        # Governance event when a budget blocks a call (off unless GOVERNANCE_EVENTS_ENABLED).
+        self._events = GatewayEvents.from_config(config, client_factory=lambda: redis.Redis.from_url(config.CACHE_URL))
 
     async def async_pre_call_hook(
         self,
@@ -97,6 +101,19 @@ class BudgetEnforcer(CustomLogger):
         spend = float(self._client.get(_tenant_key(org_id, _spend_key())) or 0.0)
         if spend >= float(cap):
             from fastapi import HTTPException
+
+            events = getattr(self, "_events", None)
+            if events is not None:
+                events.emit(
+                    "budget.exhausted",
+                    {
+                        "org_id": org_id,
+                        "period": f"{datetime.now(UTC):%Y-%m}",
+                        "spent_usd": round(spend, 6),
+                        "cap_usd": float(cap),
+                    },
+                    tenant_id=org_id,
+                )
 
             raise HTTPException(
                 status_code=429,

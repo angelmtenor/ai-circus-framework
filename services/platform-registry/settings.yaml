@@ -211,8 +211,14 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: GOVERNANCE_CATALOG_ENABLED
+    description: "true = publish each AI system's declared risk to Valkey for the gateway's by_risk fail mode"
+    type: string
+    mandatory: false
+    secret: false
+
   - name: CACHE_URL
-    description: "Redis-protocol URL (Valkey) — only the governance event outbox uses it here (sink=http)"
+    description: "Redis-protocol URL (Valkey) — governance event outbox and AI-system catalogue only"
     type: string
     mandatory: false
     secret: false

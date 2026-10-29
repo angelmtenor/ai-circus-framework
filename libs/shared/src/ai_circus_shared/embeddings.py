@@ -14,6 +14,12 @@ model — see llm-gateway/litellm_config.yaml and llm_gateway/custom_handler.py)
 same way every service already reaches llm-gateway for chat completions. That keeps
 torch + sentence-transformers installed in exactly one image instead of once per
 caller (etl-vectorize, rag-agent, form-agent all previously imported it directly).
+
+"gemini" and "voyage" go through the same gateway route: llm-gateway's litellm_config.yaml
+registers `gemini-embedding-001` and `voyage-3.5-lite` and holds the provider keys, so every
+model call — chat or embedding — passes one chokepoint where budgets, policy and tracing
+apply (a libs/shared test fails if a service calls a provider host directly). The
+document/query task types the providers distinguish travel as the request's extra fields.
 """
 
 from __future__ import annotations
@@ -30,8 +36,6 @@ from ai_circus_shared.startup import wait_for
 DEFAULT_LOCAL_MODEL = "local-embed"
 DEFAULT_GEMINI_MODEL = "gemini-embedding-001"
 DEFAULT_VOYAGE_MODEL = "voyage-3.5-lite"
-
-_HTTP_TIMEOUT_SECONDS = 30.0
 
 # GatewayEmbeddingProvider's calls are CPU-bound sentence-transformers inference on
 # llm-gateway's side (no GPU in this stack), not a fast remote API round-trip like the
@@ -62,8 +66,9 @@ def _gateway_starting(exc: Exception) -> bool:
 
 
 class GatewayEmbeddingProvider:
-    """Local sentence-transformers embeddings, proxied through llm-gateway's
-    OpenAI-compatible `/embeddings` endpoint instead of running in this process.
+    """Embeddings proxied through llm-gateway's OpenAI-compatible `/embeddings` endpoint
+    (local sentence-transformers, or a hosted provider the gateway holds the key for)
+    instead of being computed or called directly from this process.
 
     `model_name` must be a `model_name` llm-gateway's litellm_config.yaml actually
     registers (default: "local-embed") — an override that doesn't match fails loudly
@@ -78,8 +83,13 @@ class GatewayEmbeddingProvider:
         *,
         probe: bool = True,
         timeout: float = _GATEWAY_HTTP_TIMEOUT_SECONDS,
+        document_params: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
     ) -> None:
         self._model_name = model_name
+        # Provider-specific fields (Gemini `task_type`, Voyage `input_type`) litellm forwards.
+        self._document_params = document_params or {}
+        self._query_params = query_params or {}
         self._client = httpx.Client(base_url=base_url, headers={"Authorization": f"Bearer {api_key}"}, timeout=timeout)
         # Determined by a live probe call rather than hardcoded — see the other
         # providers' constructors for why this class of bug is worth guarding against.
@@ -93,92 +103,18 @@ class GatewayEmbeddingProvider:
             else 0
         )
 
-    def _embed(self, texts: list[str]) -> list[list[float]]:
-        response = self._client.post("/embeddings", json={"model": self._model_name, "input": texts})
+    def _embed(self, texts: list[str], extra: dict[str, str] | None = None) -> list[list[float]]:
+        response = self._client.post("/embeddings", json={"model": self._model_name, "input": texts, **(extra or {})})
         response.raise_for_status()
         return [item["embedding"] for item in response.json()["data"]]
 
     def encode_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed a batch of document chunks for storage."""
-        return self._embed(texts)
+        return self._embed(texts, self._document_params)
 
     def encode_query(self, text: str) -> list[float]:
         """Embed a single search query."""
-        return self._embed([text])[0]
-
-
-class GeminiEmbeddingProvider:
-    """Google's Gemini embeddings API, called directly over REST (no SDK dependency).
-
-    https://ai.google.dev/api/embeddings
-    """
-
-    _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-
-    def __init__(self, api_key: str, model_name: str = DEFAULT_GEMINI_MODEL) -> None:
-        self._model_name = model_name
-        self._client = httpx.Client(
-            base_url=self._BASE_URL, headers={"x-goog-api-key": api_key}, timeout=_HTTP_TIMEOUT_SECONDS
-        )
-        # Determined by a live probe call rather than hardcoded: the API's default
-        # output dimensionality isn't a stable constant we should bake in here.
-        self.dimension = len(self.encode_query("dimension probe"))
-
-    def encode_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of document chunks for storage."""
-        requests = [
-            {
-                "model": f"models/{self._model_name}",
-                "content": {"parts": [{"text": text}]},
-                "taskType": "RETRIEVAL_DOCUMENT",
-            }
-            for text in texts
-        ]
-        response = self._client.post(f"/{self._model_name}:batchEmbedContents", json={"requests": requests})
-        response.raise_for_status()
-        return [item["values"] for item in response.json()["embeddings"]]
-
-    def encode_query(self, text: str) -> list[float]:
-        """Embed a single search query."""
-        response = self._client.post(
-            f"/{self._model_name}:embedContent",
-            json={
-                "model": f"models/{self._model_name}",
-                "content": {"parts": [{"text": text}]},
-                "taskType": "RETRIEVAL_QUERY",
-            },
-        )
-        response.raise_for_status()
-        return response.json()["embedding"]["values"]
-
-
-class VoyageEmbeddingProvider:
-    """Voyage AI's embeddings API, called directly over REST (no SDK dependency).
-
-    https://docs.voyageai.com/reference/embeddings-api
-    """
-
-    _URL = "https://api.voyageai.com/v1/embeddings"
-
-    def __init__(self, api_key: str, model_name: str = DEFAULT_VOYAGE_MODEL) -> None:
-        self._model_name = model_name
-        self._client = httpx.Client(headers={"Authorization": f"Bearer {api_key}"}, timeout=_HTTP_TIMEOUT_SECONDS)
-        self.dimension = len(self.encode_query("dimension probe"))
-
-    def _embed(self, texts: list[str], input_type: str) -> list[list[float]]:
-        response = self._client.post(
-            self._URL, json={"input": texts, "model": self._model_name, "input_type": input_type}
-        )
-        response.raise_for_status()
-        return [item["embedding"] for item in response.json()["data"]]
-
-    def encode_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of document chunks for storage."""
-        return self._embed(texts, "document")
-
-    def encode_query(self, text: str) -> list[float]:
-        """Embed a single search query."""
-        return self._embed([text], "query")[0]
+        return self._embed([text], self._query_params)[0]
 
 
 def build_embedding_provider(
@@ -191,22 +127,42 @@ def build_embedding_provider(
 ) -> EmbeddingProvider:
     """Build the embedding provider named by `provider` ("local" | "gemini" | "voyage").
 
-    `model_name` overrides that provider's default model when set. The caller's
+    All three call llm-gateway (`llm_gateway_url`/`llm_gateway_api_key` are required); the
+    provider keys live on the gateway (GOOGLE_API_KEY, VOYAGE_API_KEY), not in the caller.
+    `google_api_key`/`voyage_api_key` are accepted for backward compatibility and ignored.
+    `model_name` overrides that provider's default gateway model when set. The caller's
     EnvConfig validates `provider` against these three values (see settings.yaml's
-    EMBEDDING_PROVIDER regex) — the ValueError branch below is a defense-in-depth
-    fallback, not the primary validation path. `llm_gateway_url`/`llm_gateway_api_key`
-    are only required for provider="local" (see GatewayEmbeddingProvider).
+    EMBEDDING_PROVIDER regex) — the ValueError branch below is a defense-in-depth fallback.
     """
+    del google_api_key, voyage_api_key  # keys are llm-gateway's concern now
     if provider == "local":
         if not llm_gateway_url or not llm_gateway_api_key:
             raise RuntimeError("EMBEDDING_PROVIDER=local requires LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY to be set.")
         return GatewayEmbeddingProvider(llm_gateway_url, llm_gateway_api_key, model_name or DEFAULT_LOCAL_MODEL)
     if provider == "gemini":
-        if not google_api_key:
-            raise RuntimeError("EMBEDDING_PROVIDER=gemini requires GOOGLE_API_KEY to be set.")
-        return GeminiEmbeddingProvider(google_api_key, model_name or DEFAULT_GEMINI_MODEL)
+        if not llm_gateway_url or not llm_gateway_api_key:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=gemini requires LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY "
+                "(and GOOGLE_API_KEY set on llm-gateway)."
+            )
+        return GatewayEmbeddingProvider(
+            llm_gateway_url,
+            llm_gateway_api_key,
+            model_name or DEFAULT_GEMINI_MODEL,
+            document_params={"task_type": "RETRIEVAL_DOCUMENT"},
+            query_params={"task_type": "RETRIEVAL_QUERY"},
+        )
     if provider == "voyage":
-        if not voyage_api_key:
-            raise RuntimeError("EMBEDDING_PROVIDER=voyage requires VOYAGE_API_KEY to be set.")
-        return VoyageEmbeddingProvider(voyage_api_key, model_name or DEFAULT_VOYAGE_MODEL)
+        if not llm_gateway_url or not llm_gateway_api_key:
+            raise RuntimeError(
+                "EMBEDDING_PROVIDER=voyage requires LLM_GATEWAY_URL and LLM_GATEWAY_API_KEY "
+                "(and VOYAGE_API_KEY set on llm-gateway)."
+            )
+        return GatewayEmbeddingProvider(
+            llm_gateway_url,
+            llm_gateway_api_key,
+            model_name or DEFAULT_VOYAGE_MODEL,
+            document_params={"input_type": "document"},
+            query_params={"input_type": "query"},
+        )
     raise ValueError(f"Unknown EMBEDDING_PROVIDER={provider!r}; must be 'local', 'gemini', or 'voyage'.")

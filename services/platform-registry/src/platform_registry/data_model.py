@@ -107,13 +107,16 @@ class EnvConfig(BaseSettings):
         description="true = append every admin mutation to the hash-chained audit_log and serve GET /governance/audit",
         default=None,
     )
-    CACHE_URL: str | None = Field(
-        description="Redis-protocol URL (Valkey) — only the governance event outbox uses it here (sink=http)",
+    GOVERNANCE_CATALOG_ENABLED: str | None = Field(
+        description="true = publish each AI system's declared risk to Valkey for the gateway's by_risk fail mode",
         default=None,
+    )
+    CACHE_URL: str | None = Field(
+        description="Redis-protocol URL (Valkey) — governance event outbox and AI-system catalogue only", default=None
     )
 
 
-_SOURCE_YAML_HASH = "08732fd2146a9ff01e5dcb87199a0cdd860b7b1d1e4fbc1e017c9e4e0150e78d"
+_SOURCE_YAML_HASH = "ee4e268aaeb03bcef901515bd86d8864cab85e3d2d84a720299dc48de289249e"
 
 
 EnvConfig.model_rebuild()

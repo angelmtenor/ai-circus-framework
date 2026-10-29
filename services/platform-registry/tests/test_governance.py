@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from typing import Any
@@ -241,3 +242,68 @@ def test_helpers_survive_an_unloadable_config(monkeypatch: pytest.MonkeyPatch) -
     assert governance.audit_enabled() is False
     assert governance.get_events().enabled is False
     governance.get_events.cache_clear()
+
+
+def test_catalogue_publishes_each_systems_declared_risk_for_the_gateways_by_risk_mode() -> None:
+    import fakeredis
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        governed = resolve_governance("prestaciones_sociales", None)
+        governed["ai_act"] = {"role": "deployer", "risk_category": "high", "annex_iii_area": "essential_services"}
+        session.add_all([
+            Scenario(
+                slug="prestaciones_sociales",
+                kind="tabular_ml",
+                title="t",
+                description="d",
+                icon="x",
+                role_required="r",
+                industry="public_sector",
+                governance=governed,
+            ),
+            Scenario(
+                slug="churn",
+                kind="tabular_ml",
+                title="t",
+                description="d",
+                icon="x",
+                role_required="r",
+                industry="banking_finance",
+                governance=resolve_governance("churn", None),
+            ),
+            Scenario(
+                slug="legacy",
+                kind="tabular_ml",
+                title="t",
+                description="d",
+                icon="x",
+                role_required="r",
+                industry="banking_finance",
+                governance=None,
+            ),
+        ])
+        session.commit()
+        client = fakeredis.FakeStrictRedis(decode_responses=True)
+
+        assert governance.publish_catalog(session, client) == 3
+
+    assert json.loads(client.get("governance:ai-system:prestaciones_sociales")) == {"risk_category": "high"}
+    assert json.loads(client.get("governance:ai-system:churn")) == {"risk_category": "unassessed"}
+    assert json.loads(client.get("governance:ai-system:legacy")) == {"risk_category": "unassessed"}
+
+
+def test_catalogue_survives_a_valkey_outage_and_a_missing_cache_url() -> None:
+    import fakeredis
+    import redis as redis_lib
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    class Down(fakeredis.FakeStrictRedis):
+        def pipeline(self, *args: Any, **kwargs: Any) -> Any:
+            raise redis_lib.RedisError("down")
+
+    with Session(engine) as session:
+        assert governance.publish_catalog(session, Down()) == 0

@@ -136,6 +136,36 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: GOVERNANCE_POLICY_HMAC_SECRET
+    description: "HMAC secret signing POST /governance/policy/invalidate; unset = endpoint off"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: GOVERNANCE_POLICY_PUSH_TTL_SECONDS
+    description: "How long a decision pushed through the invalidate endpoint stays cached (default 3600)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENTS_ENABLED
+    description: "true = emit ai_system.status_applied events when a pushed decision suspends or resumes a system"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_SINK
+    description: "'log' (default) or 'http' (Valkey outbox drained by platform-registry)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_NAMESPACE
+    description: "Reverse-DNS namespace of governance event types (default dev.aicircus)"
+    type: string
+    mandatory: false
+    secret: false
+
   - name: PLATFORM_REGISTRY_URL
     description: "Base URL of platform-registry (admin audit trail writes)"
     type: string

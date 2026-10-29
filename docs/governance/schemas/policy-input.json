@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "description": "What the decision point is asked about.",
+  "properties": {
+    "ai_system_id": {
+      "maxLength": 64,
+      "title": "Ai System Id",
+      "type": "string"
+    },
+    "call_type": {
+      "description": "LiteLLM call type, e.g. completion or embedding",
+      "maxLength": 64,
+      "title": "Call Type",
+      "type": "string"
+    },
+    "model": {
+      "maxLength": 128,
+      "title": "Model",
+      "type": "string"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "title": "Tenant Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "ai_system_id",
+    "model",
+    "call_type"
+  ],
+  "title": "PolicyInput",
+  "type": "object"
+}

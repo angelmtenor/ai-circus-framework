@@ -26,7 +26,7 @@ from pydantic import ValidationError
 from platform_registry import get_env_config
 from platform_registry.api import router
 from platform_registry.core.db import ensure_added_columns, init_engine
-from platform_registry.core.governance import start_outbox_deliverer
+from platform_registry.core.governance import catalog_enabled, publish_catalog, start_outbox_deliverer
 from platform_registry.core.logger import configure_logger, get_logger
 from platform_registry.core.models import Base
 from platform_registry.core.seed import seed_default_llm_setting, seed_default_voice_setting, seed_scenarios
@@ -56,6 +56,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         # agui-voice's own static STT_PROVIDER/TTS_PROVIDER env defaults.
         seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
 
+    if catalog_enabled():
+        with Session(engine) as catalog_session:
+            logger.info("Published {} AI systems to the governance catalogue", publish_catalog(catalog_session))
     deliverer = start_outbox_deliverer()
     try:
         yield

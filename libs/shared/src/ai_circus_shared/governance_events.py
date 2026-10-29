@@ -120,6 +120,50 @@ class ModelTrainedData(BaseModel):
     metrics: dict[str, float] = Field(default_factory=dict)
 
 
+class PolicyDecisionData(BaseModel):
+    """`data` of `policy.decision`: the gateway denied or degraded a call, or let it through
+    because the decision point was unreachable (`fail_open`). Never the request content.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str = Field(max_length=64)
+    ai_system_id: str = Field(max_length=64)
+    model: str = Field(max_length=128)
+    call_type: str = Field(max_length=64)
+    decision: Literal["allow", "deny", "degrade"]
+    reason_code: str = Field(max_length=96)
+    policy_version: str | None = Field(default=None, max_length=64)
+    fail_open: bool = False
+    # Which model actually served a `degrade`d call, and the token cap applied.
+    served_model: str | None = Field(default=None, max_length=128)
+    max_tokens: int | None = None
+
+
+class BudgetExhaustedData(BaseModel):
+    """`data` of `budget.exhausted`: a tenant's monthly gateway budget blocked a call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    org_id: str = Field(max_length=64)
+    period: str = Field(pattern=r"^[0-9]{4}-[0-9]{2}$")
+    spent_usd: float
+    cap_usd: float
+    scope: Literal["tenant", "ai_system"] = "tenant"
+    ai_system_id: str | None = Field(default=None, max_length=64)
+
+
+class AiSystemStatusData(BaseModel):
+    """`data` of `ai_system.status_applied`: a suspend/resume pushed by the decision point took effect."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ai_system_id: str = Field(max_length=64)
+    tenant_id: str | None = Field(default=None, max_length=64)
+    status: Literal["active", "suspended"]
+    policy_version: str | None = Field(default=None, max_length=64)
+
+
 # Event name -> data model. The name is the `<name>` in `<namespace>.governance.<name>.v1`.
 EVENT_DATA_MODELS: dict[str, type[BaseModel]] = {
     "entitlement.changed": AdminChangeData,
@@ -127,6 +171,10 @@ EVENT_DATA_MODELS: dict[str, type[BaseModel]] = {
     "voice.active_settings.changed": AdminChangeData,
     "budget.changed": AdminChangeData,
     "model.trained": ModelTrainedData,
+    "policy.changed": AdminChangeData,
+    "policy.decision": PolicyDecisionData,
+    "budget.exhausted": BudgetExhaustedData,
+    "ai_system.status_applied": AiSystemStatusData,
 }
 
 
