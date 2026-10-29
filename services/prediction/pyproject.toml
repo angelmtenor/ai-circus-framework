@@ -25,20 +25,20 @@ classifiers = [
 
 dependencies = [
     "ai-circus-shared",
-    "fastapi>=0.141.1",
+    "fastapi>=0.162.0",
     "joblib>=1.5.3",
     "lightgbm>=4.7.0",
     "loguru>=0.7.3",
-    "numpy>=2.3.5",
-    "pandas>=3.0.5",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
     "psutil>=7.0.0",
     "py-cpuinfo>=9.0.0",
     "pyarrow>=25.0.0",
-    "pydantic>=2.11.4",
-    "pydantic-settings>=2.9.1",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.1",
     "PyYAML>=6.0.2",
     "scikit-learn>=1.9.0",
-    "shap>=0.52.0",
+    "shap>=0.54.1",
     "uvicorn[standard]>=0.52.1",
 ]
 
@@ -52,16 +52,16 @@ dev = [
     "debugpy>=1.8.14",
     "deptry>=0.23.0",
     "packaging>=24.0",      # used directly by check_full_env.py
-    "pre-commit>=4.2.0",
+    "pre-commit>=4.7.0",
     "pyinstrument>=5.0.1",
-    "pyrefly>=0.53.0",       # replaces pyright
+    "pyrefly>=1.4.0",       # replaces pyright
     "python-dotenv>=1.0.1",  # used directly by check_full_env.py
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
     "rich>=13.7.0",          # optional pretty output for check_full_env.py
-    "ruff>=0.11.8",
+    "ruff>=0.17.2",
     "twine>=6.1.0",
-    "pytest-asyncio>=1.4.0",
+    "pytest-asyncio>=1.4.1",
 ]
 
 [build-system]
