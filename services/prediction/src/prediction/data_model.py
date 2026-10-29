@@ -78,9 +78,30 @@ class EnvConfig(BaseSettings):
     KEYCLOAK_AUDIENCE: str | None = Field(
         description="Expected token audience, registered via an Audience client-scope mapper in Keycloak", default=None
     )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit a content-free `prediction.recorded` governance event per scoring request",
+        default=None,
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="'log' (default) or 'http' (Valkey outbox drained by platform-registry; needs CACHE_URL)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types (default dev.aicircus)", default=None
+    )
+    GOVERNANCE_RECORD_STORE: str | None = Field(
+        description="'objectstore' = also keep each decision record in the tenant's bucket for the retention window",
+        default=None,
+    )
+    GOVERNANCE_RETENTION_DAYS: str | None = Field(
+        description="Days stored decision records are kept before pruning (default 183, about six months)", default=None
+    )
+    CACHE_URL: str | None = Field(
+        description="Redis-protocol URL (Valkey) — only the governance event outbox uses it (sink=http)", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "31a51094a676985d60fbb79de97de1d1acaebdf3a086a0eefb243246eadca777"
+_SOURCE_YAML_HASH = "689e4d3e999a95daaa7929319dcd4efb190dca8194ba4885e5a10c19665e1724"
 
 
 EnvConfig.model_rebuild()

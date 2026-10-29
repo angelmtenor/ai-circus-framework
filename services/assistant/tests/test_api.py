@@ -295,6 +295,10 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
     assert metadata["trace_user_id"] == "org-1"
     assert metadata["session_id"] == "t"
     assert any(tag.startswith("scenario:") for tag in metadata["tags"])
+    # ...and the framework's correlation fields llm-gateway's policy hook and trace spans use.
+    assert metadata["aicf_tenant_id"] == "org-1"
+    assert metadata["aicf_ai_system_id"] == "motor_speed"
+    assert metadata["aicf_scenario_slug"] == "motor_speed"
 
 
 async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(monkeypatch: pytest.MonkeyPatch) -> None:

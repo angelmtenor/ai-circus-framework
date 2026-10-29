@@ -126,6 +126,47 @@ env_variables:
     secret: false
 
 # Optional global settings
+  # --- Governance (docs/governance/, ADR 0011): a content-free decision record per scoring
+  # request (event `prediction.recorded`, and optionally a retained copy in the object store).
+  # Off by default. NOTE: no profile defaults for GOVERNANCE_*: config is built as
+  # EnvConfig(**profile) and init values beat environment variables, so a default could never
+  # be overridden. Unset = off.
+  - name: GOVERNANCE_EVENTS_ENABLED
+    description: "true = emit a content-free `prediction.recorded` governance event per scoring request"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_SINK
+    description: "'log' (default) or 'http' (Valkey outbox drained by platform-registry; needs CACHE_URL)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_NAMESPACE
+    description: "Reverse-DNS namespace of governance event types (default dev.aicircus)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_RECORD_STORE
+    description: "'objectstore' = also keep each decision record in the tenant's bucket for the retention window"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_RETENTION_DAYS
+    description: "Days stored decision records are kept before pruning (default 183, about six months)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: CACHE_URL
+    description: "Redis-protocol URL (Valkey) — only the governance event outbox uses it (sink=http)"
+    type: string
+    mandatory: false
+    secret: false
+
 global_settings:
   env_file: ".env"          # Default location for environment variable file
   fail_on_missing: true     # Stop execution if mandatory variables are missing
@@ -162,6 +203,7 @@ environments:
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
+    CACHE_URL: "redis://localhost:6379"
     LLM_GATEWAY_URL: "http://localhost:4000"
     SCENARIOS_DIR: "../../scenarios"
     OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
@@ -169,6 +211,7 @@ environments:
 
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
+    CACHE_URL: "redis://valkey:6379"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
     SCENARIOS_DIR: "/app/scenarios"
     OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from ai_circus_shared.decision_records import build_recorder
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
@@ -71,6 +72,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         )
 
     app.state.definitions = definitions
+    # Decision records (docs/governance/): off unless GOVERNANCE_EVENTS_ENABLED / _RECORD_STORE are set.
+    app.state.recorder = build_recorder(config, source="/dl-inference", stores=stores)
     app.state.model_cache = DlModelCache(
         stores, fallback_org_id=config.SHARED_MODEL_ORG_ID, threads=int(config.ORT_THREADS)
     )

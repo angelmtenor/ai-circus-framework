@@ -20,8 +20,11 @@ from typing import Any
 import onnxruntime as ort
 import psutil
 from ai_circus_shared.auth import Identity, is_admin_bearer_token
+from ai_circus_shared.decision_records import model_version, summarise, trace_id_from
+from ai_circus_shared.governance import ai_system_id_of
+from ai_circus_shared.governance_events import PredictionRecordData
 from ai_circus_shared.scenario_schema import ScenarioDefinition
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, model_validator
 
 from dl_inference import get_env_config
@@ -183,6 +186,8 @@ def _text_input(body: PredictRequest, model: LoadedModel) -> str:
 @router.post("/predict/{scenario_slug}", response_model=PredictResponse)
 def predict(
     body: PredictRequest,
+    request: Request,
+    background: BackgroundTasks,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_definition),
     cache: DlModelCache = Depends(_cache),
@@ -240,6 +245,29 @@ def predict(
                     model.remember_explanation(body.sample_id, target, explanation)
     except inference.InvalidInputError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Decision record (docs/governance/): after the response, off the request path; a no-op unless
+    # switched on. The input (image or text) is never part of it.
+    recorder = getattr(request.app.state, "recorder", None)
+    if recorder is not None and recorder.enabled:
+        assert identity.org_id is not None
+        background.add_task(
+            recorder.record,
+            PredictionRecordData(
+                scenario_slug=definition.slug,
+                ai_system_id=ai_system_id_of(definition),
+                org_id=identity.org_id,
+                model_name=str(model.metadata.get("base_model") or model.metadata.get("model_name") or "unknown"),
+                model_version=model_version(model.metadata),
+                task_type=str(model.metadata["task"]) if model.metadata.get("task") else None,
+                prediction_count=1,
+                outcomes=summarise([keys[predicted]], [float(scored.probs[predicted])])[0],
+                score_min=round(float(scored.probs[predicted]), 6),
+                score_max=round(float(scored.probs[predicted]), 6),
+                explanation_available=explanation is not None,
+                trace_id=trace_id_from(request.headers),
+            ),
+        )
 
     return PredictResponse(
         predicted=keys[predicted],

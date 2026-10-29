@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from ai_circus_shared.governance import GovernanceConfig, resolve_governance
+from ai_circus_shared.governance import GovernanceConfig, ai_system_id_of, resolve_governance
 from ai_circus_shared.scenario_schema import load_all
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -93,3 +93,15 @@ def test_published_json_schema_matches_the_model() -> None:
     """
     published = json.loads(_SCHEMA_FILE.read_text(encoding="utf-8"))
     assert published == json.loads(json.dumps(GovernanceConfig.model_json_schema(), sort_keys=True))
+
+
+def test_ai_system_id_of_prefers_the_declared_id_and_falls_back_to_the_slug() -> None:
+    definitions = {d.slug: d for d in load_all(_REPO_ROOT / "scenarios")}
+    assert ai_system_id_of(definitions["churn"]) == "churn"
+    assert ai_system_id_of(definitions["prestaciones_sociales"]) == "prestaciones_sociales"
+
+    class Declared:
+        slug = "churn"
+        governance = GovernanceConfig(ai_system_id="churn-v2")
+
+    assert ai_system_id_of(Declared()) == "churn-v2"

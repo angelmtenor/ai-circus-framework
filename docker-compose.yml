@@ -631,6 +631,11 @@ services:
       <<: [*service-auth-env, *object-store-env]
       # A scenario's model.text_challenger embeds text live via llm-gateway's local-embed.
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Governance decision records (docs/governance/): all off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
+      GOVERNANCE_RECORD_STORE: ${GOVERNANCE_RECORD_STORE:-}
+      GOVERNANCE_RETENTION_DAYS: ${GOVERNANCE_RETENTION_DAYS:-183}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -657,6 +662,11 @@ services:
     profiles: ["deep-learning"]
     environment:
       <<: [*service-auth-env, *object-store-env]
+      # Governance decision records (docs/governance/): all off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
+      GOVERNANCE_RECORD_STORE: ${GOVERNANCE_RECORD_STORE:-}
+      GOVERNANCE_RETENTION_DAYS: ${GOVERNANCE_RETENTION_DAYS:-183}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -686,6 +696,7 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY}
       # Governance policy decision point (docs/governance/policy.md): noop = behave as before.
+      TRACE_CAPTURE_CONTENT: ${TRACE_CAPTURE_CONTENT:-true}
       POLICY_DECIDER: ${POLICY_DECIDER:-noop}
       POLICY_FAIL_MODE: ${POLICY_FAIL_MODE:-open}
       POLICY_STATIC_PATH: ${POLICY_STATIC_PATH:-}

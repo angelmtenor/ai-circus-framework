@@ -18,6 +18,7 @@ with a tenant and an AI system (`ai_system_id`, see the scenario `governance:` b
 | `voice.active_settings.changed` | the STT/TTS provider is switched | [event-voice-active_settings-changed.v1.json](schemas/event-voice-active_settings-changed.v1.json) |
 | `budget.changed` | a tenant's monthly gateway budget is set or removed | [event-budget-changed.v1.json](schemas/event-budget-changed.v1.json) |
 | `model.trained` | a tabular model finished training and was stored | [event-model-trained.v1.json](schemas/event-model-trained.v1.json) |
+| `prediction.recorded` | a non-LLM scoring request was served (decision record; see [telemetry.md](telemetry.md)) | [event-prediction-recorded.v1.json](schemas/event-prediction-recorded.v1.json) |
 | `policy.decision` | the gateway denied or degraded a call, or let it through because the decision point was down | [event-policy-decision.v1.json](schemas/event-policy-decision.v1.json) |
 | `budget.exhausted` | a monthly budget (tenant, or one AI system) blocked a call | [event-budget-exhausted.v1.json](schemas/event-budget-exhausted.v1.json) |
 | `ai_system.status_applied` | a suspend/resume pushed by the decision point took effect | [event-ai_system-status_applied.v1.json](schemas/event-ai_system-status_applied.v1.json) |
