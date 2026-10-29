@@ -1,0 +1,164 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: Angel Martinez-Tenor
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# data-ingest is the Data Platform's capture-to-bronze worker (docs/data-platform/,
+# ADRs 0003/0004/0012): one instance serves every `kind: data_product` scenario. It
+# consumes each kafka source's tenant topics, validates them against their contract,
+# upserts bronze by business key (quarantining what fails), keeps the hot-path minute
+# aggregates, loads + reconciles landing-bucket file deliveries, captures the
+# operational source database by CDC, and archives bronze to the Iceberg lake. Its
+# HTTP surface is internal (status for data-api / the admin Platform view).
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_HOST
+    description: "Postgres hostname (docker service name in-container, localhost for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PORT
+    description: "Postgres port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_DB
+    description: "Warehouse database: bronze, hot, ops (and the dbt-built silver/gold) — one schema per data product"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SOURCES_DB
+    description: "Operational source database the data products' simulators play (ERP…), captured by CDC"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_USER
+    description: "Postgres user (needs CREATEDB and REPLICATION — the cluster's own user has both)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PASSWORD
+    description: "Postgres password"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: KAFKA_BOOTSTRAP_SERVERS
+    description: "Kafka bootstrap server(s), host:port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (landing bucket + Iceberg lake)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: ADMIN_API_KEY
+    description: "Bearer token required on the status/trigger routes (service-to-service and admin)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS
+    description: "Comma-separated data_product slugs this instance serves (empty = every data_product)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: LANDING_SCAN_SECONDS
+    description: "How often the landing bucket is scanned for new file deliveries"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: CDC_POLL_SECONDS
+    description: "How often the CDC replication slot is drained"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: LAKE_ARCHIVE_SECONDS
+    description: "How often new bronze rows are appended to the Iceberg lake"
+    type: string
+    mandatory: true
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "data_platform"
+    SOURCES_DB: "data_sources"
+    POSTGRES_USER: "ai_circus"
+    SCENARIOS: ""
+    LANDING_SCAN_SECONDS: "20"
+    CDC_POLL_SECONDS: "3"
+    LAKE_ARCHIVE_SECONDS: "60"
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    POSTGRES_HOST: "localhost"
+    KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
+    SCENARIOS_DIR: "../../scenarios"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    POSTGRES_HOST: "postgres"
+    KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
+    SCENARIOS_DIR: "/app/scenarios"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

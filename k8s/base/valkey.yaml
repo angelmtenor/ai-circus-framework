@@ -74,5 +74,7 @@ spec:
         # cache keys above.
         - podSelector: {matchLabels: {app: langfuse-web}}
         - podSelector: {matchLabels: {app: langfuse-worker}}
+        # Superset's chart/query cache (Data Platform bi tier) — its own db (3).
+        - podSelector: {matchLabels: {app: superset}}
       ports:
         - {protocol: TCP, port: 6379}

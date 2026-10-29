@@ -102,6 +102,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.decision_policy = policy.model_dump() if policy is not None else None
         document_tool = definition.documents.tool if definition.documents is not None else None
         existing.document_tool = document_tool.model_dump() if document_tool is not None else None
+        existing.data_product = definition.data_product.model_dump() if definition.data_product is not None else None
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.

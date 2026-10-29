@@ -1,0 +1,247 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: Angel Martinez-Tenor
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+#
+# data-api is the Data Platform's single governed door (docs/adr/0007, 0008): records by
+# key with their processing trail, search, scenario-declared metrics, governed SQL, the
+# dataset catalogue with freshness, pipeline events over SSE and the simulator controls —
+# for every `kind: data_product` scenario, routed by `{scenario_slug}`. Every route resolves
+# the caller (entitlement-checked) and applies the data product's access policy.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the FastAPI app listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SCENARIOS
+    description: "Comma-separated data_product slugs this instance serves (empty = every data_product)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: SCENARIOS_DIR
+    description: "Path to the scenarios/ directory (one subdirectory per scenario.yaml)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_HOST
+    description: "Postgres hostname (docker service name in-container, localhost for local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PORT
+    description: "Postgres port"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_DB
+    description: "Warehouse database (bronze/hot/ops written by data-ingest, silver/gold by dbt)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: SOURCES_DB
+    description: "Operational source database the simulators write (ERP…)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_USER
+    description: "Postgres user"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POSTGRES_PASSWORD
+    description: "Postgres password"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: KAFKA_BOOTSTRAP_SERVERS
+    description: "Kafka bootstrap server(s), host:port (simulator producer + pipeline-events relay)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint URL (the simulator's landing-file drops)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (must match OBJECT_STORE_ACCESS_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: DATA_INGEST_URL
+    description: "Internal URL of data-ingest (status, landing-scan trigger)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MARTS_ENGINE
+    description: "Silver/gold engine: postgres (core tier, default when unset) or clickhouse (analytics tier)"
+    type: string
+    mandatory: false
+    secret: false
+    validation:
+      regex: ^(postgres|clickhouse)$
+      error_message: "MARTS_ENGINE must be postgres or clickhouse."
+
+  - name: CLICKHOUSE_URL
+    description: "ClickHouse HTTP URL (analytics tier only)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: CLICKHOUSE_USER
+    description: "ClickHouse user for the data_platform database (analytics tier only)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: CLICKHOUSE_PASSWORD
+    description: "ClickHouse password (analytics tier only)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: DATA_TIER_URLS
+    description: "Optional internal tier probes, e.g. analytics=http://dagster:3000,bi=http://superset:8088"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of the platform-registry service's entitlement-check API"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: AUTH_DISABLED
+    description: "DEV ONLY: skip token/entitlement checks. Must be false beyond local iteration."
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: CORS_ALLOWED_ORIGINS
+    description: "Comma-separated origins ui-react is allowed to call this API from (never '*' beyond local dev)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: ADMIN_API_KEY
+    description: "Shared admin bearer token — resolves to the 'admin' org, entitled to every scenario"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: ENGINEERING_DEMO_API_KEY
+    description: "Optional demo bearer token for 'engineering-demo' org (mpm/electric_motor/energy_building only)"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: DEV_ORG_ID
+    description: "Org id used for every request when AUTH_DISABLED=true"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: DATA_FALLBACK_ORG_ID
+    description: "Org whose data product a tenant without data of its own reads (and the org the seed Job fills)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_ISSUER
+    description: "Keycloak realm issuer (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: KEYCLOAK_JWKS_URL
+    description: "Keycloak realm JWKS endpoint (required unless AUTH_DISABLED=true)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: KEYCLOAK_AUDIENCE
+    description: "Expected token audience, registered via an Audience client-scope mapper in Keycloak"
+    type: string
+    mandatory: false
+    secret: false
+
+# Optional global settings
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    POSTGRES_PORT: "5432"
+    POSTGRES_DB: "data_platform"
+    SOURCES_DB: "data_sources"
+    POSTGRES_USER: "ai_circus"
+    OBJECT_STORE_ACCESS_KEY: "ai_circus"
+    DEV_ORG_ID: "demo"
+    DATA_FALLBACK_ORG_ID: "demo"
+    SCENARIOS: ""
+    # MARTS_ENGINE deliberately has no profile default: a profile value beats the process env,
+    # and `make k3s-data-analytics-up` sets it on the pod.
+    # AUTH_DISABLED/ADMIN_API_KEY/CORS_ALLOWED_ORIGINS deliberately have NO default here —
+    # see prediction's settings.yaml: a profile default would beat a real env var.
+
+  # Running with `uv run` on the host, against infra started via `make up-infra`.
+  local:
+    POSTGRES_HOST: "localhost"
+    KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
+    SCENARIOS_DIR: "../../scenarios"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
+    DATA_INGEST_URL: "http://localhost:8030"
+
+  # Running as a container inside docker-compose's `ai-circus` network.
+  docker:
+    POSTGRES_HOST: "postgres"
+    KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
+    SCENARIOS_DIR: "/app/scenarios"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
+    DATA_INGEST_URL: "http://data-ingest:8000"
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

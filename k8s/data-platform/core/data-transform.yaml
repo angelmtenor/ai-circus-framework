@@ -1,0 +1,55 @@
+# Data Platform core tier — data-transform as a CronJob: every few minutes, every data
+# product's dbt project is built (bronze → silver → gold + tests) and recorded in
+# `<slug>.ops_transform_runs` (services/data-transform, docs/adr/0006). On demand:
+# `make k3s-data-transform`. The analytics tier replaces this schedule with Dagster.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-transform
+  namespace: ai-circus
+spec:
+  schedule: "*/3 * * * *"
+  concurrencyPolicy: Forbid  # (and an advisory lock per data product inside)
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata:
+          labels: {app: data-transform}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: data-transform
+              image: ai-circus/data-transform:local
+              imagePullPolicy: Never
+              args: ["python", "-m", "data_transform.app", "run"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: {drop: ["ALL"]}
+              envFrom:
+                - configMapRef: {name: shared-config}
+                - secretRef: {name: data-transform-secrets}
+              env:
+                - {name: POSTGRES_HOST, value: postgres}
+                - {name: HOME, value: /tmp}
+              volumeMounts:
+                - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+                - {name: work, mountPath: /tmp}
+              # dbt parses the project and holds the manifest; the SQL itself runs in Postgres.
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 768Mi}
+          volumes:
+            - name: scenarios
+              hostPath: {path: /scenarios, type: Directory}
+            - name: work
+              emptyDir: {sizeLimit: 256Mi}

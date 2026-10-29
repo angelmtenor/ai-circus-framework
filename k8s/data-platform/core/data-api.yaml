@@ -1,0 +1,85 @@
+# Data Platform core tier — data-api: the governed door of every data product (records,
+# metrics, governed SQL, datasets, pipeline events over SSE, simulator controls —
+# services/data-api, docs/adr/0007). Browser-facing at data-api.localhost.
+# Mirrors docker-compose.yml's data-api.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-api
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: data-api}
+  template:
+    metadata:
+      labels: {app: data-api}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: data-api
+          image: ai-circus/data-api:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-api-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+            - {name: DATA_INGEST_URL, value: "http://data-ingest:8000"}
+            # Optional tiers, probed for the UI's tier badges (absent tiers just read "off").
+            - {name: DATA_TIER_URLS, value: "analytics=http://dagster:3000/server_info,bi=http://superset:8088/health,governance=http://openmetadata:8586/healthcheck"}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          # The simulator's backfill generates a day at a time (a few MB); metrics stream rows.
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 640Mi}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-api
+  namespace: ai-circus
+spec:
+  selector: {app: data-api}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: data-api
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`data-api.localhost`)
+      kind: Rule
+      services:
+        - {name: data-api, port: 8000}

@@ -59,6 +59,9 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "global_health_shipments",
         "sede_electronica",
         "prestaciones_sociales",
+        "surf_retail",
+        "surf_demand_forecast",
+        "surf_customer_propensity",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -248,6 +251,9 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "global_health_shipments",
         "sede_electronica",
         "prestaciones_sociales",
+        "surf_retail",
+        "surf_demand_forecast",
+        "surf_customer_propensity",
     }
 
 
@@ -264,8 +270,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 30
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 30
+    assert session.query(Scenario).count() == 33
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 33
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -407,3 +413,18 @@ def test_seed_scenarios_populates_business_rules_and_the_decision_policy(session
     assert session.get(Scenario, "titanic").document_tool is None
     assert aid.ui_extras["kind"] == "case_desk"
     assert session.get(Scenario, "titanic").business_rules is None
+
+
+def test_seed_scenarios_stores_the_data_product_block(session: Session) -> None:
+    """A `data_product` scenario reaches the DB with its whole block (sources, metrics, access)
+    as JSON — data-ingest, data-api and ui-react read it from the entitlements API.
+    """
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    retail = session.get(Scenario, "surf_retail")
+    assert retail is not None and retail.kind == "data_product"
+    assert retail.data_product is not None
+    assert {"sources", "metrics", "access"} <= retail.data_product.keys()
+    assert retail.data_product["metrics"]
+    churn = session.get(Scenario, "churn")
+    assert churn is not None and churn.data_product is None

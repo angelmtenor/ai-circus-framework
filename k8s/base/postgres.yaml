@@ -28,7 +28,10 @@ spec:
           # wal_level=logical (default: replica) — required for the CDC replication
           # slot data-platform-manager's /cdc/poll creates. Mirrors docker-compose.yml's
           # postgres service exactly; see that file's comment for the full rationale.
-          args: ["-c", "wal_level=logical"]
+          # max_slot_wal_keep_size caps how much WAL an undrained replication slot (the Data
+          # Platform's CDC, when its core tier is off) may pin: past 1 GB the slot is invalidated
+          # instead of filling the volume, and data-ingest re-snapshots on its next start.
+          args: ["-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1024MB"]
           ports:
             - containerPort: 5432
           env:
@@ -102,6 +105,10 @@ data:
         GRANT ALL PRIVILEGES ON DATABASE form_agent TO "$POSTGRES_USER";
         CREATE DATABASE data_platform_manager;
         GRANT ALL PRIVILEGES ON DATABASE data_platform_manager TO "$POSTGRES_USER";
+        CREATE DATABASE data_platform;
+        GRANT ALL PRIVILEGES ON DATABASE data_platform TO "$POSTGRES_USER";
+        CREATE DATABASE data_sources;
+        GRANT ALL PRIVILEGES ON DATABASE data_sources TO "$POSTGRES_USER";
         CREATE DATABASE langfuse;
         GRANT ALL PRIVILEGES ON DATABASE langfuse TO "$POSTGRES_USER";
         CREATE DATABASE mlflow;
@@ -144,5 +151,12 @@ spec:
         - podSelector: {matchLabels: {app: langfuse-web}}
         - podSelector: {matchLabels: {app: langfuse-worker}}
         - podSelector: {matchLabels: {app: mlflow}}
+        # Data Platform tiers (k8s/data-platform/) — admitted here even while a tier is off;
+        # ClickHouse reads silver through its PostgreSQL engine (analytics tier).
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [data-ingest, data-api, data-transform, dagster, superset, openmetadata, openmetadata-ingestion, clickhouse]
       ports:
         - {protocol: TCP, port: 5432}

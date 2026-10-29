@@ -121,7 +121,7 @@ services:
     # this image — see ai_circus_shared.cdc's module docstring). A small,
     # always-on WAL-volume increase, accepted so a slot can be created without
     # a second Postgres restart later.
-    command: ["postgres", "-c", "wal_level=logical"]
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=1024MB"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -990,6 +990,77 @@ services:
       - "traefik.http.routers.data-platform-manager.rule=Host(`data-platform-manager.localhost`)"
       - "traefik.http.routers.data-platform-manager.entrypoints=web"
       - "traefik.http.services.data-platform-manager.loadbalancer.server.port=8000"
+
+  # ── Data Platform core tier (profile "data-platform"; mirrors k8s/data-platform/core/) ──
+  # Kafka above, plus the capture worker, the governed API and the dbt build. The analytics,
+  # bi and governance tiers (Dagster, Superset, OpenMetadata) are k3s-only overlays.
+  data-ingest:
+    build:
+      context: .
+      dockerfile: services/data-ingest/Dockerfile
+    profiles: ["data-platform"]
+    environment:
+      <<: [*object-store-env, *postgres-env]
+      APP_ENVIRONMENT: docker
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g  # a month of history per delivery + the lake buffer (k8s: 1Gi)
+
+  data-api:
+    build:
+      context: .
+      dockerfile: services/data-api/Dockerfile
+    profiles: ["data-platform"]
+    environment:
+      <<: [*service-auth-env, *object-store-env, *postgres-env]
+      DATA_TIER_URLS: ""
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      data-ingest:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 640m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.data-api.rule=Host(`data-api.localhost`)"
+      - "traefik.http.routers.data-api.entrypoints=web"
+      - "traefik.http.services.data-api.loadbalancer.server.port=8000"
+
+  # The k8s CronJob's equivalent: one dbt build of every data product per run
+  # (`docker compose --profile data-platform run --rm data-transform`).
+  data-transform:
+    build:
+      context: .
+      dockerfile: services/data-transform/Dockerfile
+    profiles: ["data-platform"]
+    command: ["python", "-m", "data_transform.app", "run"]
+    environment:
+      <<: [*object-store-env, *postgres-env]
+      APP_ENVIRONMENT: docker
+      DATA_PSEUDONYM_KEY: ${DATA_PSEUDONYM_KEY}
+      HOME: /tmp
+    volumes:
+      - ./scenarios:/app/scenarios:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [ai-circus]
+    restart: "no"
+    mem_limit: 768m
 
   ui-react:
     build:

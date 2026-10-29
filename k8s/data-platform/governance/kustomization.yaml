@@ -1,0 +1,7 @@
+# Data Platform — governance tier (docs/data-platform/): OpenMetadata + its search index +
+# the catalog-sync Job. `make k3s-data-governance-up` / `k3s-data-governance-down`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - elasticsearch.yaml
+  - openmetadata.yaml
