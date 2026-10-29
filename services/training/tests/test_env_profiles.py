@@ -28,7 +28,7 @@ def test_get_env_config_default_local(monkeypatch: pytest.MonkeyPatch) -> None:
     config = get_env_config()
 
     assert config.LOG_LEVEL == "INFO"
-    assert config.SCENARIOS == ""
+    assert not config.SCENARIOS  # unset = every scenario
     assert config.SCENARIOS_DIR == "../../scenarios"
     assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
 
@@ -65,10 +65,12 @@ def test_get_env_config_explicit_env_overrides_app_environment(monkeypatch: pyte
     assert config.OBJECT_STORE_ENDPOINT == "http://objectstore.localhost"
 
 
-def test_scenarios_yaml_default_beats_a_real_env_var_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Documents a known, accepted residual limitation — see etl-tabular/settings.yaml's comment."""
+def test_scenarios_env_var_selects_the_scenarios(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SCENARIOS has no profile default (a profile value would beat the env var), so a Job can
+    train only some scenarios — `make k3s-data-ml` sets it on the Job's manifest.
+    """
     monkeypatch.setenv("SCENARIOS", "churn,mpm")
 
     config = get_env_config()
 
-    assert config.SCENARIOS == ""
+    assert config.SCENARIOS == "churn,mpm"
