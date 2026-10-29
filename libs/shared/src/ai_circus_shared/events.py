@@ -48,6 +48,12 @@ def _topic(tenant_org_id: str, topic: str) -> str:
     return f"tenant-{tenant_org_id}.{topic}"
 
 
+def tenant_topic(tenant_org_id: str, topic: str) -> str:
+    """The wire name of a tenant's topic (`tenant-<org>.<topic>`), for callers that drive a
+    raw confluent-kafka client (regex subscriptions, explicit produce) themselves."""
+    return _topic(tenant_org_id, topic)
+
+
 def connect_producer(config: EventStreamConfig) -> Producer:
     """Create the process-wide Kafka producer. Call once, at startup."""
     return Producer({"bootstrap.servers": config.KAFKA_BOOTSTRAP_SERVERS})
