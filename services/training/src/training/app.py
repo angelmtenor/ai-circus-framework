@@ -46,6 +46,7 @@ from sklearn.model_selection import train_test_split
 
 from training import get_env_config
 from training.core.challenger import ChallengerResult, ChallengerUnavailableError, train_text_challenger
+from training.core.governance_events import emit_model_trained
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
 from training.core.training import (
@@ -277,6 +278,8 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         dataset_rows=len(df),
         accuracy_gain_threshold=definition.model.accuracy_gain_threshold_for_complexity,
     )
+
+    emit_model_trained(config, slug=slug, definition=definition, metadata=metadata, org_id=config.ORG_ID)
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
 

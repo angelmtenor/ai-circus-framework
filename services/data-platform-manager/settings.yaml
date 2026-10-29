@@ -126,6 +126,22 @@ env_variables:
     secret: false
 
 # Optional global settings
+  # NOTE: no profile defaults for GOVERNANCE_* — config is built as EnvConfig(**profile), and init
+  # values beat environment variables, so a default here could never be switched on. Unset = off.
+  # --- Governance (docs/governance/, ADR 0011): off by default. When on, budget changes are
+  # recorded in platform-registry's hash-chained admin audit trail (best-effort, fail-open + logged).
+  - name: GOVERNANCE_AUDIT_ENABLED
+    description: "true = record gateway budget changes in platform-registry's admin audit trail"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: PLATFORM_REGISTRY_URL
+    description: "Base URL of platform-registry (admin audit trail writes)"
+    type: string
+    mandatory: false
+    secret: false
+
 global_settings:
   env_file: ".env"          # Default location for environment variable file
   fail_on_missing: true     # Stop execution if mandatory variables are missing
@@ -150,6 +166,7 @@ environments:
     POSTGRES_HOST: "localhost"
     CACHE_URL: "redis://localhost:6379"
     LLM_GATEWAY_URL: "http://localhost:4000"
+    PLATFORM_REGISTRY_URL: "http://localhost:8010"
     KAFKA_BOOTSTRAP_SERVERS: "localhost:9092"
     OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     SCENARIOS_DIR: "../../scenarios"
@@ -159,6 +176,7 @@ environments:
     POSTGRES_HOST: "postgres"
     CACHE_URL: "redis://valkey:6379"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
+    PLATFORM_REGISTRY_URL: "http://platform-registry:8000"
     KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
     OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     SCENARIOS_DIR: "/app/scenarios"

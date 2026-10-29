@@ -572,6 +572,12 @@ services:
       <<: [*service-auth-env, *postgres-env]
       LOG_LEVEL: INFO
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Governance (docs/governance/): all off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
+      GOVERNANCE_AUDIT_ENABLED: ${GOVERNANCE_AUDIT_ENABLED:-false}
+      GOVERNANCE_WEBHOOK_URL: ${GOVERNANCE_WEBHOOK_URL:-}
+      GOVERNANCE_WEBHOOK_SECRET: ${GOVERNANCE_WEBHOOK_SECRET:-}
       # Service-account client used by this service's sync tooling (see naming
       # contract) — no Logto analog.
       KEYCLOAK_M2M_CLIENT_ID: ${KEYCLOAK_M2M_CLIENT_ID}
@@ -794,6 +800,9 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       # A scenario's model.text_challenger checks/fills its embedding cache via local-embed.
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Governance (docs/governance/): a `model.trained` event, off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -972,6 +981,9 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      # Governance audit trail (docs/governance/): off unless set in .env.
+      GOVERNANCE_AUDIT_ENABLED: ${GOVERNANCE_AUDIT_ENABLED:-false}
+      PLATFORM_REGISTRY_URL: http://platform-registry:8000
     # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
     volumes:
       - ./scenarios:/app/scenarios:ro

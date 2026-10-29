@@ -27,6 +27,12 @@ data:
   # applied (see that file's own comment for why referencing an absent Service
   # name is safe: librdkafka connects lazily and retries in the background).
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  # Governance (docs/governance/, ADR 0011) — every switch off by default, so nothing
+  # changes until an operator opts in. GOVERNANCE_EVENT_SINK=http additionally needs
+  # GOVERNANCE_WEBHOOK_URL here and GOVERNANCE_WEBHOOK_SECRET in .env (`make k3s-secrets`).
+  GOVERNANCE_EVENTS_ENABLED: "false"
+  GOVERNANCE_EVENT_SINK: "log"
+  GOVERNANCE_AUDIT_ENABLED: "false"
   # Observability (langfuse.yaml / mlflow.yaml). llm-gateway exports every LLM call
   # to Langfuse's OTel endpoint here (keys come from llm-gateway-secrets); training
   # logs each run to MLflow here. Both are "if set" integrations in the services —

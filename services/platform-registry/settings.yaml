@@ -171,6 +171,52 @@ env_variables:
     secret: false
 
 # Optional global settings
+  # NOTE: no profile defaults for GOVERNANCE_* — config is built as EnvConfig(**profile), and init
+  # values beat environment variables, so a default here could never be switched on. Unset = off.
+  # --- Governance (docs/governance/, ADR 0011): all off by default; with them off the
+  # service behaves exactly as before. Flags are strings ("true"/"false") like every var here.
+  - name: GOVERNANCE_EVENTS_ENABLED
+    description: "true = emit content-free CloudEvents governance events for admin changes"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_SINK
+    description: "Where governance events go: 'log' (default) or 'http' (HMAC-signed webhook via a Valkey outbox)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_NAMESPACE
+    description: "Reverse-DNS namespace of governance event types, '<namespace>.governance.<name>.v1'"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_WEBHOOK_URL
+    description: "Webhook receiving governance events when GOVERNANCE_EVENT_SINK=http"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_WEBHOOK_SECRET
+    description: "HMAC secret signing webhook deliveries (X-Governance-Signature); from the environment only"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: GOVERNANCE_AUDIT_ENABLED
+    description: "true = append every admin mutation to the hash-chained audit_log and serve GET /governance/audit"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: CACHE_URL
+    description: "Redis-protocol URL (Valkey) — only the governance event outbox uses it here (sink=http)"
+    type: string
+    mandatory: false
+    secret: false
+
 global_settings:
   env_file: ".env"          # Default location for environment variable file
   fail_on_missing: true     # Stop execution if mandatory variables are missing
@@ -201,6 +247,7 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     POSTGRES_HOST: "localhost"
+    CACHE_URL: "redis://localhost:6379"
     SCENARIOS_DIR: "../../scenarios"
     # Loopback-bound host port (not Traefik — see root docker-compose.yml's
     # llm-gateway comment for why it must never be on the public entrypoint).
@@ -209,6 +256,7 @@ environments:
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     POSTGRES_HOST: "postgres"
+    CACHE_URL: "redis://valkey:6379"
     SCENARIOS_DIR: "/app/scenarios"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
 

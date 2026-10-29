@@ -1,0 +1,91 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of `model.trained`: a tabular model finished training and was stored.",
+  "properties": {
+    "ai_system_id": {
+      "maxLength": 64,
+      "title": "Ai System Id",
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "model_name": {
+      "maxLength": 128,
+      "title": "Model Name",
+      "type": "string"
+    },
+    "org_id": {
+      "maxLength": 64,
+      "title": "Org Id",
+      "type": "string"
+    },
+    "scenario_slug": {
+      "maxLength": 64,
+      "title": "Scenario Slug",
+      "type": "string"
+    },
+    "selection_metric": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selection Metric"
+    },
+    "task_type": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Type"
+    },
+    "test_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Test Score"
+    },
+    "training_rows": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Training Rows"
+    }
+  },
+  "required": [
+    "scenario_slug",
+    "ai_system_id",
+    "org_id",
+    "model_name"
+  ],
+  "title": "ModelTrainedData",
+  "type": "object"
+}

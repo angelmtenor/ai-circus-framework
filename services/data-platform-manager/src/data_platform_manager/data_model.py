@@ -61,9 +61,15 @@ class EnvConfig(BaseSettings):
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
+    GOVERNANCE_AUDIT_ENABLED: str | None = Field(
+        description="true = record gateway budget changes in platform-registry's admin audit trail", default=None
+    )
+    PLATFORM_REGISTRY_URL: str | None = Field(
+        description="Base URL of platform-registry (admin audit trail writes)", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "531b888614aa43774592c7db8377d9c1430c7773280a4b409d4f32caa6265f3f"
+_SOURCE_YAML_HASH = "7553fcef76e6fd881cef5383d599d88d6ba4fd30551d2f054edb7ddab8acb362"
 
 
 EnvConfig.model_rebuild()

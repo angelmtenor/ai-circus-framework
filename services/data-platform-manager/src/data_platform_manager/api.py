@@ -42,7 +42,16 @@ from kubernetes.client.exceptions import ApiException
 from pydantic import BaseModel
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, resources, semantic, workloads
+from data_platform_manager.core import (
+    gateway,
+    governance_audit,
+    k8s_jobs,
+    lakehouse,
+    platform_status,
+    resources,
+    semantic,
+    workloads,
+)
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -280,6 +289,7 @@ def set_gateway_budget(
     body: BudgetSetIn,
     cache: TenantCache = Depends(get_cache),
     session: DbSession = Depends(get_document_session),
+    authorization: str | None = Header(default=None),
 ) -> BudgetOut:
     """Set (or update) one org's monthly AI Gateway spend cap.
 
@@ -288,8 +298,18 @@ def set_gateway_budget(
     it on its hot path with zero calls back to this service.
     """
     store = DocumentStore(session)
+    previous = store.get(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
+    # Snapshot before put(): `previous` is the live row and put() updates it in place.
+    before = {"monthly_cap_usd": previous.content["monthly_cap_usd"]} if previous is not None else None
     store.put(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id, {"monthly_cap_usd": body.monthly_cap_usd})
     cache.set(org_id, _BUDGET_CAP_KEY, str(body.monthly_cap_usd))
+    governance_audit.record_budget_change(
+        authorization=authorization,
+        action="gateway.budget.set",
+        org_id=org_id,
+        before=before,
+        after={"monthly_cap_usd": body.monthly_cap_usd},
+    )
     return BudgetOut(
         org_id=org_id,
         monthly_cap_usd=body.monthly_cap_usd,
@@ -302,11 +322,22 @@ def delete_gateway_budget(
     org_id: str,
     cache: TenantCache = Depends(get_cache),
     session: DbSession = Depends(get_document_session),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, bool]:
     """Remove an org's cap — makes it unlimited again, not "zero budget"."""
     store = DocumentStore(session)
+    previous = store.get(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
+    before = {"monthly_cap_usd": previous.content["monthly_cap_usd"]} if previous is not None else None
     deleted = store.delete(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
     cache.delete(org_id, _BUDGET_CAP_KEY)
+    if deleted:
+        governance_audit.record_budget_change(
+            authorization=authorization,
+            action="gateway.budget.deleted",
+            org_id=org_id,
+            before=before,
+            after=None,
+        )
     return {"deleted": deleted}
 
 

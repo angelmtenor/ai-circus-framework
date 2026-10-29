@@ -86,9 +86,34 @@ class EnvConfig(BaseSettings):
     KEYCLOAK_AUDIENCE: str | None = Field(
         description="Expected token audience, registered via an Audience client-scope mapper in Keycloak", default=None
     )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit content-free CloudEvents governance events for admin changes", default=None
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="Where governance events go: 'log' (default) or 'http' (HMAC-signed webhook via a Valkey outbox)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types, '<namespace>.governance.<name>.v1'", default=None
+    )
+    GOVERNANCE_WEBHOOK_URL: str | None = Field(
+        description="Webhook receiving governance events when GOVERNANCE_EVENT_SINK=http", default=None
+    )
+    GOVERNANCE_WEBHOOK_SECRET: SecretStr | None = Field(
+        description="HMAC secret signing webhook deliveries (X-Governance-Signature); from the environment only",
+        default=None,
+    )
+    GOVERNANCE_AUDIT_ENABLED: str | None = Field(
+        description="true = append every admin mutation to the hash-chained audit_log and serve GET /governance/audit",
+        default=None,
+    )
+    CACHE_URL: str | None = Field(
+        description="Redis-protocol URL (Valkey) — only the governance event outbox uses it here (sink=http)",
+        default=None,
+    )
 
 
-_SOURCE_YAML_HASH = "f7dfd367e3636af401f7dbabda3c377a7f8a19b294424c60ba8dd0bc184d98fa"
+_SOURCE_YAML_HASH = "08732fd2146a9ff01e5dcb87199a0cdd860b7b1d1e4fbc1e017c9e4e0150e78d"
 
 
 EnvConfig.model_rebuild()
