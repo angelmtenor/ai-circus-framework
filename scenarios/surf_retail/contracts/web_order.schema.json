@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retail.web.orders.v1",
+  "title": "Web order (versioned)",
+  "description": "An online order and each of its status updates; a higher `version` of the same `order_id` supersedes the earlier ones. Money is integer cents.",
+  "type": "object",
+  "required": ["event_id", "event_type", "contract_version", "source", "ts", "order_id", "version", "status",
+               "channel", "fulfilment", "lines", "payment", "totals"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {"type": "string", "minLength": 8, "maxLength": 64},
+    "event_type": {"enum": ["web.order.created", "web.order.updated"]},
+    "contract_version": {"const": "1.0"},
+    "source": {"const": "webshop"},
+    "ts": {"type": "string", "format": "date-time"},
+    "produced_at": {"type": "string", "format": "date-time"},
+    "order_id": {"type": "string", "pattern": "^W-[0-9]{4}-[0-9]{7}$"},
+    "version": {"type": "integer", "minimum": 1, "maximum": 20},
+    "status": {"enum": ["paid", "picked", "shipped", "ready_for_collection", "delivered", "collected", "returned", "cancelled"]},
+    "return_reason": {"type": ["string", "null"], "enum": [null, "damaged", "wrong_size", "not_as_described", "changed_mind", "late_delivery"]},
+    "channel": {"const": "online"},
+    "store_id": {"type": ["string", "null"], "pattern": "^S[0-9]{3}$", "description": "Collecting store for click & collect, null for home delivery"},
+    "customer_loyalty_id": {"type": ["string", "null"], "pattern": "^LOY-[0-9]{8}$"},
+    "fulfilment": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["click_collect", "home_delivery"]},
+        "promised_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 40,
+      "items": {
+        "type": "object",
+        "required": ["line_no", "sku", "qty", "unit_price_cents", "discount_cents", "tax_rate", "line_total_cents"],
+        "additionalProperties": false,
+        "properties": {
+          "line_no": {"type": "integer", "minimum": 1},
+          "sku": {"type": "string", "pattern": "^[A-Z]{3}-[0-9]{4}$"},
+          "qty": {"type": "integer", "minimum": 1, "maximum": 50},
+          "unit_price_cents": {"type": "integer", "minimum": 0},
+          "discount_cents": {"type": "integer", "minimum": 0},
+          "promo_id": {"type": ["string", "null"], "maxLength": 32},
+          "tax_rate": {"type": "number", "minimum": 0, "maximum": 0.5},
+          "line_total_cents": {"type": "integer"}
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "required": ["method", "amount_cents"],
+      "additionalProperties": false,
+      "properties": {
+        "method": {"enum": ["card", "paypal", "voucher", "mobile"]},
+        "amount_cents": {"type": "integer"}
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["lines_total_cents", "discount_cents", "shipping_cents", "grand_total_cents"],
+      "additionalProperties": false,
+      "properties": {
+        "lines_total_cents": {"type": "integer"},
+        "discount_cents": {"type": "integer", "minimum": 0},
+        "shipping_cents": {"type": "integer", "minimum": 0},
+        "grand_total_cents": {"type": "integer"}
+      }
+    }
+  }
+}

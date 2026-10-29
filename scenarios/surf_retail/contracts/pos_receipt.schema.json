@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retail.pos.receipts.v1",
+  "title": "POS receipt",
+  "description": "One receipt rung up by a store till (modern stores stream it, legacy stores send it in a daily file). Money is integer cents.",
+  "type": "object",
+  "required": ["event_id", "event_type", "contract_version", "source", "ts", "receipt_id", "store_id",
+               "register_id", "channel", "currency", "lines", "taxes", "payments", "totals"],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {"type": "string", "minLength": 8, "maxLength": 64},
+    "event_type": {"const": "pos.receipt.created"},
+    "contract_version": {"const": "1.0"},
+    "source": {"enum": ["pos", "legacy_file"]},
+    "ts": {"type": "string", "format": "date-time"},
+    "produced_at": {"type": "string", "format": "date-time"},
+    "receipt_id": {"type": "string", "pattern": "^S[0-9]{3}-R[0-9]{2}-[0-9]{9}$"},
+    "store_id": {"type": "string", "pattern": "^S[0-9]{3}$"},
+    "register_id": {"type": "string", "pattern": "^R[0-9]{2}$"},
+    "cashier_id": {"type": "string", "maxLength": 16},
+    "channel": {"const": "store"},
+    "currency": {"const": "EUR"},
+    "loyalty_id": {"type": ["string", "null"], "pattern": "^LOY-[0-9]{8}$"},
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 60,
+      "items": {
+        "type": "object",
+        "required": ["line_no", "sku", "qty", "unit_price_cents", "discount_cents", "tax_rate", "line_total_cents"],
+        "additionalProperties": false,
+        "properties": {
+          "line_no": {"type": "integer", "minimum": 1},
+          "sku": {"type": "string", "pattern": "^[A-Z]{3}-[0-9]{4}$"},
+          "qty": {"type": "integer", "minimum": -50, "maximum": 50},
+          "unit_price_cents": {"type": "integer", "minimum": 0},
+          "discount_cents": {"type": "integer", "minimum": 0},
+          "promo_id": {"type": ["string", "null"], "maxLength": 32},
+          "tax_rate": {"type": "number", "minimum": 0, "maximum": 0.5},
+          "line_total_cents": {"type": "integer"}
+        }
+      }
+    },
+    "taxes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rate", "base_cents", "amount_cents"],
+        "additionalProperties": false,
+        "properties": {
+          "rate": {"type": "number"},
+          "base_cents": {"type": "integer"},
+          "amount_cents": {"type": "integer"}
+        }
+      }
+    },
+    "payments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["method", "amount_cents"],
+        "additionalProperties": false,
+        "properties": {
+          "method": {"enum": ["card", "cash", "voucher", "mobile"]},
+          "amount_cents": {"type": "integer"}
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["gross_cents", "discount_cents", "grand_total_cents"],
+      "additionalProperties": false,
+      "properties": {
+        "gross_cents": {"type": "integer"},
+        "discount_cents": {"type": "integer", "minimum": 0},
+        "grand_total_cents": {"type": "integer"}
+      }
+    },
+    "notes": {"type": ["string", "null"], "maxLength": 500}
+  }
+}
