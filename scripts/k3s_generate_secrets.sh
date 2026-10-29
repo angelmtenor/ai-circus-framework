@@ -52,6 +52,13 @@ SECRET_SPECS=(
   # generated unconditionally, harmless when that overlay isn't applied.
   "dl-inference-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,AUTH_DISABLED,ADMIN_API_KEY,ENGINEERING_DEMO_API_KEY,KEYCLOAK_ISSUER,KEYCLOAK_AUDIENCE"
   "dl-training-secrets|OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
+  # Data Platform tiers (k8s/data-platform/) — generated unconditionally, harmless when off.
+  "data-ingest-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,ADMIN_API_KEY"
+  "data-api-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,AUTH_DISABLED,ADMIN_API_KEY,ENGINEERING_DEMO_API_KEY,KEYCLOAK_ISSUER,KEYCLOAK_AUDIENCE,CLICKHOUSE_PASSWORD"
+  "data-transform-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,DATA_PSEUDONYM_KEY,CLICKHOUSE_PASSWORD,SUPERSET_ADMIN_PASSWORD"
+  "superset-secrets|POSTGRES_USER,POSTGRES_PASSWORD,SUPERSET_SECRET_KEY,SUPERSET_ADMIN_PASSWORD"
+  "openmetadata-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OPENMETADATA_FERNET_KEY"
+  "openmetadata-ingestion-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,CLICKHOUSE_PASSWORD,SUPERSET_ADMIN_PASSWORD"
   "data-platform-manager-secrets|POSTGRES_USER,POSTGRES_PASSWORD,ADMIN_API_KEY,LITELLM_MASTER_KEY,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
   # Observability (k8s/base/langfuse.yaml + mlflow.yaml): Langfuse web + worker share
   # one Secret (identical env by design — see the manifest); ClickHouse only needs its
@@ -60,6 +67,19 @@ SECRET_SPECS=(
   "clickhouse-secrets|CLICKHOUSE_PASSWORD"
   "mlflow-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
 )
+
+# Data Platform secrets created once if .env predates them; never printed. The
+# pseudonymisation key (HMAC of personal ids in silver): rotating it re-keys every
+# pseudonymised id. Superset's session key and admin password (bi tier); OpenMetadata's
+# Fernet key, which encrypts the connection secrets it stores (governance tier).
+for generated in DATA_PSEUDONYM_KEY SUPERSET_SECRET_KEY SUPERSET_ADMIN_PASSWORD OPENMETADATA_FERNET_KEY; do
+  if ! grep -q "^${generated}=" "$ENV_FILE"; then
+    # OpenMetadata's Fernet key must be 32 url-safe base64-encoded bytes; hex is fine elsewhere.
+    if [ "$generated" = OPENMETADATA_FERNET_KEY ]; then value=$(openssl rand -base64 32 | tr '+/' '-_'); else value=$(openssl rand -hex 32); fi
+    echo "${generated}=${value}" >> "$ENV_FILE"
+    echo "ℹ added a generated ${generated} to $ENV_FILE"
+  fi
+done
 
 for spec in "${SECRET_SPECS[@]}"; do
   name="${spec%%|*}"

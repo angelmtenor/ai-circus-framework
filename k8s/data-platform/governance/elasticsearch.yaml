@@ -1,0 +1,86 @@
+# Data Platform governance tier — Elasticsearch, OpenMetadata's search index (single node,
+# small heap: a catalogue of a few hundred entities, not a log store). Internal only.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: om-search
+  namespace: ai-circus
+spec:
+  serviceName: om-search
+  replicas: 1
+  selector:
+    matchLabels: {app: om-search}
+  template:
+    metadata:
+      labels: {app: om-search}
+    spec:
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000   # the image's `elasticsearch` user
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          env:
+            # single-node discovery: bootstrap checks (vm.max_map_count…) only warn.
+            - {name: discovery.type, value: single-node}
+            - {name: xpack.security.enabled, value: "false"}
+            - {name: ES_JAVA_OPTS, value: "-Xms384m -Xmx384m"}
+            - {name: cluster.routing.allocation.disk.threshold_enabled, value: "false"}
+          ports:
+            - {containerPort: 9200}
+          volumeMounts:
+            - {name: om-search-data, mountPath: /usr/share/elasticsearch/data}
+          resources:
+            requests: {cpu: 100m, memory: 640Mi}
+            limits: {memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /_cluster/health, port: 9200}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            httpGet: {path: /_cluster/health, port: 9200}
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /_cluster/health, port: 9200}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+  volumeClaimTemplates:
+    - metadata: {name: om-search-data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: om-search
+  namespace: ai-circus
+spec:
+  selector: {app: om-search}
+  ports:
+    - {port: 9200, targetPort: 9200}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: om-search
+  namespace: ai-circus
+spec:
+  podSelector:
+    matchLabels: {app: om-search}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: openmetadata}}
+      ports:
+        - {protocol: TCP, port: 9200}

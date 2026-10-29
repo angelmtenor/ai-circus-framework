@@ -254,10 +254,25 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "valkey",
         "seaweedfs",
         "kafka",
+        "data-ingest",
+        "data-api",
+        "dagster",
+        "superset",
+        "openmetadata",
+        "om-search",
         "langfuse",
         "langfuse-worker",
         "clickhouse",
         "mlflow",
     }
-    assert {t.name for t in platform_status.TARGETS if t.optional} == {"kafka", "dl-inference"}
-    assert {t.name for t in platform_status.TARGETS if t.console_url} == {"keycloak", "seaweedfs", "langfuse", "mlflow"}
+    data_tiers = {"data-ingest", "data-api", "dagster", "superset", "openmetadata", "om-search"}
+    assert {t.name for t in platform_status.TARGETS if t.optional} == {"kafka", "dl-inference"} | data_tiers
+    assert {t.name for t in platform_status.TARGETS if t.console_url} == {
+        "keycloak",
+        "seaweedfs",
+        "langfuse",
+        "mlflow",
+        "dagster",
+        "superset",
+        "openmetadata",
+    }

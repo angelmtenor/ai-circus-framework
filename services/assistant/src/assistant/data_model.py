@@ -60,6 +60,9 @@ class EnvConfig(BaseSettings):
     QDRANT_URL: str = Field(
         description="Qdrant endpoint URL — only searched for a scenario with a `documents.tool` (document search)"
     )
+    DATA_API_URL: str = Field(
+        description="Base URL of data-api (backs the chat's data tools for data_product scenarios; unused otherwise)"
+    )
     PREDICTION_SERVICE_URL: str = Field(
         description="Base URL of the prediction service's dataset/predict API (backs the chat agent's data tools)"
     )
@@ -118,7 +121,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "b0237cd205fb121ede8f505c3c9e7c03c0c0226ee919ee839846b5f0d8a02bc4"
+_SOURCE_YAML_HASH = "bc5851a5e7f36024f271d87ab3fa7499026dc6f63841037a9d421917c94db6db"
 
 
 EnvConfig.model_rebuild()

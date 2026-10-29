@@ -166,6 +166,10 @@ class ScenarioSummary(BaseModel):
     # tabular_ml whose assistant searches reference documents — the tool's name, label
     # and documents-only sample questions (see scenario_schema.DocumentToolConfig).
     document_tool: dict[str, Any] | None = None
+    # data_product only — the scenario's `data_product` block (see
+    # ai_circus_shared.data_product): sources, datasets, metrics, records, access roles,
+    # simulator actions; a plain dict like `form`.
+    data_product: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -22,6 +22,11 @@ dependencies = [
     "confluent-kafka>=2.15.0",
 ]
 
+[project.optional-dependencies]
+# Data-tier services only (data-ingest, data-api): ai_circus_shared.contracts validates
+# JSON Schema contracts; rfc3339-validator makes its "date-time" format actually checked.
+data = ["jsonschema>=4.23.0", "rfc3339-validator>=0.1.4"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -30,7 +35,7 @@ build-backend = "hatchling.build"
 packages = ["src/ai_circus_shared"]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.11.8", "fakeredis>=2.26.0"]
+dev = ["pytest>=8.3.5", "ruff>=0.11.8", "fakeredis>=2.26.0", "jsonschema>=4.23.0", "rfc3339-validator>=0.1.4"]
 
 [tool.ruff]
 target-version = "py312"

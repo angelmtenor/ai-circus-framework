@@ -1,0 +1,55 @@
+# Superset dashboards of the surf_retail data product (bi tier, docs/adr/0009) —
+# created and kept in sync through Superset's REST API by data-transform's `bi-sync` Job
+# (`make k3s-data-bi-up`). Charts never carry SQL: each one names a governed metric from
+# scenario.yaml (`data_product.metrics`), which becomes a saved metric on its dataset — the
+# same definition the API, the native dashboards and the assistant use.
+#
+# viz: big_number | line | bar | pie | table. `source: marts` reads the curated datasets (on
+# ClickHouse when the analytics tier runs, else Postgres); `source: warehouse` reads Postgres
+# (the hot path lives there in every tier).
+row_security:
+  # Superset roles mirroring the data product's filtered roles: a user with this role only
+  # sees rows of its store, in every chart (Superset row-level security).
+  - role: "Store manager S001 (Tarifa)"
+    clause: "store_id = 'S001'"
+    datasets: [mart_sales_daily, mart_sales_hourly, mart_omnichannel, hot_sales_minute]
+    user: {username: store.manager.s001, first_name: Store, last_name: "Manager S001"}
+
+dashboards:
+  - slug: retail-sales
+    title: "Angel's Surf Co. · Sales performance"
+    refresh_seconds: 300
+    charts:
+      - {title: "Revenue (€)", viz: big_number, metric: revenue, width: 3}
+      - {title: "Receipts / orders", viz: big_number, metric: receipts, width: 3}
+      - {title: "Average basket (€)", viz: big_number, metric: avg_basket, width: 3}
+      - {title: "Gross margin %", viz: big_number, metric: margin_pct, width: 3}
+      - {title: "Revenue by day and channel (€)", viz: line, metric: revenue, time: day, groupby: [channel], width: 12}
+      - {title: "Revenue by store (€)", viz: bar, metric: revenue, groupby: [store_name], width: 8, limit: 25}
+      - {title: "Gross margin % by region", viz: bar, metric: margin_pct, groupby: [region], width: 4}
+      - {title: "Intraday shape (€)", viz: bar, metric: hourly_revenue, groupby: [hour_of_day], width: 12, limit: 24, sort_by_dimension: true}
+
+  - slug: retail-products
+    title: "Angel's Surf Co. · Products, promotions & omnichannel"
+    refresh_seconds: 600
+    charts:
+      - {title: "Top products (€)", viz: table, metric: product_revenue, groupby: [product_name, category], width: 6, limit: 15}
+      - {title: "Promotion unit uplift %", viz: bar, metric: promo_uplift_pct, groupby: [promo_name], width: 6}
+      - {title: "Click & collect orders by store", viz: bar, metric: click_collect_orders, groupby: [store_name], width: 6, limit: 15}
+      - {title: "Online returns by reason", viz: pie, metric: returned_orders, groupby: [reason], width: 6}
+
+  - slug: retail-live
+    title: "Angel's Surf Co. · Live sales (hot path)"
+    refresh_seconds: 10
+    source: warehouse
+    datasets:
+      - name: hot_sales_minute
+        schema: surf_retail
+        time_column: minute
+        metrics:
+          - {name: live_revenue, label: "Revenue today (€, approximate)", expression: "sum(revenue_cents) / 100.0"}
+          - {name: live_receipts, label: "Receipts today (approximate)", expression: "sum(receipts)"}
+    charts:
+      - {title: "Revenue today (€, live)", viz: big_number, dataset: hot_sales_minute, metric: live_revenue, width: 6, today: true}
+      - {title: "Receipts today (live)", viz: big_number, dataset: hot_sales_minute, metric: live_receipts, width: 6, today: true}
+      - {title: "Revenue per minute, last 2 hours (€)", viz: line, dataset: hot_sales_minute, metric: live_revenue, time: minute, groupby: [channel], width: 12, last_minutes: 120}

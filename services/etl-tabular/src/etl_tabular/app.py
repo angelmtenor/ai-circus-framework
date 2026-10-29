@@ -40,7 +40,7 @@ def main() -> None:
         sys.exit(1)
 
     scenarios_dir = Path(config.SCENARIOS_DIR)
-    definitions = resolve_scenarios(scenarios_dir, config.SCENARIOS, kind="tabular_ml")
+    definitions = resolve_scenarios(scenarios_dir, config.SCENARIOS or "", kind="tabular_ml")
     if not definitions:
         logger.error(
             "No tabular_ml scenario matched SCENARIOS={!r} under {!r}.", config.SCENARIOS, config.SCENARIOS_DIR

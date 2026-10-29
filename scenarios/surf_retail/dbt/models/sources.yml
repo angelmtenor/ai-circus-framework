@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Raw records as received, written by data-ingest (one row per business key and version)."
+    schema: surf_retail
+    tables:
+      - name: bronze_pos_receipts
+        description: "Store receipts — streamed by modern-store tills and loaded from legacy stores' daily files."
+      - name: bronze_web_orders
+        description: "Online orders, one row per status version."
+      - name: bronze_cdc_products
+        description: "Change log of the ERP products table (logical replication)."
+      - name: cdc_stores
+        description: "Current state of the ERP stores table."
+      - name: cdc_promotions
+        description: "Current state of the ERP promotions table."
+      - name: cdc_customers
+        description: "Current state of the CRM loyalty customers (personal data: never leaves silver unpseudonymised)."
+
+  # ClickHouse target only: Postgres' silver seen through a PostgreSQL-engine database that
+  # data-transform creates; each silver model there is a columnar copy of it.
+  - name: pg_silver
+    schema: surf_retail_pg_silver
+    tables:
+      - {name: stg_web_orders}
+      - {name: dim_store}
+      - {name: dim_product}
+      - {name: dim_promotion}
+      - {name: dim_promotion_sku}
+      - {name: fct_sales_line}
+
+  # ClickHouse target only: Postgres' gold, for the few marts copied rather than recomputed
+  # (data-transform creates this PostgreSQL-engine database next to pg_silver).
+  - name: pg_gold
+    schema: surf_retail_pg_gold
+    tables:
+      - {name: mart_product_affinity}

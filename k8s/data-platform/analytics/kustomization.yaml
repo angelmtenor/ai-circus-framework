@@ -1,0 +1,8 @@
+# Data Platform — analytics tier (docs/data-platform/): Dagster + the data products' marts on
+# ClickHouse (the existing instance, own databases). Applied on top of the core tier by
+# `make k3s-data-analytics-up`, which also raises ClickHouse's memory limit and points
+# data-api at ClickHouse; `make k3s-data-analytics-down` reverts all three.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - dagster.yaml

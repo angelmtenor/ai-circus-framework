@@ -1,0 +1,162 @@
+# Data Platform governance tier — OpenMetadata (docs/adr/0010): the catalogue of every data
+# product (warehouse, ERP source, Kafka topics with their contracts, ClickHouse marts, dbt
+# models + tests, Superset dashboards) and its end-to-end lineage. No Airflow: metadata is
+# ingested by the catalog-sync Job (infra/openmetadata-ingestion/). Metadata DB in Postgres
+# database `openmetadata`; search in om-search. Basic-auth login at openmetadata.localhost
+# (admin@open-metadata.org — OpenMetadata's default admin; change it in its UI for any
+# shared deployment).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openmetadata
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: openmetadata}
+  template:
+    metadata:
+      labels: {app: openmetadata}
+    spec:
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # the image's `openmetadata` user
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: create-database
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["python", "-m", "data_transform.app", "create-database", "openmetadata"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-transform-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+        - name: migrate  # schema migrations (idempotent)
+          image: openmetadata/server:2.0.7
+          command: ["/bin/bash", "-c", "./bootstrap/openmetadata-ops.sh migrate"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          env: &om-env
+            - {name: DB_DRIVER_CLASS, value: org.postgresql.Driver}
+            - {name: DB_SCHEME, value: postgresql}
+            - {name: DB_HOST, value: postgres}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_USER, valueFrom: {secretKeyRef: {name: openmetadata-secrets, key: POSTGRES_USER}}}
+            - {name: DB_USER_PASSWORD, valueFrom: {secretKeyRef: {name: openmetadata-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: OM_DATABASE, value: openmetadata}
+            - {name: DB_PARAMS, value: "sslmode=disable"}
+            - {name: SEARCH_TYPE, value: elasticsearch}
+            - {name: ELASTICSEARCH_HOST, value: om-search}
+            - {name: ELASTICSEARCH_PORT, value: "9200"}
+            - {name: ELASTICSEARCH_SCHEME, value: http}
+            - {name: AUTHENTICATION_PROVIDER, value: basic}
+            - {name: AUTHORIZER_CLASS_NAME, value: org.openmetadata.service.security.DefaultAuthorizer}
+            - {name: AUTHORIZER_ADMIN_PRINCIPALS, value: "[admin]"}
+            # No Airflow: ingestion runs as the catalog-sync Job.
+            - {name: PIPELINE_SERVICE_CLIENT_ENABLED, value: "false"}
+            - {name: FERNET_KEY, valueFrom: {secretKeyRef: {name: openmetadata-secrets, key: OPENMETADATA_FERNET_KEY}}}
+            - {name: OPENMETADATA_HEAP_OPTS, value: "-Xmx512m -Xms256m"}
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+            limits: {memory: 768Mi}
+      containers:
+        - name: openmetadata
+          image: openmetadata/server:2.0.7
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          env: *om-env
+          ports:
+            - {containerPort: 8585}
+            - {containerPort: 8586}  # admin port (health)
+          resources:
+            requests: {cpu: 100m, memory: 640Mi}
+            limits: {memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /healthcheck, port: 8586}
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 72
+          readinessProbe:
+            httpGet: {path: /healthcheck, port: 8586}
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthcheck, port: 8586}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openmetadata
+  namespace: ai-circus
+spec:
+  selector: {app: openmetadata}
+  ports:
+    - {name: http, port: 8585, targetPort: 8585}
+    - {name: admin, port: 8586, targetPort: 8586}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: openmetadata
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`openmetadata.localhost`)
+      kind: Rule
+      services:
+        - {name: openmetadata, port: 8585}
+---
+# Catalogue every data product (re-run: `make k3s-data-catalog-sync`).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: catalog-sync
+  namespace: ai-circus
+spec:
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 900
+  template:
+    metadata:
+      labels: {app: openmetadata-ingestion}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: catalog-sync
+          image: ai-circus/openmetadata-ingestion:local
+          imagePullPolicy: Never
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom:
+            - secretRef: {name: openmetadata-ingestion-secrets}
+          env:
+            - {name: OPENMETADATA_URL, value: "http://openmetadata:8585"}
+            - {name: OBJECT_STORE_ENDPOINT, value: "http://seaweedfs:8333"}
+            - {name: SCENARIOS_DIR, value: /app/scenarios}
+            - {name: HOME, value: /tmp}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}

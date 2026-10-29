@@ -1,0 +1,584 @@
+# Seed definition for the "surf_retail" data product — a scenario of kind `data_product`
+# (see docs/data-platform/ and docs/adr/0002). Angel's Surf Co., a fictional chain of surf,
+# SUP and kite shops on Europe's coasts plus a web shop, feeds a governed data platform:
+# follow one receipt from the till to the dashboard, the models and the assistant.
+#
+# Everything surf lives here and in the files next to this one — contracts/ (JSON Schema of
+# every event), simulator/ (the chain's tills, web shop, legacy franchise stores and ERP),
+# dbt/ (silver and gold models, reference seeds) and bi/ (Superset dashboards). The services
+# that run it (data-ingest, data-transform, data-api, assistant) are generic.
+#
+# FICTIONAL: Angel's Surf Co. and its house brands (Levante Shapes, Poniente SUP, Tramontana
+# Kite, Garbí Gear) were invented by the framework's author, Ángel Martínez Tenor, a surf
+# enthusiast. No real company, brand, product, customer or price is represented; prices are
+# indicative of the market for each kind of product, and every sale is simulated.
+
+slug: surf_retail
+kind: data_product
+title: "Angel's Surf Co. — Data Platform"
+description: >
+  Angel's Surf Co. (fictional) sells surfboards, SUP and kite gear through 24 shops on the
+  coasts of Spain, France, Italy, Greece, Cyprus and Malta, and a web shop. Five years of
+  history arrive as migration files, tills stream receipts through Kafka, the Greek
+  franchise's old tills send daily files reconciled against control totals, and the ERP is
+  captured by change-data-capture. Every record lands raw in bronze, dbt builds tested silver
+  and gold marts, and one governed API serves live tiles, dashboards, a metadata catalogue
+  and an assistant that answers with numbers — store managers only ever see their own shop.
+role_required: "scenario:surf_retail"
+icon: "🏄"
+industry: retail
+
+chat:
+  context: >
+    You are the data assistant of Angel's Surf Co., a fictional chain of surf, SUP and kite
+    shops on the coasts of Spain, France, Italy, Greece, Cyprus and Malta, with a web shop.
+    It was invented by the framework's author, a surf enthusiast; its brands and sales are
+    simulated. Answer business questions with numbers from the governed data tools — never
+    estimate a figure the tools did not return. Money is returned in euros. Always say which
+    metric you used and how fresh the data is (the tools report it). If a question needs
+    data the tools do not expose, say so.
+
+    You also explain the data platform itself, in plain words first and technical detail
+    when asked. A receipt is rung up at a till and published to Kafka (one topic per
+    organisation); the Greek franchise's legacy tills send a daily file with a control file,
+    five years of history arrived as migration files, and the ERP's changes are captured by
+    change data capture. data-ingest checks every record against its JSON Schema contract and
+    business rules — failures go to quarantine, where a data steward fixes and replays them —
+    and stores valid ones once, by key, in bronze (re-sends are ignored, corrections counted),
+    updates the live per-minute tiles, and archives them to an Apache Iceberg lake. dbt builds
+    silver (clean, pseudonymised) and gold (marts) with tests, every few minutes or when
+    Dagster sees new data; ClickHouse holds columnar marts on the analytics tier. Every door —
+    this chat, the dashboards, Superset, governed SQL, the API — uses the same governed
+    metrics, scoped to the organisation and to the user's role; OpenMetadata catalogues it
+    all with lineage. Use data_health or get_record to show a real example when explaining.
+  sample_questions:
+    - "How are sales today versus the same weekday last week?"
+    - "Which shop had the lowest revenue last week, and how did its basket compare?"
+    - "How do SUP board sales change between summer and winter?"
+    - "What did the AUTUMN-SWELL promotion add in revenue and margin?"
+    - "Show me the latest receipt from Tarifa (S001)."
+    - "Is the data fresh and did every Greek franchise store deliver its file?"
+    - "Explain, step by step, how the latest receipt from S001 got into these numbers."
+    - "Why would a receipt end up in quarantine, and what happens to it then?"
+
+data_product:
+  domain: retail
+
+  sources:
+    - id: pos_receipts
+      type: kafka
+      label: "Store tills (modern stores)"
+      topic: retail.pos.receipts.v1
+      contract: contracts/pos_receipt.schema.json
+      business_key: receipt_id
+      event_time: ts
+      rules:
+        - name: lines_sum_to_total
+          type: sum_equals
+          description: "Receipt lines add up to the receipt total"
+          items: "lines[*].line_total_cents"
+          total: totals.grand_total_cents
+        - name: payments_sum_to_total
+          type: sum_equals
+          description: "Payments add up to the receipt total"
+          items: "payments[*].amount_cents"
+          total: totals.grand_total_cents
+        - name: quantity_not_zero
+          type: nonzero
+          description: "No line has a zero quantity"
+          field: "lines[*].qty"
+        - name: known_store
+          type: known_value
+          description: "The store exists in the ERP"
+          field: store_id
+          reference: stores.store_id
+        - name: not_in_future
+          type: not_future
+          description: "Event time is not in the future"
+          field: ts
+    - id: web_orders
+      type: kafka
+      label: "Online shop orders"
+      topic: retail.web.orders.v1
+      contract: contracts/web_order.schema.json
+      business_key: order_id
+      event_time: ts
+      version_field: version
+      rules:
+        - name: lines_sum_to_total
+          type: sum_equals
+          description: "Order lines add up to the order's line total"
+          items: "lines[*].line_total_cents"
+          total: totals.lines_total_cents
+        - name: quantity_not_zero
+          type: nonzero
+          description: "No line has a zero quantity"
+          field: "lines[*].qty"
+        - name: not_in_future
+          type: not_future
+          description: "Event time is not in the future"
+          field: ts
+    - id: legacy_pos_files
+      type: files
+      label: "Greek franchise stores (legacy daily files)"
+      prefix: legacy_pos/
+      data_file: receipts.jsonl
+      lands_in: pos_receipts
+      control:
+        count_field: receipt_count
+        sum_field: grand_total_cents
+        sum_path: totals.grand_total_cents
+    - id: pos_history_files
+      type: files
+      label: "History migration — store tills (monthly exports)"
+      prefix: history_pos/
+      data_file: receipts.jsonl
+      lands_in: pos_receipts
+      control:
+        count_field: record_count
+        sum_field: grand_total_cents
+        sum_path: totals.grand_total_cents
+    - id: web_history_files
+      type: files
+      label: "History migration — web shop (fortnightly exports)"
+      prefix: history_web/
+      data_file: orders.jsonl
+      lands_in: web_orders
+      control:
+        count_field: record_count
+        sum_field: grand_total_cents
+        sum_path: totals.grand_total_cents
+    - id: erp
+      type: cdc
+      label: "ERP database (change data capture)"
+      tables:
+        - {name: stores, key: store_id, label: "Stores"}
+        - {name: products, key: sku, label: "Products and list prices"}
+        - {name: promotions, key: promo_id, label: "Promotions"}
+        - {name: customers, key: loyalty_id, label: "Loyalty customers"}
+
+  hot_path:
+    - name: sales_minute
+      label: "Live sales by minute"
+      sources: [pos_receipts, web_orders]
+      dimensions: {store_id: store_id, channel: channel}
+      measures:
+        - {name: receipts, agg: count}
+        - {name: revenue_cents, agg: sum, path: totals.grand_total_cents}
+        - {name: units, agg: sum, path: "lines[*].qty"}
+
+  transform:
+    dbt_project: dbt
+    interval_minutes: 3
+
+  datasets:
+    - name: fct_sales_line
+      layer: silver
+      label: "Sales lines"
+      description: "One sold line across channels, with net, discount, tax and margin, pseudonymised customer key"
+      grain: "receipt or order line"
+      time_column: day
+      freshness_minutes: 10
+    - name: mart_sales_daily
+      layer: gold
+      label: "Daily sales"
+      description: "Revenue, units, receipts, basket and margin per day, store and channel"
+      grain: "day × store × channel"
+      time_column: day
+      freshness_minutes: 10
+    - name: mart_sales_hourly
+      layer: gold
+      label: "Hourly sales"
+      description: "Intraday shape of sales per hour, store and channel"
+      grain: "hour × store × channel"
+      time_column: hour
+      freshness_minutes: 10
+    - name: mart_top_products
+      layer: gold
+      label: "Top products"
+      description: "Units and revenue per week, region and product"
+      grain: "week × region × product"
+      time_column: week
+    - name: mart_promo_effect
+      layer: gold
+      label: "Promotion effect"
+      description: "Promoted units, revenue, discount and margin per promotion, day, store and channel, with the pre-promotion baseline of the same store and channel"
+      grain: "promotion × day × store × channel"
+      time_column: day
+    - name: mart_omnichannel
+      layer: gold
+      label: "Click & collect"
+      description: "Online orders collected in store and delivered home, per day and store"
+      grain: "day × store"
+      time_column: day
+    - name: mart_returns
+      layer: gold
+      label: "Returns"
+      description: "Completed and returned online orders per week, fulfilment and return reason (not_returned for the rest)"
+      grain: "week × fulfilment × reason"
+      time_column: week
+    - name: mart_category_weekly
+      layer: gold
+      label: "Weekly sales by category"
+      description: "Units, revenue and margin per week, shop, channel and product category — five years of seasonality"
+      grain: "week × shop × channel × category"
+      time_column: week
+    - name: mart_catalogue
+      layer: gold
+      label: "Catalogue"
+      description: "Every product's current version: attributes, list price, on-sale flag and last-90-days best-seller rank"
+      grain: "product"
+    - name: mart_product_affinity
+      layer: gold
+      label: "Riders also bought"
+      description: "Association rules over the last year of baskets: the products bought together most often, with confidence and lift"
+      grain: "product × recommended product"
+    - name: ml_demand_features
+      layer: gold
+      label: "ML · weekly demand features"
+      description: "Training data of the weekly demand forecast: shop × rider group × week, recent weeks and next week's units"
+      grain: "shop × rider group × week"
+      time_column: week
+    - name: ml_customer_features
+      layer: gold
+      label: "ML · customer propensity features"
+      description: "Training data of the board-purchase propensity model: pseudonymised loyalty customers' history and whether they bought a board after"
+      grain: "loyalty customer"
+    - name: mart_stores
+      layer: gold
+      label: "Stores"
+      description: "Every store with its region, city, format and map coordinates (reference data from a dbt seed)"
+      grain: "store"
+    - name: ops_file_deliveries
+      layer: ops
+      label: "File deliveries and reconciliation"
+      description: "Every legacy daily file: expected vs loaded receipts and totals"
+      grain: "delivery file"
+      time_column: business_date
+    - name: ops_quarantine
+      layer: ops
+      label: "Quarantine"
+      description: "Records rejected at ingestion, with the rule they failed"
+      grain: "rejected record"
+      time_column: day
+
+  metrics:
+    - name: revenue
+      label: "Revenue"
+      description: "Net sales after discounts, tax included (euros)"
+      dataset: mart_sales_daily
+      expression: "sum(revenue_cents)"
+      format: currency_cents
+      dimensions: [store_id, store_name, region, channel]
+    - name: receipts
+      label: "Receipts / orders"
+      description: "Number of store receipts plus online orders"
+      dataset: mart_sales_daily
+      expression: "sum(receipts)"
+      format: integer
+      dimensions: [store_id, store_name, region, channel]
+    - name: units
+      label: "Units sold"
+      description: "Items sold"
+      dataset: mart_sales_daily
+      expression: "sum(units)"
+      format: integer
+      dimensions: [store_id, store_name, region, channel]
+    - name: avg_basket
+      label: "Average basket"
+      description: "Revenue per receipt or order (euros)"
+      dataset: mart_sales_daily
+      expression: "sum(revenue_cents) / nullif(sum(receipts), 0)"
+      format: currency_cents
+      dimensions: [store_id, store_name, region, channel]
+    - name: margin
+      label: "Gross margin"
+      description: "Net sales without tax minus product cost (euros)"
+      dataset: mart_sales_daily
+      expression: "sum(margin_cents)"
+      format: currency_cents
+      dimensions: [store_id, store_name, region, channel]
+    - name: margin_pct
+      label: "Gross margin %"
+      description: "Gross margin over net sales without tax"
+      dataset: mart_sales_daily
+      expression: "100.0 * sum(margin_cents) / nullif(sum(net_ex_tax_cents), 0)"
+      format: percent
+      dimensions: [store_id, store_name, region, channel]
+    - name: identified_share
+      label: "Loyalty-identified share"
+      description: "Share of receipts and orders with a loyalty card"
+      dataset: mart_sales_daily
+      expression: "100.0 * sum(identified_receipts) / nullif(sum(receipts), 0)"
+      format: percent
+      dimensions: [store_id, store_name, region, channel]
+    - name: hourly_revenue
+      label: "Revenue by hour"
+      description: "Net sales per hour (euros)"
+      dataset: mart_sales_hourly
+      expression: "sum(revenue_cents)"
+      format: currency_cents
+      dimensions: [store_id, region, channel, hour_of_day]
+    - name: product_revenue
+      label: "Product revenue"
+      description: "Net sales per product (euros)"
+      dataset: mart_top_products
+      expression: "sum(revenue_cents)"
+      format: currency_cents
+      dimensions: [region, sku, product_name, category]
+    - name: product_units
+      label: "Product units"
+      description: "Units sold per product"
+      dataset: mart_top_products
+      expression: "sum(units)"
+      format: integer
+      dimensions: [region, sku, product_name, category]
+    - name: promo_revenue
+      label: "Promoted revenue"
+      description: "Net sales of promoted lines (euros)"
+      dataset: mart_promo_effect
+      expression: "sum(revenue_cents)"
+      format: currency_cents
+      dimensions: [promo_id, promo_name, store_id, channel]
+    - name: promo_margin
+      label: "Promoted margin"
+      description: "Gross margin of promoted lines (euros)"
+      dataset: mart_promo_effect
+      expression: "sum(margin_cents)"
+      format: currency_cents
+      dimensions: [promo_id, promo_name, store_id, channel]
+    - name: promo_uplift_pct
+      label: "Promotion unit uplift %"
+      description: "Promoted units per day versus the same products' daily units, in the same store and channel, in the 14 days before the promotion"
+      dataset: mart_promo_effect
+      expression: "100.0 * (sum(units) / nullif(sum(baseline_units), 0) - 1)"
+      format: percent
+      dimensions: [promo_id, promo_name, store_id, channel]
+    - name: category_units
+      label: "Units by category"
+      description: "Units sold per product category and rider group (surf, SUP, kite, accessories)"
+      dataset: mart_category_weekly
+      expression: "sum(units)"
+      format: integer
+      dimensions: [store_id, store_name, region, channel, rider_group, category]
+    - name: category_revenue
+      label: "Revenue by category"
+      description: "Net sales per product category and rider group (euros)"
+      dataset: mart_category_weekly
+      expression: "sum(revenue_cents)"
+      format: currency_cents
+      dimensions: [store_id, store_name, region, channel, rider_group, category]
+    - name: click_collect_orders
+      label: "Click & collect orders"
+      description: "Online orders picked up in a store"
+      dataset: mart_omnichannel
+      expression: "sum(click_collect_orders)"
+      format: integer
+      dimensions: [store_id, store_name]
+    - name: click_collect_revenue
+      label: "Click & collect revenue"
+      description: "Revenue of online orders picked up in a store (euros)"
+      dataset: mart_omnichannel
+      expression: "sum(click_collect_revenue_cents)"
+      format: currency_cents
+      dimensions: [store_id, store_name]
+    - name: return_rate
+      label: "Online return rate %"
+      description: "Returned online orders over delivered or collected online orders"
+      dataset: mart_returns
+      expression: "100.0 * sum(returned_orders) / nullif(sum(completed_orders), 0)"
+      format: percent
+      dimensions: [fulfilment]
+    - name: returned_orders
+      label: "Returned online orders"
+      description: "Online orders returned, by the customer's reason"
+      dataset: mart_returns
+      expression: "sum(returned_orders)"
+      format: integer
+      dimensions: [fulfilment, reason]
+
+  records:
+    - entity: receipt
+      label: "Receipt"
+      source: pos_receipts
+      summary: {Store: store_id, Time: ts, Total: totals.grand_total_cents, Channel: channel}
+      search: [receipt_id, store_id, "lines[*].sku", "lines[*].promo_id"]
+    - entity: web_order
+      label: "Online order"
+      source: web_orders
+      summary: {Status: status, Time: ts, Total: totals.grand_total_cents, Fulfilment: fulfilment.type}
+      search: [order_id, status, store_id, "lines[*].sku"]
+
+  access:
+    row_filter:
+      column: store_id
+      claim: stores
+      labels: {dataset: mart_stores, label: store_name}  # "S001 · Angel's Surf Co. Tarifa" in the view-as picker
+    roles:
+      retail_admin:
+        label: "Platform admin"
+        layers: [bronze, silver, gold, ops, quarantine]
+        sql: true
+      retail_analyst:
+        label: "Analyst"
+        layers: [silver, gold, ops]
+        hidden: [loyalty_id]
+        sql: true
+      retail_store_manager:
+        label: "Store manager"
+        rows: filtered
+        layers: [bronze, gold]
+        hidden: [loyalty_id, customer_key]
+      retail_data_steward:
+        label: "Data steward"
+        layers: [bronze, ops, quarantine]
+        hidden: [loyalty_id]
+    default_role: retail_analyst
+    admin_role: retail_admin
+    pseudonymise: [loyalty_id, customer_loyalty_id]
+
+  simulator:
+    package: simulator
+    seed: 42
+    history_days: 1826  # five years; `make k3s-data-seed-lite` loads one
+    live_rate_per_second: 1.5
+    actions:
+      - name: sell
+        label: "Sale in store"
+        description: "A till in a modern shop rings up one receipt"
+        params:
+          - {name: store_id, label: "Shop", type: choice, options: [S001, S002, S003, S004, S005, S006, S007, S008, S009, S010, S011, S012, S013, S014, S015, S016, S017, S018, S019, S023, S024], default: S001}
+          - {name: promo, label: "Include an AUTUMN-SWELL fish", type: bool, default: true}
+          - {name: loyalty, label: "Loyalty card", type: bool, default: true}
+      - name: sell_bad
+        label: "Malformed sale"
+        description: "A receipt whose lines do not add up to its total — quarantined at validation"
+        tone: warning
+        params:
+          - {name: store_id, label: "Shop", type: choice, options: [S001, S002, S009], default: S001}
+      - name: duplicate
+        label: "Re-sent receipt"
+        description: "The till re-sends its last receipt — deduplicated by key, counts do not change"
+      - name: web_order
+        label: "Online order"
+        description: "An online order through its status updates (paid → ready → collected), optionally returned"
+        params:
+          - {name: fulfilment, label: "Fulfilment", type: choice, options: [click_collect, home_delivery], default: click_collect}
+          - {name: store_id, label: "Collect at", type: choice, options: [S001, S002, S004, S009], default: S001}
+          - {name: returned, label: "Returned afterwards", type: bool, default: false}
+      - name: legacy_drop
+        label: "Franchise daily file"
+        description: "A Greek franchise shop delivers yesterday's file; optionally one receipt is missing against its control file"
+        params:
+          - {name: store_id, label: "Shop", type: choice, options: [S020, S021, S022], default: S020}
+          - {name: missing, label: "Receipts missing", type: int, default: 1, min: 0, max: 5}
+      - name: price_change
+        label: "ERP price change"
+        description: "The ERP changes a product's list price — captured by CDC into a new product version"
+        params:
+          - {name: sku, label: "Product", type: choice, options: [FSH-0102, KTE-0103, SUP-0101, LSH-0201], default: FSH-0102}
+          - {name: pct, label: "Change %", type: int, default: -15, min: -50, max: 50}
+      - name: shop_checkout
+        label: "Web shop checkout"
+        description: "An order placed in the fictional web shop: the cart becomes a web order, through the same contract and Kafka topic"
+        hidden: true
+        params:
+          - {name: cart, label: "Cart", type: items}
+          - {name: loyalty_id, label: "Loyalty card", type: text}
+          - {name: fulfilment, label: "Fulfilment", type: choice, options: [click_collect, home_delivery], default: home_delivery}
+          - {name: store_id, label: "Collect at", type: choice, options: [S001, S002, S003, S004, S005, S006, S007, S008, S009, S010, S011, S012, S013, S014, S015, S016, S017, S018, S019, S023, S024], default: S001}
+
+  stage_labels:
+    produced: "Till / web shop / migration"
+    event_log: "Kafka"
+    validated: "Contract + rules"
+    bronze: "Bronze (raw, by key)"
+    hot: "Live tile"
+    lake: "Iceberg lake"
+    transformed: "dbt"
+    gold: "Gold marts"
+    served: "API · BI · assistant"
+
+  kpis: [revenue, receipts, avg_basket, margin_pct, identified_share]
+  dashboard:
+    - title: "Shops across the Mediterranean"
+      chart: map
+      metric: revenue
+      metrics: [receipts, units, avg_basket, margin_pct, identified_share]
+      dims: [store_id]
+      compare: true
+      wide: true
+      places:
+        {dataset: mart_stores, key: store_id, label: store_name, lat: lat, lon: lon, group: region,
+         group_colours: {Spain: amber, France: blue, Italy: green, Greece: teal, Cyprus: pink, Malta: red, Online: purple}}
+    - {title: "Five years of riders: units per week by rider group", metric: category_units, dims: [week, rider_group], chart: line, period: all, wide: true}
+    - {title: "Revenue by day and channel", metric: revenue, dims: [day, channel], chart: line, wide: true}
+    - {title: "Revenue by shop vs previous period", metric: revenue, dims: [store_name], chart: bar, compare: true, limit: 25, wide: true}
+    - {title: "Intraday shape", metric: hourly_revenue, dims: [hour_of_day], chart: bar, limit: 24}
+    - {title: "Gross margin % by country", metric: margin_pct, dims: [region], chart: bar}
+    - {title: "Top products", metric: product_revenue, dims: [product_name], chart: hbar, limit: 10}
+    - {title: "Promotion unit uplift", metric: promo_uplift_pct, dims: [promo_name], chart: bar, period: all}
+    - {title: "Click & collect by store", metric: click_collect_orders, dims: [store_name], chart: hbar, limit: 10}
+    - {title: "Online returns by reason (last 30 days)", metric: returned_orders, dims: [reason], chart: pie, period: last_30_days}
+
+  bi_dashboards: bi/dashboards.yaml
+
+  # Gold feature marts that train the chain's two models (child tabular_ml scenarios).
+  ml_exports:
+    - {dataset: ml_demand_features, scenario: surf_demand_forecast}
+    - {dataset: ml_customer_features, scenario: surf_customer_propensity}
+
+  apps:
+    insights:
+      title: "Surf HQ"
+      subtitle: "Five years of seasons and next week's forecast for every shop — the chain's control room"
+      heatmap:
+        title: "Five years of swell: units sold per week"
+        metric: category_units
+        rows: rider_group
+      forecast:
+        title: "Next week, shop by shop"
+        model: surf_demand_forecast
+        latest_flag: is_latest
+        row: store_id
+        column: rider_group
+        baseline: units_this_week
+    storefront:
+      title: "Angel's Surf Co."
+      tagline: "Boards, SUP and kite gear from the Mediterranean to the Atlantic"
+      disclaimer: >
+        A fictional web shop for the data platform demo: Angel's Surf Co. and its brands were
+        invented by the author, a surf enthusiast. Nothing is for sale, no payment is taken —
+        an order becomes a simulated web order that travels the real pipeline.
+      catalogue: mart_catalogue
+      fields:
+        id: sku
+        name: product_name
+        price: list_price_cents
+        group: category
+        brand: brand
+        subtitle: size_label
+        rank: category_rank
+        available: on_sale
+        image_shape: shape
+        image_colour: colour
+        image_length: length_in
+        details: [model, construction, volume_l, rider_group]
+      recommendations: mart_product_affinity
+      checkout_action: shop_checkout
+      order_entity: web_order
+
+credits:
+  source: "Synthetic — generated by the scenario's own simulator"
+  url: "https://github.com/angelmtenor/ai-circus-framework/tree/develop/scenarios/surf_retail"
+  note: >
+    Fictional: Angel's Surf Co. and its brands (Levante Shapes, Poniente SUP, Tramontana Kite,
+    Garbí Gear) were invented by the framework's author, Ángel Martínez Tenor, a surf
+    enthusiast. No real company, brand, product, customer or price is represented; prices are
+    indicative and every sale is simulated.
+
+services:
+  ingest: data-ingest
+  transform: data-transform
+  api: data-api
+  assistant: assistant

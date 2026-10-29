@@ -1,9 +1,9 @@
-# Optional Data Platform profile — Kafka, KRaft mode. Deliberately NOT part of
+# Data Platform core tier — Kafka, KRaft mode. Deliberately NOT part of
 # k8s/base's kustomization (never bundled into `kubectl apply/delete -k
 # k8s/base`, so a base up/down never starts or destroys this by accident):
 #
-#   kubectl apply -f k8s/data-platform/kafka.yaml     (make k3s-data-platform-up)
-#   kubectl delete -f k8s/data-platform/kafka.yaml    (make k3s-data-platform-down)
+#   kubectl apply -k k8s/data-platform/core     (make k3s-data-core-up)
+#   kubectl delete -k k8s/data-platform/core    (make k3s-data-core-down)
 #
 # Mirrors docker-compose.yml's kafka service (profile "data-platform") — keep
 # the two in sync by hand if either changes. data-platform-manager always tries
@@ -28,28 +28,42 @@ spec:
     spec:
       automountServiceAccountToken: false
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # the image's own `appuser`
+        fsGroup: 1000    # so the fresh PVC is writable by it
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: kafka
           image: apache/kafka:3.9.0
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
           env:
             - {name: KAFKA_NODE_ID, value: "1"}
             - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
             - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093"}
             - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka:9092"}
             - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER"}
-            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@kafka:9093"}
+            # Combined broker+controller in one process: the quorum is this pod itself. Via
+            # localhost, not the Service — which only exposes 9092 (and the NetworkPolicy
+            # below only admits 9092), so "1@kafka:9093" timed out the controller registration.
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093"}
             - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"}
             - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT"}
             # Same fixed, non-secret cluster id as docker-compose.yml's kafka
             # service — see that file's comment for why a fixed value is fine.
             - {name: CLUSTER_ID, value: "MkU3OEVBNTcwNTJENDM2Qk"}
             - {name: KAFKA_HEAP_OPTS, value: "-Xmx512M -Xms512M"}
+            # On the PVC (the image's default is /tmp/kafka-logs, lost on every restart).
+            - {name: KAFKA_LOG_DIRS, value: "/var/lib/kafka/data/logs"}
             - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            # Bronze is the system of record, not the topics: keep a day (and at most
+            # ~256 MiB per partition) so a 60-day backfill never fills the 2Gi volume.
+            - {name: KAFKA_LOG_RETENTION_HOURS, value: "24"}
+            - {name: KAFKA_LOG_RETENTION_BYTES, value: "268435456"}
+            - {name: KAFKA_LOG_SEGMENT_BYTES, value: "67108864"}
           ports:
             - {containerPort: 9092}
           volumeMounts:
@@ -58,13 +72,15 @@ spec:
           resources:
             requests: {cpu: 50m, memory: 512Mi}
             limits: {memory: 768Mi}
+          startupProbe:
+            tcpSocket: {port: 9092}
+            periodSeconds: 2
+            failureThreshold: 90
           readinessProbe:
             tcpSocket: {port: 9092}
-            initialDelaySeconds: 15
             periodSeconds: 5
           livenessProbe:
             tcpSocket: {port: 9092}
-            initialDelaySeconds: 30
             periodSeconds: 10
   volumeClaimTemplates:
     - metadata: {name: kafka-data}
@@ -95,6 +111,8 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector: {matchLabels: {app: data-platform-manager}}
+        - podSelector:
+            matchExpressions:
+              - {key: app, operator: In, values: [data-platform-manager, data-ingest, data-api, data-transform, dagster, openmetadata-ingestion]}
       ports:
         - {protocol: TCP, port: 9092}

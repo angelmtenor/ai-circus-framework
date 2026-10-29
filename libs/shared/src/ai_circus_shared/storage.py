@@ -129,6 +129,22 @@ class ObjectStore:
             return False
         return True
 
+    def delete(self, tenant_org_id: str, path: str) -> None:
+        """Delete one object at a tenant-scoped path (no error if it is already gone)."""
+        self._client.delete_object(Bucket=self.bucket, Key=self._key(tenant_org_id, path))
+
+    def tenants(self) -> list[str]:
+        """The org ids that have at least one object in this bucket — for a platform worker
+        (data-ingest's landing scan) that serves every tenant; never for a request path."""
+        paginator = self._client.get_paginator("list_objects_v2")
+        orgs = []
+        for page in paginator.paginate(Bucket=self.bucket, Delimiter="/"):
+            for common in page.get("CommonPrefixes", []):
+                org = common["Prefix"].removeprefix("tenant-").rstrip("/")
+                if common["Prefix"].startswith("tenant-") and _SAFE_ORG_ID.match(org):
+                    orgs.append(org)
+        return orgs
+
     def list(self, tenant_org_id: str, prefix: str = "") -> list[str]:
         """List object keys (relative to the tenant prefix) under the given prefix."""
         full_prefix = self._key(tenant_org_id, prefix)

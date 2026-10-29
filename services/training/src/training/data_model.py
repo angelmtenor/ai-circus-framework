@@ -29,8 +29,9 @@ class EnvConfig(BaseSettings):
         case_sensitive=True,
     )
     LOG_LEVEL: str = Field(description="Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    SCENARIOS: str = Field(
-        description="Comma-separated tabular_ml scenario slugs this run trains; empty/unset = every scenario"
+    SCENARIOS: str | None = Field(
+        description="Comma-separated tabular_ml scenario slugs this run trains; empty/unset = every scenario",
+        default=None,
     )
     ORG_ID: str = Field(description="Tenant (Keycloak Organization id) whose dataset this run trains on")
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
@@ -56,7 +57,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "1daa8e2de4f345489289aee82dd903122ca3702c5e66af33334294c9b66c3fa6"
+_SOURCE_YAML_HASH = "f2114402274aed5404906db2fdf55a3928a9419c38406e402a98268e82b3a565"
 
 
 EnvConfig.model_rebuild()

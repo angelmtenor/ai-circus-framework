@@ -17,7 +17,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
-	k3s-data-platform-up k3s-data-platform-down \
+	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-data-showcase k3s-data-showcase-off \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
 
@@ -284,6 +284,10 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 	@docker build -f infra/mlflow/Dockerfile -t ai-circus/mlflow:local infra/mlflow || exit 1
 	@echo "── ai-circus/keycloak:local (infra/keycloak/Dockerfile — pre-built, realm baked in) ──"
 	@docker build -t ai-circus/keycloak:local infra/keycloak || exit 1
+	@$(MAKE) --no-print-directory k3s-ui-image
+	@echo "✓ all images built"
+
+k3s-ui-image: ## Build only the ui-react image (same Vite build args as k3s-build)
 	@docker build -f ui-react/Dockerfile -t ai-circus/ui-react:local \
 		--build-arg VITE_KEYCLOAK_ISSUER="$(VITE_KEYCLOAK_ISSUER)" \
 		--build-arg VITE_KEYCLOAK_CLIENT_ID="$(if $(VITE_KEYCLOAK_CLIENT_ID),$(VITE_KEYCLOAK_CLIENT_ID),ui-react)" \
@@ -291,7 +295,6 @@ k3s-build: ## Build every service image locally (same Dockerfiles docker-compose
 		--build-arg VITE_DEV_MODE="$(if $(DEV_MODE),$(DEV_MODE),false)" \
 		--build-arg VITE_DEV_ORG_ID="$(if $(DEV_ORG_ID),$(DEV_ORG_ID),demo)" \
 		.
-	@echo "✓ all images built"
 
 k3s-import: ## Import every ai-circus/*:local image into the k3d cluster's containerd (one batched import)
 	@k3d image import $(foreach svc,$(K3S_IMAGES) ui-react mlflow keycloak,ai-circus/$(svc):local) -c "$(K3S_CLUSTER)"
@@ -360,13 +363,9 @@ k3s-all: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait ## One-sho
 k3s-all-lite: k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-lite k3s-wait ## `k3s-all`, but the K3S_LITE_SKIP pods (default mlflow, agui-voice) are scaled to 0 right after `k3s-up` so `k3s-wait` never waits on them — images are still built/imported, so `make k3s-full` works later without a rebuild
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up in lite mode — http://aiopen.localhost ('make k3s-full' brings the skipped pods back)"
 
-k3s-data-platform-up: ## Apply the optional Data Platform profile (k8s/data-platform/ — currently: Kafka), NOT part of `k3s-up`/`k3s-down`
-	@kubectl apply -f k8s/data-platform/kafka.yaml
-	@kubectl -n ai-circus rollout status statefulset/kafka --timeout=120s
-	@echo "✓ kafka up in k3s — data-platform-manager will start publishing/reading real events against it"
+k3s-data-platform-up: k3s-data-core-up ## Alias of k3s-data-core-up (the Data Platform's core tier)
 
-k3s-data-platform-down: ## Delete the optional Data Platform profile's k8s resources (its PVC is retained by default, same as postgres/qdrant)
-	@kubectl delete -f k8s/data-platform/kafka.yaml --ignore-not-found
+k3s-data-platform-down: k3s-data-core-down ## Alias of k3s-data-core-down
 
 k3s-pause: k3s-portforward-stop ## Stop the k3d cluster's containers to free CPU/RAM while keeping all cluster state (pods, volumes) — resume with `make k3s-resume`
 	@k3d cluster stop "$(K3S_CLUSTER)"
@@ -508,6 +507,138 @@ k3s-dl-train-anomaly: ## In-cluster Jobs for the CV anomaly-detection scenarios,
 
 k3s-all-dl: k3s-all k3s-dl-build k3s-dl-up ## `k3s-all` + the Deep Learning overlay (no training — run `make dl-train` on a GPU host, or the admin console's Train button)
 	@echo "✓ k3s cluster '$(K3S_CLUSTER)' is up with the Deep Learning overlay — train models with 'make dl-train' (GPU) if not done yet"
+
+# ── Data Platform (optional tiers, docs/data-platform/) ──────────────────────
+# Never part of k3s-all: each tier is a kustomize overlay under k8s/data-platform/<tier>/ with
+# its own up/down target. Images are opt-in like the deep-learning ones.
+
+K3S_DATA_IMAGES = data-ingest data-api data-transform
+DATA_PRODUCT   ?= surf_retail
+
+k3s-data-build: ## Build + import the Data Platform images (data-ingest, data-api, data-transform) into k3d
+	@for svc in $(K3S_DATA_IMAGES); do \
+		echo "── ai-circus/$$svc:local ──"; \
+		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
+	done
+	@k3d image import $(foreach svc,$(K3S_DATA_IMAGES),ai-circus/$(svc):local) -c "$(K3S_CLUSTER)"
+	@echo "✓ Data Platform images built + imported"
+
+k3s-data-core-up: ## Data Platform core tier: Kafka + data-ingest + data-api (+ the dbt CronJob) — k8s/data-platform/core
+	@kubectl apply -k k8s/data-platform/core
+	@kubectl -n ai-circus rollout status statefulset/kafka --timeout=180s
+	@kubectl -n ai-circus rollout status deployment/data-ingest --timeout=240s
+	@kubectl -n ai-circus rollout status deployment/data-api --timeout=240s
+	@echo "✓ Data Platform core up — http://data-api.localhost/healthz; seed history with 'make k3s-data-seed'"
+
+k3s-data-core-down: ## Remove the core tier; drops the CDC replication slot first (an undrained slot retains WAL)
+	@kubectl -n ai-circus exec postgres-0 -- sh -c 'psql -U "$$POSTGRES_USER" -d data_sources -tAc \
+		"SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = '"'"'data_ingest'"'"'"' \
+		>/dev/null 2>&1 || true
+	@kubectl delete -k k8s/data-platform/core --ignore-not-found
+
+k3s-data-call: ## GET (or METHOD=POST BODY='{…}') a data-api path as the admin, e.g. P=/v1/surf_retail/overview — the key comes from .env, never echoed
+	@[ -n "$(P)" ] || { echo "❌ usage: make k3s-data-call P=/v1/<slug>/<path>"; exit 1; }
+	@curl -s -X "$(if $(METHOD),$(METHOD),GET)" -H "Authorization: Bearer $${ADMIN_API_KEY:-angel2026}" \
+		-H 'Content-Type: application/json' $(if $(BODY),-d '$(BODY)') "$${DATA_API_URL:-http://data-api.localhost}$(P)"; echo
+
+k3s-data-transform: ## Run the dbt build of every data product now (a Job from the data-transform CronJob) and show its log
+	@job="data-transform-manual-$$(date +%s)"; \
+	kubectl -n ai-circus create job "$$job" --from=cronjob/data-transform >/dev/null || exit 1; \
+	for _ in $$(seq 1 180); do \
+		state=$$(kubectl -n ai-circus get job "$$job" -o jsonpath='{.status.succeeded}{.status.failed}'); \
+		[ -n "$$state" ] && break; sleep 5; \
+	done; \
+	kubectl -n ai-circus logs "job/$$job" --tail=40; \
+	[ "$$(kubectl -n ai-circus get job "$$job" -o jsonpath='{.status.succeeded}')" = "1" ]
+
+k3s-data-analytics-up: ## Data Platform analytics tier: Dagster + marts on ClickHouse (raises ClickHouse's limit to 1Gi, points data-api at ClickHouse, suspends the dbt CronJob)
+	@kubectl -n ai-circus patch statefulset clickhouse --type=json \
+		-p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"1Gi"}]'
+	@kubectl apply -k k8s/data-platform/analytics
+	@kubectl -n ai-circus patch cronjob/data-transform -p '{"spec":{"suspend":true}}'
+	@kubectl -n ai-circus set env deployment/data-api MARTS_ENGINE=clickhouse CLICKHOUSE_URL=http://clickhouse:8123 CLICKHOUSE_USER=clickhouse
+	@kubectl -n ai-circus rollout status statefulset/clickhouse --timeout=240s
+	@kubectl -n ai-circus rollout status deployment/dagster --timeout=420s
+	@echo "✓ analytics tier up — http://dagster.localhost (admin basic auth); the first Postgres build chains a ClickHouse one"
+
+k3s-data-analytics-down: ## Remove the analytics tier: data-api back on Postgres marts, CronJob resumed, ClickHouse limit restored
+	@kubectl -n ai-circus set env deployment/data-api MARTS_ENGINE=postgres CLICKHOUSE_URL- CLICKHOUSE_USER-
+	@kubectl -n ai-circus patch cronjob/data-transform -p '{"spec":{"suspend":false}}' || true
+	@kubectl delete -k k8s/data-platform/analytics --ignore-not-found
+	@kubectl -n ai-circus patch statefulset clickhouse --type=json \
+		-p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"512Mi"}]'
+
+k3s-data-bi-up: ## Data Platform bi tier: Apache Superset (image from infra/superset/) + dashboards as code from each data product's bi/dashboards.yaml
+	@docker build -q -t ai-circus/superset:local infra/superset >/dev/null
+	@k3d image import ai-circus/superset:local -c "$(K3S_CLUSTER)" >/dev/null
+	@kubectl -n ai-circus delete job superset-bi-sync --ignore-not-found >/dev/null
+	@kubectl apply -k k8s/data-platform/bi
+	@kubectl -n ai-circus rollout status deployment/superset --timeout=600s
+	@kubectl -n ai-circus wait --for=condition=complete job/superset-bi-sync --timeout=600s
+	@kubectl -n ai-circus logs job/superset-bi-sync --tail=5
+	@echo "✓ bi tier up — http://superset.localhost (user admin, password SUPERSET_ADMIN_PASSWORD in .env)"
+
+k3s-data-bi-sync: ## Re-run the dashboards-as-code Job (after editing a data product's bi/dashboards.yaml)
+	@kubectl -n ai-circus delete job superset-bi-sync --ignore-not-found >/dev/null
+	@kubectl apply -k k8s/data-platform/bi >/dev/null
+	@kubectl -n ai-circus wait --for=condition=complete job/superset-bi-sync --timeout=600s
+	@kubectl -n ai-circus logs job/superset-bi-sync --tail=5
+
+k3s-data-bi-down: ## Remove the bi tier (Superset's metadata stays in Postgres database `superset`)
+	@kubectl delete -k k8s/data-platform/bi --ignore-not-found
+
+k3s-data-governance-up: ## Data Platform governance tier: OpenMetadata + search index, then the catalog-sync Job (image from infra/openmetadata-ingestion/)
+	@docker build -q -t ai-circus/openmetadata-ingestion:local infra/openmetadata-ingestion >/dev/null
+	@k3d image import ai-circus/openmetadata-ingestion:local -c "$(K3S_CLUSTER)" >/dev/null
+	@kubectl -n ai-circus delete job catalog-sync --ignore-not-found >/dev/null
+	@kubectl apply -k k8s/data-platform/governance
+	@kubectl -n ai-circus rollout status statefulset/om-search --timeout=300s
+	@kubectl -n ai-circus rollout status deployment/openmetadata --timeout=900s
+	@kubectl -n ai-circus wait --for=condition=complete job/catalog-sync --timeout=1200s
+	@kubectl -n ai-circus logs job/catalog-sync --tail=12 | grep -F "[catalog-sync]"
+	@echo "✓ governance tier up — http://openmetadata.localhost (admin@open-metadata.org)"
+
+k3s-data-catalog-sync: ## Re-run the catalogue sync (after a new data product, a dbt change or another tier coming up)
+	@kubectl -n ai-circus delete job catalog-sync --ignore-not-found >/dev/null
+	@kubectl apply -k k8s/data-platform/governance >/dev/null
+	@kubectl -n ai-circus wait --for=condition=complete job/catalog-sync --timeout=1200s
+	@kubectl -n ai-circus logs job/catalog-sync --tail=12 | grep -F "[catalog-sync]"
+
+k3s-data-governance-down: ## Remove the governance tier (the catalogue stays in Postgres database `openmetadata`; the search index PVC is kept)
+	@kubectl delete -k k8s/data-platform/governance --ignore-not-found
+
+# Everything a data showcase never touches, scaled to 0 by `k3s-data-showcase` (on top of
+# K3S_DEMO_SKIP): the other kinds' services. The assistant, llm-gateway and Keycloak stay.
+K3S_DATA_SHOWCASE_SKIP ?= prediction rag-agent form-agent dl-inference
+K3S_DATA_SHOWCASE_SKIP_STS ?= qdrant
+
+k3s-data-showcase: ## The whole Data Platform on one laptop: scale AI-only pods to 0 (k3s-demo + other kinds), then core + analytics + bi + governance
+	@$(MAKE) --no-print-directory k3s-lite K3S_LITE_SKIP="$(K3S_DEMO_SKIP)"
+	@for d in $(K3S_DATA_SHOWCASE_SKIP); do \
+		kubectl -n ai-circus scale deployment/$$d --replicas=0 >/dev/null 2>&1 || true; done
+	@for s in $(K3S_DATA_SHOWCASE_SKIP_STS); do kubectl -n ai-circus scale statefulset/$$s --replicas=0 >/dev/null; done
+	@$(MAKE) --no-print-directory k3s-data-core-up k3s-data-analytics-up k3s-data-bi-up k3s-data-governance-up
+	@kubectl top node 2>/dev/null || true
+	@echo "✓ data showcase up — http://aiopen.localhost → Omnichannel Retail Data Platform"
+
+k3s-data-showcase-off: ## Undo k3s-data-showcase: drop governance + bi + analytics, bring the other kinds' pods back
+	@$(MAKE) --no-print-directory k3s-data-governance-down k3s-data-bi-down k3s-data-analytics-down
+	@for s in $(K3S_DATA_SHOWCASE_SKIP_STS); do kubectl -n ai-circus scale statefulset/$$s --replicas=1 >/dev/null; done
+	@for d in $(K3S_DATA_SHOWCASE_SKIP); do \
+		kubectl -n ai-circus scale deployment/$$d --replicas=1 >/dev/null 2>&1 || true; done
+	@$(MAKE) --no-print-directory k3s-demo-off
+
+k3s-data-reset: ## Drop ALL data of one data product (every tenant): warehouse schemas, lake, landing, ERP, topics — then `make k3s-data-seed`
+	@./scripts/k3s_data_reset.sh "$(DATA_PRODUCT)" "$(if $(DATA_DOMAIN),$(DATA_DOMAIN),retail)"
+
+k3s-data-seed: ## Generate the data product's history through the real pipeline (DATA_PRODUCT=surf_retail, DAYS=…) into the fallback org
+	@./scripts/k3s_data_seed.sh "$(DATA_PRODUCT)" "$(DAYS)"
+
+k3s-data-ml: ## Train the tabular_ml scenarios the data product exports (ml_exports) — after a transform has built its feature marts
+	@./scripts/k3s_ml_train.sh "$(if $(ML_SCENARIOS),$(ML_SCENARIOS),surf_demand_forecast,surf_customer_propensity)"
+
+k3s-data-seed-lite: ## Same with one year of history (laptops short of memory/disk; the default is the scenario's history_days)
+	@./scripts/k3s_data_seed.sh "$(DATA_PRODUCT)" 365
 
 # ── Scaffolding ───────────────────────────────────────────────────────────────
 

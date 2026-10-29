@@ -1,0 +1,6 @@
+# Data Platform — bi tier (docs/data-platform/): Apache Superset + the dashboards-as-code Job.
+# `make k3s-data-bi-up` / `k3s-data-bi-down`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - superset.yaml

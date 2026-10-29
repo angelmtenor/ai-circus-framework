@@ -95,6 +95,9 @@ class Scenario(Base):
     # tabular_ml whose assistant searches reference documents — see
     # scenario_schema.DocumentToolConfig (auto-added by ensure_added_columns, like tutorial).
     document_tool: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # data_product only — the whole `data_product` block (sources, datasets, metrics, access…)
+    # driving ui-react's DataProductView; a plain dict like `form`.
+    data_product: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

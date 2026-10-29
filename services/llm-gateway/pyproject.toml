@@ -198,6 +198,11 @@ DEP002 = ["fastapi", "torch"]
 
 # CPU-only torch build (sentence-transformers' dependency) — Green Code: avoids
 # pulling ~2GB of unused CUDA/nvidia-* wheels into a demo image with no GPU.
+[tool.uv]
+# filelock < 4.2.1 has known CVEs; huggingface-hub allows 3.x and litellm 1.104 pins it there,
+# so this resolves to the newest litellm that accepts the fixed filelock (re-check on upgrades).
+constraint-dependencies = ["filelock>=4.2.1"]
+
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
 
