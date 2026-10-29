@@ -428,3 +428,35 @@ def test_seed_scenarios_stores_the_data_product_block(session: Session) -> None:
     assert retail.data_product["metrics"]
     churn = session.get(Scenario, "churn")
     assert churn is not None and churn.data_product is None
+
+
+def test_seed_scenarios_gives_every_scenario_a_stable_ai_system_id(session: Session) -> None:
+    """Undeclared scenarios get the slug as ai_system_id and declared=False; the
+    illustrative blocks are stored verbatim with declared=True.
+    """
+    slugs = seed_scenarios(session, SCENARIOS_DIR)
+
+    for slug in slugs:
+        governance = session.get(Scenario, slug).governance
+        assert governance["ai_system_id"] == slug
+    churn = session.get(Scenario, "churn").governance
+    assert churn["declared"] is False
+    assert churn["ai_act"]["risk_category"] == "unassessed"
+    prestaciones = session.get(Scenario, "prestaciones_sociales").governance
+    assert prestaciones["declared"] is True
+    assert prestaciones["ai_act"] == {
+        "role": "deployer",
+        "risk_category": "high",
+        "annex_iii_area": "essential_services",
+    }
+    assert prestaciones["human_oversight"]["mode"] == "approve"
+
+
+def test_seed_scenarios_refreshes_governance_on_reseed(session: Session) -> None:
+    seed_scenarios(session, SCENARIOS_DIR)
+    session.get(Scenario, "churn").governance = None
+    session.commit()
+
+    seed_scenarios(session, SCENARIOS_DIR)
+
+    assert session.get(Scenario, "churn").governance["ai_system_id"] == "churn"

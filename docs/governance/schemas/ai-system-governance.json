@@ -1,0 +1,210 @@
+{
+  "$defs": {
+    "AiActInfo": {
+      "additionalProperties": false,
+      "description": "Where the owner places this system under the EU AI Act \u2014 declared, not computed.",
+      "properties": {
+        "annex_iii_area": {
+          "anyOf": [
+            {
+              "enum": [
+                "biometrics",
+                "critical_infrastructure",
+                "education",
+                "employment",
+                "essential_services",
+                "law_enforcement",
+                "migration_border",
+                "justice_democracy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Annex Iii Area"
+        },
+        "risk_category": {
+          "default": "unassessed",
+          "enum": [
+            "prohibited",
+            "high",
+            "limited",
+            "minimal",
+            "unassessed"
+          ],
+          "title": "Risk Category",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "provider",
+                "deployer"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "title": "AiActInfo",
+      "type": "object"
+    },
+    "GovernanceData": {
+      "additionalProperties": false,
+      "description": "What kind of data the system touches; `None` = not declared (not \"no\").",
+      "properties": {
+        "datasets": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Datasets",
+          "type": "array"
+        },
+        "personal_data": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Personal Data"
+        },
+        "special_categories": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Special Categories"
+        }
+      },
+      "title": "GovernanceData",
+      "type": "object"
+    },
+    "HumanOversight": {
+      "additionalProperties": false,
+      "description": "How a person stays in the loop: `review` = checks outcomes after the fact,\n`approve` = a person must confirm before an outcome takes effect.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "review",
+                "approve"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        }
+      },
+      "title": "HumanOversight",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The whole `governance:` block. Every field is optional.",
+  "properties": {
+    "ai_act": {
+      "$ref": "#/$defs/AiActInfo"
+    },
+    "ai_system_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai System Id"
+    },
+    "data": {
+      "$ref": "#/$defs/GovernanceData"
+    },
+    "human_oversight": {
+      "$ref": "#/$defs/HumanOversight"
+    },
+    "intended_purpose": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Intended Purpose"
+    },
+    "known_risks": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Known Risks",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Limitations",
+      "type": "array"
+    },
+    "owner": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner"
+    }
+  },
+  "title": "GovernanceConfig",
+  "type": "object"
+}

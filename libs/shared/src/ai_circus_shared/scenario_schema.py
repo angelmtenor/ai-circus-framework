@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ai_circus_shared.business_rules import BusinessRules, DecisionPolicy
 from ai_circus_shared.data_product import DataProductConfig
+from ai_circus_shared.governance import GovernanceConfig
 
 
 class NumericFeatureUI(BaseModel):
@@ -1875,6 +1876,9 @@ class ScenarioDefinition(BaseModel):
     industry: Industry
     chat: ChatConfig
     credits: DatasetCredits | None = None
+    # Optional, owner-declared AI-system metadata for external governance tooling (see
+    # ai_circus_shared.governance); absent = nothing declared, behaviour unchanged.
+    governance: GovernanceConfig | None = None
 
     dataset: TabularDataset | None = None
     model: TabularModel | None = None

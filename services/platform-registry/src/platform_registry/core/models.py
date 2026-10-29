@@ -98,6 +98,9 @@ class Scenario(Base):
     # data_product only — the whole `data_product` block (sources, datasets, metrics, access…)
     # driving ui-react's DataProductView; a plain dict like `form`.
     data_product: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # Owner-declared AI-system metadata — see ai_circus_shared.governance.resolve_governance
+    # (auto-added by ensure_added_columns, like tutorial above).
+    governance: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

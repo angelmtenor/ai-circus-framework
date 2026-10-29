@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 import pytest
+from ai_circus_shared.governance import resolve_governance
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -36,6 +37,7 @@ def client() -> Generator[TestClient]:
                 icon="📉",
                 role_required="scenario:churn",
                 industry="banking_finance",
+                governance=resolve_governance("churn", None),
             )
         )
         setup_session.commit()
@@ -75,6 +77,16 @@ def test_grant_then_check_then_list_then_revoke(client: TestClient) -> None:
 
     assert client.delete("/entitlements/org-1/churn").status_code == 204
     assert client.get("/entitlements/org-1/churn").status_code == 404
+
+
+def test_entitled_scenario_summary_carries_the_governance_record(client: TestClient) -> None:
+    """The scenario list exposes the stable ai_system_id (and `declared`) per scenario."""
+    assert client.put("/entitlements/org-1/churn").status_code == 204
+
+    (scenario,) = client.get("/entitlements/org-1").json()
+
+    assert scenario["governance"]["ai_system_id"] == "churn"
+    assert scenario["governance"]["declared"] is False
 
 
 def test_grant_unknown_scenario_returns_404(client: TestClient) -> None:

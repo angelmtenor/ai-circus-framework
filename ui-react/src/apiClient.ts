@@ -587,6 +587,9 @@ export type ScenarioSummary = {
   // data_product only — sources, datasets, metrics, records, access roles and simulator
   // actions driving DataProductView (see dataApi.ts / ai_circus_shared.data_product).
   data_product?: DataProductConfig | null;
+  // Owner-declared AI-system metadata for external governance tooling (always carries the
+  // stable ai_system_id; see ai_circus_shared.governance). Not rendered by the UI today.
+  governance?: Record<string, unknown> | null;
   // tabular_ml only — a guided Tutorial tab (see TutorialView.tsx).
   tutorial?: TutorialConfig | null;
   // tabular_ml with a text feature only — an LLM rubric check over a description of
