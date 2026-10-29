@@ -69,6 +69,12 @@ spec:
     - from:
         - podSelector: {matchLabels: {app: data-platform-manager}}
         - podSelector: {matchLabels: {app: llm-gateway}}
+        # Governance (docs/governance/): drains the event outbox stream to the webhook and
+        # publishes the AI-system catalogue the gateway's by_risk fail mode reads.
+        - podSelector: {matchLabels: {app: platform-registry}}
+        # The decision records of non-LLM predictions use the same event outbox (sink=http).
+        - podSelector: {matchLabels: {app: prediction}}
+        - podSelector: {matchLabels: {app: dl-inference}}
         # Langfuse's ingestion queue (BullMQ) — keys namespaced under `langfuse:`
         # (REDIS_KEY_PREFIX in langfuse.yaml) so they never collide with the budget/
         # cache keys above.

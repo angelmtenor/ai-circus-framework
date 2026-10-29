@@ -1,0 +1,6 @@
+# Governance overlay (docs/governance/): the optional OPA policy decision point.
+# `make k3s-governance-opa-up` / `k3s-governance-opa-down`. Never part of k8s/base.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - opa.yaml

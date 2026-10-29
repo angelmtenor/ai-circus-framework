@@ -29,6 +29,23 @@ credits:
     18 of its 90 articles, unmodified (reuse authorised, Decision 2011/833/EU). The knowledge
     graph is a machine extraction checked for verbatim quotes — a study aid, not legal advice.
 
+# Illustrative governance declaration (owner to confirm): feeds the AI-system inventory
+# only — see docs/governance/README.md. Never an automatic legal classification.
+governance:
+  intended_purpose: Answer questions about the EU AML rulebook with cited passages and a knowledge-graph view.
+  owner: Framework demo team
+  ai_act:
+    role: provider
+    risk_category: limited
+  human_oversight:
+    mode: review
+    description: Answers cite their sources so a reader can verify them; not legal advice.
+  data:
+    personal_data: false
+    special_categories: false
+  limitations:
+    - Knowledge graph extracted offline by an LLM; may omit or misstate provisions.
+
 chat:
   context: >
     The EU Anti-Money Laundering Regulation (EU) 2024/1624 ("AMLR") as it applies to banks

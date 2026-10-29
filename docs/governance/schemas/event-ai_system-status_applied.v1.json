@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of `ai_system.status_applied`: a suspend/resume pushed by the decision point took effect.",
+  "properties": {
+    "ai_system_id": {
+      "maxLength": 64,
+      "title": "Ai System Id",
+      "type": "string"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "suspended"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Id"
+    }
+  },
+  "required": [
+    "ai_system_id",
+    "status"
+  ],
+  "title": "AiSystemStatusData",
+  "type": "object"
+}

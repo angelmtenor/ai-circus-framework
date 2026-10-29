@@ -57,6 +57,12 @@ class TenantCache:
             raise ValueError(f"Invalid tenant_org_id {tenant_org_id!r}: must match {_SAFE_ORG_ID.pattern}.")
         return f"tenant-{tenant_org_id}:{key}"
 
+    def key(self, tenant_org_id: str, key: str) -> str:
+        """The full tenant-prefixed Valkey key, for callers that need raw client commands
+        (hashes, streams) the value helpers below don't wrap.
+        """
+        return self._key(tenant_org_id, key)
+
     def set(self, tenant_org_id: str, key: str, value: str, ttl_seconds: int | None = None) -> None:
         """Set a value, optionally expiring after ttl_seconds."""
         self._client.set(self._key(tenant_org_id, key), value, ex=ttl_seconds)

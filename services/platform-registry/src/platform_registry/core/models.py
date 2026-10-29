@@ -98,6 +98,9 @@ class Scenario(Base):
     # data_product only — the whole `data_product` block (sources, datasets, metrics, access…)
     # driving ui-react's DataProductView; a plain dict like `form`.
     data_product: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # Owner-declared AI-system metadata — see ai_circus_shared.governance.resolve_governance
+    # (auto-added by ensure_added_columns, like tutorial above).
+    governance: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 
@@ -114,6 +117,29 @@ class Entitlement(Base):
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     scenario: Mapped[Scenario] = relationship(back_populates="entitlements")
+
+
+class AuditLog(Base):
+    """Append-only, hash-chained record of an admin mutation (see ai_circus_shared.governance_audit).
+
+    Written only by core/audit.py inside the mutation's own transaction; never updated or
+    deleted by the application. `ts` is stored as the exact ISO-8601 text that went into the
+    hash, so a database round-trip can never change what is hashed.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ts: Mapped[str] = mapped_column(String(32))
+    actor: Mapped[str] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(String(96), index=True)
+    target_type: Mapped[str] = mapped_column(String(64))
+    target_id: Mapped[str] = mapped_column(String(128))
+    org_id: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    prev_hash: Mapped[str] = mapped_column(String(64))
+    hash: Mapped[str] = mapped_column(String(64), unique=True)
 
 
 class LlmSetting(Base):

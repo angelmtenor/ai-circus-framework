@@ -52,6 +52,9 @@ class EnvConfig(BaseSettings):
     GOOGLE_API_KEY: SecretStr | None = Field(
         description="Google API key (only needed if litellm_config.yaml routes to a gemini/* model)", default=None
     )
+    VOYAGE_API_KEY: SecretStr | None = Field(
+        description="Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage routes embeddings here)", default=None
+    )
     AZURE_OPENAI_API_KEY: SecretStr | None = Field(
         description="Azure OpenAI API key (only needed if litellm_config.yaml routes to an azure/* model)", default=None
     )
@@ -86,6 +89,49 @@ class EnvConfig(BaseSettings):
     LANGFUSE_SECRET_KEY: SecretStr | None = Field(
         description="Langfuse project secret key (sk-lf-...); unset = no tracing", default=None
     )
+    POLICY_DECIDER: str | None = Field(
+        description="Policy decision point: 'noop' (default, allow all), 'static' (YAML), 'opa' or 'http'", default=None
+    )
+    POLICY_STATIC_PATH: str | None = Field(
+        description="YAML rules file for POLICY_DECIDER=static (see docs/governance/policy.md)", default=None
+    )
+    POLICY_OPA_URL: str | None = Field(
+        description="OPA base URL for POLICY_DECIDER=opa, e.g. http://opa:8181", default=None
+    )
+    POLICY_OPA_PACKAGE: str | None = Field(
+        description="OPA package path of the decision rule (default 'aicircus/governance')", default=None
+    )
+    POLICY_HTTP_URL: str | None = Field(
+        description="Decision endpoint for POLICY_DECIDER=http (the policy-decision.json contract)", default=None
+    )
+    POLICY_HTTP_TOKEN: SecretStr | None = Field(
+        description="Optional bearer token sent to the http decision endpoint", default=None
+    )
+    POLICY_TIMEOUT_MS: str | None = Field(
+        description="Per-decision timeout in milliseconds (default 500)", default=None
+    )
+    POLICY_CACHE_TTL_SECONDS: str | None = Field(
+        description="How long a decision is cached in Valkey (default 30); an invalidation webhook clears it sooner",
+        default=None,
+    )
+    POLICY_FAIL_MODE: str | None = Field(
+        description="If the decision point is unreachable: 'open' (default), 'closed' or 'by_risk'", default=None
+    )
+    TRACE_CAPTURE_CONTENT: str | None = Field(
+        description="false = redact prompts and completions from traces and logs (default: captured, as before)",
+        default=None,
+    )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit content-free governance events (policy deny/degrade/fail-open, budget exhausted)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="'log' (default) or 'http' (append to the Valkey outbox platform-registry drains to the webhook)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types (default dev.aicircus)", default=None
+    )
 
     @field_validator("EMBEDDING_PROVIDER", mode="after")
     @classmethod
@@ -114,7 +160,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "97bdcc60416e105241112fa182a31d5332bbd668f0676b77fa79d973e82fa34e"
+_SOURCE_YAML_HASH = "8a82aca29b4c44e783e6b28eb97f4f81a5de9f8a44c014376d69480a9d9af353"
 
 
 EnvConfig.model_rebuild()

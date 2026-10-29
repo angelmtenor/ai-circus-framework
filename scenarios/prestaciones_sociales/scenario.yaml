@@ -41,6 +41,29 @@ credits:
     Las bases de la ayuda, la instrucción interna y el protocolo de atención de Villaclara
     son FICTICIOS, como el municipio y las solicitudes. No es asesoramiento jurídico.
 
+# Illustrative governance declaration (owner to confirm): feeds the AI-system inventory
+# only — see docs/governance/README.md. Never an automatic legal classification.
+governance:
+  intended_purpose: >
+    Propose a grant / manual-review / deny outcome for a (fictional) municipal
+    emergency-aid application, after deterministic eligibility rules, for a caseworker to decide.
+  owner: Servicios Sociales — Ayuntamiento de Villaclara (fictional)
+  ai_act:
+    role: deployer
+    risk_category: high
+    annex_iii_area: essential_services
+  human_oversight:
+    mode: approve
+    description: The model only proposes; a caseworker approves or overrides every outcome.
+  data:
+    personal_data: true
+    special_categories: false
+    datasets: [prestaciones_sociales]
+  limitations:
+    - Trained on synthetic applications; not validated on real casework.
+  known_risks:
+    - Proxy bias through free-text boxes; audit-only columns feed the equity panel, not the model.
+
 chat:
   context: >
     Responde siempre en español. Eres el asistente del Área de Bienestar Social del

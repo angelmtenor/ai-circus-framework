@@ -39,3 +39,16 @@ def test_redact_token_query_params_blanks_bearer_credentials_in_uvicorn_log_reco
     record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, "GET /x?access_token=eyJ.a.b", None, None)
     RedactTokenQueryParams().filter(record)
     assert record.getMessage() == "GET /x?access_token=[REDACTED]"
+
+
+def test_metadata_carries_the_aicf_correlation_fields_defaulting_the_ai_system_to_the_slug() -> None:
+    plain = langfuse_request_metadata(service="assistant", org_id="acme", scenario_slug="churn")
+    assert plain["aicf_tenant_id"] == "acme"
+    assert plain["aicf_scenario_slug"] == "churn"
+    assert plain["aicf_ai_system_id"] == "churn"
+
+    declared = langfuse_request_metadata(
+        service="assistant", org_id="acme", scenario_slug="churn", ai_system_id="churn-v2"
+    )
+    assert declared["aicf_ai_system_id"] == "churn-v2"
+    assert declared["trace_metadata"]["scenario_slug"] == "churn", "the existing Langfuse fields are unchanged"

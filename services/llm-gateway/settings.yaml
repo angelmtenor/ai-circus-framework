@@ -76,6 +76,12 @@ env_variables:
     mandatory: false
     secret: true
 
+  - name: VOYAGE_API_KEY
+    description: "Voyage AI API key (only needed if EMBEDDING_PROVIDER=voyage routes embeddings here)"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: AZURE_OPENAI_API_KEY
     description: "Azure OpenAI API key (only needed if litellm_config.yaml routes to an azure/* model)"
     type: string
@@ -140,6 +146,88 @@ env_variables:
     secret: true
 
 # Optional global settings
+  # --- Governance (docs/governance/, ADR 0011): the policy decision point hook. All off by
+  # default — POLICY_DECIDER unset/'noop' makes the hook a no-op, so the gateway behaves exactly
+  # as before. NOTE: no profile defaults for these: config is built as EnvConfig(**profile) and
+  # init values beat environment variables, so a default could never be overridden.
+  - name: POLICY_DECIDER
+    description: "Policy decision point: 'noop' (default, allow all), 'static' (YAML), 'opa' or 'http'"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_STATIC_PATH
+    description: "YAML rules file for POLICY_DECIDER=static (see docs/governance/policy.md)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_OPA_URL
+    description: "OPA base URL for POLICY_DECIDER=opa, e.g. http://opa:8181"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_OPA_PACKAGE
+    description: "OPA package path of the decision rule (default 'aicircus/governance')"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_HTTP_URL
+    description: "Decision endpoint for POLICY_DECIDER=http (the policy-decision.json contract)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_HTTP_TOKEN
+    description: "Optional bearer token sent to the http decision endpoint"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: POLICY_TIMEOUT_MS
+    description: "Per-decision timeout in milliseconds (default 500)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_CACHE_TTL_SECONDS
+    description: "How long a decision is cached in Valkey (default 30); an invalidation webhook clears it sooner"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: POLICY_FAIL_MODE
+    description: "If the decision point is unreachable: 'open' (default), 'closed' or 'by_risk'"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: TRACE_CAPTURE_CONTENT
+    description: "false = redact prompts and completions from traces and logs (default: captured, as before)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENTS_ENABLED
+    description: "true = emit content-free governance events (policy deny/degrade/fail-open, budget exhausted)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_SINK
+    description: "'log' (default) or 'http' (append to the Valkey outbox platform-registry drains to the webhook)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: GOVERNANCE_EVENT_NAMESPACE
+    description: "Reverse-DNS namespace of governance event types (default dev.aicircus)"
+    type: string
+    mandatory: false
+    secret: false
+
 global_settings:
   env_file: ".env"          # Default location for environment variable file
   fail_on_missing: true     # Stop execution if mandatory variables are missing

@@ -1,0 +1,54 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of `budget.exhausted`: a tenant's monthly gateway budget blocked a call.",
+  "properties": {
+    "ai_system_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai System Id"
+    },
+    "cap_usd": {
+      "title": "Cap Usd",
+      "type": "number"
+    },
+    "org_id": {
+      "maxLength": 64,
+      "title": "Org Id",
+      "type": "string"
+    },
+    "period": {
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "title": "Period",
+      "type": "string"
+    },
+    "scope": {
+      "default": "tenant",
+      "enum": [
+        "tenant",
+        "ai_system"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "spent_usd": {
+      "title": "Spent Usd",
+      "type": "number"
+    }
+  },
+  "required": [
+    "org_id",
+    "period",
+    "spent_usd",
+    "cap_usd"
+  ],
+  "title": "BudgetExhaustedData",
+  "type": "object"
+}

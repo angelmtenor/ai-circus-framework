@@ -112,6 +112,7 @@ def test_endpoint_returns_the_structured_reading() -> None:
     assert body["behaviours"][0]["name"] == "Self-promotion & credit-taking"
     assert llm.updates["temperature"] == 0 and llm.updates["model_kwargs"]["user"] == "org-1"
     assert llm.updates["extra_body"]["metadata"]["trace_name"] == "assistant-rubric/toxic_leadership"
+    assert llm.updates["extra_body"]["metadata"]["aicf_ai_system_id"] == "toxic_leadership"
     assert DESCRIPTION in llm.messages[1].content
 
 

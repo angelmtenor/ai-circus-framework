@@ -1,0 +1,99 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of an admin mutation event (entitlement, active model, voice settings, budget).",
+  "properties": {
+    "action": {
+      "maxLength": 96,
+      "pattern": "^[a-z_]+(\\.[a-z_]+)+$",
+      "title": "Action",
+      "type": "string"
+    },
+    "actor": {
+      "maxLength": 64,
+      "title": "Actor",
+      "type": "string"
+    },
+    "after": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "After"
+    },
+    "audit_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Audit Hash"
+    },
+    "audit_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Audit Id"
+    },
+    "before": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Before"
+    },
+    "org_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Org Id"
+    },
+    "target_id": {
+      "maxLength": 128,
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_type": {
+      "maxLength": 64,
+      "title": "Target Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "actor",
+    "action",
+    "target_type",
+    "target_id"
+  ],
+  "title": "AdminChangeData",
+  "type": "object"
+}

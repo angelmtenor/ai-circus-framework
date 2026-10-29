@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of `policy.decision`: the gateway denied or degraded a call, or let it through\nbecause the decision point was unreachable (`fail_open`). Never the request content.",
+  "properties": {
+    "ai_system_id": {
+      "maxLength": 64,
+      "title": "Ai System Id",
+      "type": "string"
+    },
+    "call_type": {
+      "maxLength": 64,
+      "title": "Call Type",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "allow",
+        "deny",
+        "degrade"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "fail_open": {
+      "default": false,
+      "title": "Fail Open",
+      "type": "boolean"
+    },
+    "max_tokens": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Tokens"
+    },
+    "model": {
+      "maxLength": 128,
+      "title": "Model",
+      "type": "string"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "reason_code": {
+      "maxLength": 96,
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "served_model": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Served Model"
+    },
+    "tenant_id": {
+      "maxLength": 64,
+      "title": "Tenant Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_id",
+    "ai_system_id",
+    "model",
+    "call_type",
+    "decision",
+    "reason_code"
+  ],
+  "title": "PolicyDecisionData",
+  "type": "object"
+}

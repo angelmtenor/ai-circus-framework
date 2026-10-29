@@ -1,0 +1,119 @@
+{
+  "$defs": {
+    "Obligations": {
+      "additionalProperties": false,
+      "description": "What the gateway must enforce alongside the decision.",
+      "properties": {
+        "allowed_models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed Models"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Cap on completion tokens",
+          "title": "Max Tokens"
+        },
+        "monthly_budget": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "USD per month for this tenant + AI system",
+          "title": "Monthly Budget"
+        },
+        "rpm": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Requests per minute for this tenant + AI system",
+          "title": "Rpm"
+        },
+        "status": {
+          "default": "active",
+          "enum": [
+            "active",
+            "suspended"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "title": "Obligations",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The decision point's answer.",
+  "properties": {
+    "decision": {
+      "enum": [
+        "allow",
+        "deny",
+        "degrade"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "obligations": {
+      "$ref": "#/$defs/Obligations"
+    },
+    "policy_version": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Version"
+    },
+    "reason_code": {
+      "pattern": "^[a-z0-9_]{1,96}$",
+      "title": "Reason Code",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision",
+    "reason_code"
+  ],
+  "title": "PolicyDecision",
+  "type": "object"
+}

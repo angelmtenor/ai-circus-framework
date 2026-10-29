@@ -170,6 +170,10 @@ class ScenarioSummary(BaseModel):
     # ai_circus_shared.data_product): sources, datasets, metrics, records, access roles,
     # simulator actions; a plain dict like `form`.
     data_product: dict[str, Any] | None = None
+    # Owner-declared AI-system metadata for external governance tooling (see
+    # ai_circus_shared.governance.resolve_governance): always carries the stable
+    # `ai_system_id` and a `declared` flag; a plain dict like `form`.
+    governance: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

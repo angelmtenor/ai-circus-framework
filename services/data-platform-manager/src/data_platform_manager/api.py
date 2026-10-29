@@ -35,14 +35,26 @@ from ai_circus_shared.cdc import ensure_slot, poll_changes, slot_status
 from ai_circus_shared.document_store import DbSession, DocumentStore
 from ai_circus_shared.document_store import get_session as get_document_session
 from ai_circus_shared.events import EventConsumer, EventProducer, connect_consumer
+from ai_circus_shared.governance_events import AiSystemStatusData
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from confluent_kafka import Producer
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from kubernetes.client.exceptions import ApiException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from data_platform_manager import get_env_config
-from data_platform_manager.core import gateway, k8s_jobs, lakehouse, platform_status, resources, semantic, workloads
+from data_platform_manager.core import (
+    gateway,
+    governance_audit,
+    k8s_jobs,
+    lakehouse,
+    platform_status,
+    policy_admin,
+    resources,
+    semantic,
+    workloads,
+)
 from data_platform_manager.core.cache_client import get_client
 from data_platform_manager.core.events_client import get_producer
 from data_platform_manager.core.roadmap import Capability, get_roadmap
@@ -280,6 +292,7 @@ def set_gateway_budget(
     body: BudgetSetIn,
     cache: TenantCache = Depends(get_cache),
     session: DbSession = Depends(get_document_session),
+    authorization: str | None = Header(default=None),
 ) -> BudgetOut:
     """Set (or update) one org's monthly AI Gateway spend cap.
 
@@ -288,8 +301,18 @@ def set_gateway_budget(
     it on its hot path with zero calls back to this service.
     """
     store = DocumentStore(session)
+    previous = store.get(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
+    # Snapshot before put(): `previous` is the live row and put() updates it in place.
+    before = {"monthly_cap_usd": previous.content["monthly_cap_usd"]} if previous is not None else None
     store.put(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id, {"monthly_cap_usd": body.monthly_cap_usd})
     cache.set(org_id, _BUDGET_CAP_KEY, str(body.monthly_cap_usd))
+    governance_audit.record_budget_change(
+        authorization=authorization,
+        action="gateway.budget.set",
+        org_id=org_id,
+        before=before,
+        after={"monthly_cap_usd": body.monthly_cap_usd},
+    )
     return BudgetOut(
         org_id=org_id,
         monthly_cap_usd=body.monthly_cap_usd,
@@ -302,12 +325,93 @@ def delete_gateway_budget(
     org_id: str,
     cache: TenantCache = Depends(get_cache),
     session: DbSession = Depends(get_document_session),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, bool]:
     """Remove an org's cap — makes it unlimited again, not "zero budget"."""
     store = DocumentStore(session)
+    previous = store.get(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
+    before = {"monthly_cap_usd": previous.content["monthly_cap_usd"]} if previous is not None else None
     deleted = store.delete(ADMIN_ORG_ID, _BUDGETS_COLLECTION, org_id)
     cache.delete(org_id, _BUDGET_CAP_KEY)
+    if deleted:
+        governance_audit.record_budget_change(
+            authorization=authorization,
+            action="gateway.budget.deleted",
+            org_id=org_id,
+            before=before,
+            after=None,
+        )
     return {"deleted": deleted}
+
+
+async def _read_bounded_body(request: Request, limit: int) -> bytes:
+    """The raw request body, refusing anything over `limit` bytes without buffering it all."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail="Request body too large.")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            raise HTTPException(status_code=413, detail="Request body too large.")
+    return bytes(body)
+
+
+@router.post("/governance/policy/invalidate")
+async def invalidate_policy(
+    request: Request,
+    cache: TenantCache = Depends(get_cache),
+    x_governance_timestamp: str | None = Header(default=None),
+    x_governance_signature: str | None = Header(default=None),
+) -> dict[str, bool]:
+    """Tell llm-gateway to forget (or replace) its cached policy decision for one tenant's AI system.
+
+    Called by an external governance tool, so it is authenticated by an HMAC signature over
+    `"<X-Governance-Timestamp>.<raw body>"` (secret: GOVERNANCE_POLICY_HMAC_SECRET) instead of
+    the admin bearer token, and answers 404 until that secret is configured. See
+    core/policy_admin.py and docs/governance/policy.md.
+    """
+    config = get_env_config()
+    secret = config.GOVERNANCE_POLICY_HMAC_SECRET.get_secret_value() if config.GOVERNANCE_POLICY_HMAC_SECRET else None
+    if not secret:
+        raise HTTPException(
+            status_code=404, detail="Policy invalidation is not enabled (GOVERNANCE_POLICY_HMAC_SECRET)."
+        )
+    body = await _read_bounded_body(request, policy_admin.MAX_BODY_BYTES)
+    if not policy_admin.signature_is_valid(
+        secret, timestamp=x_governance_timestamp, signature=x_governance_signature, body=body
+    ):
+        raise HTTPException(status_code=401, detail="Invalid or stale signature.")
+    try:
+        parsed = policy_admin.PolicyInvalidateIn.model_validate_json(body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors(include_url=False, include_input=False)) from exc
+
+    ttl = int(config.GOVERNANCE_POLICY_PUSH_TTL_SECONDS or policy_admin.DEFAULT_PUSH_TTL_SECONDS)
+    overwritten = await run_in_threadpool(policy_admin.apply_invalidation, cache, parsed, default_ttl=ttl)
+    await run_in_threadpool(
+        governance_audit.record_change,
+        authorization=f"Bearer {config.ADMIN_API_KEY.get_secret_value()}",
+        action="policy.overwritten" if overwritten else "policy.invalidated",
+        target_type="policy",
+        target_id=f"{parsed.tenant_id}/{parsed.ai_system_id}",
+        org_id=parsed.tenant_id,
+        before=None,
+        after=policy_admin.audit_summary(parsed),
+    )
+    if overwritten and parsed.decision is not None:
+        policy_admin.get_events().emit(
+            "ai_system.status_applied",
+            AiSystemStatusData(
+                ai_system_id=parsed.ai_system_id,
+                tenant_id=parsed.tenant_id,
+                status=parsed.decision.obligations.status,
+                policy_version=parsed.decision.policy_version,
+            ),
+            tenant_id=parsed.tenant_id,
+            ai_system_id=parsed.ai_system_id,
+        )
+    return {"invalidated": True, "overwritten": overwritten}
 
 
 @router.get("/pipeline/jobs", response_model=PipelineJobsOut, dependencies=[Depends(require_admin)])

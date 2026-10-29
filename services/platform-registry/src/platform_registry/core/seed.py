@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
+from ai_circus_shared.governance import resolve_governance
 from ai_circus_shared.scenario_schema import load_all
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -103,6 +104,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         document_tool = definition.documents.tool if definition.documents is not None else None
         existing.document_tool = document_tool.model_dump() if document_tool is not None else None
         existing.data_product = definition.data_product.model_dump() if definition.data_product is not None else None
+        existing.governance = resolve_governance(definition.slug, definition.governance)
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.

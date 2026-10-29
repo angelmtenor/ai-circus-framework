@@ -12,11 +12,14 @@ import httpx
 import pandas as pd
 from ai_circus_shared.auth import Identity
 from ai_circus_shared.business_rules import RuleResult, decide, evaluate
+from ai_circus_shared.decision_records import model_version, summarise, trace_id_from
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
+from ai_circus_shared.governance import ai_system_id_of
+from ai_circus_shared.governance_events import PredictionRecordData
 from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from prediction import get_env_config
@@ -310,6 +313,7 @@ def healthz() -> dict[str, str]:
 def predict_endpoint(
     body: PredictRequest,
     request: Request,
+    background: BackgroundTasks,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
     model_cache: ModelCache = Depends(_model_cache),
@@ -330,10 +334,49 @@ def predict_endpoint(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ChallengerUnavailableError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return PredictResponse(
-        predictions=[
-            _prediction_out(p, record, definition) for p, record in zip(predictions, body.records, strict=True)
-        ]
+    outputs = [_prediction_out(p, record, definition) for p, record in zip(predictions, body.records, strict=True)]
+    # Decision record (docs/governance/): after the response, off the request path; a no-op unless switched on.
+    recorder = getattr(request.app.state, "recorder", None)
+    if recorder is not None and recorder.enabled:
+        background.add_task(
+            recorder.record,
+            _decision_record(
+                identity.org_id, definition, artifacts.metadata, body, outputs, trace_id_from(request.headers)
+            ),
+        )
+    return PredictResponse(predictions=outputs)
+
+
+def _decision_record(
+    org_id: str,
+    definition: ScenarioDefinition,
+    metadata: dict[str, object],
+    body: PredictRequest,
+    outputs: list[PredictionOut],
+    trace_id: str,
+) -> PredictionRecordData:
+    """The content-free record of one scoring request: what was scored by which model version, the
+    outcome histogram and score range, and whether an explanation was available. No inputs.
+    """
+    challenger = body.model == "challenger"
+    name = str((metadata.get("challenger") or {}).get("model_name", "challenger")) if challenger else None
+    outcomes, low, high = summarise(
+        (out.decision or out.gate or "scored" for out in outputs), (out.prediction for out in outputs)
+    )
+    return PredictionRecordData(
+        scenario_slug=definition.slug,
+        ai_system_id=ai_system_id_of(definition),
+        org_id=org_id,
+        model_name=name or str(metadata.get("model_name", "unknown")),
+        model_version=model_version(metadata),
+        model_variant="challenger" if challenger else "primary",
+        task_type=str(metadata["task_type"]) if metadata.get("task_type") else None,
+        prediction_count=len(outputs),
+        outcomes=outcomes,
+        score_min=low,
+        score_max=high,
+        explanation_available=bool(body.explain and any(out.contributions for out in outputs)),
+        trace_id=trace_id,
     )
 
 

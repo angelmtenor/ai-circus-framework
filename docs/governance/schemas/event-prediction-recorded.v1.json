@@ -1,0 +1,111 @@
+{
+  "additionalProperties": false,
+  "description": "`data` of `prediction.recorded`: the decision record of one scoring request (any model kind).\n\nThe unit is the request: a bulk request is one record with `prediction_count` and an\n`outcomes` histogram. Never the input features, free text, or an individual's identity.",
+  "properties": {
+    "ai_system_id": {
+      "maxLength": 64,
+      "title": "Ai System Id",
+      "type": "string"
+    },
+    "explanation_available": {
+      "title": "Explanation Available",
+      "type": "boolean"
+    },
+    "model_name": {
+      "maxLength": 128,
+      "title": "Model Name",
+      "type": "string"
+    },
+    "model_variant": {
+      "default": "primary",
+      "enum": [
+        "primary",
+        "challenger"
+      ],
+      "title": "Model Variant",
+      "type": "string"
+    },
+    "model_version": {
+      "description": "Content-derived id of the stored artifacts",
+      "maxLength": 64,
+      "title": "Model Version",
+      "type": "string"
+    },
+    "org_id": {
+      "maxLength": 64,
+      "title": "Org Id",
+      "type": "string"
+    },
+    "outcomes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Outcomes",
+      "type": "object"
+    },
+    "prediction_count": {
+      "minimum": 0,
+      "title": "Prediction Count",
+      "type": "integer"
+    },
+    "scenario_slug": {
+      "maxLength": 64,
+      "title": "Scenario Slug",
+      "type": "string"
+    },
+    "score_max": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score Max"
+    },
+    "score_min": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Score Min"
+    },
+    "task_type": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task Type"
+    },
+    "trace_id": {
+      "pattern": "^[0-9a-f]{32}$",
+      "title": "Trace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scenario_slug",
+    "ai_system_id",
+    "org_id",
+    "model_name",
+    "model_version",
+    "prediction_count",
+    "explanation_available",
+    "trace_id"
+  ],
+  "title": "PredictionRecordData",
+  "type": "object"
+}

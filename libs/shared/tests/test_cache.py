@@ -109,3 +109,10 @@ def test_incr_by_float_applies_ttl_only_on_first_call(cache: TenantCache) -> Non
 
     assert ttl_after_first > 0
     assert ttl_after_second > 0
+
+
+def test_key_exposes_the_tenant_prefixed_key_and_keeps_its_guard() -> None:
+    cache = TenantCache(_client=fakeredis.FakeStrictRedis(decode_responses=True))
+    assert cache.key("org-1", "policy:churn") == "tenant-org-1:policy:churn"
+    with pytest.raises(ValueError):
+        cache.key("org:1", "x")

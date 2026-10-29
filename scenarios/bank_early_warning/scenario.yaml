@@ -26,6 +26,23 @@ credits:
   url: "https://api.fdic.gov/banks/docs/"
   note: "2008-12-31 call reports + FDIC failed-bank list 2009-2010; one row per bank"
 
+# Illustrative governance declaration (owner to confirm): feeds the AI-system inventory
+# only — see docs/governance/README.md. Never an automatic legal classification.
+governance:
+  intended_purpose: Rank US banks by distress risk from public FDIC call-report ratios for supervisory triage.
+  owner: Framework demo team
+  ai_act:
+    role: provider
+    risk_category: minimal
+  human_oversight:
+    mode: review
+    description: Scores prioritise a watchlist; a supervisor decides any action.
+  data:
+    personal_data: false
+    special_categories: false
+  limitations:
+    - Public aggregate data only; no forward-looking supervisory information.
+
 chat:
   context: >
     An early-warning system for a bank-resolution authority / banking supervisor. A
