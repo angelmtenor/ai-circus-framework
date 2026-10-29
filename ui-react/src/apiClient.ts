@@ -1,3 +1,4 @@
+import type { DataProductConfig } from "./dataApi";
 /**
  * Thin fetch-based clients for the backend services.
  */
@@ -583,6 +584,9 @@ export type ScenarioSummary = {
   ui_extras?: UiExtras | null;
   // deep_learning only — see DeepLearningConfig above.
   deep_learning?: DeepLearningConfig | null;
+  // data_product only — sources, datasets, metrics, records, access roles and simulator
+  // actions driving DataProductView (see dataApi.ts / ai_circus_shared.data_product).
+  data_product?: DataProductConfig | null;
   // tabular_ml only — a guided Tutorial tab (see TutorialView.tsx).
   tutorial?: TutorialConfig | null;
   // tabular_ml with a text feature only — an LLM rubric check over a description of

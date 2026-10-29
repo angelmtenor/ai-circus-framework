@@ -55,6 +55,11 @@ const CATEGORIES: Category[] = [
     match: (s) => s.kind === "assisted_form",
   },
   {
+    key: "data_platform",
+    label: "Data Platform",
+    match: (s) => s.kind === "data_product",
+  },
+  {
     key: "specific_agents",
     label: "Specific Agents",
     match: (s) => s.kind === "agent",
@@ -84,6 +89,7 @@ function mlSubtype(scenario: ScenarioSummary): string | null {
   if (scenario.kind === "tabular_ml_timeseries") return "Time Series";
   if (scenario.kind === "tabular_ml") return scenario.task_type === "regression" ? "Regression" : "Classification";
   if (scenario.kind === "deep_learning") return scenario.deep_learning?.modality === "image" ? "Computer Vision" : "NLP";
+  if (scenario.kind === "data_product") return "Lakehouse · marts · governance";
   return null;
 }
 
@@ -118,8 +124,9 @@ const TECHNIQUES: Technique[] = [
       s.kind === "conversational_rag" || s.kind === "assisted_form" || !!s.document_tool || !!s.rubric_check,
   },
   { key: "graph", label: "Graphs & networks", match: (s) => GRAPH_EXTRAS.has(s.ui_extras?.kind ?? "") },
+  { key: "data_platform", label: "Data engineering", match: (s) => s.kind === "data_product" },
   { key: "time_series", label: "Time series", match: (s) => s.kind === "tabular_ml_timeseries" },
-  { key: "custom_tab", label: "With a showcase tab", match: (s) => !!s.ui_extras || !!s.tutorial },
+  { key: "custom_tab", label: "With a showcase tab", match: (s) => !!s.ui_extras || !!s.tutorial || s.kind === "data_product" },
 ];
 
 // Case- and accent-insensitive ("prestacion" finds "prestación").

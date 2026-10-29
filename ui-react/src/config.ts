@@ -30,6 +30,12 @@ export const config = {
   formAgentUrl: import.meta.env.VITE_FORM_AGENT_URL ?? "http://form-agent.localhost",
   voiceUrl: import.meta.env.VITE_VOICE_URL ?? "http://agui-voice.localhost",
   dataPlatformManagerUrl: import.meta.env.VITE_DATA_PLATFORM_MANAGER_URL ?? "http://data-platform-manager.localhost",
+  // Optional Data Platform tiers (k8s/data-platform/) — data_product scenarios only. The
+  // three tool UIs are linked from the data product's workspace when their tier is up.
+  dataApiUrl: import.meta.env.VITE_DATA_API_URL ?? "http://data-api.localhost",
+  dagsterUrl: import.meta.env.VITE_DAGSTER_URL ?? "http://dagster.localhost",
+  supersetUrl: import.meta.env.VITE_SUPERSET_URL ?? "http://superset.localhost",
+  openMetadataUrl: import.meta.env.VITE_OPENMETADATA_URL ?? "http://openmetadata.localhost",
   keycloakIssuer: import.meta.env.VITE_KEYCLOAK_ISSUER ?? "http://keycloak.localhost/realms/ai-circus",
   keycloakClientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "",
   keycloakAudience: import.meta.env.VITE_KEYCLOAK_AUDIENCE ?? "https://api.ai-circus-framework.local",
