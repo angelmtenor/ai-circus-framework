@@ -569,7 +569,7 @@ services:
       context: .
       dockerfile: services/platform-registry/Dockerfile
     environment:
-      <<: [*service-auth-env, *postgres-env]
+      <<: [*service-auth-env, *postgres-env, *object-store-env]
       LOG_LEVEL: INFO
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       # Governance (docs/governance/): all off unless set in .env.
@@ -577,6 +577,7 @@ services:
       GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
       GOVERNANCE_AUDIT_ENABLED: ${GOVERNANCE_AUDIT_ENABLED:-false}
       GOVERNANCE_CATALOG_ENABLED: ${GOVERNANCE_CATALOG_ENABLED:-false}
+      GOVERNANCE_INVENTORY_ENABLED: ${GOVERNANCE_INVENTORY_ENABLED:-false}
       GOVERNANCE_WEBHOOK_URL: ${GOVERNANCE_WEBHOOK_URL:-}
       GOVERNANCE_WEBHOOK_SECRET: ${GOVERNANCE_WEBHOOK_SECRET:-}
       # Service-account client used by this service's sync tooling (see naming
