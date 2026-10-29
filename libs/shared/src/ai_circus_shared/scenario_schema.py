@@ -14,6 +14,7 @@ import yaml
 from pydantic import BaseModel, Field, model_validator
 
 from ai_circus_shared.business_rules import BusinessRules, DecisionPolicy
+from ai_circus_shared.data_product import DataProductConfig
 
 
 class NumericFeatureUI(BaseModel):
@@ -1495,6 +1496,15 @@ class DeepLearningServices(BaseModel):
     inference: str
 
 
+class DataProductServices(BaseModel):
+    """Names of the services that implement a `data_product` scenario."""
+
+    ingest: str
+    transform: str
+    api: str
+    assistant: str
+
+
 class DocumentChunking(BaseModel):
     """Chunking config for a `conversational_rag` scenario."""
 
@@ -1857,7 +1867,7 @@ class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
     slug: str
-    kind: Literal["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"]
+    kind: Literal["tabular_ml", "conversational_rag", "assisted_form", "deep_learning", "data_product"]
     title: str
     description: str
     role_required: str
@@ -1872,6 +1882,9 @@ class ScenarioDefinition(BaseModel):
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
     deep_learning: DeepLearningConfig | None = None
+    # data_product only — sources, contracts, transforms, serving and access of a governed
+    # data product (see ai_circus_shared.data_product and docs/data-platform/).
+    data_product: DataProductConfig | None = None
     # tabular_ml / deep_learning — opts this scenario into one of ui-react's generic 5th
     # workspace tabs (see UiExtras above); conversational_rag — the knowledge-graph panel.
     # None (the common case) means the plain workspace every scenario of that kind gets.
@@ -1880,7 +1893,7 @@ class ScenarioDefinition(BaseModel):
     tutorial: TutorialConfig | None = None
     # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
     rubric_check: RubricCheckConfig | None = None
-    services: TabularServices | RagServices | FormServices | DeepLearningServices
+    services: TabularServices | RagServices | FormServices | DeepLearningServices | DataProductServices
 
     @model_validator(mode="after")
     def _deep_learning_block_matches_kind(self) -> ScenarioDefinition:
@@ -1892,8 +1905,17 @@ class ScenarioDefinition(BaseModel):
             raise ValueError("kind='deep_learning' requires a `deep_learning` block (and only that kind may set one).")
         if is_dl and not isinstance(self.services, DeepLearningServices):
             raise ValueError("kind='deep_learning' requires services: {training, inference}.")
+        is_data = self.kind == "data_product"
+        if is_data != (self.data_product is not None):
+            raise ValueError("kind='data_product' requires a `data_product` block (and only that kind may set one).")
+        if is_data and not isinstance(self.services, DataProductServices):
+            raise ValueError("kind='data_product' requires services: {ingest, transform, api, assistant}.")
+        if is_data and (self.dataset is not None or self.model is not None or self.form is not None):
+            raise ValueError("kind='data_product' does not take dataset/model/form blocks.")
         if self.ui_extras is None:
             return self
+        if is_data:
+            raise ValueError("ui_extras is not available for kind='data_product' (DataProductView is its renderer).")
         allowed = {"deep_learning": _DEEP_LEARNING_UI_EXTRAS, "conversational_rag": _RAG_UI_EXTRAS}.get(
             self.kind, _TABULAR_UI_EXTRAS
         )
@@ -2419,18 +2441,18 @@ class ScenarioDefinition(BaseModel):
         """
         documents = self.documents
         tool = documents.tool if documents is not None else None
-        if self.kind != "tabular_ml":
+        if self.kind not in ("tabular_ml", "data_product"):
             if tool is not None:
-                raise ValueError("documents.tool is only available for kind='tabular_ml' scenarios.")
+                raise ValueError("documents.tool is only available for kind='tabular_ml'/'data_product' scenarios.")
             return self
         if documents is None:
             if self.vector_store is not None:
                 raise ValueError("vector_store is set but documents is missing.")
             return self
         if tool is None or self.vector_store is None:
-            raise ValueError("A tabular_ml scenario's documents need documents.tool and a vector_store.")
+            raise ValueError(f"A {self.kind} scenario's documents need documents.tool and a vector_store.")
         if documents.knowledge_graph is not None:
-            raise ValueError("documents.knowledge_graph is not available for kind='tabular_ml' scenarios.")
+            raise ValueError(f"documents.knowledge_graph is not available for kind={self.kind!r} scenarios.")
         if tool.name in TABULAR_ASSISTANT_TOOL_NAMES:
             raise ValueError(f"documents.tool.name {tool.name!r} clashes with a built-in assistant tool.")
         return self

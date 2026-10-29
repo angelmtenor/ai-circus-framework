@@ -187,6 +187,13 @@ spec:
         # Read-only /ping probe for the admin platform-status dashboard
         # (data_platform_manager.core.platform_status) — nothing else.
         - podSelector: {matchLabels: {app: data-platform-manager}}
+        # Data Platform analytics tier: the data products' marts live in their own
+        # databases on this instance (docs/adr/0005).
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [data-transform, data-api, dagster, superset, openmetadata-ingestion]
       ports:
         - {protocol: TCP, port: 8123}
         - {protocol: TCP, port: 9000}

@@ -70,10 +70,18 @@ class Identity:
     subject: str
     org_id: str | None
     roles: frozenset[str]
+    # Other string / list-of-string claims of the token (e.g. a user attribute mapped as
+    # `stores: ["S012"]`) — what a data product's row filter reads (ai_circus_shared.data_policy).
+    # A tuple of pairs, not a dict, so Identity stays hashable.
+    attributes: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     def has_role(self, role: str) -> bool:
         """Return whether the caller's token carries the given role."""
         return role in self.roles
+
+    def attribute(self, name: str) -> tuple[str, ...]:
+        """The values of one token claim (empty when the token doesn't carry it)."""
+        return next((values for key, values in self.attributes if key == name), ())
 
 
 class TokenValidationError(Exception):
@@ -118,7 +126,25 @@ def validate_token(token: str, *, issuer: str, audience: str, jwks_url: str) -> 
         raise TokenValidationError(str(exc)) from exc
 
     roles = frozenset(claims.get(REALM_ACCESS_CLAIM, {}).get("roles", []) or [])
-    return Identity(subject=claims["sub"], org_id=_extract_org_id(claims), roles=roles)
+    return Identity(
+        subject=claims["sub"], org_id=_extract_org_id(claims), roles=roles, attributes=_string_claims(claims)
+    )
+
+
+_STANDARD_CLAIMS = frozenset({"iss", "sub", "aud", "exp", "iat", "nbf", "jti", "azp", "typ", "sid", "scope", "acr"})
+
+
+def _string_claims(claims: dict) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Non-standard claims whose value is a string or a list of strings (bounded)."""
+    found = []
+    for name, value in claims.items():
+        if name in _STANDARD_CLAIMS or not isinstance(name, str):
+            continue
+        if isinstance(value, str):
+            found.append((name, (value[:200],)))
+        elif isinstance(value, list) and value and all(isinstance(v, str) for v in value):
+            found.append((name, tuple(v[:200] for v in value[:100])))
+    return tuple(sorted(found))[:50]
 
 
 class AuthSettings(Protocol):

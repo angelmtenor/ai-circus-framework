@@ -95,6 +95,12 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv-cache,sharing=locked \\
 FROM python:${PYTHON_VERSION}-slim AS runtime
 WORKDIR /app
 
+# Pull the Debian security fixes published since the base image was built, and drop the
+# base image's own pip: nothing installs at runtime, and its vendored urllib3/msgpack are
+# what CI's Trivy scan (HIGH/CRITICAL, fixed-only) flags.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/* \\
+    && python -m pip uninstall -y --root-user-action=ignore pip
+
 # UID 1000 is what every k8s manifest's runAsUser pins. The code/venv below stay
 # root-owned (read-only to the service): only the home directory (caches) is writable.
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app
@@ -112,6 +118,15 @@ USER app
 
 CMD ["python", "-m", "$PACKAGE_NAME.app"]
 EOF
+
+# The template's pre-commit config is written for a one-project repo: run from here it
+# would lint and rewrite every file of the monorepo. Scope it to this service, the same
+# shape as every existing services/*/.pre-commit-config.yaml.
+sed -e "s|^repos:|files: ^services/$SERVICE_NAME/\nrepos:|" \
+    -e "s|entry: uv run ruff|entry: uv run --project services/$SERVICE_NAME ruff|" \
+    -e "s|entry: uv run pyrefly check src|entry: uv run --project services/$SERVICE_NAME pyrefly check services/$SERVICE_NAME/src|" \
+    "$SERVICE_DIR/.pre-commit-config.yaml" > "$SERVICE_DIR/.pre-commit-config.yaml.tmp" \
+    && mv "$SERVICE_DIR/.pre-commit-config.yaml.tmp" "$SERVICE_DIR/.pre-commit-config.yaml"
 
 echo "✓ services/$SERVICE_NAME scaffolded — next: k8s/base manifest, docker-compose.yml entry, K3S_IMAGES,"
 echo "  platform_status.py row, k3s_generate_secrets.sh spec (see the new-service-scaffold skill)"

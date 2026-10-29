@@ -998,7 +998,7 @@ admin-only service, **`data-platform-manager`**, that exposes it —
 
 ```bash
 make data-platform-up      # docker compose --profile data-platform up -d kafka
-make k3s-data-platform-up  # kubectl apply -f k8s/data-platform/kafka.yaml (k3s target)
+make k3s-data-platform-up  # = make k3s-data-core-up (Kafka + the data product services, see below)
 ```
 
 `data-platform-manager` (gated on `ADMIN_API_KEY`, never a Keycloak end-user token) is reachable
@@ -1056,6 +1056,36 @@ table — repeat it and watch the snapshot count climb. Then run any query under
 & Query Federation** to see it joined live against `platform-registry`'s real tenant data.
 
 The roadmap panel above is the live source of truth for exactly what's built versus planned.
+
+### Data products — an open-source data platform (optional tiers)
+
+A fifth scenario kind, **`data_product`**, turns the platform into a governed data platform:
+events and files captured, landed raw, transformed as code into marts, and served through one
+governed API, dashboards, a metadata catalogue and the assistant — all open source, on the same
+k3s cluster, switched on tier by tier. The first data product is **Angel's Surf Co.**
+(`surf_retail`): a fictional chain of surf, SUP and kite shops — invented by the author, a surf
+enthusiast — with 24 shops on Europe's coasts, a web shop, an ERP and five years of history. On
+top of it: a fictional **web shop** with a recommender (association rules over every basket)
+whose orders travel the real pipeline, **Surf HQ** (five years of seasons and a live forecast
+board) and two **ML models** trained on gold feature marts (`surf_demand_forecast`,
+`surf_customer_propensity`) that the assistant can call. The services are generic — a new data
+product is a scenario folder (contracts, simulator, dbt project, dashboards), not code. Design and decisions: [docs/data-platform](docs/data-platform/README.md)
+and [docs/adr](docs/adr/README.md).
+
+| Tier | `make` target | What it adds |
+|---|---|---|
+| core | `k3s-data-core-up` | Kafka (a topic per tenant) · CDC · file landing + reconciliation · JSON Schema contracts + quarantine · bronze by key · Iceberg lake · dbt silver/gold + tests · `data-api` (metrics, records, governed SQL, lineage, live events) |
+| analytics | `k3s-data-analytics-up` | ClickHouse marts · Dagster (sensors on new bronze, asset checks, lineage) |
+| bi | `k3s-data-bi-up` | Apache Superset, dashboards as code with row-level security |
+| governance | `k3s-data-governance-up` | OpenMetadata: catalogue, contracts, end-to-end lineage, a Domain + Data Product |
+
+`make k3s-data-showcase` runs all four on a 16 GB laptop (AI-only pods scaled to 0);
+`make k3s-data-seed` generates the history through the real pipeline (five years; `k3s-data-seed-lite`
+loads one) and `make k3s-data-ml` trains the models on the feature marts once a transform has run. In the workspace: the
+**live flow** of every record (simulate sales, malformed receipts, legacy files with a missing
+receipt, ERP price changes), governed **dashboards**, **explore** (records with their processing
+trail, datasets, SQL, quarantine), **quality & lineage** — and *view as* a store manager to see
+every door (API, SQL, dashboards, the assistant) restricted to one store.
 
 ### Observability (admin-only)
 

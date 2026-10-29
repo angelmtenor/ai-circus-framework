@@ -1,0 +1,9 @@
+# Data Platform — core tier (docs/data-platform/, docs/adr/0001). Never part of k8s/base:
+# `make k3s-data-core-up` / `k3s-data-core-down`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - kafka.yaml
+  - data-ingest.yaml
+  - data-api.yaml
+  - data-transform.yaml

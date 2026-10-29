@@ -13,7 +13,17 @@ import type { DocumentTool } from "./apiClient";
 export type ChatLocale = "es" | "en";
 export type ChatScope = "all" | "documents";
 
-export type ProvenanceKey = "documents" | "rules" | "model" | "evaluation" | "data" | "chart" | "table" | "none";
+export type ProvenanceKey =
+  | "documents"
+  | "rules"
+  | "model"
+  | "evaluation"
+  | "metrics"
+  | "health"
+  | "data"
+  | "chart"
+  | "table"
+  | "none";
 export type Provenance = { keys: ProvenanceKey[]; sources: string[]; documentsEmpty: boolean };
 
 // Delimiters a retrieval tool's result wraps each excerpt in — rag-agent's retrieve_docs
@@ -22,6 +32,9 @@ export type Provenance = { keys: ProvenanceKey[]; sources: string[]; documentsEm
 // the older `[Source: file]` marker is still accepted for any agent that emits it.
 const SOURCE_TAG = /<(?:retrieved_document|catalog_entry)\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
 const RETRIEVAL_TOOLS = new Set(["retrieve_docs", "graph_search", "graph_path", "retrieve_catalog"]);
+// A data product's governed tools (assistant's core/data_tools.py): metrics, health, records/SQL.
+const METRIC_TOOLS = new Set(["query_metric", "list_metrics"]);
+const RECORD_TOOLS = new Set(["get_record", "search_records", "run_sql", "get_dataset_sample"]);
 // The synthetic answer ChatPanel writes for a frontend tool call (render_chart…).
 export const FRONTEND_TOOL_ANSWER = "Displayed to the user.";
 
@@ -32,6 +45,8 @@ export const CHAT_WORDS = {
     rules: "Reglas",
     model: "Modelo",
     evaluation: "Evaluación del modelo",
+    metrics: "Métricas gobernadas",
+    health: "Salud de los datos",
     data: "Datos (los del dashboard)",
     chart: "Gráfico",
     table: "Tabla",
@@ -48,6 +63,8 @@ export const CHAT_WORDS = {
     rules: "Rules",
     model: "Model",
     evaluation: "Model evaluation",
+    metrics: "Governed metrics",
+    health: "Data health",
     data: "Data (the dashboard's)",
     chart: "Chart",
     table: "Table",
@@ -65,6 +82,8 @@ export const PROVENANCE_ICONS: Record<ProvenanceKey, string> = {
   rules: "⚖️",
   model: "🧮",
   evaluation: "🎯",
+  metrics: "📐",
+  health: "🩺",
   data: "📊",
   chart: "📈",
   table: "📋",
@@ -125,12 +144,14 @@ function provenanceOf(
       if (result.includes('"rules"')) keys.add("rules");
       keys.add("model");
     } else if (name === "get_predictions_vs_actuals") keys.add("evaluation");
-    else if (name === "get_dataset_sample") keys.add("data");
+    else if (METRIC_TOOLS.has(name)) keys.add("metrics");
+    else if (name === "data_health") keys.add("health");
+    else if (RECORD_TOOLS.has(name)) keys.add("data");
     else if (name === "render_chart") keys.add("chart");
     else if (name === "render_table") keys.add("table");
   }
   if (keys.size === 0) keys.add("none");
-  const order: ProvenanceKey[] = ["documents", "rules", "model", "evaluation", "data", "chart", "table", "none"];
+  const order: ProvenanceKey[] = ["documents", "rules", "model", "evaluation", "metrics", "health", "data", "chart", "table", "none"];
   return {
     keys: order.filter((k) => keys.has(k)),
     sources: [...sources],

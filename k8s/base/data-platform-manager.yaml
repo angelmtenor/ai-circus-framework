@@ -48,7 +48,8 @@ rules:
   # (postgres, keycloak, platform-registry, this service, ...) can never be scaled from here.
   - apiGroups: ["apps"]
     resources: ["deployments/scale", "statefulsets/scale"]
-    resourceNames: ["agui-voice", "mlflow", "clickhouse", "langfuse-web", "langfuse-worker", "dl-inference", "kafka"]
+    resourceNames: ["agui-voice", "mlflow", "clickhouse", "langfuse-web", "langfuse-worker", "dl-inference", "kafka",
+                    "dagster", "superset", "openmetadata", "om-search"]
     verbs: ["get", "patch", "update"]
   # The Monitor tab's per-pod CPU/memory (metrics-server). Read-only.
   - apiGroups: ["metrics.k8s.io"]

@@ -1,0 +1,108 @@
+# Board-purchase propensity of Angel's Surf Co. loyalty customers (fictional — see
+# scenarios/surf_retail): trained on the data product's gold feature mart
+# `ml_customer_features`, exported here by data-transform after every successful build
+# (data_product.ml_exports). Customers are pseudonymised keys: no name or card number ever
+# reaches this model.
+
+slug: surf_customer_propensity
+kind: tabular_ml
+title: "Angel's Surf Co. — Board Purchase Propensity"
+description: >
+  Which loyalty customers of Angel's Surf Co. (fictional) are about to buy a new board? A
+  LightGBM classifier on each rider's purchase history — how recently and how often they shop,
+  what they spend on, how long since their last board — predicts a board purchase in the next
+  90 days, explained with SHAP. Customers are pseudonymised keys only.
+role_required: "scenario:surf_customer_propensity"
+industry: retail
+icon: "🏄‍♀️"
+
+credits:
+  source: "Synthetic — the surf_retail data product's gold mart ml_customer_features"
+  url: "https://github.com/angelmtenor/ai-circus-framework/tree/develop/scenarios/surf_retail"
+  note: >
+    Fictional: Angel's Surf Co. was invented by the framework's author, Ángel Martínez Tenor,
+    a surf enthusiast; every customer and sale behind this model is simulated.
+
+chat:
+  context: >
+    The board-purchase propensity model of Angel's Surf Co., a fictional chain of surf, SUP and
+    kite shops: from a loyalty customer's pseudonymised purchase history it predicts the chance
+    they buy a board in the next 90 days. Explain with feature contributions; never try to
+    identify a customer — the key is a pseudonym by design.
+  sample_questions:
+    - "What makes a customer likely to buy a new board soon?"
+    - "Does buying accessories predict a board purchase?"
+    - "How well does the model separate buyers from non-buyers?"
+    - "Why would a recent customer still score low?"
+
+dataset:
+  bucket: "scenario-surf-propensity"
+  raw_object: "raw/surf_customers.csv"
+  seed_file: "sample_data/surf_customers.csv"
+  index_col: "customer_key"
+  target: "buys_board_next_90d"
+  feature_columns:
+    - recency_days
+    - tenure_days
+    - baskets
+    - spend_eur
+    - boards_bought
+    - accessory_eur
+    - surf_share
+    - sup_share
+    - kite_share
+    - online_share
+    - days_since_last_board
+  feature_schema:
+    recency_days:
+      {type: numeric, label: "Days since last visit", min: 0, max: 1900, default: 45, step: 1,
+       info: "Days between the customer's last basket and the snapshot."}
+    tenure_days:
+      {type: numeric, label: "Days as a customer", min: 0, max: 1900, default: 600, step: 1,
+       info: "Days since the customer's first basket."}
+    baskets:
+      {type: numeric, label: "Baskets", min: 1, max: 200, default: 6, step: 1,
+       info: "Receipts and online orders with the loyalty card."}
+    spend_eur:
+      {type: numeric, label: "Total spend (€)", min: 0, max: 30000, default: 900, step: 10,
+       info: "Net spend before the snapshot, tax included."}
+    boards_bought:
+      {type: numeric, label: "Boards bought", min: 0, max: 30, default: 1, step: 1,
+       info: "Surfboards, SUP boards, kites and kite boards bought."}
+    accessory_eur:
+      {type: numeric, label: "Accessory spend (€)", min: 0, max: 5000, default: 120, step: 5,
+       info: "Spend on leashes, fins, wax, bags, paddles…"}
+    surf_share:
+      {type: numeric, label: "Surf share of spend", min: 0, max: 1, default: 0.6, step: 0.01,
+       info: "Share of spend on surfboards."}
+    sup_share:
+      {type: numeric, label: "SUP share of spend", min: 0, max: 1, default: 0.1, step: 0.01,
+       info: "Share of spend on SUP boards."}
+    kite_share:
+      {type: numeric, label: "Kite share of spend", min: 0, max: 1, default: 0.1, step: 0.01,
+       info: "Share of spend on kite gear."}
+    online_share:
+      {type: numeric, label: "Online share of baskets", min: 0, max: 1, default: 0.3, step: 0.01,
+       info: "Share of baskets bought in the web shop."}
+    days_since_last_board:
+      {type: numeric, label: "Days since last board", min: 0, max: 3650, default: 500, step: 1,
+       info: "Days since the last board purchase (3650 = never bought one)."}
+  default_charts:
+    - {type: histogram, x: recency_days, color_by: buys_board_next_90d}
+    - {type: box, x: buys_board_next_90d, y: days_since_last_board, color_by: buys_board_next_90d}
+    - {type: scatter, x: baskets, y: spend_eur, color_by: buys_board_next_90d}
+
+model:
+  task_type: classification
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_label: "Buys a board in the next 90 days"
+  target_description: "Whether the loyalty customer bought a surfboard, SUP board, kite or kite board in the 90 days after the snapshot."
+  target_value_labels: {"0": "No board", "1": "Buys a board"}
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

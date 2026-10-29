@@ -81,7 +81,7 @@ def client() -> Generator[TestClient]:
     app.dependency_overrides[resolve_identity] = lambda: Identity(
         subject="user-1", org_id="org-1", roles=frozenset({"scenario:churn"})
     )
-    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn")
+    app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn", kind="tabular_ml")
     app.dependency_overrides[_prompt_cache] = lambda: SimpleNamespace(get=lambda _org_id, _slug: "system prompt")
     app.dependency_overrides[_llm_model] = lambda: "gpt-4o-mini"
     app.dependency_overrides[_llm_display] = lambda: ("gpt-4o-mini", "OpenAI", True)
@@ -232,7 +232,7 @@ async def test_agui_endpoint_builds_prediction_tools_scoped_to_the_request(monke
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed", documents=None),
+        definition=SimpleNamespace(slug="motor_speed", kind="tabular_ml", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
@@ -280,7 +280,7 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed", documents=None),
+        definition=SimpleNamespace(slug="motor_speed", kind="tabular_ml", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=FakeLlm(),
         model_name="gemini-flash",
@@ -323,7 +323,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed", documents=None),
+        definition=SimpleNamespace(slug="motor_speed", kind="tabular_ml", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
@@ -371,7 +371,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed", documents=None),
+        definition=SimpleNamespace(slug="motor_speed", kind="tabular_ml", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",
@@ -514,7 +514,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         ),
         request=_fake_http_request("Bearer tok-1"),
         identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:motor_speed"})),
-        definition=SimpleNamespace(slug="motor_speed", documents=None),
+        definition=SimpleNamespace(slug="motor_speed", kind="tabular_ml", documents=None),
         prompt_cache=SimpleNamespace(get=lambda _org_id, _slug: "system prompt"),
         llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
         model_name="gemini-flash",

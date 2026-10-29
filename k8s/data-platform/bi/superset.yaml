@@ -1,0 +1,203 @@
+# Data Platform bi tier — Apache Superset (docs/adr/0009): dashboards as code, created through
+# its REST API by the bi-sync Job from each data product's `bi/dashboards.yaml`. Metadata in
+# Postgres database `superset`, cache in Valkey (db 3). Admin login `admin` with
+# SUPERSET_ADMIN_PASSWORD (generated into .env by `make k3s-secrets`), at superset.localhost.
+# Image: infra/superset/Dockerfile (official image + Postgres/ClickHouse drivers).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: superset-config
+  namespace: ai-circus
+data:
+  # Mirrors infra/superset/superset_config.py — keep the two in sync by hand.
+  superset_config.py: |
+    """Superset configuration for the Data Platform's bi tier — every secret from the environment.
+
+    Mirrors the ConfigMap in k8s/data-platform/bi/superset.yaml (keep the two in sync by hand).
+    """
+
+    import os
+
+    SECRET_KEY = os.environ["SUPERSET_SECRET_KEY"]
+    SQLALCHEMY_DATABASE_URI = (
+        f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}"
+        f"@{os.environ.get('POSTGRES_HOST', 'postgres')}:5432/superset"
+    )
+    _CACHE_URL = os.environ.get("SUPERSET_CACHE_URL", "redis://valkey:6379/3")
+    CACHE_CONFIG = {"CACHE_TYPE": "RedisCache", "CACHE_DEFAULT_TIMEOUT": 300, "CACHE_KEY_PREFIX": "superset_",
+                    "CACHE_REDIS_URL": _CACHE_URL}
+    DATA_CACHE_CONFIG = {**CACHE_CONFIG, "CACHE_KEY_PREFIX": "superset_data_", "CACHE_DEFAULT_TIMEOUT": 60}
+    FEATURE_FLAGS = {"DASHBOARD_RBAC": True, "ALERT_REPORTS": False}
+    FAB_ADD_SECURITY_API = True  # roles/users through the REST API (the bi-sync Job)
+    ROW_LIMIT = 10_000
+    SQL_MAX_ROW = 10_000
+    TALISMAN_ENABLED = False  # served over plain http behind Traefik on a laptop
+    WTF_CSRF_ENABLED = True
+    SUPERSET_WEBSERVER_TIMEOUT = 60
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: superset
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: superset}
+  template:
+    metadata:
+      labels: {app: superset}
+    spec:
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # the image's `superset` user
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: create-database
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["python", "-m", "data_transform.app", "create-database", "superset"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-transform-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+        - name: migrate  # schema upgrade, admin user, roles — idempotent
+          image: ai-circus/superset:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - >-
+              superset db upgrade &&
+              (superset fab create-admin --username admin --firstname Platform --lastname Admin
+              --email admin@example.org --password "$SUPERSET_ADMIN_PASSWORD" || true) &&
+              superset init
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom: &superset-env
+            - secretRef: {name: superset-secrets}
+          env: &superset-vars
+            - {name: POSTGRES_HOST, value: postgres}
+            - {name: SUPERSET_CACHE_URL, value: "redis://valkey:6379/3"}
+            - {name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py}
+          volumeMounts: &superset-mounts
+            - {name: config, mountPath: /app/pythonpath/superset_config.py, subPath: superset_config.py, readOnly: true}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 768Mi}
+      containers:
+        - name: superset
+          image: ai-circus/superset:local
+          imagePullPolicy: Never
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom: *superset-env
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+            - {name: SUPERSET_CACHE_URL, value: "redis://valkey:6379/3"}
+            - {name: SUPERSET_CONFIG_PATH, value: /app/pythonpath/superset_config.py}
+            # One gunicorn worker with threads: a laptop demo, not a production server.
+            - {name: SERVER_WORKER_AMOUNT, value: "1"}
+            - {name: SERVER_THREADS_AMOUNT, value: "8"}
+          ports:
+            - {containerPort: 8088}
+          volumeMounts: *superset-mounts
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+            limits: {memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /health, port: 8088}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 100
+          readinessProbe:
+            httpGet: {path: /health, port: 8088}
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: 8088}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+      volumes:
+        - name: config
+          configMap: {name: superset-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: superset
+  namespace: ai-circus
+spec:
+  selector: {app: superset}
+  ports:
+    - {port: 8088, targetPort: 8088}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: superset
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`superset.localhost`)
+      kind: Rule
+      services:
+        - {name: superset, port: 8088}
+---
+# Dashboards as code: (re)create every data product's Superset objects. Re-run any time with
+# `make k3s-data-bi-sync` (it is idempotent by name).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: superset-bi-sync
+  namespace: ai-circus
+spec:
+  backoffLimit: 6  # Superset may still be starting
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels: {app: data-transform}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: bi-sync
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["python", "-m", "data_transform.bi_sync"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-transform-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+            - {name: HOME, value: /tmp}
+            - {name: SUPERSET_URL, value: "http://superset:8088"}
+            # Charts read the marts on ClickHouse when the analytics tier has built them there
+            # (bi-sync checks), else on Postgres.
+            - {name: CLICKHOUSE_HOST, value: clickhouse}
+            - {name: CLICKHOUSE_USER, value: clickhouse}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 128Mi}
+            limits: {memory: 384Mi}
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}

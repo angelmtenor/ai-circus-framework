@@ -1,0 +1,113 @@
+# Weekly demand forecast of Angel's Surf Co. (fictional — see scenarios/surf_retail): trained on
+# the data product's gold feature mart `ml_demand_features`, which data-transform exports here
+# as this scenario's raw dataset after every successful build (data_product.ml_exports). The
+# committed sample is a slice of that export, so the scenario also runs without the data tier.
+
+slug: surf_demand_forecast
+kind: tabular_ml
+title: "Angel's Surf Co. — Weekly Demand Forecast"
+description: >
+  How many surfboards, SUP and kite gear will each shop of Angel's Surf Co. (fictional) sell
+  next week? A LightGBM regression trained on five years of weekly sales from the surf_retail
+  data platform: the shop, its coast and size, the season, recent weeks and the same week last
+  year — explained with SHAP, and the forecast the shop's stock planning reads.
+role_required: "scenario:surf_demand_forecast"
+industry: retail
+icon: "🌊"
+
+credits:
+  source: "Synthetic — the surf_retail data product's gold mart ml_demand_features"
+  url: "https://github.com/angelmtenor/ai-circus-framework/tree/develop/scenarios/surf_retail"
+  note: >
+    Fictional: Angel's Surf Co. was invented by the framework's author, Ángel Martínez Tenor,
+    a surf enthusiast; every sale behind this model is simulated.
+
+chat:
+  context: >
+    The weekly demand forecast of Angel's Surf Co., a fictional chain of surf, SUP and kite
+    shops on Europe's coasts: it predicts the units a shop will sell next week for one rider
+    group (surf, SUP, kite or accessories) from the shop's profile, the season and its recent
+    weeks. Explain forecasts with the model's feature contributions and say when the season,
+    rather than recent sales, drives a number.
+  sample_questions:
+    - "What drives next week's SUP sales the most?"
+    - "How accurate is the forecast, in units per week?"
+    - "Why does a kite shop sell more in spring?"
+    - "How much does the same week last year matter compared to last week?"
+
+dataset:
+  bucket: "scenario-surf-demand"
+  raw_object: "raw/surf_demand_weekly.csv"
+  seed_file: "sample_data/surf_demand_weekly.csv"
+  index_col: "row_id"
+  target: "units_next_week"
+  display_columns: [week]
+  feature_columns:
+    - store_id
+    - rider_group
+    - country
+    - spot
+    - store_size
+    - next_week_of_year
+    - next_month
+    - store_age_weeks
+    - units_this_week
+    - units_last_week
+    - units_4w_avg
+    - units_next_week_last_year
+  feature_schema:
+    store_id:
+      {type: categorical, label: "Shop", options: [S001, S002, S003, S004, S005, S006, S007, S008, S009, S010, S011, S012, S013, S014, S015, S016, S017, S018, S019, S020, S021, S022, S023, S024, WEB], default: S001,
+       info: "The shop (WEB = the web shop's home deliveries)."}
+    rider_group:
+      {type: categorical, label: "Rider group", options: [surf, sup, kite, accessory], default: surf,
+       info: "What is being forecast: surfboards, SUP boards, kite gear or accessories."}
+    country:
+      {type: categorical, label: "Country", options: [Spain, France, Italy, Greece, Cyprus, Malta, Online], default: Spain,
+       info: "The shop's country."}
+    spot:
+      {type: categorical, label: "Coast", options: [atlantic, surf, kite, flat, online], default: kite,
+       info: "The water the shop serves: Atlantic surf, Mediterranean surf breaks, kite spots or flat-water bays."}
+    store_size:
+      {type: categorical, label: "Shop size", options: [S, M, L, online], default: L,
+       info: "Small, medium or large shop."}
+    next_week_of_year:
+      {type: numeric, label: "Week of the year", min: 1, max: 53, default: 27, step: 1,
+       info: "ISO week being forecast — the season."}
+    next_month:
+      {type: numeric, label: "Month", min: 1, max: 12, default: 7, step: 1,
+       info: "Month of the week being forecast."}
+    store_age_weeks:
+      {type: numeric, label: "Shop age (weeks)", min: 0, max: 520, default: 200, step: 1,
+       info: "Weeks since the shop opened — new shops ramp up."}
+    units_this_week:
+      {type: numeric, label: "Units this week", min: 0, max: 400, default: 20, step: 1,
+       info: "Units of this rider group sold this (complete) week."}
+    units_last_week:
+      {type: numeric, label: "Units last week", min: 0, max: 400, default: 18, step: 1,
+       info: "Units sold the week before."}
+    units_4w_avg:
+      {type: numeric, label: "4-week average", min: 0, max: 400, default: 19, step: 0.25,
+       info: "Average weekly units over the last four weeks."}
+    units_next_week_last_year:
+      {type: numeric, label: "Same week last year", min: 0, max: 400, default: 22, step: 1,
+       info: "Units sold in the forecast week, one year earlier (0 if the shop was not open)."}
+  default_charts:
+    - {type: box, x: rider_group, y: units_next_week, color_by: rider_group}
+    - {type: scatter, x: units_next_week_last_year, y: units_next_week, color_by: rider_group}
+    - {type: bar, x: next_month, y: units_next_week, agg: mean, color_by: rider_group}
+
+model:
+  task_type: regression
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "units"
+  target_label: "Units next week"
+  target_description: "Units of the rider group the shop sells in the coming week."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

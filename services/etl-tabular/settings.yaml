@@ -19,7 +19,7 @@ env_variables:
   - name: SCENARIOS
     description: "Comma-separated tabular_ml scenario slugs this run processes; empty/unset = every scenario"
     type: string
-    mandatory: true
+    mandatory: false
     secret: false
 
   - name: ORG_ID
@@ -66,11 +66,6 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "demo"
     OBJECT_STORE_ACCESS_KEY: "ai_circus"
-    # Empty = every tabular_ml scenario under SCENARIOS_DIR. Safe to default here:
-    # there's only one instance of this service now (see prediction/settings.yaml's
-    # "Consolidation mechanism" comment) — though a real env var override of this
-    # specific value would still be silently ignored while this default exists.
-    SCENARIOS: ""
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

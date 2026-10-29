@@ -1,0 +1,69 @@
+# Data Platform core tier — data-ingest: Kafka/landing/CDC → bronze, hot path, Iceberg lake
+# (services/data-ingest, docs/adr/0004). Internal only: no IngressRoute (data-api and the
+# admin Platform view reach it over Service DNS). Mirrors docker-compose.yml's data-ingest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-ingest
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}  # one consumer + one replication slot reader at a time
+  selector:
+    matchLabels: {app: data-ingest}
+  template:
+    metadata:
+      labels: {app: data-ingest}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: data-ingest
+          image: ai-circus/data-ingest:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-ingest-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+          volumeMounts:
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+          # Batches of 1,000 records, PyIceberg/Arrow appends of 10k rows, Kafka prefetch capped at 8 MB.
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {memory: 1Gi}  # a month of history per delivery + the lake buffer
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-ingest
+  namespace: ai-circus
+spec:
+  selector: {app: data-ingest}
+  ports:
+    - {port: 8000, targetPort: 8000}

@@ -1,0 +1,179 @@
+# Data Platform analytics tier — Dagster orchestrating every data product's dbt project on
+# Postgres and ClickHouse (services/data-transform's data_transform.dagster_defs, docs/adr/0006).
+# Webserver + daemon in one pod (sharing DAGSTER_HOME for compute logs); runs, events and
+# schedules live in Postgres database `dagster`. Admin-only UI at dagster.localhost (basic auth,
+# like the Keycloak/SeaweedFS consoles). While this tier is up, `make k3s-data-analytics-up`
+# suspends the core tier's dbt CronJob: Dagster's sensors build instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dagster-instance
+  namespace: ai-circus
+data:
+  dagster.yaml: |
+    storage:
+      postgres:
+        postgres_db:
+          username: {env: POSTGRES_USER}
+          password: {env: POSTGRES_PASSWORD}
+          hostname: postgres
+          db_name: dagster
+          port: 5432
+          # SQLAlchemy 2.1 maps a bare postgresql:// to psycopg 3, whose server-side binding
+          # rejects dagster-postgres' `NOTIFY run_events, %(id)s` — pin the driver it is written for.
+          scheme: postgresql+psycopg2
+    run_coordinator:
+      module: dagster.core.run_coordinator
+      class: QueuedRunCoordinator
+      config: {max_concurrent_runs: 1}
+    # A run whose worker died (OOMKilled, pod restart) would otherwise stay STARTED forever
+    # and — with max_concurrent_runs 1 — queue every later run behind it.
+    run_monitoring:
+      enabled: true
+      start_timeout_seconds: 180
+      # A run whose worker died (pod restart) would stay STARTED and block the queue forever.
+      max_runtime_seconds: 3600
+      max_resume_run_attempts: 0
+      poll_interval_seconds: 60
+    telemetry: {enabled: false}
+    nux: {enabled: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: dagster}
+  template:
+    metadata:
+      labels: {app: dagster}
+    spec:
+      automountServiceAccountToken: false
+      # No service-link env vars (SUPERSET_PORT=tcp://…): they clobber the tools' own
+      # settings of the same name.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: create-database  # creates database `dagster` once
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["python", "-m", "data_transform.app", "create-database", "dagster"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-transform-secrets}
+          env:
+            - {name: POSTGRES_HOST, value: postgres}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 256Mi}
+      containers:
+        - name: webserver
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-m", "data_transform.dagster_entry"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom: &dagster-env
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: data-transform-secrets}
+          env: &dagster-vars
+            - {name: POSTGRES_HOST, value: postgres}
+            - {name: DAGSTER_HOME, value: /dagster-home}
+            - {name: HOME, value: /tmp}
+            - {name: TRANSFORM_TARGETS, value: "postgres,clickhouse"}
+            - {name: CLICKHOUSE_HOST, value: clickhouse}
+            - {name: CLICKHOUSE_USER, value: clickhouse}
+            - {name: ARTIFACTS_DIR, value: /tmp/dbt}
+            - {name: DBT_LOG_PATH, value: /tmp/dbt/logs}  # the project dir is a read-only mount
+          ports:
+            - {containerPort: 3000}
+          volumeMounts: &dagster-mounts
+            - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
+            - {name: home, mountPath: /dagster-home}
+            - {name: instance, mountPath: /dagster-home/dagster.yaml, subPath: dagster.yaml, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 640Mi}
+          startupProbe:
+            httpGet: {path: /server_info, port: 3000}
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 80
+          readinessProbe:
+            httpGet: {path: /server_info, port: 3000}
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: {path: /server_info, port: 3000}
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+        - name: daemon  # sensors, schedules, and the run queue (runs execute here, dbt included)
+          image: ai-circus/data-transform:local
+          imagePullPolicy: Never
+          args: ["dagster-daemon", "run", "-m", "data_transform.dagster_entry"]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          envFrom: *dagster-env
+          env: *dagster-vars
+          volumeMounts: *dagster-mounts
+          # The daemon + a run worker (each loading the code location: dagster + dbt + the
+          # manifests) + the dbt subprocess itself — OOMKilled at 1280Mi with a step subprocess.
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+            limits: {memory: 1536Mi}
+          startupProbe:
+            exec: {command: ["dagster-daemon", "liveness-check"]}
+            periodSeconds: 10
+            timeoutSeconds: 20
+            failureThreshold: 30
+          livenessProbe:
+            exec: {command: ["dagster-daemon", "liveness-check"]}
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            exec: {command: ["dagster-daemon", "liveness-check"]}
+            periodSeconds: 60
+            timeoutSeconds: 30
+      volumes:
+        - name: scenarios
+          hostPath: {path: /scenarios, type: Directory}
+        - name: home
+          emptyDir: {sizeLimit: 512Mi}
+        - name: tmp
+          emptyDir: {sizeLimit: 512Mi}
+        - name: instance
+          configMap: {name: dagster-instance}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dagster
+  namespace: ai-circus
+spec:
+  selector: {app: dagster}
+  ports:
+    - {port: 3000, targetPort: 3000}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dagster
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`dagster.localhost`)
+      kind: Rule
+      middlewares:
+        - {name: admin-basicauth}
+      services:
+        - {name: dagster, port: 3000}

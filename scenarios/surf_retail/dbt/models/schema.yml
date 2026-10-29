@@ -1,0 +1,101 @@
+version: 2
+
+models:
+  - name: stg_receipts
+    description: "One row per store receipt (streamed or from a legacy daily file), loyalty id pseudonymised."
+    columns:
+      - name: receipt_id
+        tests: [not_null]
+      - name: store_id
+        tests: [not_null]
+      - name: customer_key
+        description: "HMAC-SHA256 of the loyalty id (no direct identifier)."
+  - name: stg_web_orders
+    description: "One row per online order, its latest status version."
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [paid, picked, shipped, ready_for_collection, delivered, collected, returned, cancelled]
+      - name: fulfilment
+        tests:
+          - accepted_values:
+              arguments:
+                values: [click_collect, home_delivery]
+  - name: dim_store
+    columns:
+      - name: store_id
+        tests: [not_null]
+  - name: dim_product
+    description: "Products as SCD2: one row per version captured by CDC from the ERP."
+    columns:
+      - name: product_version_key
+        tests: [unique, not_null]
+  - name: dim_customer
+    description: "Loyalty customers keyed by pseudonym — no names or e-mails."
+  - name: fct_sales_line
+    description: "One sold line across channels with net, tax-free net, cost and margin."
+    columns:
+      - name: sales_line_id
+        tests: [unique, not_null]
+      - name: channel
+        tests:
+          - accepted_values:
+              arguments:
+                values: [store, online]
+      - name: store_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_store')
+                field: store_id
+      - name: qty
+        tests: [not_null]
+  - name: mart_sales_daily
+    description: "Revenue, units, receipts, basket and margin per day × store × channel."
+  - name: mart_sales_hourly
+    description: "Sales per hour × store × channel."
+  - name: mart_top_products
+    description: "Units and revenue per week × region × product."
+  - name: mart_promo_effect
+    description: "Promoted lines per promotion × day × store, with the pre-promotion baseline."
+  - name: mart_omnichannel
+    description: "Click & collect and home delivery orders per day × store."
+  - name: mart_returns
+    description: "Completed and returned online orders per week × fulfilment × reason."
+  - name: mart_category_weekly
+    description: "Units, revenue and margin per week × shop × channel × category (five years of seasonality; the demand forecast's grain)."
+  - name: mart_catalogue
+    description: "The current catalogue with attributes, on-sale flag and last-90-days sales rank per category (the web shop)."
+    columns:
+      - name: sku
+        tests: [not_null]
+  - name: mart_product_affinity
+    description: "Association rules over the last year of baskets: per product, the top 8 products bought with it (together, confidence, lift)."
+  - name: ml_demand_features
+    description: "Weekly demand forecast training data: shop × rider group × week features and next week's units (null on the latest complete week, the one forecast now)."
+    columns:
+      - name: row_id
+        tests: [not_null]
+  - name: ml_customer_features
+    description: "Board-purchase propensity training data: per pseudonymised loyalty customer, history before a snapshot 90 days back and whether they bought a board after it."
+    columns:
+      - name: customer_key
+        tests: [not_null]
+  - name: mart_stores
+    description: "Every store with its region, city, format and map coordinates (the online shop has none)."
+    columns:
+      - name: store_id
+        tests: [not_null]
+      - name: store_name
+        tests: [not_null]
+
+seeds:
+  - name: city_coordinates
+    description: "Reference data kept as code: latitude/longitude of every city with a store."
+    columns:
+      - name: city
+        tests: [not_null, unique]

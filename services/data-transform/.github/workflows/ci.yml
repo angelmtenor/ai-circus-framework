@@ -1,0 +1,105 @@
+# CI: quality gate for every push and pull request.
+# Mirrors `make check` (qa + test) so local and CI behavior stay identical, plus the
+# repo-wide checks a local pre-commit run can't cover (full-history secret scan,
+# container image CVE scan + SBOM, Conventional Commits). Actions are pinned to
+# commit SHAs (Dependabot keeps them current — see .github/dependabot.yml).
+# Author: Angel Martinez-Tenor. Scaffolded from ai-circus-template.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+        with:
+          enable-cache: true
+
+      # Not strictly required: `uv sync` below would auto-install a matching Python
+      # if missing. Kept explicit so a Python provisioning failure shows up as its
+      # own step, separate from dependency resolution.
+      - name: Install Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # data_model.py is committed, but regenerating it here is idempotent and
+      # surfaces settings.yaml drift as its own failing step, before `make qa`.
+      - name: Generate data model
+        run: make generate-data-model
+
+      - name: QA (pre-commit + config drift check + uv audit)
+        run: make qa
+
+      - name: Run tests
+        run: make test
+
+  # Repo-wide secret scan. Distinct from the pre-commit gitleaks hook (which only
+  # scans what's being committed) — this one walks the full checkout and commit
+  # history, with the same gitleaks version pinned in .pre-commit-config.yaml.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # full history, not just this ref — see comment above
+      - name: Gitleaks (repo-wide secret scan)
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only required if this repo is owned by a GitHub Organization (gitleaks-action
+          # enforces a license for org-owned scanning); harmless if unset for a personal repo.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          GITLEAKS_VERSION: "8.30.0" # match .pre-commit-config.yaml's gitleaks rev
+
+  # Container image vulnerability scan + SBOM: catches CVEs in the base image's OS
+  # packages, which `uv audit` (Python dependencies only) never sees.
+  container-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build image
+        run: docker build -t data-transform:ci .
+      - name: Generate SBOM (SPDX JSON) and upload as workflow artifact
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: "data-transform:ci"
+          format: spdx-json
+          output-file: "sbom-data-transform.spdx.json"
+          artifact-name: "sbom-data-transform"
+      - name: Trivy scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: "data-transform:ci"
+          scan-type: "image"
+          format: "table"
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+  # Conventional Commits enforcement — styleguide.md documents the convention; this
+  # checks PR commits against it (config: commitlint.config.mjs).
+  commitlint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1

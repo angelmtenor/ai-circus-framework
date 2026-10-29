@@ -416,7 +416,7 @@ def main() -> None:
             logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
         sys.exit(1)
 
-    definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="tabular_ml")
+    definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS or "", kind="tabular_ml")
     if not definitions:
         logger.error(
             "No tabular_ml scenario matched SCENARIOS={!r} under {!r}.", config.SCENARIOS, config.SCENARIOS_DIR

@@ -12,7 +12,7 @@ platform-registry, this very service, ...) has nothing to gain from a stop butto
 everything to lose. That allowlist is enforced twice — here, and by the Role's
 `resourceNames` on the `*/scale` subresources in k8s/base/data-platform-manager.yaml
 (tests/test_workloads.py pins the two together) — so even a bug here cannot scale
-anything else. The overlay workloads (dl-inference, kafka) can be started/stopped once
+anything else. The overlay workloads (dl-inference, kafka, the data tiers' tools) can be started/stopped once
 deployed but never *created* from here: that needs their manifests (`make k3s-dl-up`,
 `make k3s-data-platform-up`), the same boundary core/k8s_jobs.py keeps for Jobs.
 
@@ -88,6 +88,22 @@ OPTIONAL_SERVICES: dict[str, OptionalService] = {
         (Workload("statefulset", "kafka"),),
         deploy_hint="make k3s-data-platform-up",
         stop_effect="Pipeline-trigger and CDC events are no longer published (best-effort by design).",
+    ),
+    # Data Platform tiers above the core one — the heavy JVM/Python tools a laptop may want back.
+    "dagster": OptionalService(
+        (Workload("deployment", "dagster"),),
+        deploy_hint="make k3s-data-analytics-up",
+        stop_effect="No sensor-driven builds while stopped (the core tier's CronJob is suspended meanwhile).",
+    ),
+    "superset": OptionalService(
+        (Workload("deployment", "superset"),),
+        deploy_hint="make k3s-data-bi-up",
+        stop_effect="The BI dashboards are unavailable; the native ones in the workspace keep working.",
+    ),
+    "openmetadata": OptionalService(
+        (Workload("deployment", "openmetadata"), Workload("statefulset", "om-search")),
+        deploy_hint="make k3s-data-governance-up",
+        stop_effect="The metadata catalogue is unavailable; the workspace's lineage view keeps working.",
     ),
 }
 

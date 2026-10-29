@@ -14,6 +14,7 @@ const TabularView = lazy(() => import("./TabularView").then((m) => ({ default: m
 const RagView = lazy(() => import("./RagView").then((m) => ({ default: m.RagView })));
 const AssistedFormView = lazy(() => import("./AssistedFormView").then((m) => ({ default: m.AssistedFormView })));
 const DeepLearningView = lazy(() => import("./DeepLearningView").then((m) => ({ default: m.DeepLearningView })));
+const DataProductView = lazy(() => import("./DataProductView").then((m) => ({ default: m.DataProductView })));
 const Settings = lazy(() => import("./Settings").then((m) => ({ default: m.Settings })));
 const PlatformStatusView = lazy(() => import("./PlatformStatus").then((m) => ({ default: m.PlatformStatusView })));
 
@@ -299,9 +300,12 @@ export default function App() {
               {!scenariosLoading && selected?.kind === "deep_learning" && (
                 <DeepLearningView scenario={selected} accessToken={identity.accessToken} />
               )}
+              {!scenariosLoading && selected?.kind === "data_product" && (
+                <DataProductView scenario={selected} accessToken={identity.accessToken} />
+              )}
               {!scenariosLoading &&
                 selected &&
-                !["tabular_ml", "conversational_rag", "assisted_form", "deep_learning"].includes(selected.kind) && (
+                !["tabular_ml", "conversational_rag", "assisted_form", "deep_learning", "data_product"].includes(selected.kind) && (
                   <div className="app-loading">
                     {selected.title} ({selected.kind}) doesn't have a workspace view yet.
                   </div>

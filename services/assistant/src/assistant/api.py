@@ -33,6 +33,7 @@ from qdrant_client import QdrantClient
 from assistant import get_env_config
 from assistant.core.agent import ModelUsageCallback, build_agui_agent
 from assistant.core.chat import documents_only_instructions
+from assistant.core.data_tools import DataApiClient, build_data_tools, data_system_prompt
 from assistant.core.extraction import MAX_OCR_CHARS, build_extraction_prompt, parse_extraction
 from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
@@ -537,13 +538,27 @@ async def agui_endpoint(
     # `async def` (needed for StreamingResponse below), so FastAPI won't threadpool
     # it automatically — off the event loop explicitly, or a cold-start miss for one
     # tenant stalls every other tenant's concurrent request on this instance.
-    system_prompt = await run_in_threadpool(prompt_cache.get, identity.org_id, definition.slug)
     config = get_env_config()
+    if definition.kind == "data_product":
+        system_prompt = data_system_prompt(definition)
+    else:
+        system_prompt = await run_in_threadpool(prompt_cache.get, identity.org_id, definition.slug)
     # Documents-only mode drops the dataset/prediction tools from the run itself (not
     # just from the prompt), so the model cannot reach the data or the model there.
     scope = _chat_scope(input_data, definition)
     tools: list[BaseTool] = []
-    if scope == SCOPE_ALL:
+    if definition.kind == "data_product":
+        props = input_data.forwarded_props if isinstance(input_data.forwarded_props, dict) else {}
+        view_as = props.get("data_view_as") if isinstance(props.get("data_view_as"), dict) else None
+        data_client = DataApiClient(config.DATA_API_URL, scenario_slug, request.headers.get("authorization"), view_as)
+        tools = build_data_tools(
+            data_client,
+            definition,
+            definitions=request.app.state.definitions,
+            prediction=PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL),
+            authorization=request.headers.get("authorization"),
+        )
+    elif scope == SCOPE_ALL:
         prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
         tools = build_prediction_tools(
             prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")

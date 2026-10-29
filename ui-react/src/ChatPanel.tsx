@@ -286,6 +286,7 @@ export function ChatPanel({
   lockedScope,
   prompt,
   onReplySources,
+  forwardedProps,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -337,6 +338,8 @@ export function ChatPanel({
   prompt?: { id: number; text: string } | null;
   // The document sources the latest reply cited — lets a reading list light them up.
   onReplySources?: (sources: string[]) => void;
+  /** Extra AG-UI forwardedProps for every run (e.g. a data product's "view as" role). */
+  forwardedProps?: Record<string, unknown>;
 }) {
   const { copilotkit } = useCopilotKit();
   const [messages, setMessages] = useState<AguiMessage[]>(initialMessages ?? agent.messages);
@@ -452,7 +455,8 @@ export function ChatPanel({
       agent.addMessage({ id: randomUUID(), role: "user", content });
       const tools = toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]);
       const context = contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>);
-      await agent.runAgent({ tools, context, ...(documentTool ? { forwardedProps: { scope } } : {}) });
+      const props = { ...(documentTool ? { scope } : {}), ...(forwardedProps ?? {}) };
+      await agent.runAgent({ tools, context, ...(Object.keys(props).length ? { forwardedProps: props } : {}) });
       const frontendToolNames = new Set(
         (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
       );

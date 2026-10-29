@@ -44,14 +44,19 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Resolve SCENARIOS to their definitions, connect each one's SeaweedFS bucket, and llm-gateway."""
     config = get_env_config()
-    definitions = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="tabular_ml")
+    tabular = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="tabular_ml")
+    # data_product scenarios chat through data-api's governed tools (core/data_tools.py):
+    # no bucket, model metadata or prompt cache of their own.
+    data_products = resolve_scenarios(Path(config.SCENARIOS_DIR), config.SCENARIOS, kind="data_product")
+    definitions = {**tabular, **data_products}
     if not definitions:
         raise RuntimeError(
-            f"No tabular_ml scenario matched SCENARIOS={config.SCENARIOS!r} under {config.SCENARIOS_DIR!r}."
+            f"No tabular_ml or data_product scenario matched SCENARIOS={config.SCENARIOS!r} under "
+            f"{config.SCENARIOS_DIR!r}."
         )
 
     stores = {}
-    for slug, definition in definitions.items():
+    for slug, definition in tabular.items():
         assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
         stores[slug] = ObjectStore.connect(
             bucket=definition.dataset.bucket,
@@ -98,7 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         else None
     )
     app.state.qdrant = QdrantClient(url=config.QDRANT_URL)
-    app.state.prompt_cache = SystemPromptCache(stores, definitions, fallback_org_id=config.SHARED_MODEL_ORG_ID)
+    app.state.prompt_cache = SystemPromptCache(stores, tabular, fallback_org_id=config.SHARED_MODEL_ORG_ID)
     # LangChain ChatOpenAI client backing the AG-UI route's create_agent (see
     # core/agent.py) — only a LangChain/LangGraph agent can participate in generative
     # UI. Cached per model_name, same reasoning as rag-agent's llm_clients — which

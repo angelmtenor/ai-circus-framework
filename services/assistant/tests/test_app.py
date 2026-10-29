@@ -152,7 +152,7 @@ async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.Mon
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
 
-    with pytest.raises(RuntimeError, match="No tabular_ml scenario matched"):
+    with pytest.raises(RuntimeError, match="No tabular_ml or data_product scenario matched"):
         async with app.lifespan(app.app):
             pass
 
