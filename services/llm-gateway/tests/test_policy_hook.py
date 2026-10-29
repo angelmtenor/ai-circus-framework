@@ -113,14 +113,33 @@ def test_noop_is_a_true_no_op_and_touches_nothing() -> None:
     _run(scenario)
 
 
-def test_allow_passes_the_request_through_unchanged() -> None:
+def test_allow_passes_the_request_through_unchanged_apart_from_the_trace_annotation() -> None:
     async def scenario() -> None:
         rig = _rig(_decision())
         data = _data()
-        before = json.dumps(data, sort_keys=True)
+        before = json.loads(json.dumps(data))
         assert await rig.call(data) is None
-        assert json.dumps(data, sort_keys=True) == before
+        # The only difference is what the trace span will carry (aicf.policy.*).
+        assert data["metadata"].pop("aicf_policy_decision") == "allow"
+        assert data["metadata"].pop("aicf_policy_version") == "v1"
+        assert data == before
         assert rig.events() == [], "allowing is the normal case and is not an event"
+
+    _run(scenario)
+
+
+def test_the_decision_is_recorded_on_the_metadata_for_the_trace_span() -> None:
+    async def scenario() -> None:
+        degrade = _rig(_decision("degrade", "cost_control", allowed_models=["cheap"]))
+        data = _data(model="gpt-5.6-sol")
+        await degrade.call(data)
+        assert data["metadata"]["aicf_policy_decision"] == "degrade"
+
+        fail_open = _rig(PolicyError("down"))
+        data = _data()
+        await fail_open.call(data)
+        assert data["metadata"]["aicf_policy_decision"] == "allow"
+        assert "aicf_policy_version" not in data["metadata"]
 
     _run(scenario)
 

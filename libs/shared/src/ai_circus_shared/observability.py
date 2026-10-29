@@ -37,7 +37,7 @@ def configure_metrics(app: FastAPI) -> None:
 
 
 def langfuse_request_metadata(
-    *, service: str, org_id: str, scenario_slug: str, thread_id: str | None = None
+    *, service: str, org_id: str, scenario_slug: str, thread_id: str | None = None, ai_system_id: str | None = None
 ) -> dict[str, Any]:
     """Build the `metadata` block LiteLLM's Langfuse callback reads off a completion request.
 
@@ -49,12 +49,21 @@ def langfuse_request_metadata(
     `session_id` (the conversation thread, so a multi-turn chat is one Langfuse session),
     `trace_name` and `tags` (service + scenario, for filtering). Keys are LiteLLM's, not
     Langfuse's — see litellm.integrations.langfuse.langfuse_otel._set_metadata_attributes.
+
+    The `aicf_*` keys are the framework's own correlation fields: llm-gateway's policy hook reads
+    `aicf_ai_system_id` to decide which AI system a call belongs to, and its tracing patch turns
+    them into the `aicf.tenant.id` / `aicf.ai_system.id` / `aicf.scenario.slug` span attributes
+    (docs/governance/telemetry.md). `ai_system_id` is the scenario's declared id (see
+    `ai_circus_shared.governance.ai_system_id_of`) and defaults to the scenario slug.
     """
     metadata: dict[str, Any] = {
         "trace_user_id": org_id,
         "trace_name": f"{service}/{scenario_slug}",
         "tags": [service, f"scenario:{scenario_slug}", f"org:{org_id}"],
         "trace_metadata": {"service": service, "scenario_slug": scenario_slug, "org_id": org_id},
+        "aicf_tenant_id": org_id,
+        "aicf_ai_system_id": ai_system_id or scenario_slug,
+        "aicf_scenario_slug": scenario_slug,
     }
     if thread_id:
         metadata["session_id"] = thread_id

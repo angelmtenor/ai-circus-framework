@@ -204,6 +204,12 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: TRACE_CAPTURE_CONTENT
+    description: "false = redact prompts and completions from traces and logs (default: captured, as before)"
+    type: string
+    mandatory: false
+    secret: false
+
   - name: GOVERNANCE_EVENTS_ENABLED
     description: "true = emit content-free governance events (policy deny/degrade/fail-open, budget exhausted)"
     type: string

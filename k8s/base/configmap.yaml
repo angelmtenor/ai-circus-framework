@@ -36,6 +36,12 @@ data:
   GOVERNANCE_CATALOG_ENABLED: "false"
   # llm-gateway's policy decision point (docs/governance/policy.md): noop = allow everything,
   # i.e. exactly the behaviour before governance existed. static | opa | http opt in.
+  # Decision records of non-LLM predictions: kept in the tenant's bucket only when
+  # GOVERNANCE_RECORD_STORE=objectstore; pruned after GOVERNANCE_RETENTION_DAYS (default 183).
+  GOVERNANCE_RETENTION_DAYS: "183"
+  # llm-gateway traces: prompts and completions are captured in Langfuse spans by default (as before);
+  # "false" redacts them while keeping tenant, model, token counts and the gen_ai.*/aicf.* attributes.
+  TRACE_CAPTURE_CONTENT: "true"
   POLICY_DECIDER: "noop"
   POLICY_FAIL_MODE: "open"
   # Observability (langfuse.yaml / mlflow.yaml). llm-gateway exports every LLM call

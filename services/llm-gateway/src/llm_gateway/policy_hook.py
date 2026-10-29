@@ -46,7 +46,7 @@ from litellm.integrations.custom_logger import CustomLogger
 from litellm.proxy._types import UserAPIKeyAuth
 from litellm.types.utils import CallTypesLiteral
 
-from llm_gateway import get_env_config, get_logger
+from llm_gateway import get_env_config, get_logger, tracing
 from llm_gateway.governance_events import GatewayEvents
 from llm_gateway.policy import (
     NoopDecider,
@@ -59,6 +59,9 @@ from llm_gateway.policy import (
 )
 
 logger = get_logger(__name__)
+
+# Idempotent: adds gen_ai.* and aicf.* attributes to the Langfuse spans. Inert without langfuse_otel.
+tracing.install()
 
 _ORG_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _AI_SYSTEM_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
@@ -156,8 +159,25 @@ class PolicyEnforcer(CustomLogger):
             decision = await self._decision_for(policy_input)
         except PolicyError as exc:
             await self._decision_point_unavailable(policy_input, exc)
+            self._annotate(data, None, "allow")
             return None
+        self._annotate(data, decision, decision.decision)
         return await self._enforce(policy_input, decision, data)
+
+    @staticmethod
+    def _annotate(data: dict, decision: PolicyDecision | None, outcome: str) -> None:
+        """Record the decision on the request metadata so the trace span carries it
+        (`aicf.policy.decision` / `aicf.policy.version`, see tracing.py). A refused call never
+        produces a span, so for `deny` this is only for completeness.
+        """
+        metadata = data.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = data.setdefault("metadata", {}) if "litellm_metadata" not in data else data["litellm_metadata"]
+        if not isinstance(metadata, dict):
+            return
+        metadata["aicf_policy_decision"] = outcome
+        if decision is not None and decision.policy_version:
+            metadata["aicf_policy_version"] = decision.policy_version
 
     def _input(self, data: dict, call_type: str) -> PolicyInput | None:
         org_id = data.get("user")

@@ -35,32 +35,57 @@ def launch(argv: list[str], env: dict[str, str]) -> None:
 LANGFUSE_CALLBACK = "langfuse_otel"
 
 
-def resolve_config_path(config_path: Path, env: dict[str, str]) -> Path:
-    """Return the litellm config to run — with Langfuse tracing appended when it's configured.
+def env_flag(value: str, *, default: bool) -> bool:
+    """A true/false env string; an empty or unrecognised value keeps `default`."""
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
 
-    litellm_config.yaml is static and a `langfuse_otel` entry in its `callbacks` list is
-    unconditional: without LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY litellm silently falls
-    back to a console span exporter that dumps every completion to stdout. So the callback
-    is added here, at start-up, only when both keys are present (LANGFUSE_HOST then picks
-    the in-cluster instance over Langfuse Cloud) — the committed file is untouched and
-    `make run` without Langfuse keeps working. The merged copy lives in a temp file; the
-    exec'd litellm process reads it once at boot.
+
+def resolve_config_path(config_path: Path, env: dict[str, str]) -> Path:
+    """Return the litellm config to run — merged with whatever the environment switches on.
+
+    litellm_config.yaml is static, so anything conditional on the environment is merged in here,
+    at start-up, into a temp copy (the committed file is untouched; the exec'd litellm process reads
+    the copy once at boot). With nothing to merge the committed file is returned as-is.
+
+    **Langfuse tracing**: a `langfuse_otel` entry in `callbacks` would be unconditional, and without
+    LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY litellm silently falls back to a console span exporter
+    that dumps every completion to stdout — so the callback is added only when both keys are present
+    (LANGFUSE_HOST then picks the in-cluster instance over Langfuse Cloud).
+
+    **Trace content** (`TRACE_CAPTURE_CONTENT`): prompts and completions are part of the Langfuse span
+    today — a deliberate feature of that monitor — so the default is unchanged. Set it to a false value
+    and litellm's `turn_off_message_logging` replaces the message text with `redacted-by-litellm` in
+    every logging callback, while tenant, model, token counts and the `gen_ai.*` / `aicf.*` attributes
+    stay (see docs/governance/telemetry.md).
     """
-    if not (env.get("LANGFUSE_PUBLIC_KEY") and env.get("LANGFUSE_SECRET_KEY")):
+    tracing_on = bool(env.get("LANGFUSE_PUBLIC_KEY") and env.get("LANGFUSE_SECRET_KEY"))
+    redact = "TRACE_CAPTURE_CONTENT" in env and not env_flag(env["TRACE_CAPTURE_CONTENT"], default=True)
+    if not (tracing_on or redact):
         return config_path
 
     config = yaml.safe_load(config_path.read_text()) or {}
     litellm_settings = config.setdefault("litellm_settings", {})
-    callbacks = litellm_settings.setdefault("callbacks", [])
-    if LANGFUSE_CALLBACK not in callbacks:
-        callbacks.append(LANGFUSE_CALLBACK)
+    if tracing_on:
+        callbacks = litellm_settings.setdefault("callbacks", [])
+        if LANGFUSE_CALLBACK not in callbacks:
+            callbacks.append(LANGFUSE_CALLBACK)
+    if redact:
+        litellm_settings["turn_off_message_logging"] = True
 
     fd, merged = tempfile.mkstemp(prefix="litellm_config.", suffix=".yaml")
     with os.fdopen(fd, "w") as handle:
         yaml.safe_dump(config, handle, sort_keys=False)
-    logger.info(
-        "Langfuse tracing enabled (host={}) — running merged config {}", env.get("LANGFUSE_HOST") or "cloud", merged
-    )
+    if tracing_on:
+        logger.info(
+            "Langfuse tracing enabled (host={}) — running merged config {}", env.get("LANGFUSE_HOST") or "cloud", merged
+        )
+    if redact:
+        logger.info("TRACE_CAPTURE_CONTENT is off — prompts and completions are redacted from traces and logs")
     return Path(merged)
 
 

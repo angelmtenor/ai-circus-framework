@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+from ai_circus_shared.decision_records import build_recorder
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
@@ -59,6 +60,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     app.state.definitions = definitions
     app.state.model_cache = ModelCache(stores, fallback_org_id=config.SHARED_MODEL_ORG_ID)
+    # Decision records (docs/governance/): off unless GOVERNANCE_EVENTS_ENABLED / _RECORD_STORE are set.
+    app.state.recorder = build_recorder(config, source="/prediction", stores=stores)
     # llm-gateway embedding clients for text challengers, built on first use (api._gateway_embedder).
     app.state.embedding_clients = {}
     # Before serving (so readiness only passes once models are warm): never make a demo's

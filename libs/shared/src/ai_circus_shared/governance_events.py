@@ -164,6 +164,32 @@ class AiSystemStatusData(BaseModel):
     policy_version: str | None = Field(default=None, max_length=64)
 
 
+class PredictionRecordData(BaseModel):
+    """`data` of `prediction.recorded`: the decision record of one scoring request (any model kind).
+
+    The unit is the request: a bulk request is one record with `prediction_count` and an
+    `outcomes` histogram. Never the input features, free text, or an individual's identity.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_slug: str = Field(max_length=64)
+    ai_system_id: str = Field(max_length=64)
+    org_id: str = Field(max_length=64)
+    model_name: str = Field(max_length=128)
+    model_version: str = Field(max_length=64, description="Content-derived id of the stored artifacts")
+    model_variant: Literal["primary", "challenger"] = "primary"
+    task_type: str | None = Field(default=None, max_length=64)
+    prediction_count: int = Field(ge=0)
+    # Outcome label -> how many predictions got it (decision-policy decisions, gate results,
+    # predicted classes, or "scored" for a plain score).
+    outcomes: dict[str, int] = Field(default_factory=dict)
+    score_min: float | None = None
+    score_max: float | None = None
+    explanation_available: bool
+    trace_id: str = Field(pattern=r"^[0-9a-f]{32}$")
+
+
 # Event name -> data model. The name is the `<name>` in `<namespace>.governance.<name>.v1`.
 EVENT_DATA_MODELS: dict[str, type[BaseModel]] = {
     "entitlement.changed": AdminChangeData,
@@ -175,6 +201,7 @@ EVENT_DATA_MODELS: dict[str, type[BaseModel]] = {
     "policy.decision": PolicyDecisionData,
     "budget.exhausted": BudgetExhaustedData,
     "ai_system.status_applied": AiSystemStatusData,
+    "prediction.recorded": PredictionRecordData,
 }
 
 

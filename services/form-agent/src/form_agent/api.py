@@ -17,6 +17,7 @@ from ai_circus_shared.auth import Identity
 from ai_circus_shared.conversations import ConversationStore, DbSession, get_session
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.entitlements import PlatformRegistryClient
+from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.storage import ObjectStore
@@ -347,6 +348,7 @@ async def agui_endpoint(
                     org_id=identity.org_id,
                     scenario_slug=scenario_slug,
                     thread_id=input_data.thread_id,
+                    ai_system_id=ai_system_id_of(definition),
                 ),
             },
         }

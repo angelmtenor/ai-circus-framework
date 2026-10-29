@@ -73,9 +73,30 @@ class EnvConfig(BaseSettings):
     ORT_THREADS: str = Field(
         description="onnxruntime intra-op threads per inference session (keeps the pod's CPU use bounded)"
     )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit a content-free `prediction.recorded` governance event per scoring request",
+        default=None,
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="'log' (default) or 'http' (Valkey outbox drained by platform-registry; needs CACHE_URL)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types (default dev.aicircus)", default=None
+    )
+    GOVERNANCE_RECORD_STORE: str | None = Field(
+        description="'objectstore' = also keep each decision record in the tenant's bucket for the retention window",
+        default=None,
+    )
+    GOVERNANCE_RETENTION_DAYS: str | None = Field(
+        description="Days stored decision records are kept before pruning (default 183, about six months)", default=None
+    )
+    CACHE_URL: str | None = Field(
+        description="Redis-protocol URL (Valkey) — only the governance event outbox uses it (sink=http)", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "8a088798363b343b9778c21036dd515cbd279f500799b382eaeced9ebca758ba"
+_SOURCE_YAML_HASH = "8b19303cf386d6487ef86c62196838821ca9027d7809118fde9d58c6a16c0621"
 
 
 EnvConfig.model_rebuild()

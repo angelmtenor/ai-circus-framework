@@ -117,6 +117,10 @@ class EnvConfig(BaseSettings):
     POLICY_FAIL_MODE: str | None = Field(
         description="If the decision point is unreachable: 'open' (default), 'closed' or 'by_risk'", default=None
     )
+    TRACE_CAPTURE_CONTENT: str | None = Field(
+        description="false = redact prompts and completions from traces and logs (default: captured, as before)",
+        default=None,
+    )
     GOVERNANCE_EVENTS_ENABLED: str | None = Field(
         description="true = emit content-free governance events (policy deny/degrade/fail-open, budget exhausted)",
         default=None,
@@ -156,7 +160,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "9a07b6becae45a3a368e366808466f4b2790a9296f15053e8e53fc89b730429d"
+_SOURCE_YAML_HASH = "8a82aca29b4c44e783e6b28eb97f4f81a5de9f8a44c014376d69480a9d9af353"
 
 
 EnvConfig.model_rebuild()

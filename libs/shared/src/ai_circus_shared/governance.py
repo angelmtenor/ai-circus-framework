@@ -100,3 +100,14 @@ def resolve_governance(slug: str, declared: GovernanceConfig | None) -> dict[str
     record["ai_system_id"] = config.ai_system_id or slug
     record["declared"] = declared is not None
     return record
+
+
+def ai_system_id_of(definition: object) -> str:
+    """The scenario's stable AI-system id: the declared `governance.ai_system_id`, else its slug.
+
+    Takes anything with `.slug` and an optional `.governance` (a `ScenarioDefinition`), so the
+    agent services can tag their gateway calls without importing the scenario schema here.
+    """
+    governance = getattr(definition, "governance", None)
+    declared = getattr(governance, "ai_system_id", None)
+    return str(declared or definition.slug)  # type: ignore[attr-defined]

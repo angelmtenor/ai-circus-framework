@@ -31,6 +31,7 @@ from ai_circus_shared.governance_events import (
     OutboxDeliverer,
     OutboxSink,
     PolicyDecisionData,
+    PredictionRecordData,
     assert_content_free,
     build_event,
     env_flag,
@@ -75,6 +76,19 @@ _SAMPLES: dict[type, Any] = {
     ),
     BudgetExhaustedData: lambda: BudgetExhaustedData(org_id="org-1", period="2026-10", spent_usd=10.0, cap_usd=10.0),
     AiSystemStatusData: lambda: AiSystemStatusData(ai_system_id="churn", status="suspended"),
+    PredictionRecordData: lambda: PredictionRecordData(
+        scenario_slug="churn",
+        ai_system_id="churn",
+        org_id="org-1",
+        model_name="lgbm",
+        model_version="abc123def456",
+        prediction_count=3,
+        outcomes={"approve": 2, "review": 1},
+        score_min=0.1,
+        score_max=0.9,
+        explanation_available=True,
+        trace_id="0af7651916cd43dd8448eb211c80319c",
+    ),
 }
 
 
