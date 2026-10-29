@@ -572,6 +572,13 @@ services:
       <<: [*service-auth-env, *postgres-env]
       LOG_LEVEL: INFO
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Governance (docs/governance/): all off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
+      GOVERNANCE_AUDIT_ENABLED: ${GOVERNANCE_AUDIT_ENABLED:-false}
+      GOVERNANCE_CATALOG_ENABLED: ${GOVERNANCE_CATALOG_ENABLED:-false}
+      GOVERNANCE_WEBHOOK_URL: ${GOVERNANCE_WEBHOOK_URL:-}
+      GOVERNANCE_WEBHOOK_SECRET: ${GOVERNANCE_WEBHOOK_SECRET:-}
       # Service-account client used by this service's sync tooling (see naming
       # contract) — no Logto analog.
       KEYCLOAK_M2M_CLIENT_ID: ${KEYCLOAK_M2M_CLIENT_ID}
@@ -677,6 +684,16 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY}
+      # Governance policy decision point (docs/governance/policy.md): noop = behave as before.
+      POLICY_DECIDER: ${POLICY_DECIDER:-noop}
+      POLICY_FAIL_MODE: ${POLICY_FAIL_MODE:-open}
+      POLICY_STATIC_PATH: ${POLICY_STATIC_PATH:-}
+      POLICY_OPA_URL: ${POLICY_OPA_URL:-}
+      POLICY_HTTP_URL: ${POLICY_HTTP_URL:-}
+      POLICY_HTTP_TOKEN: ${POLICY_HTTP_TOKEN:-}
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
       AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
@@ -794,6 +811,9 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       # A scenario's model.text_challenger checks/fills its embedding cache via local-embed.
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Governance (docs/governance/): a `model.trained` event, off unless set in .env.
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
     volumes:
       - ./scenarios:/app/scenarios:ro
     depends_on:
@@ -972,6 +992,12 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY}
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+      # Governance audit trail (docs/governance/): off unless set in .env.
+      GOVERNANCE_AUDIT_ENABLED: ${GOVERNANCE_AUDIT_ENABLED:-false}
+      GOVERNANCE_POLICY_HMAC_SECRET: ${GOVERNANCE_POLICY_HMAC_SECRET:-}
+      GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
+      GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
+      PLATFORM_REGISTRY_URL: http://platform-registry:8000
     # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
     volumes:
       - ./scenarios:/app/scenarios:ro
@@ -1013,6 +1039,19 @@ services:
     networks: [ai-circus]
     restart: unless-stopped
     mem_limit: 1g  # a month of history per delivery + the lake buffer (k8s: 1Gi)
+
+  # Optional policy decision point for llm-gateway (POLICY_DECIDER=opa, POLICY_OPA_URL=http://opa:8181):
+  # `docker compose --profile governance up opa`. Policy + data come from infra/opa/. Internal only.
+  opa:
+    image: openpolicyagent/opa:1.21.4-static
+    profiles: ["governance"]
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--log-level=info", "/policy/aicircus.rego", "/data/data.json"]
+    volumes:
+      - ./infra/opa/policy/aicircus.rego:/policy/aicircus.rego:ro
+      - ./infra/opa/data/data.json:/data/data.json:ro
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 128m  # k8s: 128Mi
 
   data-api:
     build:

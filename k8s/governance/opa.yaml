@@ -1,0 +1,74 @@
+# Governance — Open Policy Agent, an *optional* policy decision point for llm-gateway
+# (POLICY_DECIDER=opa, POLICY_OPA_URL=http://opa:8181). Not part of k8s/base: nothing needs it
+# unless an operator opts in with `make k3s-governance-opa-up`. The policy and its data come
+# from the ConfigMaps that target creates out of infra/opa/ (policy: aicircus.rego, data:
+# data.json — edit it and re-run the target, OPA reloads from the new ConfigMap on restart).
+# Internal only: never through Traefik.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: opa}
+  template:
+    metadata:
+      labels: {app: opa}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:1.21.4-static
+          args:
+            - run
+            - --server
+            - --addr=0.0.0.0:8181
+            - --log-level=info
+            # Exact files, not the directories: a ConfigMap mount also holds hidden `..data`
+            # symlink dirs that OPA would load a second time ("multiple default rules").
+            - /policy/aicircus.rego
+            - /data/data.json
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8181}
+          volumeMounts:
+            - {name: policy, mountPath: /policy, readOnly: true}
+            - {name: data, mountPath: /data, readOnly: true}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {memory: 128Mi}
+          startupProbe:
+            httpGet: {path: /health, port: 8181}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: {path: /health, port: 8181}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8181}
+            periodSeconds: 30
+      volumes:
+        - name: policy
+          configMap: {name: opa-policy}
+        - name: data
+          configMap: {name: opa-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa
+  namespace: ai-circus
+spec:
+  selector: {app: opa}
+  ports:
+    - {port: 8181, targetPort: 8181}

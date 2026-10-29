@@ -63,6 +63,7 @@ dev = [
     "rich>=13.7.0",          # optional pretty output for check_full_env.py
     "ruff>=0.11.8",
     "twine>=6.1.0",
+    "fakeredis>=2.40.0",
 ]
 
 [build-system]

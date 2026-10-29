@@ -55,9 +55,28 @@ class EnvConfig(BaseSettings):
     MLFLOW_TRACKING_URI: str | None = Field(
         description="MLflow tracking server runs are mirrored to (e.g. http://mlflow:5000); unset = off", default=None
     )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit a content-free `model.trained` governance event when a model is stored", default=None
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="'log' (default) or 'http' (Valkey outbox drained by platform-registry; needs CACHE_URL)",
+        default=None,
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types, '<namespace>.governance.<name>.v1'", default=None
+    )
+    GOVERNANCE_WEBHOOK_URL: str | None = Field(
+        description="Webhook receiving governance events when GOVERNANCE_EVENT_SINK=http", default=None
+    )
+    GOVERNANCE_WEBHOOK_SECRET: SecretStr | None = Field(
+        description="HMAC secret signing webhook deliveries; from the environment only", default=None
+    )
+    CACHE_URL: str | None = Field(
+        description="Redis-protocol URL (Valkey) — only the governance event outbox uses it (sink=http)", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "f2114402274aed5404906db2fdf55a3928a9419c38406e402a98268e82b3a565"
+_SOURCE_YAML_HASH = "28918fa764db3b342ddf4e1931900ed1c3223adb7498349f1ad1b3efce035342"
 
 
 EnvConfig.model_rebuild()

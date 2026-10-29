@@ -1,0 +1,43 @@
+{
+  "description": "Outcome of walking the chain.",
+  "properties": {
+    "checked": {
+      "title": "Checked",
+      "type": "integer"
+    },
+    "first_invalid_id": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Invalid Id"
+    },
+    "ok": {
+      "title": "Ok",
+      "type": "boolean"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    }
+  },
+  "required": [
+    "ok",
+    "checked"
+  ],
+  "title": "AuditVerification",
+  "type": "object"
+}

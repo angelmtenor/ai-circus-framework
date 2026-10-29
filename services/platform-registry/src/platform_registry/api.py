@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from platform_registry import get_env_config
 from platform_registry.core import document_extraction, llm_settings
 from platform_registry.core.db import get_session
+from platform_registry.core.governance import publish_change, record_change
 from platform_registry.core.models import Entitlement, LlmSetting, Scenario, VoiceSetting
 
 router = APIRouter()
@@ -50,6 +51,13 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
     config = get_env_config()
     if not is_admin_bearer_token(authorization, config.ADMIN_API_KEY.get_secret_value()):
         raise HTTPException(status_code=401, detail="Admin bearer token required.")
+
+
+def _ai_system_id(session: Session, scenario_slug: str) -> str:
+    """The scenario's stable ai_system_id (its slug unless the owner declared another)."""
+    scenario = session.get(Scenario, scenario_slug)
+    governance = scenario.governance if scenario is not None else None
+    return str((governance or {}).get("ai_system_id") or scenario_slug)
 
 
 def _org_identity(authorization: str | None) -> Identity:
@@ -262,7 +270,17 @@ def grant_entitlement(org_id: str, scenario_slug: str, session: Session = Depend
     stmt = select(Entitlement).where(Entitlement.org_id == org_id, Entitlement.scenario_slug == scenario_slug)
     if session.scalars(stmt).first() is None:
         session.add(Entitlement(org_id=org_id, scenario_slug=scenario_slug))
+        pending = record_change(
+            session,
+            action="entitlement.granted",
+            target_type="entitlement",
+            target_id=f"{org_id}/{scenario_slug}",
+            org_id=org_id,
+            after={"scenario_slug": scenario_slug, "entitled": True},
+            ai_system_id=_ai_system_id(session, scenario_slug),
+        )
         session.commit()
+        publish_change(pending)
 
 
 @router.delete("/entitlements/{org_id}/{scenario_slug}", status_code=204, dependencies=[Depends(require_admin)])
@@ -272,7 +290,17 @@ def revoke_entitlement(org_id: str, scenario_slug: str, session: Session = Depen
     entitlement = session.scalars(stmt).first()
     if entitlement is not None:
         session.delete(entitlement)
+        pending = record_change(
+            session,
+            action="entitlement.revoked",
+            target_type="entitlement",
+            target_id=f"{org_id}/{scenario_slug}",
+            org_id=org_id,
+            before={"scenario_slug": scenario_slug, "entitled": True},
+            ai_system_id=_ai_system_id(session, scenario_slug),
+        )
         session.commit()
+        publish_change(pending)
 
 
 @router.get("/llm-settings/providers", response_model=list[LlmProviderOut], dependencies=[Depends(require_admin)])
@@ -359,12 +387,27 @@ def set_active_llm_model(body: ActiveLlmModelIn, session: Session = Depends(get_
         )
 
     setting = session.get(LlmSetting, 1)
+    previous = setting.model_name if setting is not None else None
     if setting is None:
         setting = LlmSetting(id=1, model_name=body.model_name)
         session.add(setting)
     else:
         setting.model_name = body.model_name
+    pending = (
+        record_change(
+            session,
+            action="llm_settings.active_model.set",
+            target_type="llm_setting",
+            target_id="active-model",
+            before={"model_name": previous},
+            after={"model_name": body.model_name},
+        )
+        if previous != body.model_name
+        else None
+    )
     session.commit()
+    if pending is not None:
+        publish_change(pending)
     return ActiveLlmModelOut(model_name=setting.model_name)
 
 
@@ -415,11 +458,29 @@ def set_active_voice_settings(
         )
 
     setting = session.get(VoiceSetting, 1)
+    previous = (
+        {"stt_provider": setting.stt_provider, "tts_provider": setting.tts_provider} if setting is not None else None
+    )
+    current = {"stt_provider": body.stt_provider, "tts_provider": body.tts_provider}
     if setting is None:
         setting = VoiceSetting(id=1, stt_provider=body.stt_provider, tts_provider=body.tts_provider)
         session.add(setting)
     else:
         setting.stt_provider = body.stt_provider
         setting.tts_provider = body.tts_provider
+    pending = (
+        record_change(
+            session,
+            action="voice_settings.active.set",
+            target_type="voice_setting",
+            target_id="active",
+            before=previous,
+            after=current,
+        )
+        if previous != current
+        else None
+    )
     session.commit()
+    if pending is not None:
+        publish_change(pending)
     return ActiveVoiceSettingsOut(stt_provider=setting.stt_provider, tts_provider=setting.tts_provider)

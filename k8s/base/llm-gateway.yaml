@@ -49,6 +49,10 @@ spec:
             - secretRef: {name: llm-gateway-secrets}
           volumeMounts:
             - {name: embedding-model-cache, mountPath: /models/hf}  # HF_HOME (Dockerfile)
+            # Optional static policy file (POLICY_DECIDER=static, POLICY_STATIC_PATH=/policy/policy.yaml):
+            # `kubectl -n ai-circus create configmap gateway-policy --from-file=policy.yaml=…`
+            # (docs/governance/policy.md). Absent ConfigMap = empty dir; edits reload without a restart.
+            - {name: gateway-policy, mountPath: /policy, readOnly: true}
           # Idle ~870Mi: LiteLLM proxy + the local-embed torch model (loaded at start-up).
           resources:
             requests: {cpu: 50m, memory: 768Mi}
@@ -74,6 +78,8 @@ spec:
       volumes:
         - name: embedding-model-cache
           persistentVolumeClaim: {claimName: embedding-model-cache}
+        - name: gateway-policy
+          configMap: {name: gateway-policy, optional: true}
 ---
 apiVersion: v1
 kind: Service

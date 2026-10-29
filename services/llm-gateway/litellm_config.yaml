@@ -230,6 +230,20 @@ model_list:
     litellm_params:
       model: local-embed/voyageai/voyage-4-nano
 
+  # Hosted embeddings for EMBEDDING_PROVIDER=gemini|voyage. They live here (not in each
+  # caller) so every model call passes this one chokepoint — budgets, policy and tracing
+  # apply to embeddings too. The callers send Gemini's `task_type` / Voyage's `input_type`
+  # (document vs query) as extra request fields; see ai_circus_shared.embeddings.
+  - model_name: gemini-embedding-001
+    litellm_params:
+      model: gemini/gemini-embedding-001
+      api_key: os.environ/GOOGLE_API_KEY
+
+  - model_name: voyage-3.5-lite
+    litellm_params:
+      model: voyage/voyage-3.5-lite
+      api_key: os.environ/VOYAGE_API_KEY
+
 litellm_settings:
   # Reasoning models (GPT-5.x) reject parameters such as `temperature: 0`, which
   # assistant sends for its repeatable rubric/extraction calls — drop a parameter the
@@ -255,6 +269,9 @@ litellm_settings:
   # tenant (`user`) plus whatever `metadata` the agent services attach (scenario,
   # session/thread — see ai_circus_shared.observability.langfuse_request_metadata).
   callbacks:
+    # Policy first: a call the policy refuses must never reach (or be billed by) the budget check.
+    # POLICY_DECIDER unset/noop makes it a no-op — see policy_hook.py and docs/governance/policy.md.
+    - llm_gateway.policy_hook.instance
     - llm_gateway.budget_hook.instance
 
   # Explicit fallback chains only — litellm has no implicit/automatic fallback

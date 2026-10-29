@@ -1,0 +1,89 @@
+{
+  "additionalProperties": false,
+  "description": "The CloudEvents 1.0 structured-JSON envelope every governance event uses.",
+  "properties": {
+    "aisystemid": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Aisystemid"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "datacontenttype": {
+      "const": "application/json",
+      "default": "application/json",
+      "title": "Datacontenttype",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "source": {
+      "maxLength": 128,
+      "title": "Source",
+      "type": "string"
+    },
+    "specversion": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Specversion",
+      "type": "string"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Subject"
+    },
+    "tenantid": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenantid"
+    },
+    "time": {
+      "title": "Time",
+      "type": "string"
+    },
+    "type": {
+      "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+\\.governance\\.[a-z_]+(\\.[a-z_]+)*\\.v[0-9]+$",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "source",
+    "type",
+    "time",
+    "data"
+  ],
+  "title": "CloudEventEnvelope",
+  "type": "object"
+}

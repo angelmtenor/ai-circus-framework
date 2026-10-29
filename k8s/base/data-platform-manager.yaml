@@ -134,6 +134,8 @@ spec:
           env:
             # Renamed from .env's LITELLM_MASTER_KEY.
             - {name: LLM_GATEWAY_API_KEY, valueFrom: {secretKeyRef: {name: data-platform-manager-secrets, key: LITELLM_MASTER_KEY}}}
+            # Admin audit trail writes (only used when GOVERNANCE_AUDIT_ENABLED=true).
+            - {name: PLATFORM_REGISTRY_URL, value: "http://platform-registry:8000"}
           volumeMounts:
             # Read-only: the admin Deep Learning tab lists the deep_learning scenarios from here.
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}

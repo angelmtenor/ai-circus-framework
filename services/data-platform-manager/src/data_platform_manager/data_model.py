@@ -61,9 +61,32 @@ class EnvConfig(BaseSettings):
         description="SeaweedFS secret key (must match OBJECT_STORE_SECRET_KEY in the repo root .env)"
     )
     SCENARIOS_DIR: str = Field(description="Path to the scenarios/ directory (one subdirectory per scenario.yaml)")
+    GOVERNANCE_AUDIT_ENABLED: str | None = Field(
+        description="true = record gateway budget changes in platform-registry's admin audit trail", default=None
+    )
+    GOVERNANCE_POLICY_HMAC_SECRET: SecretStr | None = Field(
+        description="HMAC secret signing POST /governance/policy/invalidate; unset = endpoint off", default=None
+    )
+    GOVERNANCE_POLICY_PUSH_TTL_SECONDS: str | None = Field(
+        description="How long a decision pushed through the invalidate endpoint stays cached (default 3600)",
+        default=None,
+    )
+    GOVERNANCE_EVENTS_ENABLED: str | None = Field(
+        description="true = emit ai_system.status_applied events when a pushed decision suspends or resumes a system",
+        default=None,
+    )
+    GOVERNANCE_EVENT_SINK: str | None = Field(
+        description="'log' (default) or 'http' (Valkey outbox drained by platform-registry)", default=None
+    )
+    GOVERNANCE_EVENT_NAMESPACE: str | None = Field(
+        description="Reverse-DNS namespace of governance event types (default dev.aicircus)", default=None
+    )
+    PLATFORM_REGISTRY_URL: str | None = Field(
+        description="Base URL of platform-registry (admin audit trail writes)", default=None
+    )
 
 
-_SOURCE_YAML_HASH = "531b888614aa43774592c7db8377d9c1430c7773280a4b409d4f32caa6265f3f"
+_SOURCE_YAML_HASH = "fff4c84ad394514604c7813db5039d0f7636e506e3b699640a437261b6c08943"
 
 
 EnvConfig.model_rebuild()

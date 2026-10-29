@@ -1,0 +1,96 @@
+{
+  "additionalProperties": false,
+  "description": "One audit row as stored and served (`GET /governance/audit`).",
+  "properties": {
+    "action": {
+      "maxLength": 96,
+      "title": "Action",
+      "type": "string"
+    },
+    "actor": {
+      "maxLength": 64,
+      "title": "Actor",
+      "type": "string"
+    },
+    "after": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "After"
+    },
+    "before": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Before"
+    },
+    "hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Hash",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "integer"
+    },
+    "org_id": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Org Id"
+    },
+    "prev_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Prev Hash",
+      "type": "string"
+    },
+    "target_id": {
+      "maxLength": 128,
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_type": {
+      "maxLength": 64,
+      "title": "Target Type",
+      "type": "string"
+    },
+    "ts": {
+      "description": "UTC timestamp, ISO-8601 with milliseconds, e.g. 2026-10-29T10:15:00.123Z",
+      "title": "Ts",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "ts",
+    "actor",
+    "action",
+    "target_type",
+    "target_id",
+    "prev_hash",
+    "hash"
+  ],
+  "title": "AuditRecord",
+  "type": "object"
+}
