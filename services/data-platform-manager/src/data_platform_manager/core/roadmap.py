@@ -171,6 +171,77 @@ ROADMAP: list[Capability] = [
         note="Monthly per-org spend caps enforced in llm-gateway (budget_hook, tracked in Valkey) — "
         "POST/GET/DELETE /gateway/budgets",
     ),
+    # --- Governance-ready by standards (docs/governance/, ADR 0011): every capability below ships off by
+    # default and talks to external governance tools only through open contracts. They *support* an AI
+    # management system (EU AI Act / ISO/IEC 42001 evidence); none of them makes a deployment compliant. ---
+    Capability(
+        pillar="governance",
+        name="AI-system metadata",
+        status="live",
+        note="Optional declared `governance:` block per scenario (owner, purpose, EU AI Act role/risk, oversight, "
+        "data) with a stable ai_system_id — never auto-classified; served in ScenarioSummary.governance",
+    ),
+    Capability(
+        pillar="governance",
+        name="AI-BOM inventory export",
+        status="live",
+        note="CycloneDX 1.6 AI-BOM — scenarios, gateway model routes, trained models with model cards, datasets — "
+        "at GET /governance/inventory (platform-registry, admin; GOVERNANCE_INVENTORY_ENABLED)",
+    ),
+    Capability(
+        pillar="governance",
+        name="GenAI trace attributes",
+        status="live",
+        note="llm-gateway spans carry OpenTelemetry gen_ai.* (semconv v1.37.0) and aicf.* tenant/AI-system/policy "
+        "attributes; TRACE_CAPTURE_CONTENT=false redacts prompts. Viewing needs the optional Langfuse monitor",
+    ),
+    Capability(
+        pillar="governance",
+        name="ML decision records",
+        status="live",
+        note="prediction and dl-inference leave a content-free `prediction.recorded` record per scoring request, "
+        "optionally kept per tenant for GOVERNANCE_RETENTION_DAYS (default 183) — off by default",
+    ),
+    Capability(
+        pillar="governance",
+        name="Policy decision point",
+        status="live",
+        note="llm-gateway enforces allow/deny/degrade + obligations from a noop, static, OPA or HTTP decision "
+        "point; explicit open/closed/by_risk fail modes; HMAC-signed cache invalidation — off by default",
+    ),
+    Capability(
+        pillar="governance",
+        name="Governance events",
+        status="live",
+        note="Content-free CloudEvents 1.0 (policy decisions, budget exhaustion, admin changes, model trained, "
+        "predictions) to a log or an HMAC-signed webhook with a retrying Valkey outbox — off by default",
+    ),
+    Capability(
+        pillar="governance",
+        name="Admin audit trail",
+        status="live",
+        note="Hash-chained audit_log of every admin mutation (entitlements, LLM/voice settings, budgets, policy "
+        "cache) — GET /governance/audit and /audit/verify; off by default",
+    ),
+    Capability(
+        pillar="governance",
+        name="Named admin identities in the audit trail",
+        status="planned",
+        note="The admin API is one shared bearer key, so audit rows record the credential class, not a person",
+    ),
+    Capability(
+        pillar="governance",
+        name="Per-AI-system tool scoping and agent step limits",
+        status="planned",
+        note="Extend policy obligations with allowed_tools / max_steps, enforced in the agent services and the "
+        "MCP layer — today the gateway governs models, not tools",
+    ),
+    Capability(
+        pillar="governance",
+        name="SPDX 3.0 AI inventory profile",
+        status="planned",
+        note="A second inventory format next to CycloneDX",
+    ),
 ]
 
 

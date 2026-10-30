@@ -35,3 +35,30 @@ def test_non_relational_and_cache_are_reported_live_via_this_services_own_adopti
     by_name = {c.name: c for c in get_roadmap()}
     assert by_name["Non-Relational Store"].status == "live"
     assert by_name["Cache / Key-Value"].status == "live"
+
+
+def test_governance_capabilities_are_listed_with_honest_statuses() -> None:
+    by_name = {c.name: c for c in get_roadmap() if c.pillar == "governance"}
+    shipped = [
+        "AI-system metadata",
+        "AI-BOM inventory export",
+        "GenAI trace attributes",
+        "ML decision records",
+        "Policy decision point",
+        "Governance events",
+        "Admin audit trail",
+    ]
+    for name in shipped:
+        assert by_name[name].status == "live", name
+    for name in (
+        "Named admin identities in the audit trail",
+        "Per-AI-system tool scoping and agent step limits",
+        "SPDX 3.0 AI inventory profile",
+    ):
+        assert by_name[name].status == "planned", name
+
+
+def test_governance_notes_never_claim_compliance() -> None:
+    for capability in get_roadmap():
+        if capability.pillar == "governance":
+            assert "compliant" not in capability.note.lower(), capability.name
