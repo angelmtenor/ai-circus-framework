@@ -107,6 +107,18 @@ class EnvConfig(BaseSettings):
         description="true = append every admin mutation to the hash-chained audit_log and serve GET /governance/audit",
         default=None,
     )
+    GOVERNANCE_INVENTORY_ENABLED: str | None = Field(
+        description="true = serve the CycloneDX AI-BOM at GET /governance/inventory (admin only)", default=None
+    )
+    OBJECT_STORE_ENDPOINT: str | None = Field(
+        description="SeaweedFS/S3 endpoint — read-only, only for the AI-BOM's trained-model metadata", default=None
+    )
+    OBJECT_STORE_ACCESS_KEY: str | None = Field(
+        description="SeaweedFS access key (AI-BOM only; from the environment)", default=None
+    )
+    OBJECT_STORE_SECRET_KEY: SecretStr | None = Field(
+        description="SeaweedFS secret key (AI-BOM only; from the environment)", default=None
+    )
     GOVERNANCE_CATALOG_ENABLED: str | None = Field(
         description="true = publish each AI system's declared risk to Valkey for the gateway's by_risk fail mode",
         default=None,
@@ -116,7 +128,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "ee4e268aaeb03bcef901515bd86d8864cab85e3d2d84a720299dc48de289249e"
+_SOURCE_YAML_HASH = "181b26d0451c56f3ed1d03e2ed2b785214bceefde15b19876974c498c0e0d382"
 
 
 EnvConfig.model_rebuild()

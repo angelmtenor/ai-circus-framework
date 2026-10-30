@@ -211,6 +211,30 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: GOVERNANCE_INVENTORY_ENABLED
+    description: "true = serve the CycloneDX AI-BOM at GET /governance/inventory (admin only)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: OBJECT_STORE_ENDPOINT
+    description: "SeaweedFS/S3 endpoint — read-only, only for the AI-BOM's trained-model metadata"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: OBJECT_STORE_ACCESS_KEY
+    description: "SeaweedFS access key (AI-BOM only; from the environment)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: OBJECT_STORE_SECRET_KEY
+    description: "SeaweedFS secret key (AI-BOM only; from the environment)"
+    type: string
+    mandatory: false
+    secret: true
+
   - name: GOVERNANCE_CATALOG_ENABLED
     description: "true = publish each AI system's declared risk to Valkey for the gateway's by_risk fail mode"
     type: string
@@ -253,6 +277,7 @@ environments:
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:
     POSTGRES_HOST: "localhost"
+    OBJECT_STORE_ENDPOINT: "http://objectstore.localhost"
     CACHE_URL: "redis://localhost:6379"
     SCENARIOS_DIR: "../../scenarios"
     # Loopback-bound host port (not Traefik — see root docker-compose.yml's
@@ -262,6 +287,7 @@ environments:
   # Running as a container inside docker-compose's `ai-circus` network.
   docker:
     POSTGRES_HOST: "postgres"
+    OBJECT_STORE_ENDPOINT: "http://seaweedfs:8333"
     CACHE_URL: "redis://valkey:6379"
     SCENARIOS_DIR: "/app/scenarios"
     LLM_GATEWAY_URL: "http://llm-gateway:4000"
