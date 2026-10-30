@@ -1,0 +1,61 @@
+# Changelog
+
+Notable changes per release, newest first. Versions follow SemVer and every release is a git-flow
+tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
+only recorded as tags and in `git log`.
+
+## v0.34.0 — 2026-10-30
+
+### Added
+- **Platform → Governance** tab in the admin Platform page (`PlatformGovernance.tsx`) backed by
+  `GET /governance/overview` on platform-registry: switches on/off, the AI systems with their declared EU AI Act risk
+  and human oversight, the audit trail with a chain-verified badge, and an AI-BOM download. Read-only, content-free,
+  and it answers while every governance feature is off.
+
+### Changed
+- New `k3s-data-demo` / `k3s-data-demo-off` targets: every scenario kind plus the core, analytics and bi data tiers,
+  with governance, MLflow and voice off (about 8.8 of 11.7 GiB measured).
+- The simulator ADR is renumbered 0013 (0011 stays the governance ADR).
+- Docs: README governance section, tier table with demos and memory, `docs/scenarios/surf_retail.md`, a regenerated
+  data-products diagram.
+
+## v0.33.1 — 2026-10-30
+
+### Fixed
+- `prediction`: the decision-record metadata is typed as a mapping of any, so `make check` passes.
+- `libs/shared`: three lint errors in `data_product` cleared so `make check-all` passes.
+
+## v0.33.0 — 2026-10-30
+
+### Added
+- **AI-BOM** — the AI inventory exported as CycloneDX 1.6 at `GET /governance/inventory`
+  (`GOVERNANCE_INVENTORY_ENABLED`, off by default).
+- Governance documentation: [docs/governance](docs/governance/README.md) with the standards
+  crosswalk, plus the roadmap status in the admin Platform → Capabilities tab.
+
+## v0.32.0 — 2026-10-29
+
+### Added — governance-ready by standards ([ADR 0011](docs/adr/0011-governance-ready-by-standards.md))
+Everything is off by default and changes nothing when off.
+- Declared AI-system metadata per scenario with a stable `ai_system_id` (never auto-classified).
+- Content-free **CloudEvents** (log or HMAC-signed webhook with an outbox) and a **hash-chained
+  admin audit trail** (`/governance/audit`, `/audit/verify`).
+- A pluggable **policy decision point** enforced at `llm-gateway` (noop / static / OPA / HTTP, with
+  an explicit `POLICY_FAIL_MODE` and an HMAC invalidation webhook).
+- `gen_ai.*` + `aicf.*` trace attributes (semconv v1.37.0) and content-free **decision records**
+  with enforced retention for non-LLM predictions.
+
+## v0.31.0 — 2026-10-29
+
+### Added — Data Platform and the `data_product` scenario kind ([docs/data-platform](docs/data-platform/README.md))
+- A fifth scenario kind, `data_product`, and the generic services `data-ingest`, `data-transform`
+  and `data-api` on four switchable k8s tiers (core, analytics, bi, governance; never part of
+  `make k3s-all`).
+- The `assistant` answers data products through governed data, catalogue and ML tools.
+- **Angel's Surf Co.** (`surf_retail`, fictional): a web shop, the Surf HQ control room, a guided
+  tour, and two ML scenarios trained on its gold marts (`surf_demand_forecast`,
+  `surf_customer_propensity`). See [docs/scenarios/surf_retail.md](docs/scenarios/surf_retail.md).
+
+### Fixed
+- `etl-tabular` and `training` jobs honour `SCENARIOS`.
+- Dependency advisories cleared (langgraph, filelock, dnspython).

@@ -1,6 +1,6 @@
 """Angel's Surf Co. simulator — the surf_retail data product's source systems.
 
-A plugin of the generic data tier (see ai_circus_shared.data_simulator and docs/adr/0011):
+A plugin of the generic data tier (see ai_circus_shared.data_simulator and docs/adr/0013):
 modern-store tills and the web shop publish to Kafka, the Greek franchise's legacy tills drop
 daily files with a control file into the landing bucket, and the ERP (stores, products,
 promotions, loyalty customers) is a set of tables in the operational source database that CDC

@@ -1292,6 +1292,61 @@ export async function getRoadmap(baseUrl: string, accessToken: string | null): P
   return asJson<Capability[]>(response);
 }
 
+// ── Governance overview (platform-registry GET /governance/overview, admin-only) ─
+// Mirrors platform_registry.core.governance_overview's models.
+
+export type GovernanceSwitch = { env: string; label: string; enabled: boolean };
+export type GovernanceAiSystem = {
+  slug: string;
+  ai_system_id: string;
+  kind: string;
+  title: string;
+  declared: boolean;
+  owner: string | null;
+  risk_category: string;
+  oversight: string | null;
+  personal_data: boolean | null;
+};
+export type GovernanceAuditEntry = {
+  id: number;
+  ts: string;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  org_id: string | null;
+};
+export type GovernanceOverview = {
+  switches: GovernanceSwitch[];
+  event_sink: string | null;
+  inventory_path: string | null;
+  ai_systems: {
+    total: number;
+    declared: number;
+    by_risk: Record<string, number>;
+    by_oversight: Record<string, number>;
+    items: GovernanceAiSystem[];
+  };
+  audit: {
+    enabled: boolean;
+    entries: number;
+    verification: { ok: boolean; checked: number; first_invalid_id: number | null; reason: string | null } | null;
+    recent: GovernanceAuditEntry[];
+  };
+};
+
+export async function getGovernanceOverview(platformRegistryUrl: string, accessToken: string | null): Promise<GovernanceOverview> {
+  const response = await fetch(`${platformRegistryUrl}/governance/overview`, { headers: headers(accessToken) });
+  return asJson<GovernanceOverview>(response);
+}
+
+/** The AI-BOM (CycloneDX 1.6) as a Blob, for the dashboard's download button. */
+export async function downloadGovernanceInventory(platformRegistryUrl: string, accessToken: string | null): Promise<Blob> {
+  const response = await fetch(`${platformRegistryUrl}/governance/inventory`, { headers: headers(accessToken) });
+  if (!response.ok) throw new Error(`Request failed: ${response.status} ${await response.text()}`);
+  return response.blob();
+}
+
 // ── Admin platform dashboard (data-platform-manager GET /platform/status) ────────
 // Mirrors data_platform_manager.core.platform_status's dataclasses exactly.
 
