@@ -360,7 +360,7 @@ class SeasonHeatmap(BaseModel):
 
 class ForecastBoard(BaseModel):
     """Live forecasts: the `latest_flag` rows of an ml_export's feature mart, scored by its model
-    through the prediction service and laid out as a `row` × `column` board."""
+    through the prediction service and laid out as a `row` by `column` board."""
 
     title: str
     model: Identifier  # an ml_exports scenario
@@ -495,9 +495,12 @@ class DataProductConfig(BaseModel):
             metric = metrics.get(insights.heatmap.metric)
             if metric is None or insights.heatmap.rows not in metric.dimensions:
                 raise ValueError("apps.insights.heatmap: unknown metric or `rows` is not one of its dimensions.")
-        if insights is not None and insights.forecast is not None:
-            if insights.forecast.model not in {e.scenario for e in self.ml_exports}:
-                raise ValueError("apps.insights.forecast: model is not an ml_exports scenario.")
+        if (
+            insights is not None
+            and insights.forecast is not None
+            and insights.forecast.model not in {e.scenario for e in self.ml_exports}
+        ):
+            raise ValueError("apps.insights.forecast: model is not an ml_exports scenario.")
         shop = self.apps.storefront
         if shop is not None:
             for dataset in [shop.catalogue, *([shop.recommendations] if shop.recommendations else [])]:
@@ -505,7 +508,9 @@ class DataProductConfig(BaseModel):
                     raise ValueError(f"apps.storefront: dataset {dataset!r} is not declared.")
             actions = {a.name: a for a in (self.simulator.actions if self.simulator else [])}
             if shop.checkout_action not in actions:
-                raise ValueError(f"apps.storefront: checkout_action {shop.checkout_action!r} is not a simulator action.")
+                raise ValueError(
+                    f"apps.storefront: checkout_action {shop.checkout_action!r} is not a simulator action."
+                )
             if shop.order_entity not in {r.entity for r in self.records}:
                 raise ValueError(f"apps.storefront: order_entity {shop.order_entity!r} is not a record entity.")
         unknown_stages = set(self.stage_labels) - set(FLOW_STAGES)
