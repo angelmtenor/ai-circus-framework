@@ -31,7 +31,8 @@ k8s/
                     # applied manually via `make k3s-pipeline`, not part of `make k3s-up`;
                     # plus dl-training-job.yaml (per-scenario template) and gpu-smoke-pod.yaml
   deep-learning/    # optional overlay: dl-inference (make k3s-dl-up), never part of k3s-up
-  data-platform/    # optional overlay: Kafka (make k3s-data-platform-up)
+  data-platform/    # optional data tiers — core (Kafka, data-ingest, data-api, data-transform), analytics,
+                    # bi, governance — one overlay each (make k3s-data-core-up … k3s-data-showcase)
 infra/k3s-gpu/      # k3s node image with the NVIDIA runtime + device plugin (GPU clusters)
 ```
 

@@ -1,116 +1,136 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1740" height="840" viewBox="0 0 1740 840">
-<defs>
-<filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur in="SourceGraphic" stdDeviation="3.2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-<pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M 34 0 L 0 0 0 34" fill="none" stroke="rgba(255,255,255,0.035)" stroke-width="1"/></pattern>
-<marker id="arrow-primary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9fb7cc" opacity="0.85"/></marker>
-<marker id="arrow-secondary" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7d8fa3" opacity="0.6"/></marker>
-</defs>
-<rect x="0" y="0" width="1740" height="840" fill="#050b16"/>
-<rect x="0" y="0" width="1740" height="840" fill="url(#grid)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1740" height="800" viewBox="0 0 1740 800">
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9fb7cc" opacity="0.85"/></marker></defs>
+<rect width="1740" height="800" fill="#050b16"/>
 <text x="870.0" y="38" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="800" letter-spacing="2" fill="#f3f8fc">AI OPEN FRAMEWORK</text>
-<text x="870.0" y="58" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12.5" letter-spacing="0.5" fill="#5c7288">Data Platform — same repo &amp; cluster, one optional profile (off by default)</text>
-<rect x="380" y="96" width="320" height="130" rx="14" fill="#ffca28" fill-opacity="0.035" stroke="#ffca28" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="396" y="114" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#ffca28" fill-opacity="0.9">AI / BI / ML (existing)</text>
-<rect x="710" y="96" width="320" height="130" rx="14" fill="#b388ff" fill-opacity="0.035" stroke="#b388ff" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="726" y="114" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#b388ff" fill-opacity="0.9">GOVERNANCE (existing)</text>
-<rect x="720" y="130" width="300" height="80" rx="12" fill="#160f2b" stroke="#b388ff" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="720" y="130" width="300" height="80" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
-<text x="870.0" y="160" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">PLATFORM-REGISTRY</text>
-<text x="870.0" y="182" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Tenants, entitlements</text>
-<line x1="738" y1="184" x2="1002" y2="184" stroke="#b388ff" stroke-opacity="0.25"/>
-<text x="870.0" y="200" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI + SQLAlchemy</text>
-<rect x="390" y="130" width="300" height="80" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="390" y="130" width="300" height="80" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
-<text x="540.0" y="160" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">LLM-GATEWAY</text>
-<text x="540.0" y="182" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Routes every LLM call</text>
-<line x1="408" y1="184" x2="672" y2="184" stroke="#ffca28" stroke-opacity="0.25"/>
-<text x="540.0" y="200" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">LiteLLM proxy</text>
-<rect x="38" y="262" width="1664" height="130" rx="14" fill="#22d3ee" fill-opacity="0.035" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="3 4"/>
-<text x="54" y="280" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#22d3ee" fill-opacity="0.9">DATA — always on</text>
-<rect x="60" y="296" width="300" height="80" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="60" y="296" width="300" height="80" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
-<text x="210.0" y="326" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">POSTGRES</text>
-<text x="210.0" y="348" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">+ document store (JSONB)</text>
-<line x1="78" y1="350" x2="342" y2="350" stroke="#22d3ee" stroke-opacity="0.25"/>
-<text x="210.0" y="366" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">PostgreSQL</text>
-<rect x="390" y="296" width="300" height="80" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="390" y="296" width="300" height="80" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
-<text x="540.0" y="326" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">VALKEY</text>
-<text x="540.0" y="348" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Cache / rate-limit state</text>
-<line x1="408" y1="350" x2="672" y2="350" stroke="#22d3ee" stroke-opacity="0.25"/>
-<text x="540.0" y="366" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Valkey</text>
-<rect x="38" y="428" width="900" height="330" rx="14" fill="#ff8a5c" fill-opacity="0.035" stroke="#ff8a5c" stroke-opacity="0.5" stroke-width="1.3" stroke-dasharray="4 3"/>
-<text x="54" y="446" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8" fill="#ff8a5c" fill-opacity="0.9">DATA PLATFORM — OPTIONAL PROFILE (off by default: make data-platform-up)</text>
-<rect x="70" y="470" width="320" height="130" rx="12" fill="#160f2b" stroke="#b388ff" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="70" y="470" width="320" height="130" rx="12" fill="none" stroke="#b388ff" stroke-width="1.1" opacity="0.9"/>
-<text x="230.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">DATA-PLATFORM-MANAGER</text>
-<text x="230.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Admin-only (ADMIN_API_KEY)</text>
-<text x="230.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Health · roadmap · pipeline jobs · CDC ·</text>
-<text x="230.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">lakehouse · rate limits · budgets · events</text>
-<line x1="88" y1="574" x2="372" y2="574" stroke="#b388ff" stroke-opacity="0.25"/>
-<text x="230.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">FastAPI</text>
-<rect x="470" y="470" width="320" height="130" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="470" y="470" width="320" height="130" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
-<text x="630.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">KAFKA</text>
-<text x="630.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Real-time event streaming</text>
-<text x="630.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">(KRaft, single node)</text>
-<text x="630.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">e.g. topic: pipeline-triggers</text>
-<line x1="488" y1="574" x2="772" y2="574" stroke="#22d3ee" stroke-opacity="0.25"/>
-<text x="630.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Apache Kafka</text>
-<rect x="70" y="630" width="320" height="90" rx="12" fill="#14161c" stroke="#8b93a1" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="70" y="630" width="320" height="90" rx="12" fill="none" stroke="#8b93a1" stroke-width="1.1" opacity="0.9"/>
-<text x="230.0" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">KUBERNETES JOBS API</text>
-<text x="230.0" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">k3s only — RBAC-scoped to</text>
-<text x="230.0" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">batch/v1 Jobs in this namespace</text>
-<line x1="88" y1="694" x2="372" y2="694" stroke="#8b93a1" stroke-opacity="0.25"/>
-<text x="230.0" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">kubectl-equivalent client</text>
-<rect x="405" y="630" width="245" height="90" rx="12" fill="#06232a" stroke="#22d3ee" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="405" y="630" width="245" height="90" rx="12" fill="none" stroke="#22d3ee" stroke-width="1.1" opacity="0.9"/>
-<text x="527.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">LAKEHOUSE</text>
-<text x="527.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Versioned Parquet tables on</text>
-<text x="527.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">object store + Postgres catalog</text>
-<line x1="423" y1="694" x2="632" y2="694" stroke="#22d3ee" stroke-opacity="0.25"/>
-<text x="527.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">Apache Iceberg (PyIceberg)</text>
-<rect x="665" y="630" width="245" height="90" rx="12" fill="#2a2008" stroke="#ffca28" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="665" y="630" width="245" height="90" rx="12" fill="none" stroke="#ffca28" stroke-width="1.1" opacity="0.9"/>
-<text x="787.5" y="660" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="0.3" fill="#f3f8fc">SEMANTIC LAYER</text>
-<text x="787.5" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">Federates lakehouse +</text>
-<text x="787.5" y="697" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#9fb7cc">platform-registry in one query</text>
-<line x1="683" y1="694" x2="892" y2="694" stroke="#ffca28" stroke-opacity="0.25"/>
-<text x="787.5" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">DuckDB (embedded)</text>
-<rect x="1000" y="470" width="300" height="130" rx="12" fill="#08211d" stroke="#34d399" stroke-width="1.8" filter="url(#glow)" opacity="0.98"/>
-<rect x="1000" y="470" width="300" height="130" rx="12" fill="none" stroke="#34d399" stroke-width="1.1" opacity="0.9"/>
-<text x="1150.0" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="0.5" fill="#f3f8fc">UI-REACT</text>
-<text x="1150.0" y="522" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">Platform → Capabilities tab</text>
-<text x="1150.0" y="537" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">(admin tenant only)</text>
-<text x="1150.0" y="552" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11.5" fill="#9fb7cc">roadmap · jobs · events · CDC · lakehouse</text>
-<line x1="1018" y1="574" x2="1282" y2="574" stroke="#34d399" stroke-opacity="0.25"/>
-<text x="1150.0" y="590" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-style="italic" fill="#607890">React + Vite</text>
-<path d="M 1000 615 C 1000 615.0 390 615.0 390 615" fill="none" stroke="#b388ff" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
-<rect x="627.6" y="604" width="134.8" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="695" y="615" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#b388ff" opacity="0.95">admin bearer token</text>
-<path d="M 710 535 C 710 535.0 470 535.0 470 535" fill="none" stroke="#22d3ee" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
-<rect x="365.9" y="507" width="128.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="430" y="518" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#22d3ee" opacity="0.95">publish / consume</text>
-<path d="M 150 600 C 150 615.0 150 615.0 150 630" fill="none" stroke="#8b93a1" stroke-width="2.2" marker-end="url(#arrow-primary)" opacity="0.85"/>
-<rect x="89.2" y="607" width="121.6" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="150" y="618" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#8b93a1" opacity="0.95">trigger / status</text>
-<path d="M 150 470 C 150 423.0 150 423.0 150 376" fill="none" stroke="#22d3ee" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
-<rect x="69.4" y="400" width="161.2" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="150" y="411" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#22d3ee" opacity="0.95">document store + cache</text>
-<path d="M 800 630 L 800 210" fill="none" stroke="#ffca28" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arrow-secondary)" opacity="0.85"/>
-<rect x="709" y="402" width="182" height="16" rx="4" fill="#050b16" opacity="0.92"/>
-<text x="800" y="413" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9.5" fill="#ffca28" opacity="0.95">reads scenarios/entitlements</text>
-<circle cx="60" cy="782" r="6.5" fill="#b388ff"/>
-<text x="75" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Governance (transversal)</text>
-<circle cx="270" cy="782" r="6.5" fill="#ffca28"/>
-<text x="285" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">AI / BI / ML</text>
-<circle cx="390" cy="782" r="6.5" fill="#22d3ee"/>
-<text x="405" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Data (always on)</text>
-<circle cx="560" cy="782" r="6.5" fill="#34d399"/>
-<text x="575" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">Frontend</text>
-<circle cx="680" cy="782" r="6.5" fill="#8b93a1"/>
-<text x="695" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#9fb7cc">External (k3s only)</text>
-<text x="850" y="786" font-family="Arial, Helvetica, sans-serif" font-size="12" font-style="italic" fill="#5c7288">(dashed border = optional profile, off by default)</text>
-<text x="870.0" y="816" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5c7288">See architecture-detailed.svg for the full platform — this supplement covers only what changed.</text>
+<text x="870.0" y="58" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12.5" letter-spacing="0.5" fill="#5c7288">Data products — a governed open-source data platform on the same cluster, switched on tier by tier (off by default)</text>
+<text x="160.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">SOURCES</text>
+<text x="450.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">CAPTURE</text>
+<text x="740.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">INGEST</text>
+<text x="1030.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">STORE</text>
+<text x="1320.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">TRANSFORM</text>
+<text x="1580.0" y="118" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#9fb7cc">SERVE</text>
+<path d="M 280 196.0 C 305.0 196.0, 305.0 196.0, 330 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 280 308.0 C 305.0 308.0, 305.0 308.0, 330 308.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 280 420.0 C 305.0 420.0, 305.0 420.0, 330 420.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 450.0 374 L 450.0 242" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 570 196.0 C 595.0 196.0, 595.0 196.0, 620 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 570 308.0 C 595.0 308.0, 595.0 196.0, 620 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 860 196.0 C 885.0 196.0, 885.0 196.0, 910 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 860 196.0 C 885.0 196.0, 885.0 308.0, 910 308.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1150 196.0 C 1175.0 196.0, 1175.0 196.0, 1200 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1320.0 242 L 1320.0 262" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1320.0 242 L 1320.0 374" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1440 196.0 C 1450.0 196.0, 1450.0 196.0, 1460 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1440 420.0 C 1450.0 420.0, 1450.0 196.0, 1460 196.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1580.0 242 L 1580.0 262" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<path d="M 1440 420.0 C 1450.0 420.0, 1450.0 420.0, 1460 420.0" fill="none" stroke="#7d8fa3" stroke-opacity="0.7" stroke-width="1.4" marker-end="url(#a)"/>
+<rect x="40" y="150" width="240" height="92" rx="10" fill="#14161c" stroke="#8b93a1" stroke-width="1.6"/>
+<text x="52" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#8b93a1">EVENT PRODUCERS</text>
+<text x="52" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Tills and web orders (simulator</text>
+<text x="52" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">plugin shipped by the scenario)</text>
+<text x="52" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">Python plugin</text>
+<rect x="40" y="262" width="240" height="92" rx="10" fill="#14161c" stroke="#8b93a1" stroke-width="1.6"/>
+<text x="52" y="282" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#8b93a1">DAILY FILES</text>
+<text x="52" y="300" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Legacy tills + migration files</text>
+<text x="52" y="314" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">with control totals</text>
+<text x="52" y="346" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">CSV / JSON</text>
+<rect x="40" y="374" width="240" height="92" rx="10" fill="#14161c" stroke="#8b93a1" stroke-width="1.6"/>
+<text x="52" y="394" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#8b93a1">ERP DATABASE</text>
+<text x="52" y="412" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Operational tables</text>
+<text x="52" y="426" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">(data_sources)</text>
+<text x="52" y="458" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">PostgreSQL</text>
+<rect x="330" y="150" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="342" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">KAFKA</text>
+<text x="342" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">A topic per tenant:</text>
+<text x="342" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">tenant-&lt;org&gt;.&lt;topic&gt;</text>
+<text x="342" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">Kafka (KRaft)</text>
+<rect x="330" y="262" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="342" y="282" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">LANDING BUCKET</text>
+<text x="342" y="300" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Raw files, reconciled against</text>
+<text x="342" y="314" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">their control totals</text>
+<text x="342" y="346" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">SeaweedFS (S3)</text>
+<rect x="330" y="374" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="342" y="394" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">CDC</text>
+<text x="342" y="412" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Logical replication of the</text>
+<text x="342" y="426" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">ERP tables into Kafka</text>
+<text x="342" y="458" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">ai_circus_shared.cdc</text>
+<rect x="620" y="150" width="240" height="92" rx="10" fill="#20220a" stroke="#cddc39" stroke-width="1.6"/>
+<text x="632" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#cddc39">DATA-INGEST</text>
+<text x="632" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">JSON Schema contract + business rules,</text>
+<text x="632" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">quarantine, idempotent upsert by key,</text>
+<text x="632" y="216" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">hot minute aggregates, lake archiver</text>
+<text x="632" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">FastAPI workers</text>
+<rect x="910" y="150" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="922" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">BRONZE</text>
+<text x="922" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Raw JSONB by key, a schema</text>
+<text x="922" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">per data product</text>
+<text x="922" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">Postgres  data_platform</text>
+<rect x="910" y="262" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6"/>
+<text x="922" y="282" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">ICEBERG LAKE</text>
+<text x="922" y="300" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">One day-partitioned table</text>
+<text x="922" y="314" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">per source</text>
+<text x="922" y="346" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">PyIceberg on SeaweedFS</text>
+<rect x="1200" y="150" width="240" height="92" rx="10" fill="#20220a" stroke="#cddc39" stroke-width="1.6"/>
+<text x="1212" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#cddc39">DATA-TRANSFORM</text>
+<text x="1212" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">dbt: silver (clean, pseudonymised)</text>
+<text x="1212" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">then gold marts, with tests</text>
+<text x="1212" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">dbt-core · CronJob</text>
+<rect x="1200" y="262" width="240" height="92" rx="10" fill="#20220a" stroke="#cddc39" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1212" y="282" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#cddc39">DAGSTER</text>
+<text x="1212" y="300" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Sensors on new bronze,</text>
+<text x="1212" y="314" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">asset checks, lineage</text>
+<text x="1212" y="346" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">Dagster</text>
+<text x="1430" y="282" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-style="italic" fill="#cddc39" fill-opacity="0.85">analytics tier</text>
+<rect x="1200" y="374" width="240" height="92" rx="10" fill="#06232a" stroke="#22d3ee" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1212" y="394" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#22d3ee">CLICKHOUSE MARTS</text>
+<text x="1212" y="412" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Columnar copy of silver,</text>
+<text x="1212" y="426" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">gold rebuilt in place</text>
+<text x="1212" y="458" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">ClickHouse</text>
+<text x="1430" y="394" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-style="italic" fill="#22d3ee" fill-opacity="0.85">analytics tier</text>
+<rect x="1460" y="150" width="240" height="92" rx="10" fill="#2a2008" stroke="#ffca28" stroke-width="1.6"/>
+<text x="1472" y="170" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#ffca28">DATA-API</text>
+<text x="1472" y="188" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Metrics, records + trail, governed</text>
+<text x="1472" y="202" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">SQL, lineage, SSE, simulator</text>
+<text x="1472" y="234" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">FastAPI + sqlglot</text>
+<rect x="1460" y="262" width="240" height="92" rx="10" fill="#2a2008" stroke="#ffca28" stroke-width="1.6"/>
+<text x="1472" y="282" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#ffca28">ASSISTANT</text>
+<text x="1472" y="300" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Data tools, catalogue tools,</text>
+<text x="1472" y="314" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">ml_predict on the exported marts</text>
+<text x="1472" y="346" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">FastAPI + LangChain</text>
+<rect x="1460" y="374" width="240" height="92" rx="10" fill="#08211d" stroke="#2dd4bf" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1472" y="394" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#2dd4bf">SUPERSET</text>
+<text x="1472" y="412" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Dashboards as code with</text>
+<text x="1472" y="426" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">row-level security</text>
+<text x="1472" y="458" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">Apache Superset</text>
+<text x="1690" y="394" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-style="italic" fill="#2dd4bf" fill-opacity="0.85">bi tier</text>
+<rect x="1460" y="486" width="240" height="92" rx="10" fill="#2a0f1e" stroke="#f472b6" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="1472" y="506" font-family="Arial, Helvetica, sans-serif" font-size="12.5" font-weight="800" letter-spacing="0.8" fill="#f472b6">OPENMETADATA</text>
+<text x="1472" y="524" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Catalogue, contracts, lineage</text>
+<text x="1472" y="538" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">topic → bronze → dbt → dashboard</text>
+<text x="1472" y="570" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#607890">OpenMetadata</text>
+<text x="1690" y="506" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="9.5" font-style="italic" fill="#f472b6" fill-opacity="0.85">governance tier</text>
+<rect x="40" y="610" width="1660" height="150" rx="14" fill="#b388ff" fill-opacity="0.04" stroke="#b388ff" stroke-opacity="0.5" stroke-dasharray="3 4"/>
+<text x="56" y="632" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="1" fill="#b388ff">TENANCY &amp; GOVERNANCE-READY — transversal, every contract open, every switch off by default</text>
+<text x="56" y="652" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#c9d8e6">Tenant = Keycloak Organization on every door: topic, bucket prefix, schema, API call. A role then adds row filters and column masks (ai_circus_shared.data_policy).</text>
+<rect x="56" y="668" width="316" height="74" rx="8" fill="#160f2b" stroke="#b388ff" stroke-opacity="0.7"/>
+<text x="66" y="688" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#b388ff">Policy decision point</text>
+<text x="66" y="705" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">llm-gateway asks noop / static / OPA / HTTP;</text>
+<text x="66" y="718" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">allow, deny, degrade</text>
+<rect x="380" y="668" width="316" height="74" rx="8" fill="#160f2b" stroke="#b388ff" stroke-opacity="0.7"/>
+<text x="390" y="688" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#b388ff">CloudEvents</text>
+<text x="390" y="705" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">content-free events over a log line or an</text>
+<text x="390" y="718" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">HMAC webhook with an outbox</text>
+<rect x="704" y="668" width="316" height="74" rx="8" fill="#160f2b" stroke="#b388ff" stroke-opacity="0.7"/>
+<text x="714" y="688" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#b388ff">Hash-chained audit</text>
+<text x="714" y="705" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">every admin mutation, verifiable at</text>
+<text x="714" y="718" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">/governance/audit/verify</text>
+<rect x="1028" y="668" width="316" height="74" rx="8" fill="#160f2b" stroke="#b388ff" stroke-opacity="0.7"/>
+<text x="1038" y="688" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#b388ff">Decision records</text>
+<text x="1038" y="705" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">non-LLM predictions kept with enforced</text>
+<text x="1038" y="718" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">retention</text>
+<rect x="1352" y="668" width="316" height="74" rx="8" fill="#160f2b" stroke="#b388ff" stroke-opacity="0.7"/>
+<text x="1362" y="688" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#b388ff">AI-BOM</text>
+<text x="1362" y="705" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">CycloneDX 1.6 inventory at</text>
+<text x="1362" y="718" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#c9d8e6">/governance/inventory</text>
+<text x="870.0" y="786" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#5c7288">Dashed border = optional tier (analytics · bi · governance). Core = Kafka, data-ingest, data-transform, data-api. See architecture-detailed.svg for the rest of the platform.</text>
 </svg>

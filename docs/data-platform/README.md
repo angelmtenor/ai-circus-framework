@@ -84,6 +84,7 @@ tier is a kustomize overlay under `k8s/data-platform/<tier>/` with its own `make
 | **analytics** | `k3s-data-analytics-up` | ClickHouse marts + hot path (shared ClickHouse instance, own database) · Dagster webserver + daemon | Columnar marts, second-level hot aggregates, orchestration with sensors, asset lineage and checks |
 | **bi** | `k3s-data-bi-up` | Apache Superset | Dashboards versioned as code, role-scoped SQL access |
 | **governance** | `k3s-data-governance-up` | OpenMetadata + OpenSearch (metadata ingestion as Jobs, no Airflow) | Catalogue, end-to-end lineage (topic → bronze → dbt → marts → dashboard), glossary, quality results, ownership |
+| demo (no governance) | `k3s-data-demo` | core + analytics + bi with every scenario kind running; MLflow, voice and governance off | The usual multi-scenario demo including data; `k3s-data-demo-off` undoes it |
 | everything | `k3s-data-showcase` | all four tiers, AI-only extras scaled to zero | The full storyline on one laptop |
 
 `k3s-data-showcase` follows `k3s-demo`'s pattern: it frees memory by scaling to zero what a
@@ -92,7 +93,7 @@ every tier. `k3s-data-showcase-off` restores them.
 
 ## Capability map — what exists, what is new
 
-Verified against `develop` at v0.30.2 (the proposal's §3.1 was an assumption list).
+Verified against `develop` at v0.30.2, before this tier landed (the proposal's §3.1 was an assumption list); the *Gap / change* column is what v0.31.0 added.
 
 | Capability | Already in the repo | Gap / change |
 |---|---|---|
@@ -120,7 +121,9 @@ Verified against `develop` at v0.30.2 (the proposal's §3.1 was an assumption li
 ```bash
 make k3s-data-build                 # images: data-ingest, data-api, data-transform
 make k3s-data-core-up               # Kafka + data-ingest + data-api + the dbt CronJob
-make k3s-data-seed                  # 60 days of history through the real pipeline
+make k3s-data-seed                  # the scenario's history (five years for surf_retail) through the real pipeline
+make k3s-data-seed-lite             # one year, for laptops short of memory or disk
+make k3s-data-ml                    # train the tabular_ml scenarios the data product exports
 make k3s-data-transform             # a dbt build now (the CronJob runs every 3 minutes)
 make k3s-data-analytics-up          # Dagster + ClickHouse marts (data-api reads ClickHouse)
 make k3s-data-bi-up                 # Superset + dashboards as code
@@ -130,7 +133,7 @@ make k3s-data-call P=/v1/surf_retail/overview   # any data-api GET as the admin
 make k3s-data-reset                 # drop every byte of one data product, then re-seed
 ```
 
-Each `*-up` has a `*-down`. Open http://aiopen.localhost → *Omnichannel Retail Data
+Each `*-up` has a `*-down`. Open http://aiopen.localhost → *Angel's Surf Co. — Data
 Platform*. Its first tab is the **Guided tour** (`ui-react/src/DataTourView.tsx`, content in
 `dataTour.ts`): a live map of the whole platform that lights up with real pipeline events, and
 eleven steps — sources, capture, contract gate, bronze, live tile, lake, transform, gold,
@@ -169,7 +172,7 @@ generic (it is a bug in the platform, not a feature of the scenario).
 
 ## Memory budget (measured on the reference laptop, WSL2 with 11 GiB)
 
-Base framework today (v0.30.2, all 17 pods): **≈ 5.9 GiB** working set, node ≈ 7.2 GiB.
+Base framework when measured (v0.30.2, all 17 pods): **≈ 5.9 GiB** working set, node ≈ 7.2 GiB.
 Per-tier numbers are filled in by each milestone's verification (`kubectl top`, peak under the
 demo storyline), never copied from the proposal's estimates.
 
@@ -182,6 +185,12 @@ demo storyline), never copied from the proposal's estimates.
 
 Measured on 29 Oct 2026 with every tier up and the AI-only pods (langfuse web, mlflow,
 agui-voice, prediction, rag-agent, form-agent, qdrant) scaled to 0: node ≈ 9.2 GiB used of 11.7.
+
+Re-checked on 30 Oct 2026 (v0.33.1, after the governance-ready releases) with every tier up and prediction + assistant
+running (rag-agent, form-agent, qdrant, langfuse, mlflow, agui-voice at 0): core ≈ 0.77 GiB (kafka 465 MiB,
+data-ingest 153, data-api 150), analytics ≈ 1.3 GiB (Dagster 1.16 GiB, both containers; ClickHouse 159 MiB), bi ≈ 0.23 GiB, governance ≈ 1.8 GiB (OpenMetadata 829 MiB, om-search 966 MiB); node 8.7 GiB used of 11.7
+(74%).
+The images of the AI services (llm-gateway, prediction, …) were not rebuilt for this check, so it says nothing about the memory cost of the v0.32–v0.33 governance code in them.
 
 ## Milestones
 
