@@ -4,6 +4,14 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.34.3 — 2026-10-30
+
+### Added
+- README hero: a 2:54 narrated Tron-style pitch video (`docs/media/ai-open-framework-tron-pitch.mp4`, 720p, with an
+  animated WebP preview) recorded on the real app — the Angel's Surf Co. data platform, the delivery globe, the
+  money-laundering map, pneumonia and wildfire-smoke detection, an assisted tax form, the social-aid desk, and the
+  platform's health, gateway and audit trail.
+
 ## v0.34.2 — 2026-10-30
 
 ### Fixed
