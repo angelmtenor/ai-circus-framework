@@ -17,7 +17,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
-	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off \
+	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off k3s-data-demo k3s-data-demo-off \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
 
@@ -638,7 +638,7 @@ k3s-data-showcase: ## The whole Data Platform on one laptop: scale AI-only pods 
 	@for s in $(K3S_DATA_SHOWCASE_SKIP_STS); do kubectl -n ai-circus scale statefulset/$$s --replicas=0 >/dev/null; done
 	@$(MAKE) --no-print-directory k3s-data-core-up k3s-data-analytics-up k3s-data-bi-up k3s-data-governance-up
 	@kubectl top node 2>/dev/null || true
-	@echo "✓ data showcase up — http://aiopen.localhost → Omnichannel Retail Data Platform"
+	@echo "✓ data showcase up — http://aiopen.localhost → Angel's Surf Co. — Data Platform"
 
 k3s-data-showcase-off: ## Undo k3s-data-showcase: drop governance + bi + analytics, bring the other kinds' pods back
 	@$(MAKE) --no-print-directory k3s-data-governance-down k3s-data-bi-down k3s-data-analytics-down
@@ -646,6 +646,24 @@ k3s-data-showcase-off: ## Undo k3s-data-showcase: drop governance + bi + analyti
 	@for d in $(K3S_DATA_SHOWCASE_SKIP); do \
 		kubectl -n ai-circus scale deployment/$$d --replicas=1 >/dev/null 2>&1 || true; done
 	@$(MAKE) --no-print-directory k3s-demo-off
+
+# `k3s-data-demo`: the typical multi-scenario demo WITH the data platform — every scenario kind
+# (tabular, RAG, forms, data) plus the core, analytics and bi tiers; governance (OpenMetadata, the
+# heaviest tier), MLflow and voice stay off. Deep learning is optional and separate (`k3s-dl-up`).
+K3S_DATA_DEMO_OFF ?= mlflow agui-voice
+k3s-data-demo: ## Everything a multi-scenario demo needs, data included, minus governance, MLflow and voice: scenarios of every kind + data core + analytics + bi (needs a running cluster; undo with k3s-data-demo-off)
+	@$(MAKE) --no-print-directory k3s-data-governance-down
+	@for s in qdrant clickhouse; do kubectl -n ai-circus scale statefulset/$$s --replicas=1 >/dev/null || exit 1; done
+	@for d in prediction rag-agent form-agent langfuse-web langfuse-worker data-platform-manager; do \
+		kubectl -n ai-circus scale deployment/$$d --replicas=1 >/dev/null || exit 1; done
+	@$(MAKE) --no-print-directory k3s-lite K3S_LITE_SKIP="$(K3S_DATA_DEMO_OFF)"
+	@$(MAKE) --no-print-directory k3s-data-core-up k3s-data-analytics-up k3s-data-bi-up
+	@kubectl top node 2>/dev/null || true
+	@echo "✓ data demo up (no governance, MLflow or voice) — http://aiopen.localhost; 'make k3s-wait' to confirm every pod is Ready; first time: make k3s-pipeline, k3s-data-seed, k3s-data-ml"
+
+k3s-data-demo-off: ## Undo k3s-data-demo: drop bi + analytics (the core tier stays), bring MLflow and voice back
+	@$(MAKE) --no-print-directory k3s-data-bi-down k3s-data-analytics-down
+	@$(MAKE) --no-print-directory k3s-full K3S_LITE_SKIP="$(K3S_DATA_DEMO_OFF)"
 
 k3s-data-reset: ## Drop ALL data of one data product (every tenant): warehouse schemas, lake, landing, ERP, topics — then `make k3s-data-seed`
 	@./scripts/k3s_data_reset.sh "$(DATA_PRODUCT)" "$(if $(DATA_DOMAIN),$(DATA_DOMAIN),retail)"

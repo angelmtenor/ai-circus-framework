@@ -10,6 +10,7 @@ import {
   type ScenarioSummary,
 } from "./apiClient";
 import { PlatformCapabilitiesTab } from "./PlatformCapabilities";
+import { PlatformGovernanceTab } from "./PlatformGovernance";
 import { PlatformMonitorTab } from "./PlatformMonitor";
 import { DeepLearningAdmin } from "./DeepLearningAdmin";
 import { Icon } from "./Icon";
@@ -36,6 +37,7 @@ import { Icon } from "./Icon";
  * - **Capabilities**: what the platform can do today vs. what's planned (data-platform-manager's
  *   roadmap) plus the live operational controls behind it (pipeline jobs, Kafka events, CDC,
  *   Lakehouse, semantic queries, gateway rate limits) — see PlatformCapabilities.tsx.
+ *   Governance (switches, declared AI systems, audit-chain state) — see PlatformGovernance.tsx.
  *
  * - **Deep Learning**: GPU availability, the deployed deep_learning models (trained where,
  *   how accurate) and admin-only in-cluster training — see DeepLearningAdmin.tsx.
@@ -49,7 +51,7 @@ const POLL_SECONDS = 15;
 // card follows it — back to POLL_SECONDS once every optional service has settled.
 const TRANSITION_POLL_SECONDS = 3;
 
-type PlatformTab = "health" | "monitor" | "capabilities" | "deep-learning";
+type PlatformTab = "health" | "monitor" | "capabilities" | "governance" | "deep-learning";
 
 const GROUP_LABELS: Record<ComponentGroup, { title: string; hint: string }> = {
   services: { title: "Microservices", hint: "The platform's own services — every scenario kind is served by these." },
@@ -254,6 +256,14 @@ export function PlatformStatusView({
         </button>
         <button
           role="tab"
+          aria-selected={tab === "governance"}
+          className={tab === "governance" ? "active" : ""}
+          onClick={() => setTab("governance")}
+        >
+          <Icon name="shield" size={14} /> Governance
+        </button>
+        <button
+          role="tab"
           aria-selected={tab === "deep-learning"}
           className={tab === "deep-learning" ? "active" : ""}
           onClick={() => setTab("deep-learning")}
@@ -264,6 +274,7 @@ export function PlatformStatusView({
       {tab === "health" && <HealthTab baseUrl={baseUrl} accessToken={accessToken} />}
       {tab === "monitor" && <PlatformMonitorTab baseUrl={baseUrl} accessToken={accessToken} />}
       {tab === "capabilities" && <PlatformCapabilitiesTab baseUrl={baseUrl} accessToken={accessToken} />}
+      {tab === "governance" && <PlatformGovernanceTab accessToken={accessToken} />}
       {tab === "deep-learning" && <DeepLearningAdmin baseUrl={baseUrl} accessToken={accessToken} scenarios={scenarios} />}
     </div>
   );

@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>4 kinds of scenario</b> · <b>a showpiece dashboard for most of them</b> · every one of them just a <code>scenario.yaml</code>
+  <b>5 kinds of scenario</b> (incl. a governed open-source data platform) · <b>a showpiece dashboard for most of them</b> · every one of them just a <code>scenario.yaml</code>
 </p>
 
 <p align="center">
@@ -164,6 +164,23 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 <img src="docs/screenshots/custom_tabs/grading-line.webp" alt="Solar cell Grading Line: electroluminescence cells routed to stringer, scrap and manual review">
 <b>☀️ Grading Line</b> · <code>triage_board</code><br>
 <sub>Solar Cell EL Inspection — a fine-tuned ConvNeXt V2 grades electroluminescence images; expert labels include "possibly defective", so the manual lane earns its keep.</sub>
+</td>
+</tr>
+</table>
+
+### 🏄 Retail & data platform
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/surf_retail.md"><img src="docs/screenshots/surf_retail/surf-hq.webp" alt="Surf HQ: five years of weekly units sold per category as a heatmap, then next week's forecast shop by shop"></a>
+<b>🌊 Surf HQ</b> · <code>data_product</code><br>
+<sub>Angel's Surf Co. (fictional) — five years of seasons as a heatmap and a live forecast board from a model trained on the platform's own gold marts.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/surf_retail.md"><img src="docs/screenshots/surf_retail/guided-tour.webp" alt="Guided tour: a live map of the data platform lighting up as a sale travels from the till to the dashboard"></a>
+<b>🧭 Guided tour</b> · <code>data_product</code><br>
+<sub>How a sale becomes trusted data — Kafka, contracts, bronze, dbt, one governed API — lit up by real pipeline events, at three depths. Also a web shop whose orders travel the same pipeline.</sub>
 </td>
 </tr>
 </table>
@@ -430,7 +447,7 @@ number, verification code, QR and barcode).
 
 ## Scenario catalog
 
-Four kinds of scenario exist today — adding a new one is a YAML file, never new UI or container
+Five kinds of scenario exist today (`tabular_ml`, `conversational_rag`, `assisted_form`, `deep_learning`, `data_product`) — adding a new one is a YAML file, never new UI or container
 code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 
 | Scenario | Kind / task | What it predicts | Source |
@@ -459,6 +476,9 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **[Emergency Social Aid — rules, a model and a person](docs/scenarios/prestaciones_sociales.md)** (`prestaciones_sociales`) | `tabular_ml` — classification + business rules + a decision policy, free text in Spanish, domain `public_sector` | Whether a (synthetic) municipal emergency-aid application deserves a grant, after deterministic rules stop what is incomplete — the same rules and model for everyone, against fraud (undeclared income, repeated claims, aid for what the household can afford) and favouritism (aid approved by hand for acquaintances) — a **Mesa de valoración** tab: rules → model → grant / manual review / deny trays with live thresholds, an official paper sheet lit by per-box SHAP, scanned-document intake (OCR + LLM), an equity audit · small-data LightGBM + TF-IDF, hold-out ROC AUC 0.89, with a voyage-4-nano challenger | Synthetic, fictional entity |
 | **[Follow the Money](docs/scenarios/aml_money_trail.md)** (`aml_money_trail`) | `tabular_ml` — classification + a bank-consortium network, domain `banking_finance` | Which account holders — people and companies — behave like the ones a money-laundering scheme runs through, from ten days of payments at 13 banks in 13 countries — a **Money Trail** tab with two views — a world map replaying every payment hour by hour (shape = payment format), a ledger, a watchlist, a SHAP dossier per holder, and a force-directed **network graph** of holders and banks like Enron's — and a reveal of the eight laundering typologies and how many of each the model flags · LightGBM, 5-fold CV ROC AUC ≈ 0.83, out-of-fold 0.84 (≈ 0.81 without the ACH-heavy format mix) | IBM AMLworld HI-Small (synthetic, CDLA-Sharing-1.0) — Altman et al., NeurIPS 2023 |
 | **[AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md)** (`aml_regulation_kg`) | `conversational_rag` + a knowledge graph (GraphRAG), domain `banking_finance` | N/A — agentic Q&A over 18 articles of the EU Anti-Money Laundering Regulation through a knowledge graph of obliged entities, obligations, triggers, authorities, records and limits (135 nodes, 144 relations, each citing its article with a verbatim quote); HippoRAG 2-style retrieval (seed linking + Personalized PageRank) and a panel that lights up the subgraph behind each answer | Regulation (EU) 2024/1624 (AMLR), EUR-Lex — © European Union, reuse authorised |
+| **[Angel's Surf Co. — Data Platform](docs/scenarios/surf_retail.md)** (`surf_retail`) | `data_product`, domain `retail` | N/A — a fictional surf-retail chain (24 shops, web shop, ERP, five years of history) run through the real pipeline: Kafka → bronze → lake → dbt silver/gold → governed `data-api`, dashboards and assistant tools; includes a web shop and the Surf HQ control room (optional tiers, see [Data products](#data-products--an-open-source-data-platform-optional-tiers)) | Original content (synthetic, simulator-generated) |
+| **[Angel's Surf Co. — Weekly Demand Forecast](docs/scenarios/surf_retail.md#two-models-on-the-gold-marts)** (`surf_demand_forecast`) | `tabular_ml` — regression, domain `retail` | Units sold next week, trained on a `surf_retail` gold feature mart (`make k3s-data-ml`) | Original content (derived from `surf_retail`) |
+| **[Angel's Surf Co. — Board Purchase Propensity](docs/scenarios/surf_retail.md#two-models-on-the-gold-marts)** (`surf_customer_propensity`) | `tabular_ml` — classification, domain `retail` | Whether a customer buys a board in the next 90 days, trained on a `surf_retail` gold feature mart | Original content (derived from `surf_retail`) |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
 | **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
 | **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |
@@ -865,8 +885,9 @@ silos:
 - **AI / BI / ML** — consumption, built on top of that data: the scenario-serving stack (tabular ML
   inference, the conversational/RAG and assisted-form agents, voice), the AI Gateway that routes
   every LLM call, and the semantic/BI query layer.
-- **Governance** — transversal, not a third layer: identity/tenancy, ingress, and AI Gateway usage
-  controls (rate limits, budgets) apply *across* both of the above.
+- **Governance** — transversal, not a third layer: identity/tenancy, ingress, AI Gateway usage
+  controls (rate limits, budgets) and the opt-in [governance-ready](#governance-ready-by-standards)
+  contracts (policy decisions, events, audit trail, AI-BOM) apply *across* both of the above.
 
 `data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live,
 machine-readable version of this split (see `core/roadmap.py`) — which capabilities are live,
@@ -984,10 +1005,6 @@ validated; the inspection models are not validated for production use.
 
 ### Data Platform (optional profile)
 
-<p align="center">
-  <img src="docs/screenshots/architecture-data-platform.svg" alt="Data Platform optional profile — data-platform-manager and Kafka" width="1000">
-</p>
-
 Two more storage kinds — **Valkey** (cache/key-value; Redis itself is no longer OSI-licensed) and
 a **document store** (Postgres JSONB, via `ai_circus_shared.document_store`) — round out the
 tenant-scoped data layer and are **on by default**, same footprint class as Postgres/Qdrant.
@@ -1072,12 +1089,36 @@ board) and two **ML models** trained on gold feature marts (`surf_demand_forecas
 product is a scenario folder (contracts, simulator, dbt project, dashboards), not code. Design and decisions: [docs/data-platform](docs/data-platform/README.md)
 and [docs/adr](docs/adr/README.md).
 
-| Tier | `make` target | What it adds |
-|---|---|---|
-| core | `k3s-data-core-up` | Kafka (a topic per tenant) · CDC · file landing + reconciliation · JSON Schema contracts + quarantine · bronze by key · Iceberg lake · dbt silver/gold + tests · `data-api` (metrics, records, governed SQL, lineage, live events) |
-| analytics | `k3s-data-analytics-up` | ClickHouse marts · Dagster (sensors on new bronze, asset checks, lineage) |
-| bi | `k3s-data-bi-up` | Apache Superset, dashboards as code with row-level security |
-| governance | `k3s-data-governance-up` | OpenMetadata: catalogue, contracts, end-to-end lineage, a Domain + Data Product |
+<p align="center">
+  <img src="docs/screenshots/architecture-data-platform.svg" alt="Data products architecture — sources, capture, ingest, store, transform and serve, with the tenancy and governance-ready contracts" width="1100">
+</p>
+
+**Four tiers, each switched on by its own command** (none is part of `make k3s-all`; every one is off until you ask).
+Core is the base — the others add to it, and each has a matching `…-down`. Memory is the measured working set of the
+tier's own pods (a 16 GB laptop gives WSL/k3s about 11.7 GiB):
+
+| Tier | Start it | Memory | What it adds | What you can demo |
+|---|---|---|---|---|
+| **core** | `make k3s-data-core-up` | ≈ 0.8 GiB | Kafka (a topic per tenant) · CDC · file landing + reconciliation · JSON Schema contracts + quarantine · bronze by key · Iceberg lake · dbt silver/gold + tests · `data-api` (metrics, records, governed SQL, lineage, live events) | The whole workspace: guided tour, Surf HQ, live flow, dashboards, explore, quality & lineage, web shop, the assistant with data tools, *view as* a store manager |
+| **analytics** | `make k3s-data-analytics-up` | ≈ 1.3 GiB | ClickHouse marts · Dagster (sensors on new bronze, asset checks, lineage) | The same dashboards served from columnar marts, and Dagster's runs and asset checks |
+| **bi** | `make k3s-data-bi-up` | ≈ 0.2 GiB | Apache Superset, dashboards as code with row-level security | Superset dashboards, scoped per role |
+| **governance** | `make k3s-data-governance-up` | ≈ 1.8 GiB | OpenMetadata: catalogue, contracts, end-to-end lineage, a Domain + Data Product | The catalogue at `openmetadata.localhost`, lineage from topic to dashboard |
+| **demo without governance** | `make k3s-data-demo` | ≈ 8.8 of 11.7 GiB measured on the node | scenarios of every kind (tabular, RAG, forms, data) **plus** core, analytics and bi; MLflow, voice and governance off | The usual multi-scenario demo with the data platform; `make k3s-data-demo-off` undoes it |
+| **all four** | `make k3s-data-showcase` | ≈ 4.1 GiB on top of the platform | frees RAM first (scales the AI-only pods to 0), then starts every tier | The full storyline; `make k3s-data-showcase-off` undoes it |
+
+First run: start a tier, then `make k3s-data-seed` (history through the real pipeline; `k3s-data-seed-lite` loads one
+year) and `make k3s-data-ml` for the two models.
+
+**The one to use for a typical demo: `make k3s-data-demo`** (on a running cluster). It keeps every scenario kind and the
+core, analytics and bi tiers, and switches off only governance, MLflow and voice — measured at 8.8 of 11.7 GiB on the
+node, about 3 GiB of headroom. Deep-learning scenarios are separate (`make k3s-dl-up`).
+
+**Does everything fit?** Not with every microservice *and* every tier at once on a 16 GB laptop. The full base
+platform needs about 5.9 GiB and the four tiers about 4.1 GiB more, which together with the node's own overhead
+exceeds the ≈ 11.7 GiB available — hence `k3s-data-showcase`, which turns off what a data demo doesn't use
+(MLflow, Langfuse, voice, RAG and form agents, Qdrant, deep learning). Measured with that trade-off: all four tiers
+plus prediction and the assistant use 8.7 of 11.7 GiB. On a machine with 32 GB or a larger WSL allowance everything
+can run together. Pick what a demo needs: **core** alone is light enough to sit next to the whole AI platform.
 
 `make k3s-data-showcase` runs all four on a 16 GB laptop (AI-only pods scaled to 0);
 `make k3s-data-seed` generates the history through the real pipeline (five years; `k3s-data-seed-lite`
@@ -1086,6 +1127,36 @@ loads one) and `make k3s-data-ml` trains the models on the feature marts once a 
 receipt, ERP price changes), governed **dashboards**, **explore** (records with their processing
 trail, datasets, SQL, quarantine), **quality & lineage** — and *view as* a store manager to see
 every door (API, SQL, dashboards, the assistant) restricted to one store.
+
+### Governance-ready by standards
+
+The framework can be governed by an **external AI-governance tool without depending on any product**:
+it exposes what a governance programme needs through open contracts and enforces the decisions a tool
+sends back. It *supports* an ISO/IEC 42001 / EU AI Act management system and *provides evidence for*
+it — it is not one, and risk categories are declared by the owner, never inferred. **Everything is off
+by default** and changes nothing when off.
+
+| Capability | Contract / where | Switch |
+|---|---|---|
+| Declared AI-system metadata per scenario, stable `ai_system_id` | `governance:` block in `scenario.yaml` (`ai_circus_shared.governance`) | – |
+| Pluggable **policy decision point**, enforced at `llm-gateway` (noop / static / OPA / HTTP; allow, deny, degrade + obligations) | JSON Schema in `docs/governance/schemas/`; HMAC `POST /governance/policy/invalidate` | `POLICY_DECIDER`, `POLICY_FAIL_MODE` |
+| Content-free **CloudEvents** (policy decisions, budget exhaustion, model trained, admin changes…) | log line or HMAC-signed webhook with a retrying outbox | `GOVERNANCE_EVENTS_ENABLED` |
+| **Hash-chained admin audit trail** | `GET /governance/audit`, `/audit/verify` (platform-registry is the single writer) | `GOVERNANCE_AUDIT_ENABLED` |
+| **Decision records** for non-LLM predictions, with enforced retention | `prediction.recorded` events + `decision_records` | `GOVERNANCE_RECORD_STORE` |
+| GenAI trace attributes | OpenTelemetry `gen_ai.*` (semconv v1.37.0) + `aicf.*` on every model call | – |
+| **AI-BOM** inventory | CycloneDX 1.6 at `GET /governance/inventory` | `GOVERNANCE_INVENTORY_ENABLED` |
+
+<p align="center"><img src="docs/screenshots/platform-governance-tab.webp" alt="Platform → Governance: which switches are on, the admin audit trail with its hash chain verified, the AI-BOM export and the declared AI systems" width="850"></p>
+
+The admin **Platform → Governance** tab shows it at a glance — which switches are on, the AI systems and what their owners
+declared, whether the audit chain verifies, and a download of the AI-BOM. It works while everything is off (the default).
+It is read-only, served by platform-registry's `GET /governance/overview`.
+
+Events, audit and records carry ids, metrics and decisions — never prompts or personal data. Full
+guide, switches and the standards crosswalk: [docs/governance](docs/governance/README.md); design
+reasoning: [ADR 0011](docs/adr/0011-governance-ready-by-standards.md). (The data platform's own
+catalogue and lineage — OpenMetadata — is the separate `governance` *tier* of the
+[data products](#data-products--an-open-source-data-platform-optional-tiers) above.)
 
 ### Observability (admin-only)
 
@@ -1242,6 +1313,7 @@ provider wiring, the React frontend, infra).
 
 - [AGENTS.md](AGENTS.md) — mandates for AI-assisted and human contributions alike.
 - [styleguide.md](styleguide.md) — commit message conventions (Conventional Commits).
+- [CHANGELOG.md](CHANGELOG.md) — release history.
 - [docs/windows-wsl.md](docs/windows-wsl.md) — contributing (or just running the platform) from
   Windows via WSL2.
 

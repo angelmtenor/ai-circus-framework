@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Generator
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -307,3 +308,60 @@ def test_catalogue_survives_a_valkey_outage_and_a_missing_cache_url() -> None:
 
     with Session(engine) as session:
         assert governance.publish_catalog(session, Down()) == 0
+
+
+def test_the_overview_answers_while_everything_is_off(off: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(governance, "_config", lambda: SimpleNamespace())
+
+    response = off.client.get("/governance/overview")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [s["enabled"] for s in body["switches"]] == [False, False, False, False]
+    assert body["event_sink"] is None and body["inventory_path"] is None
+    assert body["audit"] == {"enabled": False, "entries": 0, "verification": None, "recent": []}
+    assert body["ai_systems"]["total"] == 1 and body["ai_systems"]["declared"] == 0
+    assert body["ai_systems"]["by_risk"] == {"unassessed": 1}
+    assert body["ai_systems"]["by_oversight"] == {"undeclared": 1}
+    assert body["ai_systems"]["items"][0]["ai_system_id"] == "churn"
+
+
+def test_the_overview_reports_switches_and_a_verified_audit_chain(on: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        governance,
+        "_config",
+        lambda: SimpleNamespace(
+            GOVERNANCE_EVENTS_ENABLED="true",
+            GOVERNANCE_EVENT_SINK="http",
+            GOVERNANCE_AUDIT_ENABLED="true",
+            GOVERNANCE_INVENTORY_ENABLED="true",
+            GOVERNANCE_CATALOG_ENABLED="false",
+        ),
+    )
+    assert on.client.put("/entitlements/org-1/churn").status_code == 204
+
+    body = on.client.get("/governance/overview").json()
+
+    assert {s["env"]: s["enabled"] for s in body["switches"]} == {
+        "GOVERNANCE_EVENTS_ENABLED": True,
+        "GOVERNANCE_AUDIT_ENABLED": True,
+        "GOVERNANCE_INVENTORY_ENABLED": True,
+        "GOVERNANCE_CATALOG_ENABLED": False,
+    }
+    assert body["event_sink"] == "http" and body["inventory_path"] == "/governance/inventory"
+    assert body["audit"]["enabled"] and body["audit"]["entries"] == 1
+    assert body["audit"]["verification"] == {"ok": True, "checked": 1, "first_invalid_id": None, "reason": None}
+    (entry,) = body["audit"]["recent"]
+    assert entry["action"] == "entitlement.granted" and "before" not in entry and "hash" not in entry
+
+
+def test_the_overview_flags_a_tampered_audit_chain(on: Harness, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(governance, "_config", lambda: SimpleNamespace(GOVERNANCE_AUDIT_ENABLED="true"))
+    assert on.client.put("/entitlements/org-1/churn").status_code == 204
+    with on.sessions() as session:
+        session.execute(update(AuditLog).values(target_id="forged"))
+        session.commit()
+
+    verification = on.client.get("/governance/overview").json()["audit"]["verification"]
+
+    assert verification["ok"] is False and verification["first_invalid_id"] == 1
