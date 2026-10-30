@@ -6,6 +6,11 @@
 </p>
 
 <p align="center">
+  <a href="docs/media/ai-open-framework-tron-pitch.mp4"><img src="docs/media/ai-open-framework-tron-pitch.webp" alt="AI Open Framework pitch video: a data platform with live tickets, a delivery globe, a money-laundering map, pneumonia and wildfire-smoke detection, an assisted tax form and a governed AI gateway — in a Tron look" width="900"></a>
+  <br><sub><b>▶ The 3-minute pitch</b> (click for the narrated video) — data layer → ML, deep learning & GenAI consumption → AI gateway, governance & traceability. Every frame is the real app.</sub>
+</p>
+
+<p align="center">
   <img alt="k3s" src="https://img.shields.io/badge/runs%20on-k3s%20%2F%20k3d-FFC61C?logo=k3s&logoColor=black">
   <img alt="Python" src="https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=black">
