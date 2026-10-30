@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>Turn a dataset and a YAML file into a live, explained, multi-tenant AI product demo.</b><br>
-  Tabular ML · deep learning · agentic RAG & GraphRAG · assisted forms · voice — behind a real login, on Kubernetes.
+  Tabular ML · deep learning · agentic RAG & GraphRAG · assisted forms · voice · a governed data platform — behind a real login, on Kubernetes.
 </p>
 
 <p align="center">
@@ -305,6 +305,61 @@ engineers report most — offloading, overloading, credential inflation, spreadi
   <img src="docs/screenshots/toxic_leadership/leadership-check.png" alt="Leadership check: an LLM coach rates a described behaviour against the rubric, quoting the text as evidence" width="62%">
 </p>
 
+### Retail — Angel's Surf Co., a data platform you can watch
+
+Most AI demos start from a CSV. A real company starts from tills, a web shop, an ERP and daily files from a franchise
+whose old systems nobody dares touch — and the hard part is making all of that **trustworthy** before any dashboard,
+model or assistant sees it. `surf_retail` is the framework's first **data product** (scenario kind `data_product`): a
+whole open-source data platform, end to end, around a fictional chain of surf, SUP and kite shops — **24 shops** on the
+coasts of Spain, France, Italy, Greece, Cyprus and Malta, a web shop, an ERP and **five years of history**. The
+company, its brands and every sale are invented by the author, a surf enthusiast; the data comes from the scenario's own
+simulator and nothing is for sale. Full walkthrough: [docs/scenarios/surf_retail.md](docs/scenarios/surf_retail.md).
+
+**How a sale becomes trusted data.** A till publishes a receipt to **Kafka** (a topic per tenant); the Greek
+franchise's old tills send a **daily file** reconciled against a control total; five years of history arrive as
+**migration files**; the ERP is captured by **change data capture**. `data-ingest` checks every record against its JSON
+Schema **contract** and business rules — failures go to **quarantine**, where a data steward fixes and replays them — and
+stores the rest once, by key, in **bronze** (re-sends are ignored, corrections counted), updates the live per-minute
+tiles and archives to an **Iceberg lake**. **dbt** builds tested **silver** (clean, pseudonymised) and **gold** marts,
+and one governed API, **`data-api`**, serves every door: the dashboards, governed SQL, Superset, and the assistant — all
+with the same metrics, scoped to the tenant and to the user's role. *View as* a store manager and every door shows only
+that store.
+
+| Tab | What it shows |
+|---|---|
+| **Guided tour** | The whole platform as a live map: eleven steps at three depths (*Simple*, *Detailed*, *Engineer*) with live numbers and a *try it* button that does the real thing — ring up a sale, send a broken receipt, re-send a duplicate, ask the assistant |
+| **Surf HQ** | Five years of seasons as a heatmap (summer lights up SUP, spring and autumn light up kites, Black Friday flashes every row) and next week's forecast, shop by shop, from a model trained on the platform's own gold marts |
+| **Live flow** | The path every record takes, live tiles, pipeline events, and controls to simulate sales, malformed receipts, legacy files with a missing receipt and ERP price changes |
+| **Dashboards** | Revenue, receipts, average basket, margin and loyalty share with a map and ranking of the shops, period and comparison pickers |
+| **Explore · Quality & lineage** | Records with their processing trail, datasets, SQL and quarantine; freshness against SLOs, dbt test results, file-delivery reconciliation and lineage |
+| **Web shop** | A fictional storefront with a recommender (association rules over every basket) whose orders become real web orders travelling the same pipeline |
+
+<p align="center">
+  <img src="docs/screenshots/surf_retail/guided-tour.webp" alt="The Guided tour: a live map of the platform lighting up as a sale travels from the till to the dashboard" width="49%">
+  <img src="docs/screenshots/surf_retail/surf-hq.webp" alt="Surf HQ: five years of weekly units sold per category as a heatmap, then next week's forecast" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/surf_retail/dashboards.webp" alt="Dashboards: KPIs, a map of the shops and their ranking" width="49%">
+  <img src="docs/screenshots/surf_retail/web-shop.webp" alt="The fictional web shop with best sellers and a cart" width="49%">
+</p>
+
+**Two models on the gold marts.** `surf_demand_forecast` (LightGBM regression: units sold next week per shop and
+category, from the season, recent weeks and the same week last year) and `surf_customer_propensity` (classification:
+will a loyalty customer buy a board in the next 90 days — customers are pseudonymised keys only) are ordinary
+`tabular_ml` scenarios whose training data is exported from the gold marts, so they are trained by the same pipeline as
+every other model and the assistant can call them (`ml_predict`) next to its governed data and catalogue tools.
+
+**Run it.** It is optional and never part of `make k3s-all`; see the [tier table](#data-products--an-open-source-data-platform-optional-tiers)
+for what each tier adds and costs:
+
+```bash
+make k3s-data-demo         # every scenario kind + the core, analytics and bi data tiers (governance, MLflow, voice off)
+make k3s-data-seed         # five years of history through the real pipeline (k3s-data-seed-lite: one year)
+make k3s-data-ml           # train the two models on the feature marts
+```
+
+Then open http://aiopen.localhost → *Angel's Surf Co. — Data Platform*.
+
 ### Data
 
 Dataset summary stats, a filterable/queryable row explorer, a build-your-own chart dashboard, and
@@ -342,7 +397,7 @@ sweeps computed from live API calls, not precomputed synthetic charts.
 ### Platform — health dashboard, capabilities & monitors (admin)
 
 Logged in as `admin`, a **Platform** button next to Settings opens the operational side of the
-app, in four tabs:
+app, in five tabs:
 
 - **Health** — a live dashboard of every microservice, store and monitor: up / degraded / down /
   stopped / not deployed, probe latency, and (on k3s) each pod's readiness and restart count,
@@ -363,6 +418,11 @@ app, in four tabs:
   the Iceberg lakehouse, semantic/federated queries and the AI Gateway's rate limits. See
   [Data Platform](#data-platform-optional-profile) below.
 
+- **Governance** — governance at a glance (see [Governance-ready by standards](#governance-ready-by-standards)): which
+  switches are on, the audit trail with a **chain-verified** badge and the latest admin changes, an **AI-BOM**
+  (CycloneDX) download, and every AI system with what its owner declared — EU AI Act risk category and human
+  oversight. It works while everything is off, which is the default.
+
 - **Deep Learning** — GPU availability, the deployed deep-learning models and in-cluster training
   (see [Deep learning](#deep-learning--nlp--computer-vision-optional)).
 
@@ -370,6 +430,7 @@ Only the visible tab is mounted, so each tab's poll stops while you're on anothe
 
 <p align="center"><img src="docs/screenshots/platform-health.png" alt="Platform — Health tab: live status of every microservice, store and monitor" width="850"></p>
 <p align="center"><img src="docs/screenshots/platform-capabilities.png" alt="Platform — Capabilities tab: capability roadmap and data-platform controls" width="850"></p>
+<p align="center"><img src="docs/screenshots/platform-governance-tab.webp" alt="Platform — Governance tab: switches, audit trail with its chain verified, the AI-BOM and the declared AI systems" width="850"></p>
 
 ### Themes
 
@@ -876,18 +937,31 @@ Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the reco
 [Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
 env-configured microservices either way, just a different orchestrator.
 
-The whole platform is built from two layers plus one cross-cutting concern, not three parallel
-silos:
+The platform is organised in **three layers**, each one standing on the next:
 
-- **Data** — the source/generation layer: object/relational/non-relational/vector storage, the
-  cache, and everything that produces or moves data (batch ETL, model training, event streaming,
-  CDC, the lakehouse).
-- **AI / BI / ML** — consumption, built on top of that data: the scenario-serving stack (tabular ML
-  inference, the conversational/RAG and assisted-form agents, voice), the AI Gateway that routes
-  every LLM call, and the semantic/BI query layer.
-- **Governance** — transversal, not a third layer: identity/tenancy, ingress, AI Gateway usage
-  controls (rate limits, budgets) and the opt-in [governance-ready](#governance-ready-by-standards)
-  contracts (policy decisions, events, audit trail, AI-BOM) apply *across* both of the above.
+<p align="center">
+  <img src="docs/screenshots/architecture-layers.svg" alt="The three layers: 1 Consumption (AI, interactive dashboards, GenAI), 2 Data platform, 3 AI gateway and governance — with the services that belong to each" width="1100">
+</p>
+
+1. **Consumption — AI, interactive dashboards and GenAI.** What people use: `ui-react` (the scenario gallery,
+   the generic tabs, the showpiece dashboards and the data-product workspace), tabular ML predictions with SHAP
+   (`prediction`), the chat copilots — the data and ML `assistant`, `rag-agent` (RAG and GraphRAG), `form-agent`
+   (assisted forms) and `agui-voice` — deep-learning inference (`dl-inference`) and the optional Superset dashboards.
+   A scenario is a YAML file; one service instance per kind serves every scenario of that kind.
+2. **Data platform — capture, store, transform, serve.** Kafka (a topic per tenant), CDC and file landing, `data-ingest`
+   (contracts, quarantine, bronze), the Iceberg lake, `data-transform` (dbt, Dagster), the marts on Postgres and
+   ClickHouse and `data-api`, the governed door to all of it — plus the batch jobs that clean datasets, train models and
+   index documents, and the stores underneath (SeaweedFS, Postgres, Qdrant, Valkey). The streaming part is optional, in
+   four tiers ([Data products](#data-products--an-open-source-data-platform-optional-tiers)).
+3. **AI gateway & governance.** What every request and every model call passes through: Traefik, Keycloak (a tenant is
+   a Keycloak Organization), `platform-registry` (entitlements, audit trail, AI-BOM), `llm-gateway` (routing, rate
+   limits, per-tenant budgets, the policy decision point), the Langfuse and MLflow monitors, the admin **Platform**
+   page (`data-platform-manager`) and the opt-in [governance-ready](#governance-ready-by-standards) contracts.
+
+Layers 1 and 2 only ever talk to each other through layer 3's checks: every service validates the caller's token and
+re-checks the entitlement with `platform-registry` — never trusting what the UI already filtered — and every LLM call
+goes through the gateway. The capability roadmap below groups the same services as Data, AI / BI / ML and Governance
+(it lists the gateway's routing under AI / BI / ML and its limits and budgets under Governance).
 
 `data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live,
 machine-readable version of this split (see `core/roadmap.py`) — which capabilities are live,
