@@ -28,6 +28,7 @@ from platform_registry.api import require_admin
 from platform_registry.core import audit, governance, inventory, llm_settings
 from platform_registry.core.db import get_session
 from platform_registry.core.governance import ACTOR, publish_change, record_change
+from platform_registry.core.governance_overview import GovernanceOverview, build_overview
 
 router = APIRouter(prefix="/governance")
 
@@ -151,3 +152,12 @@ def get_inventory(format: Literal["cyclonedx"] = Query(default="cyclonedx")) -> 
         trained, complete = inventory.collect_trained_models(definitions, _open_store)
     bom = inventory.build_bom(definitions, routes=routes, trained=trained, trained_complete=complete)
     return Response(content=json.dumps(bom, indent=2), media_type=inventory.MEDIA_TYPE)
+
+
+@router.get("/overview", response_model=GovernanceOverview, dependencies=[Depends(require_admin)])
+def get_overview(session: Session = Depends(get_session)) -> GovernanceOverview:
+    """Governance at a glance for the admin Platform page: which switches are on, the AI systems
+    and what their owners declared, and whether the audit chain verifies. Unlike the other
+    `/governance/*` routes it answers while every feature is off, and changes nothing.
+    """
+    return build_overview(session, governance._config(), audit_enabled=governance.audit_enabled())
