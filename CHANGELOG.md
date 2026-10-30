@@ -4,7 +4,7 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
-## Unreleased
+## v0.34.0 — 2026-10-30
 
 ### Added
 - **Platform → Governance** tab in the admin Platform page (`PlatformGovernance.tsx`) backed by
