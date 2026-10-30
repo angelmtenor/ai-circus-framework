@@ -16,5 +16,6 @@ pointer to its replacement.
 | [0008](0008-tenancy-and-access-policy.md) | Tenancy by `org_id` everywhere + scenario-declared row filters / column masks |
 | [0009](0009-bi-superset.md) | Apache Superset as BI, dashboards as code |
 | [0010](0010-governance-openmetadata.md) | OpenMetadata for catalogue + lineage, ingestion as Jobs (no Airflow) |
-| [0011](0011-simulator-as-scenario-plugin.md) | Data product simulators are scenario-shipped Python plugins |
+| [0011](0011-governance-ready-by-standards.md) | Governance-ready through open standards (JSON Schema, CloudEvents, OTel, CycloneDX, OPA-compatible), not a product; everything off by default |
 | [0012](0012-hot-path.md) | Hot path: ingest-side minute aggregates, in every tier |
+| [0013](0013-simulator-as-scenario-plugin.md) | Data product simulators are scenario-shipped Python plugins (numbered 0011 until the governance ADR took that number) |

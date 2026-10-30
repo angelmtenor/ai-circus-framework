@@ -2,7 +2,7 @@
 - Title:    Simulator runtime — a data product's source systems, driven from the API
 - Author:   Angel Martinez-Tenor
 
-Hosts each data product's simulator plugin (docs/adr/0011) per tenant org, behind the platform's
+Hosts each data product's simulator plugin (docs/adr/0013) per tenant org, behind the platform's
 own capture interfaces: `KafkaSink` publishes to the source's tenant topic, `LandingSink` drops
 deliveries into the landing bucket, `SourcesDb` is the operational source database CDC reads.
 The UI's Simulate panel calls `act`; `backfill` (history) and `live` (a background trickle) run

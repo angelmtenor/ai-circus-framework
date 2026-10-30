@@ -3,7 +3,7 @@
 - Author:   Angel Martinez-Tenor
 
 A data product ships its synthetic source systems as a Python package next to its
-scenario.yaml (`data_product.simulator.package`, see docs/adr/0011). The generic data-tier
+scenario.yaml (`data_product.simulator.package`, see docs/adr/0013). The generic data-tier
 services load it with `load_simulator` and drive it through `SimulatorContext`, whose sinks are
 the platform's *own* capture interfaces — a Kafka topic per source (tenant-scoped), the landing
 bucket, the operational source database. A simulator therefore exercises the real pipeline end

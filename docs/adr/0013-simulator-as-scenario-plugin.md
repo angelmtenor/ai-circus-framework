@@ -1,4 +1,4 @@
-# 0011 — Simulators are scenario-shipped Python plugins
+# 0013 — Simulators are scenario-shipped Python plugins
 
 **Context.** A data product needs realistic synthetic sources (history backfill, live mode,
 anomalies on demand). That logic is domain-specific; the services must stay generic.
