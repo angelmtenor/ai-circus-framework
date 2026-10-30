@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Literal
+from collections.abc import Callable, Mapping
+from typing import Any, Literal
 
 import httpx
 import pandas as pd
@@ -350,7 +350,7 @@ def predict_endpoint(
 def _decision_record(
     org_id: str,
     definition: ScenarioDefinition,
-    metadata: dict[str, object],
+    metadata: Mapping[str, Any],
     body: PredictRequest,
     outputs: list[PredictionOut],
     trace_id: str,
