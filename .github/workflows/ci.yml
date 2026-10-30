@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# The services target Python 3.14 (their Dockerfiles use python:3.14-slim). Without a pin `uv`
+# installs the newest release (3.15), for which confluent-kafka has no wheel and fails to build.
+env:
+  UV_PYTHON: "3.14"
+
 jobs:
   discover-services:
     runs-on: ubuntu-latest
