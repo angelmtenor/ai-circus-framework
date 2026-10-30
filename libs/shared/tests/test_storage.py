@@ -67,3 +67,28 @@ def test_connect_shares_one_client_and_lists_buckets_once(monkeypatch) -> None:
     assert created == ["mpm"]
     storage_module._s3_client.cache_clear()
     storage_module._known_buckets.clear()
+
+
+def test_connect_without_create_bucket_never_lists_or_creates(monkeypatch) -> None:
+    """A read-only caller (the governance inventory) must not create buckets as a side effect."""
+    from ai_circus_shared import storage as storage_module
+
+    calls: list[str] = []
+
+    class _FakeClient:
+        def list_buckets(self) -> dict[str, list]:
+            calls.append("list")
+            return {"Buckets": []}
+
+        def create_bucket(self, Bucket: str) -> None:  # noqa: N803 - boto3's own kwarg name
+            calls.append(f"create:{Bucket}")
+
+    storage_module._s3_client.cache_clear()
+    storage_module._known_buckets.clear()
+    monkeypatch.setattr(storage_module.boto3, "client", lambda *_a, **_kw: _FakeClient())
+    store = storage_module.ObjectStore.connect(
+        bucket="never-trained", endpoint_url="http://s3", access_key="a", secret_key="b", create_bucket=False
+    )
+    assert store.bucket == "never-trained" and calls == []
+    storage_module._s3_client.cache_clear()
+    storage_module._known_buckets.clear()

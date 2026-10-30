@@ -20,7 +20,7 @@ The JSON Schema of `GovernanceConfig` is published as
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -90,7 +90,7 @@ class GovernanceConfig(BaseModel):
     known_risks: list[str] = Field(default_factory=list, max_length=30)
 
 
-def resolve_governance(slug: str, declared: GovernanceConfig | None) -> dict[str, object]:
+def resolve_governance(slug: str, declared: GovernanceConfig | None) -> dict[str, Any]:
     """The governance record served for a scenario: the declared block (or an empty one)
     with `ai_system_id` defaulted to the slug, plus `declared` — whether the YAML had a
     block at all, so a consumer can tell "nothing declared" from "declared as minimal".

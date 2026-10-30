@@ -245,6 +245,28 @@ def list_providers(base_url: str, master_key: str) -> list[dict[str, object]]:
     return results
 
 
+def list_routes(base_url: str, master_key: str) -> list[dict[str, str | None]]:
+    """Every route llm-gateway serves (chat *and* embedding), as `{alias, provider, model}` — the
+    AI-BOM's view of the models behind the gateway. No keys, no api_base: litellm redacts keys in this
+    response and an internal URL is not inventory.
+    """
+    with _client(base_url, master_key) as client:
+        try:
+            response = client.get("/model/info")
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise LlmGatewayError(f"Could not reach llm-gateway: {exc}") from exc
+    routes: list[dict[str, str | None]] = []
+    for deployment in response.json().get("data", []):
+        alias = deployment.get("model_name")
+        configured = (deployment.get("litellm_params") or {}).get("model")
+        if not alias:
+            continue
+        provider, _, model = (configured or "").partition("/")
+        routes.append({"alias": alias, "provider": provider or None, "model": model or configured or None})
+    return sorted(routes, key=lambda route: str(route["alias"]))
+
+
 def test_provider(base_url: str, master_key: str, provider: str, model_name: str) -> dict[str, object]:
     """Round-trip a minimal real chat completion through one of the given provider's
     models — the actual, live answer to "is this model working right now". `model_name`

@@ -90,12 +90,17 @@ class ObjectStore:
         access_key: str,
         secret_key: str,
         region: str = "us-east-1",
+        create_bucket: bool = True,
     ) -> ObjectStore:
         """Bind the process-wide client for this endpoint to `bucket`, creating the bucket
         if needed — waiting for SeaweedFS first if it is still starting (see startup.py).
+
+        `create_bucket=False` is for a read-only caller (an inventory, a report) that must not
+        create anything as a side effect: a bucket that does not exist then fails on first use.
         """
         client = _s3_client(endpoint_url, access_key, secret_key, region)
-        _ensure_bucket(client, bucket)
+        if create_bucket:
+            _ensure_bucket(client, bucket)
         return cls(bucket=bucket, _client=client)
 
     def _key(self, tenant_org_id: str, path: str) -> str:

@@ -34,6 +34,7 @@ data:
   GOVERNANCE_EVENT_SINK: "log"
   GOVERNANCE_AUDIT_ENABLED: "false"
   GOVERNANCE_CATALOG_ENABLED: "false"
+  GOVERNANCE_INVENTORY_ENABLED: "false"
   # llm-gateway's policy decision point (docs/governance/policy.md): noop = allow everything,
   # i.e. exactly the behaviour before governance existed. static | opa | http opt in.
   # Decision records of non-LLM predictions: kept in the tenant's bucket only when
