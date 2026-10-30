@@ -4,6 +4,13 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.34.2 — 2026-10-30
+
+### Fixed
+- CI: every `service-check` job failed since the runner's `uv` started installing Python 3.15, for which
+  `confluent-kafka` has no wheel. The workflow now pins `UV_PYTHON: "3.14"`, the version the services and their
+  Dockerfiles target.
+
 ## v0.34.1 — 2026-10-30
 
 ### Changed
