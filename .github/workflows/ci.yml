@@ -95,6 +95,13 @@ jobs:
         working-directory: ui-react
       - run: npm run build
         working-directory: ui-react
+      - run: npm run lint
+        working-directory: ui-react
+      # Informational for now: the open high-severity findings are transitive (CopilotKit / AG-UI ->
+      # zod) with no non-breaking fix upstream, so this reports them without failing the PR.
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: ui-react
+        continue-on-error: true
 
   compose-validate:
     runs-on: ubuntu-latest
