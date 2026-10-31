@@ -26,7 +26,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from rag_agent import get_env_config
@@ -59,7 +59,7 @@ class ConversationOut(BaseModel):
 class ConversationCreateIn(BaseModel):
     """Body for POST /conversations/{scenario_slug} — title defaults to "New conversation"."""
 
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=200)
 
 
 class MessageOut(BaseModel):

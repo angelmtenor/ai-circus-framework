@@ -75,7 +75,7 @@ class ConversationOut(BaseModel):
 class ConversationCreateIn(BaseModel):
     """Body for POST /conversations/{scenario_slug} — title defaults to "New conversation"."""
 
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=200)
 
 
 class MessageOut(BaseModel):

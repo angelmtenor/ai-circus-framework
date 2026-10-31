@@ -331,3 +331,14 @@ def test_extract_document_refuses_an_upload_over_the_size_cap(
     response = client.post("/documents/extract", files={"file": ("notes.txt", b"x" * 11, "text/plain")})
 
     assert response.status_code == 413
+
+
+def test_admin_setting_bodies_are_bounded() -> None:
+    from pydantic import ValidationError
+
+    from platform_registry.api import ActiveLlmModelIn, ActiveVoiceSettingsIn
+
+    with pytest.raises(ValidationError):
+        ActiveLlmModelIn(model_name="m" * 129)
+    with pytest.raises(ValidationError):
+        ActiveVoiceSettingsIn(stt_provider="s" * 65, tts_provider="piper")

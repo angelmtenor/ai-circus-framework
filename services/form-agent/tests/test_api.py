@@ -651,3 +651,13 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
     assert '"served_model":"groq-llama"' in body
     # Emitted within the live stream, not after the run has already finished.
     assert body.index('"name":"model_fallback"') < body.index('"type":"TEXT_MESSAGE_END"')
+
+
+def test_conversation_title_is_bounded() -> None:
+    from pydantic import ValidationError
+
+    from form_agent.api import ConversationCreateIn
+
+    assert ConversationCreateIn(title="x" * 200).title is not None
+    with pytest.raises(ValidationError):
+        ConversationCreateIn(title="x" * 201)

@@ -1543,3 +1543,16 @@ def test_every_legal_basis_of_prestaciones_sociales_resolves_to_a_shipped_docume
     assert sum(rule.legal_basis is not None for rule in rules) == len(rules)  # every rule cites its basis
     for name, text in docs.items():  # the reading list needs a title and a provenance line
         assert text.startswith("# ") and "\n> " in text, name
+
+
+def test_collection_names_reject_an_unsafe_org_id() -> None:
+    from ai_circus_shared.scenario_schema import VectorStoreConfig, kg_collection_name, qdrant_collection_name
+
+    store = VectorStoreConfig(backend="qdrant", collection_prefix="docs", top_k=3)
+    assert qdrant_collection_name(store, "org-1") == "docs__org-1"
+    assert kg_collection_name(store, "org_1") == "docs_kg__org_1"
+    for bad in ("", "a/b", "a b", "org\n", "../x"):
+        with pytest.raises(ValueError, match="Invalid org id"):
+            qdrant_collection_name(store, bad)
+        with pytest.raises(ValueError, match="Invalid org id"):
+            kg_collection_name(store, bad)

@@ -30,7 +30,7 @@ from ai_circus_shared.auth import (
 from ai_circus_shared.entitlements import ScenarioSummary
 from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -155,7 +155,7 @@ class ActiveLlmModelOut(BaseModel):
 class ActiveLlmModelIn(BaseModel):
     """Body for PUT /llm-settings/active-model."""
 
-    model_name: str
+    model_name: str = Field(max_length=128)
 
 
 class ActiveVoiceSettingsOut(BaseModel):
@@ -168,8 +168,8 @@ class ActiveVoiceSettingsOut(BaseModel):
 class ActiveVoiceSettingsIn(BaseModel):
     """Body for PUT /voice-settings/active."""
 
-    stt_provider: str
-    tts_provider: str
+    stt_provider: str = Field(max_length=64)
+    tts_provider: str = Field(max_length=64)
 
 
 @router.get("/healthz")
