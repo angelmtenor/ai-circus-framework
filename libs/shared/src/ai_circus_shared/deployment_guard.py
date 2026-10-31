@@ -17,6 +17,24 @@ import os
 DEMO_ADMIN_API_KEY = "angel2026"
 DEMO_ENGINEERING_DEMO_API_KEY = "ai-circus-engineering-2026"
 
+# Other secrets `.env.example` ships with a placeholder. A service only sees the ones it was
+# given, so each is checked from this process's own environment: a placeholder is `change-me…`
+# or the demo password above, never a value an operator chose.
+_PLACEHOLDER_ENV = (
+    "POSTGRES_PASSWORD",
+    "OBJECT_STORE_SECRET_KEY",
+    "LITELLM_MASTER_KEY",
+    "KEYCLOAK_ADMIN_PASSWORD",
+    "KEYCLOAK_OWNER_PASSWORD",
+    "SUPERSET_ADMIN_PASSWORD",
+    "CLICKHOUSE_PASSWORD",
+    "LANGFUSE_NEXTAUTH_SECRET",
+)
+
+
+def _is_placeholder(value: str) -> bool:
+    return value.strip().lower().startswith("change-me") or value == DEMO_ADMIN_API_KEY
+
 
 def enforce_safe_for_public_deployment(
     *,
@@ -45,6 +63,10 @@ def enforce_safe_for_public_deployment(
         problems.append("ADMIN_API_KEY is still the shipped demo default")
     if engineering_demo_api_key == DEMO_ENGINEERING_DEMO_API_KEY:
         problems.append("ENGINEERING_DEMO_API_KEY is still the shipped demo default")
+
+    problems.extend(
+        f"{name} is still a shipped placeholder" for name in _PLACEHOLDER_ENV if _is_placeholder(os.getenv(name, ""))
+    )
 
     if problems:
         raise RuntimeError(

@@ -67,3 +67,26 @@ def test_deployment_target_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("DEPLOYMENT_TARGET", "PUBLIC")
     with pytest.raises(RuntimeError):
         _call(admin_api_key=DEMO_ADMIN_API_KEY)
+
+
+@pytest.mark.parametrize("name", ["POSTGRES_PASSWORD", "LITELLM_MASTER_KEY", "KEYCLOAK_ADMIN_PASSWORD"])
+@pytest.mark.parametrize("placeholder", ["change-me", "Change-Me-8-chars-minimum", DEMO_ADMIN_API_KEY])
+def test_refuses_a_shipped_placeholder_secret_when_public(
+    monkeypatch: pytest.MonkeyPatch, name: str, placeholder: str
+) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
+    monkeypatch.setenv(name, placeholder)
+    with pytest.raises(RuntimeError, match=f"{name} is still a shipped placeholder"):
+        _call()
+
+
+def test_placeholder_secrets_are_ignored_unless_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "local")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "change-me")
+    _call()
+
+
+def test_a_chosen_secret_passes_when_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "k3J9-an-actual-secret")
+    _call()
