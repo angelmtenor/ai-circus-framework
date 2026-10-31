@@ -6,7 +6,9 @@ guard against escaping the intended tenant prefix.
 from __future__ import annotations
 
 import pytest
+from botocore.exceptions import ClientError
 
+from ai_circus_shared import storage
 from ai_circus_shared.storage import ObjectStore
 
 
@@ -92,3 +94,50 @@ def test_connect_without_create_bucket_never_lists_or_creates(monkeypatch) -> No
     assert store.bucket == "never-trained" and calls == []
     storage_module._s3_client.cache_clear()
     storage_module._known_buckets.clear()
+
+
+@pytest.mark.parametrize("org_id", ["org-1\n", "org-1\n\n"])
+def test_key_rejects_a_trailing_newline(org_id: str) -> None:
+    """`$` matches before a trailing newline; the guard must not."""
+    with pytest.raises(ValueError, match="tenant_org_id"):
+        _store()._key(org_id, "x")
+
+
+class _FakeS3:
+    """Just enough of a boto3 client for exists()/_ensure_bucket()."""
+
+    class exceptions:  # noqa: N801 - mirrors boto3's client.exceptions namespace
+        ClientError = ClientError
+
+    def __init__(self, code: str | None = None, create_code: str | None = None) -> None:
+        self.code, self.create_code = code, create_code
+
+    def head_object(self, **_kw: object) -> None:
+        if self.code:
+            raise ClientError({"Error": {"Code": self.code}}, "HeadObject")
+
+    def list_buckets(self) -> dict:  # type: ignore[type-arg]
+        return {"Buckets": []}
+
+    def create_bucket(self, **_kw: object) -> None:
+        if self.create_code:
+            raise ClientError({"Error": {"Code": self.create_code}}, "CreateBucket")
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"), [(None, True), ("404", False), ("NoSuchKey", False), ("NotFound", False)]
+)
+def test_exists_distinguishes_present_from_absent(code: str | None, expected: bool) -> None:
+    assert ObjectStore(bucket="b", _client=_FakeS3(code)).exists("org-1", "x") is expected
+
+
+@pytest.mark.parametrize("code", ["403", "AccessDenied", "500", "ServiceUnavailable"])
+def test_exists_does_not_hide_auth_or_server_errors(code: str) -> None:
+    with pytest.raises(ClientError):
+        ObjectStore(bucket="b", _client=_FakeS3(code)).exists("org-1", "x")
+
+
+def test_losing_the_bucket_creation_race_is_not_an_error() -> None:
+    storage._ensure_bucket(_FakeS3(create_code="BucketAlreadyOwnedByYou"), "race-bucket")
+    with pytest.raises(ClientError):
+        storage._ensure_bucket(_FakeS3(create_code="AccessDenied"), "denied-bucket")

@@ -24,11 +24,16 @@ from ai_circus_shared.startup import wait_for
 # client input) and a fixed, config-derived `path` — but `_key()` has no guard of its
 # own, so a future caller passing user-controlled input into either argument would
 # have no defense-in-depth against building a key outside the intended tenant prefix.
-_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+\Z")
 
 # Buckets already confirmed to exist, per client — a service binding one ObjectStore per
 # scenario (prediction: one per tabular_ml scenario) lists buckets once, not once each.
 _known_buckets: dict[int, set[str]] = {}
+
+# head_object reports a missing key as a bare "404" (no body), other S3 calls as NoSuchKey.
+_NOT_FOUND_CODES = frozenset({"404", "NoSuchKey", "NotFound"})
+# Two pods creating the same new bucket at once: the loser has nothing left to do.
+_BUCKET_EXISTS_CODES = frozenset({"BucketAlreadyOwnedByYou", "BucketAlreadyExists"})
 _known_buckets_lock = threading.Lock()
 
 
@@ -68,7 +73,11 @@ def _ensure_bucket(client: Any, bucket: str) -> None:
         retryable=_is_transient,
     )
     if bucket not in existing:
-        client.create_bucket(Bucket=bucket)
+        try:
+            client.create_bucket(Bucket=bucket)
+        except ClientError as exc:
+            if str(exc.response.get("Error", {}).get("Code", "")) not in _BUCKET_EXISTS_CODES:
+                raise
         existing.add(bucket)
     with _known_buckets_lock:
         _known_buckets.setdefault(id(client), set()).update(existing)
@@ -130,8 +139,12 @@ class ObjectStore:
         key = self._key(tenant_org_id, path)
         try:
             self._client.head_object(Bucket=self.bucket, Key=key)
-        except self._client.exceptions.ClientError:
-            return False
+        except self._client.exceptions.ClientError as exc:
+            # Only "no such object" means absent: a 403 or 5xx must not read as "does not exist"
+            # (callers would retrain, reseed or answer "not found" during an outage).
+            if str(exc.response.get("Error", {}).get("Code", "")) in _NOT_FOUND_CODES:
+                return False
+            raise
         return True
 
     def delete(self, tenant_org_id: str, path: str) -> None:

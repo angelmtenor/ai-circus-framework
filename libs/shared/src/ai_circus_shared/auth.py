@@ -47,7 +47,14 @@ def _extract_org_id(claims: dict) -> str | None:
     organizations = claims.get(ORGANIZATION_CLAIM) or {}
     if not organizations:
         return None
-    return next(iter(organizations.values())).get("id")
+    if not isinstance(organizations, dict) or not all(isinstance(o, dict) for o in organizations.values()):
+        raise TokenValidationError("Malformed organization claim.")
+    if len(organizations) > 1:
+        # One org per user is this platform's model; picking "the first" of several would
+        # make the tenant (and so the data and entitlements) depend on claim order.
+        raise TokenValidationError("Token belongs to more than one organization; tenant is ambiguous.")
+    org_id = next(iter(organizations.values())).get("id")
+    return org_id if isinstance(org_id, str) else None
 
 
 # The tenant every scenario auto-grants access to at seed time (see
@@ -214,7 +221,9 @@ def is_admin_bearer_token(authorization: str | None, admin_api_key: str) -> bool
     """Constant-time check that `authorization` is exactly `Bearer <admin_api_key>`."""
     if not authorization or not authorization.startswith("Bearer "):
         return False
-    return secrets.compare_digest(authorization.removeprefix("Bearer "), admin_api_key)
+    # Compare bytes: `compare_digest` raises TypeError on a non-ASCII `str`, and a header value
+    # is attacker-controlled (decoded as latin-1), so that would turn a bad key into a 500.
+    return secrets.compare_digest(authorization.removeprefix("Bearer ").encode(), admin_api_key.encode())
 
 
 def _resolve_identity(*, authorization: str | None, settings: AuthSettings, bypass_roles: frozenset[str]) -> Identity:

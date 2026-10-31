@@ -28,7 +28,7 @@ import redis
 # Mirrors ai_circus_shared.storage's _SAFE_ORG_ID — see that module's docstring
 # for why this guard exists even though every current call site already passes a
 # validated `Identity.org_id`, never raw client input.
-_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+\Z")
 
 
 class CacheConfig(Protocol):
