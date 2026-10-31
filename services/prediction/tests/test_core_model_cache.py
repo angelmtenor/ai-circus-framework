@@ -343,3 +343,48 @@ def test_graph_is_cached_per_requester_until_its_ttl_expires(
     for i in range(model_cache_module.MAX_CACHED_DATASETS + 3):
         cache.graph(f"org-{i + 10}", "churn")
     assert len(cache._graphs) <= model_cache_module.MAX_CACHED_DATASETS
+
+
+def _sign(store: FakeObjectStore, org_id: str) -> None:
+    """Re-write the seeded metadata the way training does when MODEL_SIGNING_KEY is set."""
+    from ai_circus_shared.tabular_ml import MODEL_SIGNATURE_METADATA_FIELD, sign_checksums
+
+    metadata = json.loads(store.objects[org_id, MODEL_METADATA_KEY])
+    metadata[MODEL_SIGNATURE_METADATA_FIELD] = sign_checksums(metadata[MODEL_CHECKSUMS_METADATA_FIELD])
+    store.put(org_id, MODEL_METADATA_KEY, json.dumps(metadata).encode())
+
+
+def test_signing_key_set_refuses_unsigned_metadata(
+    stores: dict[str, FakeObjectStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model written before signing was enabled (or planted without the key) is not unpickled."""
+    monkeypatch.setenv("MODEL_SIGNING_KEY", "k" * 32)
+    with pytest.raises(CorruptArtifactError, match="Unsigned or wrongly signed"):
+        ModelCache(stores, fallback_org_id="fallback-org").get("org-1", "churn")
+
+
+def test_signing_key_set_loads_signed_metadata(
+    stores: dict[str, FakeObjectStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MODEL_SIGNING_KEY", "k" * 32)
+    _sign(stores["churn"], "org-1")
+    artifacts = ModelCache(stores, fallback_org_id="fallback-org").get("org-1", "churn")
+    assert artifacts.pipeline == {"fake": "pipeline"}
+
+
+def test_planted_artifact_with_recomputed_checksum_is_refused_without_the_key(
+    stores: dict[str, FakeObjectStore], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whoever can write the bucket can swap the pipeline AND its checksum — but not the signature."""
+    monkeypatch.setenv("MODEL_SIGNING_KEY", "k" * 32)
+    store = stores["churn"]
+    _sign(store, "org-1")
+    planted = io.BytesIO()
+    joblib.dump({"fake": "planted"}, planted)
+    store.put("org-1", MODEL_PIPELINE_KEY, planted.getvalue())
+    metadata = json.loads(store.objects["org-1", MODEL_METADATA_KEY])
+    metadata[MODEL_CHECKSUMS_METADATA_FIELD]["pipeline"] = artifact_checksum(planted.getvalue())
+    store.put("org-1", MODEL_METADATA_KEY, json.dumps(metadata).encode())
+
+    with pytest.raises(CorruptArtifactError, match="Unsigned or wrongly signed"):
+        ModelCache(stores, fallback_org_id="fallback-org").get("org-1", "churn")

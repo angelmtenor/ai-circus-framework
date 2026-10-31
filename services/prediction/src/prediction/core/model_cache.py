@@ -35,7 +35,10 @@ from ai_circus_shared.tabular_ml import (
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
+    MODEL_SIGNATURE_METADATA_FIELD,
     artifact_checksum,
+    checksums_signature_valid,
+    model_signing_enabled,
 )
 from sklearn.pipeline import Pipeline
 
@@ -262,6 +265,14 @@ class ModelCache:
         # shows up here as a checksum mismatch rather than a silent mix of old/new.
         metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
         checksums = metadata.get(MODEL_CHECKSUMS_METADATA_FIELD, {})
+        if model_signing_enabled() and not checksums_signature_valid(
+            checksums, metadata.get(MODEL_SIGNATURE_METADATA_FIELD)
+        ):
+            # The checksums sit next to the artifacts, so only the signature proves training wrote them.
+            raise CorruptArtifactError(
+                f"Unsigned or wrongly signed model metadata (org={load_org_id}, scenario={scenario_slug}) — "
+                "refusing to load it."
+            )
         pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
         explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
         pipeline_lower = pipeline_upper = None

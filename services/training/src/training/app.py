@@ -38,8 +38,10 @@ from ai_circus_shared.tabular_ml import (
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
+    MODEL_SIGNATURE_METADATA_FIELD,
     NORMALIZED_DATASET_KEY,
     artifact_checksum,
+    sign_checksums,
 )
 from pydantic import ValidationError
 from sklearn.model_selection import train_test_split
@@ -264,6 +266,10 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         "has_intervals": has_intervals,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
     }
+    # Authenticates the checksums above when MODEL_SIGNING_KEY is set (see ai_circus_shared.tabular_ml).
+    signature = sign_checksums(checksums)
+    if signature is not None:
+        metadata[MODEL_SIGNATURE_METADATA_FIELD] = signature
     store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
 
     # Observability mirror only (MLOps monitor) — runs after every artifact is safely
