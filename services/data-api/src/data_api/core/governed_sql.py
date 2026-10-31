@@ -11,8 +11,10 @@ mart_sales_daily GROUP BY 1`). Before it runs, sqlglot parses it and:
 2. accepts only silver/gold datasets the role's layers allow (or the query's own CTEs), and
    no column the role may not see;
 3. rejects session-escaping functions (`set_config`, `pg_*`, `dblink`, file access…);
-4. replaces every dataset reference with `(SELECT * FROM <schema>.<table> WHERE org_id =
-   '<org>') AS <alias>` — the tenant filter is part of the query tree, not a convention.
+4. replaces every dataset reference with `(SELECT <visible columns> FROM <schema>.<table>
+   WHERE org_id = '<org>') AS <alias>` — the tenant filter is part of the query tree, not a
+   convention, and a role's hidden columns are simply absent from the subquery, so no
+   spelling (`EMAIL`, `to_jsonb(t)`, `t::text`, `SELECT *`) can reach them.
 
 It then runs in a read-only transaction with a statement timeout and a row cap; hidden columns
 are dropped from the result.
@@ -21,11 +23,12 @@ are dropped from the result.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import sqlglot
 from ai_circus_shared.data_policy import DataAccess
-from ai_circus_shared.data_product import layer_schema
+from ai_circus_shared.data_product import DatasetSpec, layer_schema
 from sqlglot import exp
 
 from data_api.core.products import DataProduct
@@ -53,8 +56,20 @@ def _function_name(node: Any) -> str:  # an exp.Func (sqlglot's stubs don't rela
     return node.sql_name() if hasattr(node, "sql_name") else type(node).__name__
 
 
-def rewrite(sql: str, product: DataProduct, access: DataAccess, dialect: str) -> str:
-    """Validate one SELECT and wrap every dataset reference in its tenant filter (see module docstring)."""
+def rewrite(
+    sql: str,
+    product: DataProduct,
+    access: DataAccess,
+    dialect: str,
+    columns_of: Callable[[DatasetSpec], list[str]] | None = None,
+) -> str:
+    """Validate one SELECT and wrap every dataset reference in its tenant filter (see module docstring).
+
+    `columns_of` lists a dataset's real columns; with it, the wrapped subquery projects only
+    the columns the role may see. Without it (a dataset dbt has not built yet, or a caller
+    with no warehouse) the subquery is `SELECT *` and only the name check below protects
+    hidden columns — `run()` always supplies it.
+    """
     if len(sql) > MAX_SQL_LENGTH:
         raise GovernedSqlError(f"Query longer than {MAX_SQL_LENGTH} characters.")
     read = "postgres" if dialect == "postgres" else "clickhouse"
@@ -77,8 +92,9 @@ def rewrite(sql: str, product: DataProduct, access: DataAccess, dialect: str) ->
     allowed = {
         d.name: d for d in product.config.datasets if d.layer in access.access.layers and d.layer in ("silver", "gold")
     }
+    hidden = {name.lower() for name in access.hidden}  # Postgres folds unquoted identifiers to lower case
     for column in tree.find_all(exp.Column):
-        if column.name in access.hidden:
+        if column.name.lower() in hidden:
             raise GovernedSqlError(f"Column {column.name!r} is not available to role {access.role!r}.")
     ctes = {cte.alias_or_name for cte in tree.find_all(exp.CTE)}
     for table in list(tree.find_all(exp.Table)):
@@ -90,9 +106,11 @@ def rewrite(sql: str, product: DataProduct, access: DataAccess, dialect: str) ->
             raise GovernedSqlError(
                 f"Unknown or not allowed dataset {table.sql(dialect=read)!r}; available: {sorted(allowed)}."
             )
+        visible = [c for c in (columns_of(dataset) if columns_of else []) if c.lower() not in hidden]
+        projection = [exp.column(c, quoted=True) for c in visible] or [exp.Star()]
         inner = (
             exp
-            .select("*")
+            .select(*projection)
             .from_(
                 exp.Table(
                     this=exp.to_identifier(name, quoted=True),
@@ -110,7 +128,9 @@ def run(warehouse: Warehouse, product: DataProduct, access: DataAccess, sql: str
     """Rewrite, run read-only with a timeout and row cap, and drop hidden columns from the result."""
     access.require_sql()
     dialect = warehouse.marts_engine
-    rewritten = rewrite(sql, product, access, dialect)
+    rewritten = rewrite(
+        sql, product, access, dialect, columns_of=lambda ds: warehouse.columns(product, ds.layer, ds.name)
+    )
     q = warehouse.query("gold")
     rows = warehouse.rows(q, f"SELECT * FROM ({rewritten}) AS governed LIMIT {MAX_RESULT_ROWS + 1}", timeout_ms=10_000)
     truncated = len(rows) > MAX_RESULT_ROWS
