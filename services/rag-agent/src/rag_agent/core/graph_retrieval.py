@@ -36,6 +36,7 @@ from typing import Any
 
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.network_graph import MAX_GRAPH_EDGES, MAX_GRAPH_NODES
+from ai_circus_shared.retrieval import wrap_untrusted
 from ai_circus_shared.scenario_schema import (
     KNOWLEDGE_GRAPH_DOCUMENT_KIND,
     KNOWLEDGE_GRAPH_SYNONYM_KIND,
@@ -335,10 +336,10 @@ def graph_search(
     passages = _passages(qdrant, documents, vector_store, org_id, graph, doc_ids, query_vector, config.max_passages)
 
     lines = "\n".join(_line(graph, e) for e in chosen)
-    content = f"<knowledge_graph>\n{lines}\n</knowledge_graph>"
+    content = wrap_untrusted("knowledge_graph", lines)
     if passages:
         content += "\n\n" + "\n\n".join(
-            f'<retrieved_document source="{source}">\n{text}\n</retrieved_document>' for source, text, _ in passages
+            wrap_untrusted("retrieved_document", text, source) for source, text, _ in passages
         )
     sources = [{"source": source, "score": score} for source, _, score in passages]
     return content, sources
@@ -409,7 +410,7 @@ def graph_path(
             trace.nodes |= {edge.source, edge.target}
             hops.append(_line(graph, edge))
         lines.append("\n".join(hops))
-    return "<knowledge_graph>\n" + "\n\n".join(lines) + "\n</knowledge_graph>"
+    return wrap_untrusted("knowledge_graph", "\n\n".join(lines))
 
 
 def _best_node(qdrant: QdrantClient, collection: str, graph: KnowledgeGraph, vector: list[float]) -> str | None:

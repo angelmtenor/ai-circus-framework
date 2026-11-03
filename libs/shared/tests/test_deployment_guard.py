@@ -6,10 +6,19 @@ from __future__ import annotations
 import pytest
 
 from ai_circus_shared.deployment_guard import (
+    _PLACEHOLDER_ENV,
     DEMO_ADMIN_API_KEY,
     DEMO_ENGINEERING_DEMO_API_KEY,
     enforce_safe_for_public_deployment,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clean_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard reads these from the process env; `make` exports the developer's `.env` (placeholders
+    included) into the test run, which would trip it."""
+    for name in _PLACEHOLDER_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 def _call(
@@ -67,3 +76,26 @@ def test_deployment_target_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setenv("DEPLOYMENT_TARGET", "PUBLIC")
     with pytest.raises(RuntimeError):
         _call(admin_api_key=DEMO_ADMIN_API_KEY)
+
+
+@pytest.mark.parametrize("name", ["POSTGRES_PASSWORD", "LITELLM_MASTER_KEY", "KEYCLOAK_ADMIN_PASSWORD"])
+@pytest.mark.parametrize("placeholder", ["change-me", "Change-Me-8-chars-minimum", DEMO_ADMIN_API_KEY])
+def test_refuses_a_shipped_placeholder_secret_when_public(
+    monkeypatch: pytest.MonkeyPatch, name: str, placeholder: str
+) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
+    monkeypatch.setenv(name, placeholder)
+    with pytest.raises(RuntimeError, match=f"{name} is still a shipped placeholder"):
+        _call()
+
+
+def test_placeholder_secrets_are_ignored_unless_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "local")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "change-me")
+    _call()
+
+
+def test_a_chosen_secret_passes_when_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEPLOYMENT_TARGET", "public")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "k3J9-an-actual-secret")
+    _call()

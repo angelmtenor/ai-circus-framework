@@ -40,12 +40,14 @@ MAX_SIMILAR = 12
 class PredictRequest(BaseModel):
     """Exactly one input: free `text`, an uploaded `image_base64`, or a published `sample_id`."""
 
-    text: str | None = None
-    image_base64: str | None = None
-    sample_id: str | None = None
+    text: str | None = Field(default=None, max_length=inference.MAX_TEXT_CHARS)
+    # base64 is 4/3 of the bytes, plus slack for a `data:image/...;base64,` prefix — so an
+    # oversized body is refused by the schema, before it is held in memory and decoded.
+    image_base64: str | None = Field(default=None, max_length=inference.MAX_IMAGE_BYTES * 4 // 3 + 256)
+    sample_id: str | None = Field(default=None, max_length=128)
     explain: bool = True
     # Explain w.r.t. this class key instead of the predicted one ("why not X?").
-    target: str | None = None
+    target: str | None = Field(default=None, max_length=128)
     similar: int = Field(default=5, ge=0, le=MAX_SIMILAR)
 
     @model_validator(mode="after")

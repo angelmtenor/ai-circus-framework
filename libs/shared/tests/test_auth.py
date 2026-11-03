@@ -313,3 +313,26 @@ def test_auth_settings_adapter_from_config_unwraps_secrets_and_tolerates_missing
     assert settings.ENGINEERING_DEMO_API_KEY is None
     assert settings.PLATFORM_REGISTRY_URL == ""
     assert settings.KEYCLOAK_ISSUER == "iss"
+
+
+def test_non_ascii_bearer_token_is_a_mismatch_not_a_crash() -> None:
+    """`secrets.compare_digest` raises TypeError on a non-ASCII str; a header is attacker-controlled."""
+    assert auth_module.is_admin_bearer_token("Bearer é-key", "admin-key") is False
+    assert auth_module.is_admin_bearer_token("Bearer admin-key", "admin-key") is True
+    assert auth_module.is_admin_bearer_token("Bearer ключ", "ключ") is True
+
+
+def test_token_in_more_than_one_organization_is_rejected_not_guessed() -> None:
+    claims = {"organization": {"a": {"id": "org-a"}, "b": {"id": "org-b"}}}
+    with pytest.raises(TokenValidationError, match="more than one organization"):
+        auth_module._extract_org_id(claims)
+
+
+@pytest.mark.parametrize("claim", [["org-a"], {"a": "org-a"}, "org-a"])
+def test_malformed_organization_claim_is_a_validation_error(claim: object) -> None:
+    with pytest.raises(TokenValidationError, match="Malformed"):
+        auth_module._extract_org_id({"organization": claim})
+
+
+def test_non_string_organization_id_yields_no_tenant() -> None:
+    assert auth_module._extract_org_id({"organization": {"a": {"id": 7}}}) is None

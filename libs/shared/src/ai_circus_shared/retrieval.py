@@ -16,6 +16,7 @@ package does not have to depend on qdrant-client; every caller passes a real cli
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -67,7 +68,25 @@ def retrieve(
     return chunks
 
 
+# The delimiters that mark text as untrusted data in a prompt. A document that contains the
+# closing tag would otherwise end the block early and have whatever follows read as instructions.
+_UNTRUSTED_MARKER = re.compile(r"<(?=\s*/?\s*(?:retrieved_document|catalog_entry|knowledge_graph)\b)", re.IGNORECASE)
+_UNSAFE_ATTRIBUTE_CHARS = re.compile(r'["<>\r\n]')
+
+
+def neutralize_markers(text: str) -> str:
+    """Defang any untrusted-data delimiter inside `text` (a zero-width space after the `<`), so
+    retrieved content can neither close its own block nor open a fake one."""
+    return _UNTRUSTED_MARKER.sub("<\u200b", text)
+
+
+def wrap_untrusted(tag: str, text: str, source: str | None = None) -> str:
+    """`<tag source="…">text</tag>` with `text` defanged and `source` unable to leave its attribute."""
+    attribute = f' source="{_UNSAFE_ATTRIBUTE_CHARS.sub("'", source)}"' if source is not None else ""
+    return f"<{tag}{attribute}>\n{neutralize_markers(text)}\n</{tag}>"
+
+
 def format_retrieved(chunks: list[RetrievedChunk]) -> str:
     """Wrap each chunk in `<retrieved_document source="…">` tags, so the model can tell
     retrieved (untrusted) text from its own instructions and the UI can list sources."""
-    return "\n\n".join(f'<retrieved_document source="{c.source}">\n{c.text}\n</retrieved_document>' for c in chunks)
+    return "\n\n".join(wrap_untrusted("retrieved_document", c.text, c.source) for c in chunks)

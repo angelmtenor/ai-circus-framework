@@ -632,6 +632,8 @@ services:
       <<: [*service-auth-env, *object-store-env]
       # A scenario's model.text_challenger embeds text live via llm-gateway's local-embed.
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Optional: when set, only models whose checksums training signed with it are loaded.
+      MODEL_SIGNING_KEY: ${MODEL_SIGNING_KEY:-}
       # Governance decision records (docs/governance/): all off unless set in .env.
       GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
       GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}
@@ -823,6 +825,8 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       # A scenario's model.text_challenger checks/fills its embedding cache via local-embed.
       LLM_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY}
+      # Optional: signs each model's checksums so prediction can refuse tampered artifacts.
+      MODEL_SIGNING_KEY: ${MODEL_SIGNING_KEY:-}
       # Governance (docs/governance/): a `model.trained` event, off unless set in .env.
       GOVERNANCE_EVENTS_ENABLED: ${GOVERNANCE_EVENTS_ENABLED:-false}
       GOVERNANCE_EVENT_SINK: ${GOVERNANCE_EVENT_SINK:-log}

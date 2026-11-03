@@ -654,3 +654,13 @@ async def test_agui_endpoint_emits_the_knowledge_graph_trace_before_run_finished
     assert '"name":"knowledge_graph_trace"' in body
     assert '"edges":[["report","reports_to","fiu"]]' in body
     assert body.index('"name":"knowledge_graph_trace"') < body.index('"type":"RUN_FINISHED"')
+
+
+def test_conversation_title_is_bounded() -> None:
+    from pydantic import ValidationError
+
+    from rag_agent.api import ConversationCreateIn
+
+    assert ConversationCreateIn(title="x" * 200).title is not None
+    with pytest.raises(ValidationError):
+        ConversationCreateIn(title="x" * 201)
