@@ -1,0 +1,47 @@
+# The OPTIONAL observability lab bundle (ADR 0015) — for demos and labs with no platform stack (a laptop,
+# a DGX Spark). OFF by default and never part of `make k3s-all`: `make k3s-obs-up` / `k3s-obs-down`.
+# A real platform already runs these; it only needs collector/, dashboards/ and alerts/ from this folder.
+#
+# Everything lands in namespace `observability`, sized for a laptop (~1 GiB of limits, 24 h retention,
+# emptyDir storage — a pod restart starts empty): an OpenTelemetry collector (DaemonSet: OTLP in, pod logs
+# tailed), VictoriaMetrics single-node (also scrapes every ai-circus pod's /metrics) + vmalert, Loki,
+# Tempo and Grafana at http://grafana.localhost with the framework's dashboards provisioned.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - bundle/namespace.yaml
+  - bundle/otel-collector.yaml
+  - bundle/victoriametrics.yaml
+  - bundle/loki.yaml
+  - bundle/tempo.yaml
+  - bundle/grafana.yaml
+generatorOptions:
+  disableNameSuffixHash: true  # `make k3s-obs-up` restarts the pods after re-applying their config
+configMapGenerator:
+  - name: otel-collector-config
+    namespace: observability
+    files: [config.yaml=collector/otel-collector.yaml]
+  - name: alert-rules
+    namespace: observability
+    files: [ai-circus-rules.yaml=alerts/ai-circus-rules.yaml]
+  - name: grafana-dashboards
+    namespace: observability
+    files:
+      - llm-gateway.json=dashboards/llm-gateway.json
+      - gpu.json=dashboards/gpu.json
+      - model-drift.json=dashboards/model-drift.json
+  - name: vm-scrape-config
+    namespace: observability
+    files: [scrape.yaml=bundle/config/scrape.yaml]
+  - name: loki-config
+    namespace: observability
+    files: [loki.yaml=bundle/config/loki.yaml]
+  - name: tempo-config
+    namespace: observability
+    files: [tempo.yaml=bundle/config/tempo.yaml]
+  - name: grafana-provisioning-datasources
+    namespace: observability
+    files: [datasources.yaml=bundle/config/grafana-datasources.yaml]
+  - name: grafana-provisioning-dashboards
+    namespace: observability
+    files: [dashboards.yaml=bundle/config/grafana-dashboards.yaml]

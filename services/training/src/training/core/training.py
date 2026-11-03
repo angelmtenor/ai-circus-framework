@@ -11,13 +11,14 @@ step, so the model reads raw text and SHAP explains it term by term.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import shap
+from ai_circus_shared.drift import build_reference
 from ai_circus_shared.tabular_ml import (
     KEPT_NEGATIONS,
     TEXT_STOP_WORDS_BY_LANGUAGE,
@@ -550,6 +551,29 @@ def global_shap_importance(
 
     mean_abs = np.abs(shap_values).mean(axis=0)
     return _aggregate_by_feature(transformed_feature_names(pipeline), mean_abs, feature_columns)
+
+
+def drift_reference(
+    pipeline: Pipeline,
+    x: pd.DataFrame,
+    task_type: str,
+    numeric_features: Sequence[str],
+    categorical_features: Sequence[str],
+    feature_importance: Sequence[Mapping[str, Any]],
+    sample_size: int = 5_000,
+) -> dict[str, Any]:
+    """The model-metadata `drift_reference` (ai_circus_shared.drift): the most important features' and the
+    model score's distributions over (a sample of) the rows the final pipeline was refit on — what
+    prediction compares live traffic with. The score is what prediction serves: the positive-class
+    probability, or the predicted value for regression.
+    """
+    if len(x) > sample_size:
+        x = x.iloc[np.linspace(0, len(x) - 1, sample_size, dtype=int)]
+    scores = pipeline.predict(x) if task_type == "regression" else pipeline.predict_proba(x)[:, 1]
+    kinds = dict.fromkeys(numeric_features, "numeric") | dict.fromkeys(categorical_features, "categorical")
+    columns = {name: x[name].tolist() for name in kinds if name in x.columns}
+    ranked = [str(entry["feature"]) for entry in feature_importance]
+    return build_reference(columns, kinds, ranked, [float(s) for s in scores])
 
 
 def text_term_importance(

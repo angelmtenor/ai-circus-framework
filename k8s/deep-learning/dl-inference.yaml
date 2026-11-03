@@ -14,6 +14,8 @@ spec:
   template:
     metadata:
       labels: {app: dl-inference}
+      # Platform observability contract (ADR 0015): scrape /metrics.
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: /metrics}
     spec:
       automountServiceAccountToken: false
       securityContext:

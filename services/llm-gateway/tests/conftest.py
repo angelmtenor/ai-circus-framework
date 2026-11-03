@@ -14,11 +14,16 @@ os.environ["LITELLM_MODE"] = "PRODUCTION"
 # budget_hook.py builds its enforcer at import time from get_env_config(), whose one
 # mandatory field this is — previously satisfied only by that leaked real .env.
 os.environ.setdefault("LITELLM_MASTER_KEY", "test-only-master-key")
+import asyncio
 from collections.abc import Generator
 
 import pytest
 
 import llm_gateway.core.logger as _logger_module
+
+# LiteLLM's logging worker binds to the first event loop it sees: every test module that drives a real
+# litellm call must use this one loop, or the second module's callbacks never run.
+LITELLM_LOOP = asyncio.new_event_loop()
 
 
 class FakeSecret:

@@ -19,7 +19,8 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off k3s-data-demo k3s-data-demo-off \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
-	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke
+	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke \
+	k3s-obs-up k3s-obs-down k3s-obs-restart
 
 help: ## Show this help message
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -625,6 +626,44 @@ k3s-governance-opa-down: ## Remove the optional OPA policy decision point (and i
 
 k3s-governance-opa-test: ## Run the reference Rego policy's unit tests (needs only Docker)
 	@docker run --rm -v "$(CURDIR)/infra/opa:/policies:ro" openpolicyagent/opa:1.21.4-static test /policies -v
+
+# Optional observability lab bundle (ADR 0015, observability/) — only for clusters with no platform stack.
+# Up: deploy it, then point every service at its collector (one shared-config key, added by patch so a
+# later `kubectl apply -k k8s/base` keeps it) and restart them. Down: the reverse, then delete it.
+OBS_ENDPOINT ?= http://otel-collector.observability:4318
+OBS_SERVICES ?= prediction assistant rag-agent form-agent platform-registry data-platform-manager llm-gateway agui-voice dl-inference data-api data-ingest
+OBS_WORKLOADS = daemonset/otel-collector deployment/victoriametrics deployment/vmalert deployment/loki deployment/tempo deployment/grafana
+
+k3s-obs-up: ## OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics+vmalert, Loki, Tempo, Grafana at http://grafana.localhost; every service starts exporting to it
+	@kubectl get namespace observability >/dev/null 2>&1 || kubectl create namespace observability >/dev/null
+	@kubectl -n observability get secret grafana-admin >/dev/null 2>&1 || \
+		kubectl -n observability create secret generic grafana-admin --from-literal=password="$$(openssl rand -hex 16)" >/dev/null
+	@kubectl apply -k observability >/dev/null && echo "✓ bundle applied"
+	@kubectl -n observability rollout restart $(OBS_WORKLOADS) >/dev/null
+	@for w in $(OBS_WORKLOADS); do kubectl -n observability rollout status $$w --timeout=300s >/dev/null || exit 1; done
+	@echo "✓ bundle ready"
+	@kubectl -n ai-circus patch configmap shared-config --type merge \
+		-p '{"data":{"OTEL_EXPORTER_OTLP_ENDPOINT":"$(OBS_ENDPOINT)"}}' >/dev/null
+	@$(MAKE) --no-print-directory k3s-obs-restart
+	@echo "✓ services export to $(OBS_ENDPOINT) — Grafana: http://grafana.localhost (anonymous = Viewer; admin password:"
+	@echo "  kubectl -n observability get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d)"
+
+k3s-obs-down: ## Undo k3s-obs-up: services stop exporting, then the bundle and its (24 h of) data are deleted
+	@kubectl -n ai-circus patch configmap shared-config --type json \
+		-p '[{"op":"remove","path":"/data/OTEL_EXPORTER_OTLP_ENDPOINT"}]' >/dev/null 2>&1 || true
+	@$(MAKE) --no-print-directory k3s-obs-restart
+	@kubectl delete -k observability --ignore-not-found >/dev/null && echo "✓ observability bundle removed"
+
+k3s-obs-restart: ## (internal) Restart each running OBS_SERVICES Deployment in turn so it rereads shared-config
+	@# One at a time, each waited for: restarting them all at once doubles every pod's memory for a while,
+	@# more than a 16 GB laptop has. A service that is slow to come back is reported, never fatal.
+	@for d in $(OBS_SERVICES); do \
+		r=$$(kubectl -n ai-circus get deployment $$d -o jsonpath='{.spec.replicas}' 2>/dev/null); \
+		[ -n "$$r" ] && [ "$$r" != "0" ] || continue; \
+		kubectl -n ai-circus rollout restart deployment/$$d >/dev/null; \
+		if kubectl -n ai-circus rollout status deployment/$$d --timeout=300s >/dev/null 2>&1; then echo "  ↻ $$d"; \
+		else echo "  ⚠ $$d not Ready after 5 min — check it with: kubectl -n ai-circus get pods -l app=$$d"; fi; \
+	done
 
 # Everything a data showcase never touches, scaled to 0 by `k3s-data-showcase` (on top of
 # K3S_DEMO_SKIP): the other kinds' services. The assistant, llm-gateway and Keycloak stay.

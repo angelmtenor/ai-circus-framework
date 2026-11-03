@@ -969,6 +969,9 @@ goes through the gateway. Underneath all three, **platform observability** — a
 Prometheus-compatible metrics store, Loki, Tempo and Grafana — is a prerequisite the cluster provides, not part of the
 framework ([ADR 0015](docs/adr/0015-observability-platform-contract.md)): every service exposes `/metrics`, exports
 content-free traces over OTLP once `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and logs JSON lines carrying the trace id.
+The framework ships only the AI-specific pieces ([`observability/`](observability/README.md)): Grafana dashboards for
+the LLM gateway (calls, tokens, cost, latency), GPUs and model drift, alert rules and a collector config — plus an
+optional lab bundle for clusters with no stack (`make k3s-obs-up`, off by default, ~1 GiB).
 The capability roadmap below groups the same services as Data, AI / BI / ML and Governance
 (it lists the gateway's routing under AI / BI / ML and its limits and budgets under Governance).
 

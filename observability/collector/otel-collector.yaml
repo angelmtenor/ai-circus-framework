@@ -1,0 +1,87 @@
+# OpenTelemetry Collector (contrib) config for ai-circus-framework — the "collector snippet" of ADR 0015.
+#
+# Used as-is by the optional lab bundle (observability/kustomization.yaml) and meant to be merged into a
+# platform's own collector. Destinations come from the environment, so the same file serves both:
+#   METRICS_REMOTE_WRITE_URL  Prometheus remote-write endpoint (VictoriaMetrics: http://<vm>:8428/api/v1/write)
+#   TRACES_OTLP_ENDPOINT      OTLP/HTTP base URL of the trace store (Tempo: http://<tempo>:4318)
+#   LOGS_OTLP_ENDPOINT        OTLP/HTTP base URL of the log store (Loki 3: http://<loki>:3100/otlp)
+#
+# What it carries:
+#   traces   every service's content-free spans (OTLP from ai_circus_shared.telemetry and llm-gateway)
+#   metrics  llm-gateway's GenAI histograms over OTLP (tokens, cost, latency, time to first token). The
+#            services' own /metrics (HTTP, model drift, DCGM-named GPU gauges) are *scraped* by the metrics
+#            store via the pods' prometheus.io/* annotations — not routed through here, so their names stay
+#            Prometheus-native.
+#   logs     the JSON lines every pod writes (LOG_FORMAT=json), tailed from the node, trace ids kept.
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: "0.0.0.0:4317"}
+      http: {endpoint: "0.0.0.0:4318"}
+  filelog/ai-circus:
+    include: [/var/log/pods/ai-circus_*/*/*.log]
+    start_at: end
+    include_file_path: true  # the `container` parser reads namespace/pod/container from this path
+    operators:
+      - type: container  # CRI / docker log format -> body, plus k8s.namespace/pod/container from the path
+      - type: json_parser
+        if: 'body matches "^\\{"'
+        parse_to: attributes
+        severity: {parse_from: attributes.level}
+      - type: move
+        if: attributes.msg != nil
+        from: attributes.msg
+        to: body
+      - type: trace_parser  # ties a log line to its trace (Loki -> Tempo in Grafana)
+        trace_id: {parse_from: attributes.trace_id}
+        span_id: {parse_from: attributes.span_id}
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  # Defence in depth: the services already export content-free spans (RedactingSpanExporter, llm-gateway's
+  # platform span policy). This drops the same families again in case another emitter joins the pipeline.
+  transform/ai-circus-redact:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_matching_keys(attributes, "^(metadata\\..*|hidden_params|gen_ai\\.(prompt|completion|input\\.messages|output\\.messages|system_instructions).*|llm\\.(input|output)_messages.*|input\\.value|output\\.value|db\\.(statement|query\\.text)|http\\.(request|response)\\.body.*|enduser\\..*)$")
+      - context: spanevent
+        statements:
+          - delete_matching_keys(attributes, "^(gen_ai\\.(prompt|completion|input\\.messages|output\\.messages).*|input\\.value|output\\.value)$")
+  batch: {}
+
+exporters:
+  prometheusremotewrite:
+    endpoint: ${env:METRICS_REMOTE_WRITE_URL}
+    # Plain names: gen_ai.client.operation.duration -> gen_ai_client_operation_duration_{bucket,sum,count},
+    # gen_ai.usage.cost -> gen_ai_usage_cost_*, gen_ai.client.token.usage -> gen_ai_client_token_usage_*.
+    # The framework's dashboards and alert rules use exactly these.
+    add_metric_suffixes: false
+    resource_to_telemetry_conversion: {enabled: true}  # service_name as a label
+  otlphttp/traces:
+    endpoint: ${env:TRACES_OTLP_ENDPOINT}
+  otlphttp/logs:
+    endpoint: ${env:LOGS_OTLP_ENDPOINT}
+
+extensions:
+  health_check: {endpoint: "0.0.0.0:13133"}  # liveness/readiness for the collector's own pod
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/ai-circus-redact, batch]
+      exporters: [otlphttp/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [filelog/ai-circus, otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/logs]

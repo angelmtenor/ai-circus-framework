@@ -16,6 +16,7 @@ from litellm.integrations.opentelemetry import OpenTelemetryConfig
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from llm_gateway import app, tracing
+from tests.conftest import LITELLM_LOOP
 
 METADATA = {
     "trace_user_id": "org-1",
@@ -38,14 +39,16 @@ def _memory_exporter() -> Iterator[InMemorySpanExporter]:
     memory = InMemorySpanExporter()
     logger = LangfuseOtelLogger(config=OpenTelemetryConfig(exporter=memory))
     logger.callback_name = "langfuse_otel"
-    previous = litellm.callbacks
+    # LiteLLM's registry is global and dedupes by class: start and end clean so test_tracing_platform's
+    # generic `otel` logger (a parent class) neither blocks nor is blocked by this one.
+    litellm.logging_callback_manager._reset_all_callbacks()
     litellm.callbacks = [logger]
     yield memory
-    litellm.callbacks = previous
+    litellm.logging_callback_manager._reset_all_callbacks()
     litellm.turn_off_message_logging = False
 
 
-_LOOP = asyncio.new_event_loop()  # LiteLLM's logging worker binds to the first loop it sees — keep one
+_LOOP = LITELLM_LOOP  # LiteLLM's logging worker binds to the first loop it sees — one for the suite
 
 
 @pytest.fixture

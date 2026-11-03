@@ -1,0 +1,28 @@
+# VictoriaMetrics scrape config (Prometheus-compatible): every Running ai-circus pod that carries the
+# prometheus.io/* annotations (ADR 0015's /metrics contract). `service` = the pod's `app` label — the label
+# the framework's dashboards and alert rules group by.
+global:
+  scrape_interval: 30s
+scrape_configs:
+  - job_name: ai-circus-pods
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: {names: [ai-circus]}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        regex: "true"
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_phase]
+        regex: Running
+        action: keep
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        regex: '([^:]+)(?::\d+)?;(\d+)'
+        replacement: $1:$2
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        regex: (.+)
+        target_label: __metrics_path__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: service
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod

@@ -61,7 +61,10 @@ agents and APIs (`ai_circus_shared.telemetry`), and one span per model call from
 `otel` callback runs with `message_logging: false`, and the services' exporter drops prompt, completion,
 message, SQL-text, body and `enduser.*` attributes and strips URL query strings before anything leaves the
 pod. The agent's `traceparent` reaches llm-gateway, so the platform trace and the Langfuse trace of the
-same call share one trace id.
+same call share one trace id. llm-gateway's platform spans also drop every attribute LiteLLM copies from the
+request (`metadata.*` — requester IP and headers, API-key alias and hash, user e-mail — and `hidden_params`)
+and carry the `gen_ai.*`/`aicf.*` attributes above, so they can be filtered by tenant and AI system. Its GenAI
+metrics (tokens, cost, latency) keep only operation, provider and model as dimensions.
 
 ## 2. Non-LLM predictions: decision records
 
