@@ -30,6 +30,7 @@ from data_platform_manager import get_env_config
 from data_platform_manager.api import router
 from data_platform_manager.core.cache_client import init_client
 from data_platform_manager.core.events_client import init_producer
+from data_platform_manager.core.gpu_metrics import register_gpu_metrics
 from data_platform_manager.core.logger import configure_logger, get_logger
 
 logger = get_logger(__name__)
@@ -62,6 +63,7 @@ app = FastAPI(
 app.include_router(router)
 configure_metrics(app)
 configure_tracing(app, service="data-platform-manager")
+register_gpu_metrics()  # DCGM-named GPU gauges on /metrics — the NVML fallback (core/gpu_metrics.py)
 
 
 def main() -> None:
