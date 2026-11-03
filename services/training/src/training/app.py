@@ -54,6 +54,7 @@ from training.core.mlflow_tracking import log_training_run
 from training.core.training import (
     DEFAULT_SELECTION_METRIC,
     build_explainer,
+    drift_reference,
     fit_quantile_pipelines,
     global_shap_importance,
     holdout_evaluation,
@@ -153,6 +154,14 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         best.pipeline, explainer, x, definition.dataset.feature_columns, text_features=text_features
     )
     term_importance = text_term_importance(best.pipeline, explainer, x, text_features)
+    try:
+        # What prediction's drift metrics compare live traffic with (ADR 0015) — never fails the job.
+        reference = drift_reference(
+            best.pipeline, x, model.task_type, numeric_features, categorical_features, feature_importance
+        )
+    except Exception:
+        logger.opt(exception=True).warning("No drift reference for scenario={} — drift metrics stay off", slug)
+        reference = None
 
     checksums: dict[str, str] = {}
 
@@ -264,6 +273,8 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         ),
         "target": definition.dataset.target,
         "has_intervals": has_intervals,
+        # Feature and score distributions for prediction's drift metrics (ai_circus_shared.drift).
+        "drift_reference": reference,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
     }
     # Authenticates the checksums above when MODEL_SIGNING_KEY is set (see ai_circus_shared.tabular_ml).

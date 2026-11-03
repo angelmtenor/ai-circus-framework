@@ -12,6 +12,7 @@ from training.core.training import (
     _aggregate_by_feature,
     build_explainer,
     build_pipeline,
+    drift_reference,
     global_shap_importance,
     holdout_evaluation,
     out_of_fold_scores,
@@ -103,6 +104,40 @@ def test_train_candidate_scores_on_test_set(synthetic_data: tuple) -> None:
 
     assert candidate.name == "logistic_regression"
     assert 0.0 <= candidate.test_score <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("data", "candidate_name", "task_type"),
+    [
+        ("synthetic_data", "logistic_regression", "classification"),
+        ("synthetic_regression_data", "linear_regression", "regression"),
+    ],
+)
+def test_drift_reference_profiles_ranked_features_and_the_served_score(
+    request: pytest.FixtureRequest, data: str, candidate_name: str, task_type: str
+) -> None:
+    """The reference holds the ranked features' and the score's distributions — the score being what
+    prediction serves (a probability for classification, the value for regression).
+    """
+    x_train, x_test, y_train, y_test = request.getfixturevalue(data)
+    candidate = train_candidate(
+        candidate_name, x_train, y_train, x_test, y_test, ["numeric_feature"], ["category_feature"], task_type
+    )
+    importance = [{"feature": "category_feature", "importance": 0.9}, {"feature": "numeric_feature", "importance": 0.1}]
+
+    reference = drift_reference(
+        candidate.pipeline, x_train, task_type, ["numeric_feature"], ["category_feature"], importance
+    )
+
+    assert list(reference["features"]) == ["category_feature", "numeric_feature"]
+    assert reference["features"]["category_feature"]["categories"] == sorted(
+        ["A", "B"], key=lambda c: -(x_train["category_feature"] == c).sum()
+    )
+    assert reference["features"]["numeric_feature"]["kind"] == "numeric"
+    edges = reference["score"]["edges"]
+    if task_type == "classification":
+        assert edges[0] >= 0.0 and edges[-1] <= 1.0
+    assert sum(reference["score"]["expected"]) == pytest.approx(1.0, abs=1e-4)
 
 
 def test_train_candidate_scores_regression_on_test_set(synthetic_regression_data: tuple) -> None:

@@ -1,0 +1,80 @@
+# Alert rules for ai-circus-framework (ADR 0015) — Prometheus rule-group format: load with vmalert (-rule=),
+# Prometheus (rule_files) or as the `spec` of a prometheus-operator PrometheusRule. Thresholds are starting
+# points: tune `for:` and the numbers to the deployment. Label `service` is the pod's `app` label (the lab
+# bundle's scrape config sets it; map yours the same way).
+groups:
+  - name: ai-circus.llm-gateway
+    rules:
+      - alert: LLMGatewaySlowResponses
+        expr: |
+          histogram_quantile(0.95, sum by (le, gen_ai_request_model) (rate(gen_ai_client_operation_duration_bucket[10m]))) > 20
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 LLM latency above 20 s for {{ $labels.gen_ai_request_model }}"
+          description: "Calls through llm-gateway to this model are slow. Check the provider's status and the gateway's rate limits."
+      - alert: LLMCostBurnRate
+        expr: sum(rate(gen_ai_usage_cost_sum[1h])) * 3600 > 5
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "LLM spend above 5 USD/hour"
+          description: "Sustained model spend through llm-gateway. Per-tenant budgets are enforced by the gateway itself; this is the platform-wide view."
+      - alert: LLMGatewaySilent
+        expr: absent_over_time(gen_ai_client_operation_duration_count[1h]) and on() (sum(rate(http_requests_total{service=~"assistant|rag-agent|form-agent",handler=~"/agui/.*"}[1h])) > 0)
+        for: 15m
+        labels: {severity: info}
+        annotations:
+          summary: "Agents are chatting but llm-gateway reports no GenAI metrics"
+          description: "Check OTEL_EXPORTER_OTLP_ENDPOINT on llm-gateway and the collector's metrics pipeline."
+
+  - name: ai-circus.services
+    rules:
+      - alert: ServiceHighErrorRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status="5xx"}[5m]))
+            / sum by (service) (rate(http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.service }}: more than 5% of requests fail with 5xx"
+          description: "Look at the service's JSON logs in Loki, filtered by trace_id from a failing trace."
+      - alert: ServiceDown
+        expr: up{service=~"prediction|assistant|rag-agent|form-agent|platform-registry"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.service }} is not answering /metrics"
+
+  - name: ai-circus.models
+    rules:
+      - alert: ModelScoreDrift
+        expr: max by (scenario) (ai_circus_model_score_psi) > 0.25
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.scenario }}: the served score distribution has shifted (PSI {{ $value | printf \"%.2f\" }})"
+          description: "Live traffic no longer looks like the training data. Compare the drifting features, then consider retraining (make k3s-pipeline)."
+      - alert: ModelFeatureDrift
+        expr: max by (scenario, feature) (ai_circus_model_feature_psi) > 0.25
+        for: 30m
+        labels: {severity: info}
+        annotations:
+          summary: "{{ $labels.scenario }}: feature {{ $labels.feature }} has shifted (PSI {{ $value | printf \"%.2f\" }})"
+
+  - name: ai-circus.gpu
+    rules:
+      - alert: GPUTooHot
+        expr: max by (gpu, modelName) (DCGM_FI_DEV_GPU_TEMP) > 85
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "GPU {{ $labels.gpu }} ({{ $labels.modelName }}) above 85 °C"
+      - alert: GPUMemoryNearlyFull
+        expr: |
+          max by (gpu, modelName) (DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE)) > 0.95
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "GPU {{ $labels.gpu }} memory above 95%"
+          description: "A training Job may fail with out-of-memory; inference shares the same card."

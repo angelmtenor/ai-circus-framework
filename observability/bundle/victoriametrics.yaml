@@ -1,0 +1,161 @@
+# VictoriaMetrics single-node: the metrics store. Receives the collector's remote-write (GenAI metrics) and
+# scrapes every ai-circus pod's /metrics itself (bundle/config/scrape.yaml — pods carrying the
+# prometheus.io/* annotations), so those keep their Prometheus-native names. vmalert evaluates
+# alerts/ai-circus-rules.yaml against it (no Alertmanager in a lab: firing alerts are the ALERTS series).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: victoriametrics
+  namespace: observability
+automountServiceAccountToken: false
+---
+# Read-only pod discovery in the ai-circus namespace only — nothing cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: observability-pod-discovery
+  namespace: ai-circus
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: observability-pod-discovery
+  namespace: ai-circus
+subjects:
+  - {kind: ServiceAccount, name: victoriametrics, namespace: observability}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: observability-pod-discovery
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victoriametrics
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: victoriametrics}
+  template:
+    metadata:
+      labels: {app: victoriametrics}
+    spec:
+      serviceAccountName: victoriametrics
+      automountServiceAccountToken: true  # kubernetes_sd pod discovery
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: victoriametrics
+          image: victoriametrics/victoria-metrics:v1.108.1
+          args:
+            - -storageDataPath=/storage
+            - -retentionPeriod=1d
+            - -promscrape.config=/etc/vm/scrape.yaml
+            - -memory.allowedPercent=40
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8428}
+          resources:
+            requests: {cpu: 20m, memory: 96Mi}
+            limits: {memory: 384Mi}
+          startupProbe:
+            httpGet: {path: /health, port: 8428}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8428}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8428}
+            periodSeconds: 20
+          volumeMounts:
+            - {name: storage, mountPath: /storage}
+            - {name: scrape, mountPath: /etc/vm, readOnly: true}
+      volumes:
+        - name: storage
+          emptyDir: {sizeLimit: 2Gi}
+        - name: scrape
+          configMap: {name: vm-scrape-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoriametrics
+  namespace: observability
+spec:
+  selector: {app: victoriametrics}
+  ports:
+    - {port: 8428, targetPort: 8428}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vmalert
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: vmalert}
+  template:
+    metadata:
+      labels: {app: vmalert}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: vmalert
+          image: victoriametrics/vmalert:v1.108.1
+          args:
+            - -rule=/etc/alerts/*.yaml
+            - -datasource.url=http://victoriametrics:8428
+            - -remoteWrite.url=http://victoriametrics:8428
+            - -notifier.blackhole
+            - -evaluationInterval=1m
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8880}
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {memory: 64Mi}
+          startupProbe:
+            httpGet: {path: /health, port: 8880}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8880}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8880}
+            periodSeconds: 20
+          volumeMounts:
+            - {name: rules, mountPath: /etc/alerts, readOnly: true}
+      volumes:
+        - name: rules
+          configMap: {name: alert-rules}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vmalert
+  namespace: observability
+spec:
+  selector: {app: vmalert}
+  ports:
+    - {port: 8880, targetPort: 8880}

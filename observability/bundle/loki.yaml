@@ -1,0 +1,65 @@
+# Loki (single binary, filesystem, 24 h): the log store. The collector sends the pods' JSON log lines over
+# OTLP; trace_id stays as structured metadata, so Grafana links a log line to its trace in Tempo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: loki}
+  template:
+    metadata:
+      labels: {app: loki}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: loki
+          image: grafana/loki:3.3.2
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          env:
+            - {name: GOMEMLIMIT, value: "256MiB"}
+          ports:
+            - {containerPort: 3100}
+          resources:
+            requests: {cpu: 20m, memory: 96Mi}
+            limits: {memory: 320Mi}
+          startupProbe:
+            httpGet: {path: /ready, port: 3100}
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: 3100}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ready, port: 3100}
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - {name: data, mountPath: /loki}
+            - {name: config, mountPath: /etc/loki, readOnly: true}
+      volumes:
+        - name: data
+          emptyDir: {sizeLimit: 2Gi}
+        - name: config
+          configMap: {name: loki-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: observability
+spec:
+  selector: {app: loki}
+  ports:
+    - {port: 3100, targetPort: 3100}

@@ -33,6 +33,7 @@ from pydantic import ValidationError
 
 from prediction import get_env_config
 from prediction.api import router
+from prediction.core.drift_monitor import register_drift_metrics
 from prediction.core.logger import configure_logger, get_logger
 from prediction.core.model_cache import ModelCache, ModelUnavailableError
 
@@ -85,6 +86,7 @@ app = FastAPI(
 )
 app.include_router(router)
 configure_metrics(app)
+register_drift_metrics()  # model-drift PSI and scored rows on /metrics (core/drift_monitor.py)
 configure_tracing(app, service="prediction")
 
 

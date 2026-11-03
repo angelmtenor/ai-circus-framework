@@ -34,6 +34,16 @@ laptop has ~12 GiB for everything (`make k3s-data-demo` already uses ~8.8).
   content-bearing spans never reach the platform. Both continue the agent's `traceparent`, so one
   trace id links a Tempo trace to its Langfuse trace.
 
+**What the framework ships on top** ([`observability/`](../../observability/README.md)): the collector config,
+three Grafana dashboards (LLM gateway, GPU, model drift), alert rules, and the signals behind them —
+llm-gateway's OpenTelemetry GenAI metrics (dimensions limited to operation, provider and model), `prediction`'s
+model-drift PSI against a reference `training` writes into the model metadata, and the DCGM exporter's GPU
+metric names from `data-platform-manager`'s NVML reading where DCGM cannot run (WSL2, consumer cards). Pods
+carry `prometheus.io/*` annotations. llm-gateway's platform spans drop LiteLLM's request metadata
+(`metadata.*`, `hidden_params`: requester IP and headers, user e-mail, key hash) and gain the same
+`gen_ai.*`/`aicf.*` attributes as Langfuse's. An optional lab bundle (`make k3s-obs-up`, off by default)
+runs the stack itself for clusters without one.
+
 **Consequences.** Turning observability on is configuration only (`shared-config`), with no
 redeploy of anything but the configmap and a rollout. The OpenTelemetry SDK is now a dependency of
 every service image (~10 MB of disk each). The framework loads it only when enabled, but redis-py's

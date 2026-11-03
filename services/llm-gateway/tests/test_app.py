@@ -132,7 +132,12 @@ def test_resolve_config_path_exports_to_the_platform_collector_without_content(t
     loaded = yaml.safe_load(app.resolve_config_path(config, env).read_text())
 
     assert loaded["litellm_settings"]["callbacks"] == ["llm_gateway.budget_hook.instance", "langfuse_otel", "otel"]
-    assert loaded["callback_settings"] == {"otel": {"message_logging": False}}
+    assert loaded["callback_settings"] == {
+        "otel": {
+            "message_logging": False,
+            "attributes": {"include_list": ["gen_ai.operation.name", "gen_ai.system", "gen_ai.request.model"]},
+        }
+    }
     # Content capture stays a Langfuse-only choice: the global switch is untouched.
     assert "turn_off_message_logging" not in loaded["litellm_settings"]
 
@@ -159,3 +164,16 @@ def test_launch_env_follows_the_platform_log_format_and_names_the_service() -> N
         "OTEL_SERVICE_NAME": "llm-gateway",
     }
     assert app.launch_env({"OTEL_SERVICE_NAME": "gw"}) == {"OTEL_SERVICE_NAME": "gw"}
+
+
+def test_launch_env_turns_on_genai_metrics_only_with_a_collector() -> None:
+    on = app.launch_env({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://c:4318"})
+    assert on["LITELLM_OTEL_INTEGRATION_ENABLE_METRICS"] == "true"
+    assert "LITELLM_OTEL_INTEGRATION_ENABLE_METRICS" not in app.launch_env({})
+
+
+def test_the_metric_dimensions_are_ones_litellm_accepts() -> None:
+    from litellm.integrations.opentelemetry import VALID_METRIC_ATTRIBUTE_NAMES
+
+    assert set(app.OTLP_METRIC_ATTRIBUTES) <= VALID_METRIC_ATTRIBUTE_NAMES
+    assert not any(name.startswith("metadata.") for name in app.OTLP_METRIC_ATTRIBUTES)
