@@ -4,6 +4,23 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.36.0 — 2026-11-03
+
+### Added
+- Scenario gallery: a scenario whose backend is not running (scaled to 0 by `k3s-demo`/`k3s-all-lite`, or an
+  overlay never deployed) is grayed out with "<service> is not started" and the command to start it, instead of
+  failing with "Failed to fetch" once opened. The check is each service's `/healthz` through Traefik (one shared
+  30 s poll, paused while the tab is hidden); admins get a Start button for `dl-inference`. A down assistant only
+  adds a "Chat unavailable" chip.
+- ADR 0014 (proposed): Vega-Lite as the app's one chart grammar (Plotly to be phased out), Superset kept for BI,
+  Power BI reached through the gold marts and Deneb-ready specs.
+
+### Changed
+- Every animated canvas outside the network scenes (shipment globe, Dispatch Tower map and landscape, case-desk
+  circuit) runs on one loop, `ui-react/src/sceneLoop.ts`: decorative motion rests 15 s after the last input (the
+  globe's spin 30 s), nothing draws while the page or canvas is hidden, and expensive frames lower the frame rate.
+  Idle animation frames drop from 60/s to 0 on these tabs; the case-desk circuit no longer redraws forever.
+
 ## v0.35.1 — 2026-11-03
 
 ### Fixed
