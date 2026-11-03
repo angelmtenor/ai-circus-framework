@@ -263,6 +263,24 @@ TARGETS: tuple[Target, ...] = (
         app_label="mlflow",
         console_url="http://mlflow.localhost",
     ),
+    # The optional observability lab bundle (observability/, `make k3s-obs-up`, namespace `observability` —
+    # so no pod enrichment here). A platform's own stack lives elsewhere: these then read "not deployed".
+    Target(
+        "grafana",
+        "observability",
+        "http://grafana.observability:3000/api/health",
+        "Platform dashboards — LLM gateway (tokens, cost, latency), GPU and model drift (ADR 0015)",
+        console_url="http://grafana.localhost",
+        optional=True,
+    ),
+    Target(
+        "otel-collector",
+        "observability",
+        "otel-collector.observability:4318",
+        "Where every service exports traces and the gateway its GenAI metrics (OTEL_EXPORTER_OTLP_ENDPOINT)",
+        probe="tcp",
+        optional=True,
+    ),
 )
 
 
