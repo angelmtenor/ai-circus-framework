@@ -1,5 +1,13 @@
-import { useMemo, useRef } from "react";
-import type { ScenarioSummary } from "./apiClient";
+import { useMemo, useRef, useState } from "react";
+import { setComponentRunning, type ScenarioSummary } from "./apiClient";
+import { config } from "./config";
+import {
+  missingServices,
+  refreshServiceAvailability,
+  scenarioServices,
+  SERVICES,
+  useServiceAvailability,
+} from "./serviceAvailability";
 
 type Category = {
   key: string;
@@ -158,14 +166,35 @@ export function ScenarioPicker({
   onSelect,
   filters,
   onFiltersChange,
+  isAdmin = false,
+  accessToken = null,
 }: {
   scenarios: ScenarioSummary[];
   onSelect: (scenario: ScenarioSummary) => void;
   filters: ScenarioFilters;
   onFiltersChange: (filters: ScenarioFilters) => void;
+  isAdmin?: boolean;
+  accessToken?: string | null;
 }) {
   const { industry, technique, query } = filters;
   const searchRef = useRef<HTMLInputElement>(null);
+  const neededServices = useMemo(
+    () => scenarios.flatMap((s) => [...scenarioServices(s).required, ...scenarioServices(s).optional]),
+    [scenarios],
+  );
+  const availability = useServiceAvailability(neededServices);
+  const [starting, setStarting] = useState<Record<string, string>>({}); // control name -> status line
+
+  const startService = (control: string) => {
+    setStarting((s) => ({ ...s, [control]: "Starting…" }));
+    setComponentRunning(config.dataPlatformManagerUrl, control, true, accessToken)
+      .then(() => {
+        setStarting((s) => ({ ...s, [control]: "Starting — this can take a minute…" }));
+        // The pod needs a while to load its models; re-probe a few times rather than wait 30 s.
+        for (const delay of [10_000, 25_000, 45_000]) window.setTimeout(refreshServiceAvailability, delay);
+      })
+      .catch((e) => setStarting((s) => ({ ...s, [control]: `Could not start: ${(e as Error).message}` })));
+  };
   const availableIndustries = useMemo(
     () => Object.keys(INDUSTRY_LABELS).filter((key) => scenarios.some((s) => s.industry === key)),
     [scenarios],
@@ -296,19 +325,72 @@ export function ScenarioPicker({
           <div className="scenario-grid">
             {group.scenarios.map((scenario) => {
               const subtype = mlSubtype(scenario);
-              return (
-                <button key={scenario.slug} className="scenario-card" onClick={() => onSelect(scenario)}>
+              const missing = missingServices(scenario, availability);
+              const degraded = scenarioServices(scenario).optional.filter((key) => availability.get(key) === "down");
+              const body = (
+                <>
                   <div className="scenario-card-icon">{scenario.icon}</div>
                   <div className="scenario-card-body">
                     <div className="scenario-card-kind">{categoryFor(scenario).label}</div>
                     <h3>{scenario.title}</h3>
                     <p>{scenario.description}</p>
                   </div>
+                </>
+              );
+              const chips = (
+                <>
+                  {DOMAIN_CHIPS[scenario.industry] && (
+                    <span className="scenario-chip scenario-chip--domain">{DOMAIN_CHIPS[scenario.industry]}</span>
+                  )}
+                  {subtype && <span className="scenario-chip">{subtype}</span>}
+                </>
+              );
+              if (missing.length > 0) {
+                // A div, not a button: it cannot be opened, and may hold the admin's Start button
+                // (so no aria-disabled here — it would disable that button for assistive tech too).
+                const controls = [...new Set(missing.map((key) => SERVICES[key].control).filter((c): c is string => !!c))];
+                return (
+                  <div key={scenario.slug} className="scenario-card scenario-card--unavailable">
+                    {body}
+                    <div className="scenario-card-unavailable" role="status">
+                      {missing.map((key) => (
+                        <span key={key} title={`To start it: ${SERVICES[key].startHint}`}>
+                          ⏸ {SERVICES[key].label} is not started
+                        </span>
+                      ))}
+                      {isAdmin &&
+                        controls.map((control) =>
+                          starting[control] ? (
+                            <span key={control} className="scenario-card-starting">
+                              {starting[control]}
+                            </span>
+                          ) : (
+                            <button key={control} type="button" className="scenario-card-start" onClick={() => startService(control)}>
+                              Start {control}
+                            </button>
+                          ),
+                        )}
+                    </div>
+                    <div className="scenario-card-footer">
+                      {chips}
+                      <span className="scenario-card-open">Unavailable</span>
+                    </div>
+                  </div>
+                );
+              }
+              return (
+                <button key={scenario.slug} className="scenario-card" onClick={() => onSelect(scenario)}>
+                  {body}
                   <div className="scenario-card-footer">
-                    {DOMAIN_CHIPS[scenario.industry] && (
-                      <span className="scenario-chip scenario-chip--domain">{DOMAIN_CHIPS[scenario.industry]}</span>
+                    {chips}
+                    {degraded.length > 0 && (
+                      <span
+                        className="scenario-chip scenario-chip--warn"
+                        title={degraded.map((key) => `${SERVICES[key].label} is not started — to start it: ${SERVICES[key].startHint}`).join("\n")}
+                      >
+                        Chat unavailable
+                      </span>
                     )}
-                    {subtype && <span className="scenario-chip">{subtype}</span>}
                     <span className="scenario-card-open">Open →</span>
                   </div>
                 </button>

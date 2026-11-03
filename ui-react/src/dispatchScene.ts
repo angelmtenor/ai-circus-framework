@@ -10,8 +10,8 @@
  *   hub, drawn as filled isochrones (d3-contour) with the real shipments on top; hover
  *   reads the grid, click pins a destination.
  *
- * Both render on demand; the map's flight animation runs only while visible and never
- * under reduced motion.
+ * Both render on demand through sceneLoop.ts: the map's flight animation runs only while
+ * visible, rests 15 s after the last input and never runs under reduced motion.
  */
 import { contours } from "d3-contour";
 import { geoAlbersUsa, geoEqualEarth, geoPath, type GeoProjection, type GeoPermissibleObjects } from "d3-geo";
@@ -20,6 +20,7 @@ import { feature, mesh } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import { glyphPath, type Glyph, rgba, sequentialColor, sizeCanvas } from "./logisticsViz";
 import type { SurfaceMode } from "./riskPalette";
+import { type Motion, SceneLoop } from "./sceneLoop";
 
 export type SceneColors = {
   land: string;
@@ -107,12 +108,10 @@ export class HubMapScene {
   private width = 0;
   private height = 0;
   private dpr = 1;
-  private raf = 0;
-  private visible = true;
   private hubPx = new Map<string, [number, number]>();
   private onHub: (key: string) => void;
   private hoverHub: string | null = null;
-  private observer: IntersectionObserver;
+  private readonly loop: SceneLoop;
 
   constructor(canvas: HTMLCanvasElement, onHub: (key: string) => void) {
     this.canvas = canvas;
@@ -121,18 +120,11 @@ export class HubMapScene {
     canvas.addEventListener("pointermove", this.onMove);
     canvas.addEventListener("pointerleave", this.onLeave);
     canvas.addEventListener("click", this.onClick);
-    this.observer = new IntersectionObserver((entries) => {
-      this.visible = entries.some((e) => e.isIntersecting);
-      this.kick();
-    });
-    this.observer.observe(canvas);
-    document.addEventListener("visibilitychange", this.kick);
+    this.loop = new SceneLoop(canvas, this.frame);
   }
 
   destroy(): void {
-    cancelAnimationFrame(this.raf);
-    this.observer.disconnect();
-    document.removeEventListener("visibilitychange", this.kick);
+    this.loop.destroy();
     this.canvas.removeEventListener("pointermove", this.onMove);
     this.canvas.removeEventListener("pointerleave", this.onLeave);
     this.canvas.removeEventListener("click", this.onClick);
@@ -214,14 +206,13 @@ export class HubMapScene {
   }
 
   private kick = (): void => {
-    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
+    this.loop.wake();
   };
 
-  private loop = (now: number): void => {
-    this.raf = 0;
+  // The flights are ambient motion: they rest REST_AFTER_MS after the last input.
+  private frame = (now: number): Motion => {
     this.draw(now);
-    const animate = this.view && !this.view.reducedMotion && this.visible && !document.hidden;
-    if (animate) this.raf = requestAnimationFrame(this.loop);
+    return this.view && !this.view.reducedMotion ? "ambient" : "idle";
   };
 
   /** A point along the gentle arc from `a` to `b` at progress t. */
@@ -444,10 +435,10 @@ export class LandscapeScene {
   private height = 0;
   private dpr = 1;
   private transitionStart = 0;
-  private raf = 0;
   private hover: LandscapeReading | null = null;
   private onHover: (reading: LandscapeReading | null) => void;
   private onPick: (offset: Offset) => void;
+  private readonly loop: SceneLoop;
 
   constructor(canvas: HTMLCanvasElement, onHover: (reading: LandscapeReading | null) => void, onPick: (offset: Offset) => void) {
     this.canvas = canvas;
@@ -457,10 +448,11 @@ export class LandscapeScene {
     canvas.addEventListener("pointermove", this.onMove);
     canvas.addEventListener("pointerleave", this.onLeave);
     canvas.addEventListener("click", this.onClick);
+    this.loop = new SceneLoop(canvas, this.frame, { fps: 60 });
   }
 
   destroy(): void {
-    cancelAnimationFrame(this.raf);
+    this.loop.destroy();
     this.canvas.removeEventListener("pointermove", this.onMove);
     this.canvas.removeEventListener("pointerleave", this.onLeave);
     this.canvas.removeEventListener("click", this.onClick);
@@ -680,21 +672,17 @@ export class LandscapeScene {
   }
 
   private kick = (): void => {
-    if (!this.raf) this.raf = requestAnimationFrame(this.loopFrame);
+    this.loop.wake();
   };
 
-  private loopFrame = (now: number): void => {
-    this.raf = 0;
-    const running = this.draw(now);
-    if (running) this.raf = requestAnimationFrame(this.loopFrame);
-  };
+  private frame = (now: number): Motion => this.draw(now);
 
-  /** Returns whether an animation is still running. */
-  private draw(now: number): boolean {
+  /** Returns what still moves: the cross-fade/sweep is essential, the pin's pulse ambient. */
+  private draw(now: number): Motion {
     const view = this.view;
     const ls = this.landscape;
     const ctx = this.ctx;
-    if (!view || !ls || this.width < 2) return false;
+    if (!view || !ls || this.width < 2) return "idle";
     const { colors } = view;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -793,7 +781,8 @@ export class LandscapeScene {
       ctx.lineTo(x, y + 9);
       ctx.stroke();
     }
-    return fade < 1 || elapsed < sweepMs || (!!view.pin && !view.reducedMotion);
+    if (fade < 1 || elapsed < sweepMs) return "moving";
+    return view.pin && !view.reducedMotion ? "ambient" : "idle";
   }
 
   private onMove = (event: PointerEvent): void => {

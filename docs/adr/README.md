@@ -19,3 +19,4 @@ pointer to its replacement.
 | [0011](0011-governance-ready-by-standards.md) | Governance-ready through open standards (JSON Schema, CloudEvents, OTel, CycloneDX, OPA-compatible), not a product; everything off by default |
 | [0012](0012-hot-path.md) | Hot path: ingest-side minute aggregates, in every tier |
 | [0013](0013-simulator-as-scenario-plugin.md) | Data product simulators are scenario-shipped Python plugins (numbered 0011 until the governance ADR took that number) |
+| [0014](0014-charting-and-bi-strategy.md) | *Proposed:* Vega-Lite as the app's one chart grammar, Superset for BI, Power BI by contract (marts + Deneb specs) |

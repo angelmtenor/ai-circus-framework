@@ -286,6 +286,8 @@ export default function App() {
                   onSelect={setSelected}
                   filters={scenarioFilters}
                   onFiltersChange={setScenarioFilters}
+                  isAdmin={isAdmin}
+                  accessToken={identity.accessToken}
                 />
               )}
               {!scenariosLoading && selected?.kind === "tabular_ml" && (

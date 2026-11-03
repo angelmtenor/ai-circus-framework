@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DecisionPolicy } from "./apiClient";
 import { DESK_PALETTE, TRAY_GLYPHS, TRAYS, trayOf, type DeskCase, type Tray } from "./caseDeskLogic";
 import type { SurfaceMode } from "./riskPalette";
+import { type Motion, SceneLoop } from "./sceneLoop";
 
 // Logical canvas size; everything is scaled to the element's width.
 const W = 1000;
@@ -72,6 +73,7 @@ export function CaseDeskCircuit({ cases, policy, mode, trayLabels, nodeLabels, i
   const particles = useRef<Map<string, Particle>>(new Map());
   const startedAt = useRef<number>(0);
   const size = useRef({ scale: 1 });
+  const loopRef = useRef<SceneLoop | null>(null);
   const [hover, setHover] = useState<{ x: number; y: number; id: string } | null>(null);
   const reduceMotion = useMemo(() => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false, []);
 
@@ -157,6 +159,7 @@ export function CaseDeskCircuit({ cases, policy, mode, trayLabels, nodeLabels, i
       canvas.height = Math.round(cssW * (H / W) * dpr);
       canvas.style.height = `${cssW * (H / W)}px`;
       size.current.scale = (cssW * dpr) / W;
+      loopRef.current?.redraw(); // resizing clears the canvas
     };
     resize();
     const observer = new ResizeObserver(resize);
@@ -164,13 +167,14 @@ export function CaseDeskCircuit({ cases, policy, mode, trayLabels, nodeLabels, i
     return () => observer.disconnect();
   }, []);
 
+  // Runs on sceneLoop.ts: full pace while cases ride to their trays, the selection's pulse is
+  // ambient (rests 15 s after the last change), nothing at all once everything has settled.
   useEffect(() => {
-    let frame = 0;
-    const draw = (now: number) => {
-      frame = requestAnimationFrame(draw);
+    const draw = (now: number): Motion => {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
+      if (!canvas || !ctx) return "idle";
+      let moving = false;
       const { cases: all, policy: pol, mode: m, trayLabels: labels, nodeLabels: nodes, ink: inkColor, dim: dimColor, revealed: reveal, selectedId: selected } = live.current;
       const palette = DESK_PALETTE[m];
       const elapsed = (now - startedAt.current) / 1000;
@@ -286,6 +290,9 @@ export function CaseDeskCircuit({ cases, policy, mode, trayLabels, nodeLabels, i
         if (p.settled) {
           p.x += (p.tx - p.x) * 0.16;
           p.y += (p.ty - p.y) * 0.16;
+          if (Math.abs(p.tx - p.x) > 0.2 || Math.abs(p.ty - p.y) > 0.2) moving = true;
+        } else {
+          moving = true;
         }
         const hidden = !p.settled && elapsed - p.delay <= 0;
         let fill = palette[p.tray];
@@ -313,10 +320,23 @@ export function CaseDeskCircuit({ cases, policy, mode, trayLabels, nodeLabels, i
         }
       }
       ctx.globalAlpha = 1;
+      if (moving) return "moving";
+      return selected !== null && !reduceMotion ? "ambient" : "idle";
     };
-    frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
-  }, []);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const loop = new SceneLoop(canvas, draw, { fps: 60 });
+    loopRef.current = loop;
+    return () => {
+      loop.destroy();
+      loopRef.current = null;
+    };
+  }, [reduceMotion]);
+
+  // Any change of what is drawn (a slider, the reveal, a selection, the theme) wakes the loop.
+  useEffect(() => {
+    loopRef.current?.wake();
+  }, [cases, policy, mode, trayLabels, nodeLabels, ink, dim, revealed, selectedId]);
 
   const nearest = (clientX: number, clientY: number): { id: string; x: number; y: number } | null => {
     const canvas = canvasRef.current;

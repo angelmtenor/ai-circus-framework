@@ -463,6 +463,57 @@ select:focus {
   font-weight: 600;
 }
 
+.scenario-chip--warn {
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+}
+
+/* A scenario whose backend is scaled to 0 or not deployed (see serviceAvailability.ts). */
+.scenario-card--unavailable {
+  cursor: default;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.scenario-card--unavailable:hover {
+  transform: none;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.scenario-card--unavailable > .scenario-card-icon,
+.scenario-card--unavailable > .scenario-card-body {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+.scenario-card--unavailable .scenario-card-open {
+  color: var(--dim);
+}
+
+.scenario-card-unavailable {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--amber);
+}
+
+.scenario-card-start {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-border);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.scenario-card-starting {
+  color: var(--dim);
+}
+
 .scenario-empty {
   text-align: center;
   color: var(--dim);
