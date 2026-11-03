@@ -4,6 +4,34 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.35.0 — 2026-11-03
+
+### Security
+- Governed SQL (`data-api`): a role's hidden columns are now absent from the tenant-filtered subquery itself, so
+  no spelling (`EMAIL`, `to_jsonb(t)`, `t::text`, `SELECT *`) can reach them; the name check is case-insensitive.
+- Auth: a token belonging to more than one Keycloak organization is rejected (the tenant is no longer "the first
+  claim"); malformed organization claims and non-ASCII bearer values no longer cause a 500.
+- Tenant ids and path segments are validated with `\Z` (a trailing newline no longer passes); Qdrant collection
+  names are built only from a validated org id.
+- Prompt injection: retrieved documents, catalog entries and knowledge-graph lines are wrapped by
+  `wrap_untrusted`, which defangs any delimiter inside the text and keeps `source` inside its attribute.
+- Optional model-artifact signing: with `MODEL_SIGNING_KEY` set (training + prediction only), `training` signs each
+  model's checksums with HMAC-SHA256 and `prediction` refuses a model whose signature is missing or wrong. Off by
+  default; set it before `make k3s-pipeline`.
+- Public deployments (`DEPLOYMENT_TARGET=public`) also refuse the other shipped `change-me…` secrets; agui-voice's
+  RTVI message logging is opt-in (`RTVI_DEBUG=true`); Keycloak brute-force protection in the realm export.
+- Request bodies are bounded (conversation titles, dl-inference text/image/ids, registry model and voice names).
+- `ObjectStore.exists()` only answers "absent" for a real not-found; a 403/5xx now raises instead of reading as
+  missing, and concurrent bucket creation no longer fails the loser.
+
+### Added
+- `SECURITY.md` and `CONTRIBUTING.md`; Dependabot covers data-api, data-ingest, data-transform, GitHub Actions and
+  base images; CI lints the UI and reports `npm audit` (informational).
+
+### Fixed
+- Bumped `pyasn1` and `pypdf` to clear `uv audit` CVEs.
+- The entitlement TTL cache evicts the least recently written entry, not a freshly refreshed one.
+
 ## v0.34.3 — 2026-10-30
 
 ### Added
