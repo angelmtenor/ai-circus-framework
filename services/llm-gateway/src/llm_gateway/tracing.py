@@ -125,11 +125,57 @@ def set_governance_attributes(span: Any, kwargs: dict, response_obj: Any) -> Non
         logger.opt(exception=True).warning("could not add governance attributes to a trace span")
 
 
+# What LiteLLM's generic `otel` logger (the platform's traces, ADR 0015) copies verbatim from every
+# request: each `metadata` key — requester IP and custom headers, API-key alias and hash, user e-mail,
+# the agents' trace metadata — and `hidden_params` (provider routing internals). The platform's trace
+# store gets none of them; Langfuse keeps its own view, untouched.
+PLATFORM_DROPPED_ATTRIBUTE_PREFIXES = ("metadata.", "hidden_params")
+
+
+def _is_platform_logger(logger: Any) -> bool:
+    return getattr(logger, "callback_name", None) in (None, "otel")
+
+
+def install_platform_span_policy() -> bool:
+    """Shape the generic `otel` logger's spans (idempotent): no request metadata, plus `gen_ai.*`/`aicf.*`.
+
+    Same defensive pattern as `install`: it wraps two LiteLLM internals, and only for the generic `otel`
+    callback, so `langfuse_otel` spans are untouched. Returns whether the wrappers are in place.
+    """
+    try:
+        from litellm.integrations.opentelemetry import OpenTelemetry
+    except Exception:
+        logger.warning("LiteLLM's OpenTelemetry integration not importable — platform span policy is off")
+        return False
+    original_set: Callable[..., Any] = OpenTelemetry.safe_set_attribute
+    if getattr(original_set, "_aicf_wrapped", False):
+        return True
+    original_attributes: Callable[..., Any] = OpenTelemetry.set_attributes
+
+    def safe_set_attribute(self: Any, span: Any, key: str, value: Any) -> Any:
+        if _is_platform_logger(self) and isinstance(key, str) and key.startswith(PLATFORM_DROPPED_ATTRIBUTE_PREFIXES):
+            return None
+        return original_set(self, span, key, value)
+
+    def set_attributes(self: Any, span: Any, kwargs: dict, response_obj: Any) -> Any:
+        result = original_attributes(self, span, kwargs, response_obj)
+        if _is_platform_logger(self):
+            set_governance_attributes(span, kwargs, response_obj)
+        return result
+
+    safe_set_attribute._aicf_wrapped = True  # type: ignore[attr-defined]
+    OpenTelemetry.safe_set_attribute = safe_set_attribute  # type: ignore[method-assign]
+    OpenTelemetry.set_attributes = set_attributes  # type: ignore[method-assign]
+    return True
+
+
 def install() -> bool:
     """Wrap LiteLLM's Langfuse span-attribute setter (idempotent). Returns whether it is in place.
 
-    Inert when `langfuse_otel` is not configured — the wrapped function is simply never called.
+    Inert when `langfuse_otel` is not configured — the wrapped function is simply never called. Also
+    installs `install_platform_span_policy` for the generic `otel` callback (equally inert without it).
     """
+    install_platform_span_policy()
     try:
         from litellm.integrations.langfuse.langfuse_otel import LangfuseOtelLogger
     except Exception:

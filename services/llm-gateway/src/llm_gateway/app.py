@@ -37,6 +37,9 @@ OTLP_CALLBACK = "otel"
 # The platform's collector (ADR 0015). Only the generic variable: LiteLLM's `otel` callback reads
 # OTEL_EXPORTER_OTLP_ENDPOINT itself (appending /v1/traces), not the per-signal TRACES variant.
 OTLP_ENDPOINT_VAR = "OTEL_EXPORTER_OTLP_ENDPOINT"
+# Dimensions of the gateway's GenAI metrics (gen_ai.client.operation.duration, gen_ai.client.token.usage,
+# gen_ai.usage.cost, …): low-cardinality and personal-data-free. gen_ai.token.type is always kept.
+OTLP_METRIC_ATTRIBUTES = ("gen_ai.operation.name", "gen_ai.system", "gen_ai.request.model")
 
 
 def otlp_enabled(env: dict[str, str]) -> bool:
@@ -54,6 +57,9 @@ def launch_env(env: dict[str, str]) -> dict[str, str]:
     if merged.get("LOG_FORMAT", "").strip().lower() == "json":
         merged["JSON_LOGS"] = "true"  # LiteLLM's own one-object-per-line logging
     merged.setdefault("OTEL_SERVICE_NAME", "llm-gateway")
+    if otlp_enabled(merged):
+        # Token, cost and latency histograms over OTLP, next to the spans (the AI dashboards' source).
+        merged.setdefault("LITELLM_OTEL_INTEGRATION_ENABLE_METRICS", "true")
     return merged
 
 
@@ -106,7 +112,11 @@ def resolve_config_path(config_path: Path, env: dict[str, str]) -> Path:
             if wanted and callback not in callbacks:
                 callbacks.append(callback)
     if otlp_on:
-        config.setdefault("callback_settings", {}).setdefault(OTLP_CALLBACK, {})["message_logging"] = False
+        otel_settings = config.setdefault("callback_settings", {}).setdefault(OTLP_CALLBACK, {})
+        otel_settings["message_logging"] = False
+        # The GenAI metrics (LITELLM_OTEL_INTEGRATION_ENABLE_METRICS, see launch_env) keep only these
+        # dimensions — never LiteLLM's default request metadata (requester IP, user e-mail, key hash).
+        otel_settings["attributes"] = {"include_list": list(OTLP_METRIC_ATTRIBUTES)}
     if redact:
         litellm_settings["turn_off_message_logging"] = True
 
