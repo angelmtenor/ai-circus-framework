@@ -4,6 +4,12 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.35.1 — 2026-11-03
+
+### Fixed
+- `RTVI_DEBUG` (the v0.35.0 opt-in for agui-voice's RTVI message logging) now reaches the pod: it is passed by
+  `docker-compose.yml` and the k3s `agui-voice-secrets`, and documented in `.env.example`.
+
 ## v0.35.0 — 2026-11-03
 
 ### Security
