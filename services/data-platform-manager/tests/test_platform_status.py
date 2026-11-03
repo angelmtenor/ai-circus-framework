@@ -265,14 +265,22 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "langfuse-worker",
         "clickhouse",
         "mlflow",
+        "grafana",
+        "otel-collector",
     }
     data_tiers = {"data-ingest", "data-api", "dagster", "superset", "openmetadata", "om-search"}
-    assert {t.name for t in platform_status.TARGETS if t.optional} == {"kafka", "dl-inference", "opa"} | data_tiers
+    obs_bundle = {"grafana", "otel-collector"}
+    assert {t.name for t in platform_status.TARGETS if t.optional} == {
+        "kafka",
+        "dl-inference",
+        "opa",
+    } | data_tiers | obs_bundle
     assert {t.name for t in platform_status.TARGETS if t.console_url} == {
         "keycloak",
         "seaweedfs",
         "langfuse",
         "mlflow",
+        "grafana",
         "dagster",
         "superset",
         "openmetadata",

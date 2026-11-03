@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import {
   predict,
   datasetSample,
   datasetEvaluation,
   datasetExplainability,
+  modelDrift,
   type ScenarioSummary,
   type DatasetSample,
   type DatasetEvaluation,
   type DatasetExplainability,
+  type ModelDrift,
 } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
 import { BarList, StatTile, ScatterPlot, Histogram, CategoryBars, LineChart, CHART_COLORS } from "./charts";
@@ -268,12 +270,131 @@ function ModelPerformanceSection({ scenario, accessToken }: { scenario: Scenario
   );
 }
 
+type DriftLevel = "stable" | "moderate" | "significant";
+
+const DRIFT_LEVELS: Record<DriftLevel, { label: string; color: string; hint: string }> = {
+  stable: { label: "Stable", color: CHART_COLORS.green, hint: "Recent traffic looks like the data the model was trained on." },
+  moderate: {
+    label: "Moderate shift",
+    color: CHART_COLORS.amber,
+    hint: "Recent traffic has started to differ from the training data — worth watching.",
+  },
+  significant: {
+    label: "Significant shift",
+    color: CHART_COLORS.red,
+    hint: "Recent traffic no longer looks like the training data — predictions may be less reliable; consider retraining.",
+  },
+};
+
+function driftLevel(psi: number, thresholds: ModelDrift["thresholds"]): DriftLevel {
+  return psi > thresholds.significant ? "significant" : psi > thresholds.moderate ? "moderate" : "stable";
+}
+
+const PSI_INFO =
+  "Population Stability Index: how far the distribution of what this model scored lately has moved from its training data. " +
+  "Below 0.1 is stable, 0.1–0.25 a moderate shift, above 0.25 a significant one. Computed over your organisation's own " +
+  "recent requests (up to 2,000 rows, then a fresh window), per input and for the model's own output.";
+
+/** Whether recent scoring traffic still looks like the training data (prediction's GET /model/{slug}/drift). */
+function DriftSection({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+  const [drift, setDrift] = useState<ModelDrift | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshes, setRefreshes] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    modelDrift(config.predictionUrl, scenario.slug, accessToken)
+      .then((d) => {
+        if (!cancelled) {
+          setDrift(d);
+          setError(null);
+        }
+      })
+      .catch((e) => !cancelled && setError((e as Error).message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [scenario.slug, accessToken, refreshes]);
+
+  const load = () => {
+    setLoading(true);
+    setRefreshes((n) => n + 1);
+  };
+
+  const enoughRows = !!drift && drift.window_rows >= drift.min_rows;
+  const worst = drift && enoughRows ? Math.max(drift.score_psi ?? 0, ...drift.features.map((f) => f.psi)) : null;
+  const level = drift && worst !== null ? driftLevel(worst, drift.thresholds) : null;
+
+  useCopilotReadable({
+    description: `Data drift of the ${scenario.title} model: PSI of the user's organisation's recent scoring traffic vs. the training data (higher = more shifted).`,
+    value: drift && enoughRows ? { level, score_psi: drift.score_psi, features: drift.features.slice(0, 5), rows: drift.window_rows } : null,
+  });
+
+  return (
+    <div className="panel-card">
+      <h3>
+        Data drift <InfoButton text={PSI_INFO} />
+        <button className="drift-refresh" onClick={load} disabled={loading}>
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </h3>
+      {error && <p className="error">{error}</p>}
+      {drift && !drift.available && (
+        <p className="panel-hint">
+          This model was trained before drift tracking existed. Retraining it (<code>make k3s-pipeline</code>) starts comparing
+          live traffic with its training data.
+        </p>
+      )}
+      {drift?.available && !enoughRows && (
+        <p className="panel-hint">
+          Collecting traffic: {drift.window_rows} of the {drift.min_rows} scored rows needed before drift is meaningful. Score
+          some records in ML Predictions or the Data tab.
+        </p>
+      )}
+      {drift && enoughRows && level && (
+        <>
+          <p className={`drift-status drift-status--${level}`}>
+            {DRIFT_LEVELS[level].label}
+            <span>{DRIFT_LEVELS[level].hint}</span>
+          </p>
+          <div className="kpi-row">
+            <StatTile
+              label="Output shift (PSI)"
+              value={drift.score_psi !== null ? drift.score_psi.toFixed(3) : "—"}
+              color={drift.score_psi !== null ? DRIFT_LEVELS[driftLevel(drift.score_psi, drift.thresholds)].color : undefined}
+              info="How far the distribution of the model's own scores has moved."
+            />
+            {drift.features[0] && (
+              <StatTile
+                label="Most shifted input"
+                value={featureLabel(scenario, drift.features[0].feature)}
+                sub={`PSI ${drift.features[0].psi.toFixed(3)}`}
+                color={DRIFT_LEVELS[driftLevel(drift.features[0].psi, drift.thresholds)].color}
+              />
+            )}
+            <StatTile label="Rows compared" value={drift.window_rows.toLocaleString()} sub={`window of up to ${drift.window_size.toLocaleString()}`} />
+          </div>
+          <BarList
+            items={drift.features.map((f) => ({ label: featureLabel(scenario, f.feature), value: f.psi }))}
+            signed={false}
+            neutralColor={DRIFT_LEVELS[level].color}
+            valueFormatter={(v) => v.toFixed(3)}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Understanding the model: global explainability, live sensitivity, and held-out
  * performance — distinct from Dataset (no ML) and ML Predictions (running the model).
  */
 export function ExploreModelView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   return (
     <div className="tab-panel">
+      <DriftSection scenario={scenario} accessToken={accessToken} />
       <ModelPerformanceSection scenario={scenario} accessToken={accessToken} />
       <GlobalImportanceSection scenario={scenario} accessToken={accessToken} />
       <PartialDependenceSection scenario={scenario} accessToken={accessToken} />

@@ -69,7 +69,8 @@ class _Store:
 
 METADATA = {
     "feature_columns": ["CreditScore", "Geography"],
-    "transformed_feature_names": ["f1", "f2"],
+    # Not "f1"/"f2": the leak check below would then find them inside the event's random UUID hex.
+    "transformed_feature_names": ["num__score_xq", "cat__geo_xq"],
     "task_type": "classification",
     "model_name": "lightgbm",
     "checksums": {"model.joblib": "aa", "metadata.json": "bb"},
@@ -150,7 +151,7 @@ def test_a_request_leaves_one_content_free_record(rig: tuple[TestClient, _Sink, 
 
     # Nothing about the inputs or the explanation leaves the service.
     everything = json.dumps(event) + store.objects[org, path].decode()
-    for leak in ("France", "Spain", "CreditScore", "700", "contributions", "f1"):
+    for leak in ("France", "Spain", "CreditScore", "700", "contributions", "num__score_xq"):
         assert leak not in everything
 
 

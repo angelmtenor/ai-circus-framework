@@ -208,7 +208,7 @@ function ComponentCard(props: CardProps) {
           </span>
         )}
       </div>
-      {component.console_url && component.status !== "stopped" && (
+      {component.console_url && component.status !== "stopped" && component.status !== "not_deployed" && (
         <a className="btn-secondary platform-card-link" href={component.console_url} target="_blank" rel="noreferrer">
           Open console <Icon name="external" size={12} />
         </a>
@@ -308,7 +308,9 @@ function HealthTab({ baseUrl, accessToken }: { baseUrl: string; accessToken: str
   }, [load, transitioning]);
 
   const totals = status ? summarize(status.components) : null;
-  const consoles = status?.components.filter((c) => c.console_url) ?? [];
+  // No button for a tool that is stopped or not deployed (e.g. Grafana without the observability bundle) —
+  // the same rule as each card's own "Open console" link.
+  const consoles = status?.components.filter((c) => c.console_url && c.status !== "not_deployed" && c.status !== "stopped") ?? [];
 
   return (
     <>
@@ -356,6 +358,7 @@ function HealthTab({ baseUrl, accessToken }: { baseUrl: string; accessToken: str
                 >
                   {c.name === "langfuse" && "GenAI monitor · "}
                   {c.name === "mlflow" && "MLOps monitor · "}
+                  {c.name === "grafana" && "Dashboards · "}
                   {c.name} <Icon name="external" size={12} />
                 </a>
               ))}
