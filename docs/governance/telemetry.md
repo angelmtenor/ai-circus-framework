@@ -52,6 +52,17 @@ unchanged. To keep content out of traces and logs, set `TRACE_CAPTURE_CONTENT=fa
 LiteLLM then replaces every message with `redacted-by-litellm` while tenant, model, token counts and the
 attributes above stay. Governance events and audit records never carry content either way.
 
+### Platform traces (OTLP, [ADR 0015](../adr/0015-observability-platform-contract.md))
+
+With `OTEL_EXPORTER_OTLP_ENDPOINT` set (k8s `shared-config`, off by default) every service also exports
+OpenTelemetry spans to the platform's collector — FastAPI server spans and httpx client spans from the
+agents and APIs (`ai_circus_shared.telemetry`), and one span per model call from llm-gateway (LiteLLM's
+`otel` callback). These are **always content-free**, whatever `TRACE_CAPTURE_CONTENT` says: llm-gateway's
+`otel` callback runs with `message_logging: false`, and the services' exporter drops prompt, completion,
+message, SQL-text, body and `enduser.*` attributes and strips URL query strings before anything leaves the
+pod. The agent's `traceparent` reaches llm-gateway, so the platform trace and the Langfuse trace of the
+same call share one trace id.
+
 ## 2. Non-LLM predictions: decision records
 
 Record-keeping applies to ML models too. Every scoring request served by `prediction` (tabular) and

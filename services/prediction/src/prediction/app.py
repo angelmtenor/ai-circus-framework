@@ -24,6 +24,7 @@ from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
+from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,6 +85,7 @@ app = FastAPI(
 )
 app.include_router(router)
 configure_metrics(app)
+configure_tracing(app, service="prediction")
 
 
 @app.exception_handler(ModelUnavailableError)

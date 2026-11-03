@@ -32,6 +32,10 @@ x-service-auth-env: &service-auth-env
   # ui-react calls these APIs directly from the browser — aiopen.localhost is the
   # Traefik-served build, localhost:5173 the Vite dev server.
   CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://aiopen.localhost,http://localhost:5173}
+  # Platform observability contract (ADR 0015) — k8s sets LOG_FORMAT=json; compose keeps readable
+  # logs unless asked. An empty OTLP endpoint (the default) leaves tracing off.
+  LOG_FORMAT: ${LOG_FORMAT:-text}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
 x-object-store-env: &object-store-env
   OBJECT_STORE_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY}
@@ -725,6 +729,9 @@ services:
       LANGFUSE_HOST: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      # Platform observability (ADR 0015) — same switches as x-service-auth-env.
+      LOG_FORMAT: ${LOG_FORMAT:-text}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # With `local`, the local-embed model is loaded + warmed at start-up (the docker
       # settings profile sets LOCAL_EMBED_PRELOAD) — never on a demo's first RAG question.
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}

@@ -4,6 +4,31 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.37.0 — 2026-11-03
+
+### Added
+- Observability as a platform contract ([ADR 0015](docs/adr/0015-observability-platform-contract.md)): the
+  metrics/logs/traces stack (collector, Prometheus-compatible store, Loki, Tempo, Grafana) is a prerequisite the
+  cluster provides, never shipped in `k8s/base`. Each service keeps `/metrics` and now:
+  - exports **OTLP traces** when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (`ai_circus_shared.telemetry.configure_tracing`:
+    FastAPI server and httpx client spans, `traceparent` carried to llm-gateway) — off by default, and the framework
+    imports nothing OpenTelemetry while off;
+  - writes **JSON logs** (`LOG_FORMAT=json`, set in k8s `shared-config`) with `trace_id`/`span_id`.
+- llm-gateway joins the same traces through LiteLLM's `otel` callback, always without message content
+  (`message_logging: false`); Langfuse keeps the prompts, linked by the same trace id.
+- The layers diagram reads left to right, over a platform observability band.
+
+### Security
+- Exported spans are content-free: `RedactingSpanExporter` drops prompt, completion, message, SQL-text, body and
+  `enduser.*` attributes and strips URL query strings before anything leaves a pod.
+- FastAPI's own `OTEL_*` auto-export is switched off on every app — verified on k3s, it otherwise attached a second,
+  unredacted exporter (each span went out twice, once with its query string) and a log exporter carrying exception
+  messages and rejected input.
+
+### Changed
+- The OpenTelemetry SDK is a dependency of every service image (~10 MB). redis-py imports it whenever installed:
+  ~4 MiB of RSS per Python process even with tracing off (measured on `prediction`).
+
 ## v0.36.0 — 2026-11-03
 
 ### Added

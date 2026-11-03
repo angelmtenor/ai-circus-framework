@@ -33,6 +33,28 @@ def launch(argv: list[str], env: dict[str, str]) -> None:
 
 
 LANGFUSE_CALLBACK = "langfuse_otel"
+OTLP_CALLBACK = "otel"
+# The platform's collector (ADR 0015). Only the generic variable: LiteLLM's `otel` callback reads
+# OTEL_EXPORTER_OTLP_ENDPOINT itself (appending /v1/traces), not the per-signal TRACES variant.
+OTLP_ENDPOINT_VAR = "OTEL_EXPORTER_OTLP_ENDPOINT"
+
+
+def otlp_enabled(env: dict[str, str]) -> bool:
+    """Whether the platform gave a collector endpoint and did not switch the OTel SDK off."""
+    return (
+        bool(env.get(OTLP_ENDPOINT_VAR, "").strip())
+        and env.get("OTEL_SDK_DISABLED", "").strip().lower() != "true"
+        and env.get("OTEL_TRACES_EXPORTER", "").strip().lower() != "none"
+    )
+
+
+def launch_env(env: dict[str, str]) -> dict[str, str]:
+    """The exec'd proxy's environment: its JSON logs and OTel service name follow the platform's."""
+    merged = dict(env)
+    if merged.get("LOG_FORMAT", "").strip().lower() == "json":
+        merged["JSON_LOGS"] = "true"  # LiteLLM's own one-object-per-line logging
+    merged.setdefault("OTEL_SERVICE_NAME", "llm-gateway")
+    return merged
 
 
 def env_flag(value: str, *, default: bool) -> bool:
@@ -62,18 +84,29 @@ def resolve_config_path(config_path: Path, env: dict[str, str]) -> Path:
     and litellm's `turn_off_message_logging` replaces the message text with `redacted-by-litellm` in
     every logging callback, while tenant, model, token counts and the `gen_ai.*` / `aicf.*` attributes
     stay (see docs/governance/telemetry.md).
+
+    **Platform traces** (`OTEL_EXPORTER_OTLP_ENDPOINT`, ADR 0015): LiteLLM's generic `otel` callback
+    exports each call to the platform's collector, always without message content
+    (`callback_settings.otel.message_logging: false` — prompts stay in Langfuse alone, whatever
+    TRACE_CAPTURE_CONTENT says). It continues the caller's `traceparent`, so the span joins the agent's
+    trace in the trace store under the same trace id Langfuse records. Langfuse's callback keeps a
+    private tracer provider, so its content-bearing spans never reach this exporter.
     """
     tracing_on = bool(env.get("LANGFUSE_PUBLIC_KEY") and env.get("LANGFUSE_SECRET_KEY"))
     redact = "TRACE_CAPTURE_CONTENT" in env and not env_flag(env["TRACE_CAPTURE_CONTENT"], default=True)
-    if not (tracing_on or redact):
+    otlp_on = otlp_enabled(env)
+    if not (tracing_on or redact or otlp_on):
         return config_path
 
     config = yaml.safe_load(config_path.read_text()) or {}
     litellm_settings = config.setdefault("litellm_settings", {})
-    if tracing_on:
+    if tracing_on or otlp_on:
         callbacks = litellm_settings.setdefault("callbacks", [])
-        if LANGFUSE_CALLBACK not in callbacks:
-            callbacks.append(LANGFUSE_CALLBACK)
+        for callback, wanted in ((LANGFUSE_CALLBACK, tracing_on), (OTLP_CALLBACK, otlp_on)):
+            if wanted and callback not in callbacks:
+                callbacks.append(callback)
+    if otlp_on:
+        config.setdefault("callback_settings", {}).setdefault(OTLP_CALLBACK, {})["message_logging"] = False
     if redact:
         litellm_settings["turn_off_message_logging"] = True
 
@@ -86,6 +119,8 @@ def resolve_config_path(config_path: Path, env: dict[str, str]) -> Path:
         )
     if redact:
         logger.info("TRACE_CAPTURE_CONTENT is off — prompts and completions are redacted from traces and logs")
+    if otlp_on:
+        logger.info("Platform tracing enabled (OTLP {}, no message content)", env[OTLP_ENDPOINT_VAR].strip())
     return Path(merged)
 
 
@@ -101,7 +136,7 @@ def main() -> None:
             logger.error("  {}: {}", " -> ".join(str(loc) for loc in error["loc"]), error["msg"])
         sys.exit(1)
 
-    env = {**os.environ, "LITELLM_MASTER_KEY": config.LITELLM_MASTER_KEY.get_secret_value()}
+    env = launch_env({**os.environ, "LITELLM_MASTER_KEY": config.LITELLM_MASTER_KEY.get_secret_value()})
     config_path = resolve_config_path(Path(config.LITELLM_CONFIG_PATH).resolve(), env)
     argv = ["litellm", "--config", str(config_path), "--port", config.HTTP_PORT, "--host", "0.0.0.0"]  # ruff: ignore[hardcoded-bind-all-interfaces]
 

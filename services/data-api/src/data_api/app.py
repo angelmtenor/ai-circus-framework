@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
+from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -57,6 +58,7 @@ app = FastAPI(
 )
 app.include_router(router)
 configure_metrics(app)
+configure_tracing(app, service="data-api")
 
 
 @app.exception_handler(OperationalError)

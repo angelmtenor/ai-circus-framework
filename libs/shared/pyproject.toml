@@ -20,6 +20,13 @@ dependencies = [
     "psycopg[binary]>=3.3.4",
     "redis>=5.2.0",
     "confluent-kafka>=2.15.0",
+    # ai_circus_shared.telemetry imports these only when an OTLP endpoint is set (ADR 0015). One
+    # catch: redis-py's optional metrics module imports opentelemetry.sdk whenever it is installed,
+    # ~4 MiB per Python process (measured on prediction) even with tracing off.
+    "opentelemetry-sdk>=1.40.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.40.0",
+    "opentelemetry-instrumentation-fastapi>=0.61b0",
+    "opentelemetry-instrumentation-httpx>=0.61b0",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +42,7 @@ build-backend = "hatchling.build"
 packages = ["src/ai_circus_shared"]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.11.8", "fakeredis>=2.26.0", "jsonschema>=4.23.0", "rfc3339-validator>=0.1.4"]
+dev = ["pytest>=8.3.5", "ruff>=0.11.8", "fakeredis>=2.26.0", "jsonschema>=4.23.0", "rfc3339-validator>=0.1.4", "loguru>=0.7.3"]
 
 [tool.ruff]
 target-version = "py312"
