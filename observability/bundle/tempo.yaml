@@ -1,0 +1,67 @@
+# Tempo (monolithic, local storage, 24 h): the trace store, fed over OTLP by the collector. Its trace ids
+# are the ones Langfuse records for the same LLM calls.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: tempo}
+  template:
+    metadata:
+      labels: {app: tempo}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.6.1
+          args: ["-config.file=/etc/tempo/tempo.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          env:
+            - {name: GOMEMLIMIT, value: "256MiB"}
+          ports:
+            - {name: http, containerPort: 3200}
+            - {name: otlp-http, containerPort: 4318}
+          resources:
+            requests: {cpu: 20m, memory: 96Mi}
+            limits: {memory: 320Mi}
+          startupProbe:
+            httpGet: {path: /ready, port: 3200}
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: 3200}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /ready, port: 3200}
+            periodSeconds: 20
+            failureThreshold: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/tempo}
+            - {name: config, mountPath: /etc/tempo, readOnly: true}
+      volumes:
+        - name: data
+          emptyDir: {sizeLimit: 2Gi}
+        - name: config
+          configMap: {name: tempo-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  selector: {app: tempo}
+  ports:
+    - {name: http, port: 3200, targetPort: 3200}
+    - {name: otlp-http, port: 4318, targetPort: 4318}

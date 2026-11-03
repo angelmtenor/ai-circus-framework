@@ -1,0 +1,71 @@
+# OpenTelemetry collector (contrib) as a DaemonSet: OTLP from every service (Service `otel-collector`,
+# what shared-config's OTEL_EXPORTER_OTLP_ENDPOINT points at) and the node's pod logs (filelog).
+#
+# Lab-bundle exception to the repo's runAsNonRoot rule: reading /var/log/pods needs uid 0 (the files are
+# root-owned). Mitigated: no capabilities at all, no privilege escalation, read-only root filesystem, the
+# log directory mounted read-only, no service-account token.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    matchLabels: {app: otel-collector}
+  template:
+    metadata:
+      labels: {app: otel-collector}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 0
+        runAsNonRoot: false
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.115.1
+          args: ["--config=/etc/otelcol/config.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          env:
+            - {name: METRICS_REMOTE_WRITE_URL, value: "http://victoriametrics:8428/api/v1/write"}
+            - {name: TRACES_OTLP_ENDPOINT, value: "http://tempo:4318"}
+            - {name: LOGS_OTLP_ENDPOINT, value: "http://loki:3100/otlp"}
+            - {name: GOMEMLIMIT, value: "150MiB"}
+          ports:
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 192Mi}
+          startupProbe:
+            httpGet: {path: /, port: 13133}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /, port: 13133}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /, port: 13133}
+            periodSeconds: 20
+          volumeMounts:
+            - {name: config, mountPath: /etc/otelcol, readOnly: true}
+            - {name: pod-logs, mountPath: /var/log/pods, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: otel-collector-config}
+        - name: pod-logs
+          hostPath: {path: /var/log/pods, type: Directory}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector: {app: otel-collector}
+  ports:
+    - {name: otlp-grpc, port: 4317, targetPort: 4317}
+    - {name: otlp-http, port: 4318, targetPort: 4318}

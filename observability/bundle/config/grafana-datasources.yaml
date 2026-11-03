@@ -1,0 +1,31 @@
+apiVersion: 1
+datasources:
+  - name: Metrics
+    uid: metrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    isDefault: true
+  - name: Traces
+    uid: traces
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: logs
+        filterByTraceID: true
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+  - name: Logs
+    uid: logs
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: trace
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: traces
+          url: "$${__value.raw}"
