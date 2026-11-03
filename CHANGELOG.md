@@ -4,6 +4,25 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.39.0 — 2026-11-03
+
+### Added
+- **Data drift in the app**: every tabular scenario's ML Insights tab opens with a *Data drift* card — Stable /
+  Moderate / Significant shift, the output's PSI, the most shifted input and a bar per profiled input — over the
+  tenant's own recent scoring traffic, or why there is none yet (a model trained before v0.38.0; too few scored
+  rows). Served by `prediction`'s new `GET /model/{slug}/drift`.
+- The admin Platform page lists the observability bundle's `grafana` (console link) and `otel-collector` as
+  optional Observability rows.
+
+### Security
+- Drift windows are kept per tenant: tenants without a model of their own share the fallback one, and a shared
+  window would have shown one tenant statistics of another's traffic. The `/metrics` gauges still sum every
+  tenant of a model, with no tenant label.
+
+### Fixed
+- The Platform page no longer offers console links for tools that are stopped or not deployed.
+- `prediction`'s decision-record test failed at random (its `f1` leak marker also occurs in the event's UUID).
+
 ## v0.38.0 — 2026-11-03
 
 ### Added
