@@ -942,10 +942,10 @@ Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the reco
 [Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
 env-configured microservices either way, just a different orchestrator.
 
-The platform is organised in **three layers**, each one standing on the next:
+The platform is organised in **three layers**, read left to right, on top of the cluster's shared observability stack:
 
 <p align="center">
-  <img src="docs/screenshots/architecture-layers.svg" alt="The three layers: 1 Consumption (AI, interactive dashboards, GenAI), 2 Data platform, 3 AI gateway and governance — with the services that belong to each" width="1100">
+  <img src="docs/screenshots/architecture-layers.svg" alt="The three layers as columns, left to right: 1 Consumption (AI, interactive dashboards, GenAI), 2 Data platform, 3 AI gateway and governance — with the services that belong to each — above a platform observability band (collector, metrics store, Loki, Tempo, Grafana, GPU metrics) that every service reports to" width="1100">
 </p>
 
 1. **Consumption — AI, interactive dashboards and GenAI.** What people use: `ui-react` (the scenario gallery,
@@ -965,7 +965,11 @@ The platform is organised in **three layers**, each one standing on the next:
 
 Layers 1 and 2 only ever talk to each other through layer 3's checks: every service validates the caller's token and
 re-checks the entitlement with `platform-registry` — never trusting what the UI already filtered — and every LLM call
-goes through the gateway. The capability roadmap below groups the same services as Data, AI / BI / ML and Governance
+goes through the gateway. Underneath all three, **platform observability** — an OpenTelemetry collector, a
+Prometheus-compatible metrics store, Loki, Tempo and Grafana — is a prerequisite the cluster provides, not part of the
+framework ([ADR 0015](docs/adr/0015-observability-platform-contract.md)): every service exposes `/metrics`, exports
+content-free traces over OTLP once `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and logs JSON lines carrying the trace id.
+The capability roadmap below groups the same services as Data, AI / BI / ML and Governance
 (it lists the gateway's routing under AI / BI / ML and its limits and budgets under Governance).
 
 `data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live,

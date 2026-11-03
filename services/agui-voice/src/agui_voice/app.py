@@ -24,6 +24,7 @@ from typing import Any
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics, redact_token_query_params
+from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
@@ -91,6 +92,7 @@ app.include_router(ws_router)
 app.include_router(tts_router)
 app.include_router(providers_router)
 configure_metrics(app)
+configure_tracing(app, service="agui-voice")
 
 
 @app.get("/healthz")

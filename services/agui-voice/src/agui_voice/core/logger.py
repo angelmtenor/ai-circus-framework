@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ai_circus_shared.telemetry import install_json_sink, log_format_is_json
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field, ValidationError
 LOG_DIR = Path("log")
 FILENAME_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 DEFAULT_LOG_LEVEL = "INFO"
+SERVICE_NAME = __name__.split(".")[0].replace("_", "-")  # this service, in JSON log lines
 
 # === Log Format Templates ===
 # {extra[name]} is now included so get_logger() bindings are visible
@@ -82,7 +84,11 @@ def configure_logger(config: LoggerConfig | None = None, **kwargs: Any) -> Any:
     bound = logger.bind(name="root")
 
     # Console handler
-    logger.add(sys.stdout, level=config.level, format=CONSOLE_FORMAT)
+    if log_format_is_json():
+        # One JSON object per line, with the active trace id (k8s sets LOG_FORMAT=json — ADR 0015).
+        install_json_sink(logger, level=config.level, service=SERVICE_NAME)
+    else:
+        logger.add(sys.stdout, level=config.level, format=CONSOLE_FORMAT)
 
     # File handler
     if config.save_to_file:

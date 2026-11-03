@@ -27,6 +27,7 @@ from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.scenario_schema import resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
+from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
@@ -126,6 +127,7 @@ app = FastAPI(
 )
 app.include_router(router)
 configure_metrics(app)
+configure_tracing(app, service="assistant")
 
 
 def main() -> None:

@@ -51,3 +51,10 @@ data:
   # unset either to switch that export off without touching the service.
   LANGFUSE_HOST: "http://langfuse-web:3000"
   MLFLOW_TRACKING_URI: "http://mlflow:5000"
+  # Platform observability contract (ADR 0015). Logs: one JSON object per line with the trace
+  # id, for the platform's log collector (`make run` outside k8s keeps the readable format).
+  LOG_FORMAT: "json"
+  # Traces: off until the platform has a collector — uncomment and point it at the platform's
+  # OTLP/HTTP endpoint. Every service then exports content-free spans (ai_circus_shared.telemetry),
+  # llm-gateway included (its spans share the agent's trace id with Langfuse's).
+  # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4318"
