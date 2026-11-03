@@ -7,8 +7,9 @@
  * behind the globe exactly where it should and still shows above the limb.
  *
  * Interaction: drag to rotate, buttons to zoom, click an arc or a destination; when a
- * shipment is selected the globe turns to face it. It idles with a slow spin, and
- * stops animating when hidden or under reduced motion.
+ * shipment is selected the globe turns to face it. It idles with a slow spin that rests
+ * 30 s after the last input, and stops animating when hidden or under reduced motion
+ * (sceneLoop.ts).
  */
 import { geoGraticule10, geoInterpolate, geoOrthographic, geoPath, geoRotation, type GeoPermissibleObjects } from "d3-geo";
 import type { FeatureCollection, MultiLineString } from "geojson";
@@ -17,6 +18,7 @@ import type { GeometryCollection, Topology } from "topojson-specification";
 import { drawGlyph } from "./dispatchScene";
 import { type Glyph, rgba, sizeCanvas } from "./logisticsViz";
 import type { SurfaceMode } from "./riskPalette";
+import { type Motion, SceneLoop } from "./sceneLoop";
 
 export type GlobeColors = {
   ocean: string;
@@ -75,6 +77,8 @@ type Projected = { x: number; y: number; visible: boolean };
 const ARC_SAMPLES = 36;
 const SPIN_DEG_PER_S = 3.2;
 const IDLE_BEFORE_SPIN_MS = 5000;
+// The spin starts 5 s after the last input, so give it a while before the globe rests.
+const REST_AFTER_MS = 30_000;
 
 export function globeGeometry(land: Topology, countries: Topology): { land: GeoPermissibleObjects; borders: GeoPermissibleObjects } {
   const landObjects = land.objects as Record<string, GeometryCollection>;
@@ -106,8 +110,6 @@ export class GlobeScene {
   private dpr = 1;
   private rotate: [number, number] = [-38, -6];
   private zoom = 1;
-  private raf = 0;
-  private visible = true;
   private lastFrame = 0;
   private lastInteraction = -Infinity;
   private drag: { x: number; y: number; rotate: [number, number]; moved: boolean } | null = null;
@@ -116,7 +118,7 @@ export class GlobeScene {
   private projectedArcs = new Map<string, Projected[]>();
   private projectedPlaces: { place: GlobePlace; x: number; y: number }[] = [];
   private hoverPlace: GlobePlace | null = null;
-  private observer: IntersectionObserver;
+  private readonly loop: SceneLoop;
 
   constructor(canvas: HTMLCanvasElement, callbacks: GlobeCallbacks) {
     this.canvas = canvas;
@@ -126,18 +128,11 @@ export class GlobeScene {
     canvas.addEventListener("pointermove", this.onMove);
     canvas.addEventListener("pointerup", this.onUp);
     canvas.addEventListener("pointerleave", this.onLeave);
-    this.observer = new IntersectionObserver((entries) => {
-      this.visible = entries.some((e) => e.isIntersecting);
-      this.kick();
-    });
-    this.observer.observe(canvas);
-    document.addEventListener("visibilitychange", this.kick);
+    this.loop = new SceneLoop(canvas, this.frame, { restAfterMs: REST_AFTER_MS });
   }
 
   destroy(): void {
-    cancelAnimationFrame(this.raf);
-    this.observer.disconnect();
-    document.removeEventListener("visibilitychange", this.kick);
+    this.loop.destroy();
     this.canvas.removeEventListener("pointerdown", this.onDown);
     this.canvas.removeEventListener("pointermove", this.onMove);
     this.canvas.removeEventListener("pointerup", this.onUp);
@@ -212,11 +207,10 @@ export class GlobeScene {
   }
 
   private kick = (): void => {
-    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
+    this.loop.wake();
   };
 
-  private loop = (now: number): void => {
-    this.raf = 0;
+  private frame = (now: number): Motion => {
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 0;
     this.lastFrame = now;
     const view = this.view;
@@ -229,9 +223,9 @@ export class GlobeScene {
       this.rotate = [this.rotate[0] + SPIN_DEG_PER_S * dt, this.rotate[1]];
     }
     this.draw(now);
-    const animate = view && !view.reducedMotion && this.visible && !document.hidden;
-    if (animate || this.tween) this.raf = requestAnimationFrame(this.loop);
-    else this.lastFrame = 0;
+    if (this.tween || this.drag) return "moving";
+    // The idle spin and the travelling vehicles are ambient: they rest after REST_AFTER_MS.
+    return view && !view.reducedMotion ? "ambient" : "idle";
   };
 
   /** Project a (lon, lat) lifted `lift` × radius off the surface. */
