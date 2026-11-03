@@ -191,6 +191,7 @@ re-implementing:
 - `db.connect_engine` (+ `conversations`, `document_store`) — Postgres engine, URL-escaped password, waits for the DB
 - `storage.ObjectStore` — tenant-prefixed SeaweedFS keys; one boto3 client per endpoint
 - `observability` — `configure_metrics`, `langfuse_request_metadata`, `redact_token_query_params`
+- `telemetry` — `configure_tracing` (OTLP, off without an endpoint), `install_json_sink`, `redact_attributes`
 - `embeddings`, `cache` (Valkey), `events` (Kafka), `cdc`, `form_validation`, `tabular_ml`, `deployment_guard`
 
 **LLM routing.** `llm-gateway` runs the real LiteLLM proxy; `assistant`/`rag-agent`/`form-agent`/
@@ -210,7 +211,15 @@ pins the names; Start/Stop only for `core/workloads.py`'s `OPTIONAL_SERVICES`, w
 must equal the Role's `resourceNames` — `tests/test_workloads.py`); the resource monitor
 (`GET /platform/resources`, `core/resources.py`: metrics-server + NVML via `k8s/gpu/`'s patch); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
 never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_request_metadata`);
-**MLflow** for ML (`training`'s `core/mlflow_tracking.py`, must never fail the job).
+**MLflow** for ML (`training`'s `core/mlflow_tracking.py`, must never fail the job). The
+metrics/logs/traces *stack* is a platform prerequisite, never shipped in `k8s/base` (ADR 0015); each
+service honours the contract — `/metrics`, `telemetry.configure_tracing(app, service)` right after
+`configure_metrics` (OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; it imports nothing otherwise),
+and `LOG_FORMAT=json` logs with `trace_id` through `core/logger.py`. Exported spans pass
+`RedactingSpanExporter` — a new content-carrying attribute goes into `DROPPED_ATTRIBUTE_PREFIXES`, and
+log messages never carry prompts or personal data. It must stay the only exporter: never add an
+OpenTelemetry distro/auto-instrumentation, and keep `configure_tracing(app, …)` on every FastAPI app —
+it also switches off FastAPI's own `OTEL_*` auto-export, which otherwise ships an unredacted copy.
 
 **Governance-ready by standards (`docs/governance/`, ADR 0011).** The framework is governable by an
 external tool through open contracts only — never a product name in code, config or docs; it *supports* an
