@@ -1,4 +1,4 @@
-FROM node:22-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY ui-react/package.json ui-react/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
