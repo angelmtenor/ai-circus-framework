@@ -6,10 +6,19 @@ from __future__ import annotations
 import pytest
 
 from ai_circus_shared.deployment_guard import (
+    _PLACEHOLDER_ENV,
     DEMO_ADMIN_API_KEY,
     DEMO_ENGINEERING_DEMO_API_KEY,
     enforce_safe_for_public_deployment,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clean_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The guard reads these from the process env; `make` exports the developer's `.env` (placeholders
+    included) into the test run, which would trip it."""
+    for name in _PLACEHOLDER_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
 def _call(
