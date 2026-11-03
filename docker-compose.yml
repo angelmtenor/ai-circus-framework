@@ -966,6 +966,8 @@ services:
       WHISPER_MODEL: ${VOICE_WHISPER_MODEL:-base}
       PIPER_VOICE_ID: ${VOICE_PIPER_VOICE_ID:-en_US-lessac-medium}
       PIPER_VOICE_ID_ES: ${VOICE_PIPER_VOICE_ID_ES:-es_ES-davefx-medium}
+      # Opt-in: logs every RTVI handshake message (may include user transcripts) at INFO.
+      RTVI_DEBUG: ${RTVI_DEBUG:-false}
       DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-}
