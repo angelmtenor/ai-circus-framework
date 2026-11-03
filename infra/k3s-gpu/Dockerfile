@@ -12,7 +12,7 @@
 ARG K3S_VERSION=v1.35.5-k3s1
 FROM rancher/k3s:${K3S_VERSION} AS k3s
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl gnupg ca-certificates \
     && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
