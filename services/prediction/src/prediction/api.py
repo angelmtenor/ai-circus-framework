@@ -24,6 +24,8 @@ from pydantic import BaseModel, Field
 
 from prediction import get_env_config
 from prediction.core import dataset as dataset_core
+from prediction.core.drift_monitor import MONITOR as DRIFT_MONITOR
+from prediction.core.drift_monitor import SCORED_ROWS
 from prediction.core.identity import resolve_identity
 from prediction.core.model_cache import ModelCache
 from prediction.core.predict import (
@@ -335,6 +337,12 @@ def predict_endpoint(
     except ChallengerUnavailableError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     outputs = [_prediction_out(p, record, definition) for p, record in zip(predictions, body.records, strict=True)]
+    SCORED_ROWS.labels(definition.slug, "challenger" if body.model == "challenger" else "primary").inc(len(outputs))
+    if body.model != "challenger":
+        # Drift metrics (core/drift_monitor.py): after the response, off the request path.
+        background.add_task(
+            DRIFT_MONITOR.observe, definition.slug, artifacts.metadata, body.records, [o.prediction for o in outputs]
+        )
     # Decision record (docs/governance/): after the response, off the request path; a no-op unless switched on.
     recorder = getattr(request.app.state, "recorder", None)
     if recorder is not None and recorder.enabled:
