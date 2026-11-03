@@ -7,6 +7,9 @@ read from, so the three services can't drift out of sync on where artifacts live
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
+import os
 from collections.abc import Sequence
 
 NORMALIZED_DATASET_KEY = "processed/normalized.parquet"
@@ -52,6 +55,41 @@ MODEL_CHECKSUMS_METADATA_FIELD = "checksums"
 def artifact_checksum(data: bytes) -> str:
     """Return a SHA-256 hex digest identifying one serialized model artifact's bytes."""
     return hashlib.sha256(data).hexdigest()
+
+
+# The checksums above catch corruption, not tampering: they are stored in the same bucket as
+# the artifacts, so whoever can write one can rewrite the other, and prediction `joblib.load()`s
+# (pickle) whatever matches. When `MODEL_SIGNING_KEY` is set, training also signs the checksum
+# map with HMAC-SHA256 and prediction refuses any model whose signature is missing or wrong, so
+# write access to the bucket alone is no longer enough to get code executed in prediction. Unset
+# (the default) changes nothing — only training and prediction should hold the key.
+MODEL_SIGNATURE_METADATA_FIELD = "checksums_signature"
+MODEL_SIGNING_KEY_ENV = "MODEL_SIGNING_KEY"
+
+
+def _signing_key() -> bytes | None:
+    key = os.getenv(MODEL_SIGNING_KEY_ENV, "").strip()
+    return key.encode() if key else None
+
+
+def model_signing_enabled() -> bool:
+    """Whether `MODEL_SIGNING_KEY` is configured in this process."""
+    return _signing_key() is not None
+
+
+def sign_checksums(checksums: dict[str, str]) -> str | None:
+    """HMAC-SHA256 of the checksum map (canonical JSON), or None when signing is not configured."""
+    key = _signing_key()
+    if key is None:
+        return None
+    payload = json.dumps(checksums, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(key, payload, hashlib.sha256).hexdigest()
+
+
+def checksums_signature_valid(checksums: dict[str, str], signature: object) -> bool:
+    """Constant-time check of `signature` against `checksums`; False when it is missing or signing is off."""
+    expected = sign_checksums(checksums)
+    return expected is not None and isinstance(signature, str) and hmac.compare_digest(expected, signature)
 
 
 # --- Free-text (`type: text`) features -------------------------------------------------

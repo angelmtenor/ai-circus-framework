@@ -368,3 +368,17 @@ def test_ttl_cache_is_bounded_and_prefers_evicting_expired_entries(monkeypatch: 
     assert (cache.get("a"), cache.get("b"), cache.get("c")) == (None, 2, 3)
     cache.put("d", 4)  # full, nothing expired: the oldest ("b") goes
     assert (cache.get("b"), cache.get("c"), cache.get("d")) == (None, 3, 4)
+
+
+def test_a_refreshed_key_is_not_the_next_one_evicted() -> None:
+    cache = entitlements_module._TtlCache[str, int](ttl_seconds=60, max_entries=2)
+    cache.put("hot", 1)
+    cache.put("cold", 2)
+    cache.put("hot", 3)  # refreshed: now the most recently written
+    cache.put("new", 4)  # full: must evict "cold", not "hot"
+    assert cache.get("hot") == 3 and cache.get("cold") is None and cache.get("new") == 4
+
+
+@pytest.mark.parametrize("value", ["churn\n", "org-1\n"])
+def test_path_segment_guard_rejects_a_trailing_newline(value: str) -> None:
+    assert entitlements_module._SAFE_PATH_SEGMENT.match(value) is None

@@ -16,6 +16,7 @@ root-caused (see the branch's PR/commit history for context).
 from __future__ import annotations
 
 import functools
+import os
 
 from loguru import logger
 from pipecat.processors.frameworks.rtvi.processor import RTVIProcessor
@@ -41,9 +42,13 @@ def _wrap(name: str) -> None:
 
 
 def install() -> None:
-    """Patch RTVIProcessor's handshake methods with logging wrappers, once per process."""
+    """Patch RTVIProcessor's handshake methods with logging wrappers, once per process.
+
+    Opt-in (`RTVI_DEBUG=true`): the wrappers log every RTVI message's arguments at INFO, which
+    can carry user transcripts, so they must not be on by default.
+    """
     global _PATCHED
-    if _PATCHED:
+    if _PATCHED or os.getenv("RTVI_DEBUG", "").strip().lower() != "true":
         return
     for name in ("_handle_message", "set_client_ready", "set_bot_ready", "_send_bot_ready"):
         _wrap(name)

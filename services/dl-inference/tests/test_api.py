@@ -148,3 +148,19 @@ def test_admin_runtime_requires_the_admin_token(text_client: TestClient, monkeyp
     assert body["execution_providers"] == ["CPUExecutionProvider"]
     assert body["scenarios"] == ["scn"]
     assert body["threads_per_session"] == 2
+
+
+def test_oversized_fields_are_refused_by_the_schema_before_decoding() -> None:
+    """A body bigger than the decoder's own limits must fail validation, not be base64-decoded first."""
+    from pydantic import ValidationError
+
+    from dl_inference.api import PredictRequest
+    from dl_inference.core import inference
+
+    with pytest.raises(ValidationError):
+        PredictRequest(text="x" * (inference.MAX_TEXT_CHARS + 1))
+    with pytest.raises(ValidationError):
+        PredictRequest(image_base64="A" * (inference.MAX_IMAGE_BYTES * 4 // 3 + 257))
+    with pytest.raises(ValidationError):
+        PredictRequest(sample_id="s" * 129)
+    assert PredictRequest(text="x" * inference.MAX_TEXT_CHARS).text is not None

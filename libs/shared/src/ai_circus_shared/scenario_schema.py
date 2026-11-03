@@ -7,6 +7,7 @@ metadata through platform-registry's API (see `entitlements.py`), not the filesy
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -1615,18 +1616,27 @@ class VectorStoreConfig(BaseModel):
     top_k: int
 
 
+_SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+\Z")  # same alphabet as storage.py / cache.py
+
+
+def _checked_org_id(org_id: str) -> str:
+    if not _SAFE_ORG_ID.match(org_id):
+        raise ValueError(f"Invalid org id {org_id!r}: must match {_SAFE_ORG_ID.pattern}.")
+    return org_id
+
+
 def qdrant_collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
     """Per-tenant Qdrant collection name: '{collection_prefix}__{org_id}' — the single
     source of truth etl-vectorize (writer) and rag-agent (reader) both call, so the
     two can't drift out of sync on where a tenant's vectors live.
     """
-    return f"{vector_store.collection_prefix}__{org_id}"
+    return f"{vector_store.collection_prefix}__{_checked_org_id(org_id)}"
 
 
 def kg_collection_name(vector_store: VectorStoreConfig, org_id: str) -> str:
     """Per-tenant Qdrant collection of a knowledge graph's nodes and relations (see
     `KnowledgeGraphConfig`) — shared by etl-vectorize (writer) and rag-agent (reader)."""
-    return f"{vector_store.collection_prefix}_kg__{org_id}"
+    return f"{vector_store.collection_prefix}_kg__{_checked_org_id(org_id)}"
 
 
 class RagServices(BaseModel):

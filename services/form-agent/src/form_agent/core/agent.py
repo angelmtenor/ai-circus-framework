@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from ai_circus_shared.embeddings import EmbeddingProvider
-from ai_circus_shared.retrieval import retrieve
+from ai_circus_shared.retrieval import retrieve, wrap_untrusted
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
@@ -73,7 +73,7 @@ def build_catalog_retrieve_tool(
         chunks = retrieve(qdrant, embedder, vector_store, org_id, query)
         if not chunks:
             return "No matching catalog entry was found for this query."
-        return "\n\n".join(f'<catalog_entry source="{c.source}">\n{c.text}\n</catalog_entry>' for c in chunks)
+        return "\n\n".join(wrap_untrusted("catalog_entry", c.text, c.source) for c in chunks)
 
     return StructuredTool.from_function(
         func=_retrieve,

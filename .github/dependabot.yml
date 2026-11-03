@@ -139,6 +139,33 @@ updates:
       minor-and-patch:
         update-types: ["minor", "patch"]
 
+  - package-ecosystem: "uv"
+    directory: "/services/data-api"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/services/data-ingest"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "uv"
+    directory: "/services/data-transform"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: "npm"
     directory: "/ui-react"
     target-branch: "develop"
@@ -146,4 +173,29 @@ updates:
       interval: "weekly"
     groups:
       minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions are pinned to commit SHAs in .github/workflows/ci.yml; Dependabot is what
+  # keeps those pins current (it rewrites the SHA and the `# vN` comment together).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        update-types: ["minor", "patch"]
+
+  # Base images (python:3.14-slim, node, nginx, keycloak, ...) float on their tags, so a rebuild
+  # is the only thing that picks up OS security fixes; these PRs surface new tags/digests.
+  - package-ecosystem: "docker"
+    directories:
+      - "/services/*"
+      - "/ui-react"
+      - "/infra/*"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    groups:
+      base-images:
         update-types: ["minor", "patch"]

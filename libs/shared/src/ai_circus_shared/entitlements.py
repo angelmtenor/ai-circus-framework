@@ -35,7 +35,7 @@ _CACHE_MAX_ENTRIES = 4096
 # alphabet — `?`, `#`, `/`, `%`, `..` — could re-target the request (e.g. `churn?x`
 # would check entitlement to `churn` on behalf of slug `churn?x`), so it is rejected up
 # front instead of escaped: no legitimate org id or slug ever contains one.
-_SAFE_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_SAFE_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9_-]{1,128}\Z")
 
 
 class _TtlCache[K, V]:
@@ -62,6 +62,9 @@ class _TtlCache[K, V]:
                     del self._data[stale]
                 if len(self._data) >= self._max:
                     del self._data[next(iter(self._data))]
+            # Re-insert so a refreshed key moves to the back: eviction drops the front, which
+            # must be the least recently written entry, not a hot one that was just refreshed.
+            self._data.pop(key, None)
             self._data[key] = (value, now + self._ttl)
 
     def clear(self) -> None:

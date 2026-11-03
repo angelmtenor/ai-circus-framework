@@ -653,3 +653,13 @@ def test_documents_endpoint_404s_for_a_scenario_without_a_document_tool() -> Non
     response = _documents_client(DEFINITION, _FakeDocumentStore({})).get("/documents/churn")
 
     assert response.status_code == 404
+
+
+def test_conversation_title_is_bounded() -> None:
+    from pydantic import ValidationError
+
+    from assistant.api import ConversationCreateIn
+
+    assert ConversationCreateIn(title="x" * 200).title is not None
+    with pytest.raises(ValidationError):
+        ConversationCreateIn(title="x" * 201)

@@ -116,3 +116,8 @@ def test_key_exposes_the_tenant_prefixed_key_and_keeps_its_guard() -> None:
     assert cache.key("org-1", "policy:churn") == "tenant-org-1:policy:churn"
     with pytest.raises(ValueError):
         cache.key("org:1", "x")
+
+
+def test_key_rejects_a_trailing_newline() -> None:
+    with pytest.raises(ValueError, match="tenant_org_id"):
+        TenantCache(None)._key("org-1\n", "k")  # type: ignore[arg-type]
