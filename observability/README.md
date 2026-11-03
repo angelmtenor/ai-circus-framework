@@ -39,6 +39,10 @@ significant. The reference is written by `training`, so a model trained before v
 it is retrained (`make k3s-pipeline`). In a demo most scoring traffic *is* the dataset sample, so PSI stays
 low — what-ifs with unusual values move it.
 
+Drift is also in the app itself: **ML Insights → Data drift** (`GET /model/{slug}/drift`) shows each tenant its
+*own* recent traffic — windows are kept per tenant, since tenants without a model of their own share the
+fallback one. The `/metrics` gauges sum every tenant of a model and carry no tenant label.
+
 **Content never leaves the pods**: spans are redacted at export (`ai_circus_shared.telemetry`,
 `llm_gateway/tracing.py`), GenAI metrics carry no request metadata, labels carry no tenant data or values,
 log messages never include prompts or personal data. Prompts stay in Langfuse, joined by trace id.
