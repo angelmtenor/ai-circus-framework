@@ -233,7 +233,11 @@ events/audit/records carry ids, metrics and decisions — never prompts or perso
 
 **ui-react.** Reaches every backend through Traefik `*.localhost` hostnames, baked in at Vite
 *build* time (`src/config.ts`). Pages and Plotly are code-split (`React.lazy`) — keep heavy
-dependencies out of the entry chunk. The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
+dependencies out of the entry chunk. Every animated canvas runs on `sceneLoop.ts` (frames say
+`moving`/`ambient`/`idle`; ambient motion rests 15 s after the last input, nothing draws while
+hidden) — a new scene must not run its own endless `requestAnimationFrame`. `ScenarioPicker` grays
+out a scenario whose backend is down (`serviceAvailability.ts`: each service's `/healthz` through
+Traefik, one shared 30 s poll). Charting direction: ADR 0014 (Vega-Lite, Plotly being phased out). The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
 provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
