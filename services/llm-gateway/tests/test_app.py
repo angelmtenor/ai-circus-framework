@@ -116,3 +116,46 @@ def test_resolve_config_path_appends_langfuse_callback(tmp_path: Path) -> None:
     assert loaded["litellm_settings"]["callbacks"] == ["llm_gateway.budget_hook.instance", "langfuse_otel"]
     assert loaded["model_list"][0]["model_name"] == "m"  # everything else untouched
     assert yaml.safe_load(config.read_text())["litellm_settings"]["callbacks"] == ["llm_gateway.budget_hook.instance"]
+
+
+def test_resolve_config_path_exports_to_the_platform_collector_without_content(tmp_path: Path) -> None:
+    """An OTLP endpoint adds the generic `otel` callback with message logging off, next to Langfuse."""
+    config = tmp_path / "litellm_config.yaml"
+    config.write_text("litellm_settings:\n  callbacks: [llm_gateway.budget_hook.instance]\n")
+    env = {
+        "LANGFUSE_PUBLIC_KEY": "pk",
+        "LANGFUSE_SECRET_KEY": "sk",
+        "TRACE_CAPTURE_CONTENT": "true",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel-collector:4318",
+    }
+
+    loaded = yaml.safe_load(app.resolve_config_path(config, env).read_text())
+
+    assert loaded["litellm_settings"]["callbacks"] == ["llm_gateway.budget_hook.instance", "langfuse_otel", "otel"]
+    assert loaded["callback_settings"] == {"otel": {"message_logging": False}}
+    # Content capture stays a Langfuse-only choice: the global switch is untouched.
+    assert "turn_off_message_logging" not in loaded["litellm_settings"]
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"OTEL_EXPORTER_OTLP_ENDPOINT": " "},
+        {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://c:4318", "OTEL_SDK_DISABLED": "true"},
+        {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://c:4318", "OTEL_TRACES_EXPORTER": "none"},
+        {"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "http://c:4318/v1/traces"},  # LiteLLM does not read this one
+    ],
+)
+def test_resolve_config_path_ignores_a_missing_or_disabled_collector(tmp_path: Path, env: dict[str, str]) -> None:
+    config = tmp_path / "litellm_config.yaml"
+    config.write_text("litellm_settings:\n  callbacks: []\n")
+    assert app.resolve_config_path(config, env) == config
+
+
+def test_launch_env_follows_the_platform_log_format_and_names_the_service() -> None:
+    assert app.launch_env({"LOG_FORMAT": "json"}) == {
+        "LOG_FORMAT": "json",
+        "JSON_LOGS": "true",
+        "OTEL_SERVICE_NAME": "llm-gateway",
+    }
+    assert app.launch_env({"OTEL_SERVICE_NAME": "gw"}) == {"OTEL_SERVICE_NAME": "gw"}
