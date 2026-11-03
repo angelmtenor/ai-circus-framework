@@ -219,6 +219,28 @@ class ModelCardOut(BaseModel):
     challenger: ChallengerCardOut | None = None
 
 
+class DriftFeatureOut(BaseModel):
+    """One profiled feature's Population Stability Index in the caller's current drift window."""
+
+    feature: str
+    psi: float
+
+
+class ModelDriftOut(BaseModel):
+    """Response body for GET /model/{scenario_slug}/drift — how far the caller's own recent scoring traffic
+    has moved from the deployed model's training data (core/drift_monitor.py). `available` is False for a
+    model trained before drift references existed; PSI appears once the window holds `min_rows` rows.
+    """
+
+    available: bool
+    window_rows: int
+    min_rows: int
+    window_size: int
+    score_psi: float | None = None
+    features: list[DriftFeatureOut] = []
+    thresholds: dict[str, float]
+
+
 class OutOfFoldRowOut(BaseModel):
     """One row's cross-fitted score: `probability` and SHAP `contributions` (same format
     as /predict) from the fold model that never saw this row's label.
@@ -341,7 +363,12 @@ def predict_endpoint(
     if body.model != "challenger":
         # Drift metrics (core/drift_monitor.py): after the response, off the request path.
         background.add_task(
-            DRIFT_MONITOR.observe, definition.slug, artifacts.metadata, body.records, [o.prediction for o in outputs]
+            DRIFT_MONITOR.observe,
+            identity.org_id,
+            definition.slug,
+            artifacts.metadata,
+            body.records,
+            [o.prediction for o in outputs],
         )
     # Decision record (docs/governance/): after the response, off the request path; a no-op unless switched on.
     recorder = getattr(request.app.state, "recorder", None)
@@ -505,6 +532,18 @@ def dataset_sample_endpoint(
         gates=gates,
         fired_rules=fired,
     )
+
+
+@router.get("/model/{scenario_slug}/drift", response_model=ModelDriftOut)
+def model_drift_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> ModelDriftOut:
+    """The caller's drift: PSI of its own recent scoring traffic against the deployed model's training data."""
+    assert identity.org_id is not None
+    metadata = model_cache.get(identity.org_id, definition.slug).metadata
+    return ModelDriftOut(**DRIFT_MONITOR.report(identity.org_id, definition.slug, metadata))
 
 
 @router.get("/model/{scenario_slug}/card", response_model=ModelCardOut)

@@ -886,6 +886,23 @@ export async function modelCard(baseUrl: string, scenarioSlug: string, accessTok
   return asJson(response);
 }
 
+/** Mirrors prediction's ModelDriftOut: the caller's own recent scoring traffic vs. the training data (PSI). */
+export type ModelDrift = {
+  // False for a model trained before drift references existed — retraining starts the tracking.
+  available: boolean;
+  window_rows: number;
+  min_rows: number;
+  window_size: number;
+  score_psi: number | null;
+  features: { feature: string; psi: number }[];
+  thresholds: { moderate: number; significant: number };
+};
+
+export async function modelDrift(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ModelDrift> {
+  const response = await fetch(`${baseUrl}/model/${scenarioSlug}/drift`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
 export async function networkGraph(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<NetworkGraph> {
   const response = await fetch(`${baseUrl}/graph/${scenarioSlug}`, { headers: headers(accessToken) });
   return asJson(response);

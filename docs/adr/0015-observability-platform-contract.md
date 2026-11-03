@@ -37,7 +37,8 @@ laptop has ~12 GiB for everything (`make k3s-data-demo` already uses ~8.8).
 **What the framework ships on top** ([`observability/`](../../observability/README.md)): the collector config,
 three Grafana dashboards (LLM gateway, GPU, model drift), alert rules, and the signals behind them —
 llm-gateway's OpenTelemetry GenAI metrics (dimensions limited to operation, provider and model), `prediction`'s
-model-drift PSI against a reference `training` writes into the model metadata, and the DCGM exporter's GPU
+model-drift PSI against a reference `training` writes into the model metadata (also shown to each tenant, for
+its own traffic only, in ML Insights → Data drift), and the DCGM exporter's GPU
 metric names from `data-platform-manager`'s NVML reading where DCGM cannot run (WSL2, consumer cards). Pods
 carry `prometheus.io/*` annotations. llm-gateway's platform spans drop LiteLLM's request metadata
 (`metadata.*`, `hidden_params`: requester IP and headers, user e-mail, key hash) and gain the same
