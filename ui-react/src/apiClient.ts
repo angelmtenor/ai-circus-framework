@@ -240,7 +240,7 @@ export type RiskWatchlistExtra = {
   title: string;
   subtitle?: string | null;
   entity_noun: string;
-  name_column: string;
+  name_column?: string | null;
   detail_columns: string[];
   size_feature?: string | null;
   landscape_x: string;
@@ -249,6 +249,34 @@ export type RiskWatchlistExtra = {
   tiers: WatchlistTier[];
   pillars: WatchlistPillar[];
   outcome_label: string;
+  positive_is_adverse: boolean;
+  score_label: string;
+  outcome_past: string;
+  push_up: string;
+  push_down: string;
+};
+// Mirrors scenario_schema.FleetHealthExtra — see FleetHealthView.tsx.
+export type FleetHealthMeasure = {
+  value: "score" | "residual";
+  direction: "lower_is_worse" | "higher_is_worse" | "absolute";
+  warn_at: number;
+  critical_at: number;
+  label: string;
+  unit: string;
+};
+export type FleetHealthExtra = {
+  kind: "fleet_health";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  unit_noun: string;
+  group_column?: string | null;
+  order_column?: string | null;
+  unit_count: number;
+  tick_seconds: number;
+  rows_per_tick: number;
+  health: FleetHealthMeasure;
+  replay_note?: string | null;
 };
 // Mirrors scenario_schema.NetworkExplorerExtra — see NetworkExplorerView.tsx.
 export type NetworkEvent = { date: string; label: string; description?: string | null; url?: string | null };
@@ -457,7 +485,8 @@ export type UiExtras =
   | ReadingRoomExtra
   | CameraWallExtra
   | KnowledgeGraphExtra
-  | ForecastBoardExtra;
+  | ForecastBoardExtra
+  | FleetHealthExtra;
 
 // Mirrors scenario_schema.ForecastBoardExtra: what-if levers shift one exogenous feature.
 export type ForecastLever = {

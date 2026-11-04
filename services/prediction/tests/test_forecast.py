@@ -34,7 +34,7 @@ TIMES = [(START + timedelta(hours=h)).isoformat() for h in range(1, 4)]
 
 
 def _booster() -> lgb.Booster:
-    """y = 2·temp + lag_1/10, so shifting temp must move the forecast."""
+    """Y = 2·temp + lag_1/10, so shifting temp must move the forecast."""
     rng = np.random.default_rng(0)
     x = np.column_stack([rng.uniform(0, 100, 400), rng.uniform(-10, 30, 400)])
     y = 2 * x[:, 1] + x[:, 0] / 10
@@ -54,7 +54,11 @@ def _documents() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
                 "key": {},
                 "label": "all",
                 "history": {"ds": [START.isoformat()], "y": [50.0]},
-                "forecast": {"ds": TIMES, "mean": [25.0, 22.5, 22.2], "bands": {"80": {"lower": [0] * 3, "upper": [1] * 3}}},
+                "forecast": {
+                    "ds": TIMES,
+                    "mean": [25.0, 22.5, 22.2],
+                    "bands": {"80": {"lower": [0] * 3, "upper": [1] * 3}},
+                },
                 "exogenous": exogenous,
                 "peak": {"ds": TIMES[0], "value": 25.0},
             }
@@ -70,11 +74,22 @@ def _documents() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         "selection_metric": "mase",
         "selected": "lightgbm_lags",
         "horizon": 3,
-        "candidates": [{"name": "seasonal_naive", "metrics": {"mase": 1.2}}, {"name": "lightgbm_lags", "metrics": {"mase": 0.8}}],
+        "candidates": [
+            {"name": "seasonal_naive", "metrics": {"mase": 1.2}},
+            {"name": "lightgbm_lags", "metrics": {"mase": 0.8}},
+        ],
         "windows": [
             {
                 "cutoff": START.isoformat(),
-                "series": [{"key": {}, "label": "all", "ds": TIMES, "actual": [1, 2, 3], "forecasts": {"seasonal_naive": [1, 1, 1]}}],
+                "series": [
+                    {
+                        "key": {},
+                        "label": "all",
+                        "ds": TIMES,
+                        "actual": [1, 2, 3],
+                        "forecasts": {"seasonal_naive": [1, 1, 1]},
+                    }
+                ],
             }
         ],
     }
@@ -87,10 +102,12 @@ def test_what_if_re_forecasts_with_the_booster_and_bands_follow() -> None:
     base, re_forecast = what_if(forecast, forecaster, None, {})
     assert re_forecast and base == forecast["series"][0]  # no shift: the stored forecast
     colder, _ = what_if(forecast, forecaster, "all", {"temp": -8.0})
-    assert all(c < b - 5 for c, b in zip(colder["forecast"]["mean"], forecast["series"][0]["forecast"]["mean"]))
+    assert all(
+        c < b - 5 for c, b in zip(colder["forecast"]["mean"], forecast["series"][0]["forecast"]["mean"], strict=True)
+    )
     assert colder["exogenous"][0] == {"temp": 2.0}
     lower, upper = colder["forecast"]["bands"]["80"]["lower"], colder["forecast"]["bands"]["80"]["upper"]
-    assert [round(u - lo, 4) for lo, u in zip(lower, upper)] == [2.0] * 3  # ±0.5 x scale 2
+    assert [round(u - lo, 4) for lo, u in zip(lower, upper, strict=True)] == [2.0] * 3  # ±0.5 x scale 2
     assert colder["peak"]["value"] == max(colder["forecast"]["mean"])
 
 

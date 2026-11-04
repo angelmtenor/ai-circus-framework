@@ -100,6 +100,18 @@ model:
   target_label: "Predicted energy delivered"
   target_description: "Total energy this charging session is predicted to deliver, in kilowatt-hours."
 
+ui_extras:
+  kind: fleet_health
+  tab_label: "Charging regions"
+  title: "Where are sessions delivering less than expected?"
+  subtitle: "Each region replays real charging sessions. A session delivering far less energy than the model expects from the car, the charger and the hour is worth a look."
+  unit_noun: region
+  group_column: station_region
+  unit_count: 12
+  tick_seconds: 3
+  # About the worst 5% and 1% of sessions.
+  health: {value: residual, direction: lower_is_worse, warn_at: -10, critical_at: -15, label: "Delivered minus expected", unit: "kWh"}
+
 services:
   etl: etl-tabular
   training: training

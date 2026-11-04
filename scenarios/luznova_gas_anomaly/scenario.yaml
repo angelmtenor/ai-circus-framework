@@ -98,6 +98,17 @@ model:
   target_description: "The probability this meter reading is anomalous relative to the customer's own baseline — worth routing to a human inspector."
   target_value_labels: {"0": "Normal reading", "1": "Flagged for inspection"}
 
+ui_extras:
+  kind: fleet_health
+  tab_label: "Meter routes"
+  title: "Which reading route is finding anomalies?"
+  subtitle: "Each route works through real meters one at a time, and the model scores each meter for an anomaly."
+  unit_noun: route
+  unit_count: 12
+  tick_seconds: 3
+  health: {value: score, direction: higher_is_worse, warn_at: 0.2, critical_at: 0.5, label: "Anomaly probability"}
+  replay_note: "The data has one row per meter, so the routes are a fictional way of dealing meters out."
+
 services:
   etl: etl-tabular
   training: training

@@ -536,6 +536,57 @@ class LivePlantExtra(BaseModel):
     wear_feature: str | None = None
 
 
+class FleetHealthMeasure(BaseModel):
+    """What "healthy" means on a `FleetHealthExtra`: the model's `score` (a classifier's probability,
+    or a regressor's prediction when the target is itself a health measure, like remaining life), or
+    the `residual` = actual - predicted (when the target is not: a real value straying from what the
+    model expects is the signal)."""
+
+    value: Literal["score", "residual"] = "score"
+    # `absolute` reads the size of a residual in either direction.
+    direction: Literal["lower_is_worse", "higher_is_worse", "absolute"] = "higher_is_worse"
+    warn_at: float
+    critical_at: float
+    label: str
+    unit: str = ""
+
+    @model_validator(mode="after")
+    def _thresholds_follow_the_direction(self) -> FleetHealthMeasure:
+        if self.direction == "absolute" and self.value != "residual":
+            raise ValueError("fleet_health direction 'absolute' only applies to value: residual.")
+        if self.direction == "absolute" and self.warn_at <= 0:
+            raise ValueError("fleet_health direction 'absolute' needs warn_at > 0.")
+        worse = (
+            self.critical_at < self.warn_at if self.direction == "lower_is_worse" else self.critical_at > self.warn_at
+        )
+        if not worse:
+            raise ValueError(f"fleet_health critical_at must be worse than warn_at for {self.direction}.")
+        return self
+
+
+class FleetHealthExtra(BaseModel):
+    """Opt-in 5th workspace tab: a fleet of units replaying *real* rows of the dataset, every unit's
+    current row scored by the deployed model at each tick (see ui-react's FleetHealthView.tsx — DOM
+    and CSS transitions, no frame loop). `group_column` makes each of its largest values a unit, in
+    `order_column` order when set; without it the rows are dealt out to `unit_count` units in turn,
+    for data with no natural unit. No simulated readings, no real telemetry, no actuation.
+    """
+
+    kind: Literal["fleet_health"] = "fleet_health"
+    tab_label: str = "Fleet health"
+    title: str
+    subtitle: str | None = None
+    unit_noun: str = "unit"  # singular, e.g. "engine"
+    group_column: str | None = None
+    order_column: str | None = None
+    unit_count: int = Field(default=12, ge=2, le=40)
+    tick_seconds: int = Field(default=3, ge=1, le=60)
+    rows_per_tick: int = Field(default=1, ge=1, le=50)
+    health: FleetHealthMeasure
+    # What the replay is and is not, for this scenario's data (e.g. a sample losing the time order).
+    replay_note: str | None = None
+
+
 class CycleTimeModel(BaseModel):
     """How long one unit of product takes on a `ProcessOptimizerExtra` line, as a
     function of the recipe: `minutes_per_unit = fixed_minutes + work_per_unit /
@@ -818,7 +869,9 @@ class RiskWatchlistExtra(BaseModel):
     title: str
     subtitle: str | None = None
     entity_noun: str = "entity"  # singular, e.g. "bank"
-    name_column: str  # a dataset.display_columns entry
+    # A dataset.display_columns entry. None = each row is known by its id alone — for rows that are
+    # people with no name a watchlist should show (a pseudonymous key, an excluded surname).
+    name_column: str | None = None
     detail_columns: list[str] = []  # display_columns shown under the name, e.g. city, state
     size_feature: str | None = None  # numeric feature sizing each dot (e.g. total assets)
     landscape_x: str  # numeric feature
@@ -828,6 +881,13 @@ class RiskWatchlistExtra(BaseModel):
     pillars: list[WatchlistPillar] = []
     # The real outcome's wording for the backtest reveal, e.g. "Failed 2009-10".
     outcome_label: str = "Adverse outcome"
+    # False when the positive class is good news (a likely buyer): the tiers and pushes take the
+    # blue ramp instead of the red one.
+    positive_is_adverse: bool = True
+    score_label: str = "P(fail)"  # the score column's heading
+    outcome_past: str = "failed"  # "the banks that <failed>"
+    push_up: str = "failure"  # a SHAP push raising the score is "towards <failure>"
+    push_down: str = "survival"
 
 
 class NetworkEvent(BaseModel):
@@ -1285,6 +1345,7 @@ UiExtras = Annotated[
     | ProcessOptimizerExtra
     | VoyageExplorerExtra
     | RiskWatchlistExtra
+    | FleetHealthExtra
     | NetworkExplorerExtra
     | DispatchTowerExtra
     | ShipmentGlobeExtra
@@ -1300,6 +1361,7 @@ UiExtras = Annotated[
 # ui_extras kinds meant for each scenario kind — a tabular renderer given a
 # deep_learning scenario (or vice versa) would have none of the data it needs.
 _TABULAR_UI_EXTRAS = (
+    FleetHealthExtra,
     RegionMapExtra,
     LivePlantExtra,
     ProcessOptimizerExtra,
@@ -2325,7 +2387,9 @@ class ScenarioDefinition(BaseModel):
             if feature is not None:
                 self._feature_of_type(feature, "numeric", where)
         display = set(self.dataset.display_columns)
-        named = [extras.name_column, *extras.detail_columns]
+        named = [*extras.detail_columns]
+        if extras.name_column is not None:
+            named.append(extras.name_column)
         if extras.map is not None:
             named += [extras.map.lat_column, extras.map.lon_column]
         unknown = sorted(set(named) - display)
@@ -2346,6 +2410,26 @@ class ScenarioDefinition(BaseModel):
         duplicated = sorted({f for f in pillar_features if pillar_features.count(f) > 1})
         if unknown or duplicated:
             raise ValueError(f"{where} pillars: unknown features {unknown}, features in two pillars {duplicated}.")
+
+    @model_validator(mode="after")
+    def _fleet_health_reads_real_columns(self) -> ScenarioDefinition:
+        """Fail fast if a `fleet_health` block names a column the dataset sample will not carry, or
+        asks for a residual a probability cannot give."""
+        extras = self.ui_extras
+        if not isinstance(extras, FleetHealthExtra) or self.dataset is None or self.model is None:
+            return self
+        where = "ui_extras.fleet_health"
+        if self.model.task_type == "forecast":
+            raise ValueError(f"{where} is not available for a forecast scenario.")
+        if extras.health.value == "residual" and self.model.task_type != "regression":
+            raise ValueError(f"{where} health.value: residual requires a regression model.")
+        known = {self.dataset.index_col, *self.dataset.display_columns, *self.dataset.feature_columns}
+        for column in (extras.group_column, extras.order_column):
+            if column is not None and column not in known:
+                raise ValueError(f"{where} column {column!r} is not the index, a display column or a feature.")
+        if extras.order_column is not None and extras.group_column is None:
+            raise ValueError(f"{where} order_column needs a group_column: it orders the rows within a unit.")
+        return self
 
     @model_validator(mode="after")
     def _network_explorer_has_a_graph_and_real_columns(self) -> ScenarioDefinition:

@@ -817,7 +817,7 @@ select:focus {
 
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
   gap: 1rem;
 }
 
@@ -2344,6 +2344,72 @@ select:focus {
   background: var(--accent-soft);
   color: var(--accent-2);
   border-color: var(--accent-border);
+}
+
+/* Phone width: the top bar wraps (scenario on its own row, not sticky, since it is tall
+   now) and the tab strip scrolls inside itself. After the base rules on purpose. */
+@media (max-width: 720px) {
+  .app-header-group {
+    position: static;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .topbar-brand-icon {
+    width: 5.5rem;
+  }
+
+  .topbar-scenario {
+    order: 1;
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+
+  .topbar-scenario-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-org {
+    max-width: 9rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .workspace-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .workspace-tabs button {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .sub-tabs {
+    flex-wrap: wrap;
+  }
+
+  .filter-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+
+  .filter-row-range {
+    flex-wrap: wrap;
+  }
+
+  .data-table {
+    display: block;
+    overflow-x: auto;
+  }
 }
 
 /* ── Appearance / theme picker ─────────────────────────────────────────────── */

@@ -77,12 +77,13 @@ class Series:
 
     @property
     def label(self) -> str:
+        """How the series is named on screen: its id values, or "all" for a single series."""
         return " / ".join(self.key.values()) or "all"
 
 
 @dataclass
 class ForecastCandidate:
-    """One candidate's backtest: metrics averaged over windows × series, and the errors behind them."""
+    """One candidate's backtest: metrics averaged over windows x series, and the errors behind them."""
 
     name: str
     metrics: dict[str, float]
@@ -90,11 +91,13 @@ class ForecastCandidate:
     window_forecasts: list[list[list[float]]] = field(default_factory=list)  # [window][series][step]
 
     @property
-    def selection_score(self) -> float:  # read by mlflow_tracking as test_score too
+    def selection_score(self) -> float:
+        """The backtest MASE."""
         return self.metrics["mase"]
 
     @property
     def test_score(self) -> float:
+        """The backtest MASE, under the name mlflow_tracking reads."""
         return self.metrics["mase"]
 
 
@@ -124,7 +127,8 @@ def split_series(df: pd.DataFrame, dataset: TabularDataset, ts: TimeSeriesConfig
 
 def seasonal_scale(y: Sequence[float], season_length: int) -> float:
     """MASE's denominator: the in-sample mean absolute error of the seasonal-naive forecast
-    (naive when the series is shorter than two seasons); never 0."""
+    (naive when the series is shorter than two seasons); never 0.
+    """
     m = season_length if len(y) > season_length else 1
     diffs = [abs(y[i] - y[i - m]) for i in range(m, len(y))]
     return max(sum(diffs) / len(diffs), 1e-9) if diffs else 1.0
@@ -133,7 +137,9 @@ def seasonal_scale(y: Sequence[float], season_length: int) -> float:
 def forecast_metrics(actual: Sequence[float], forecast: Sequence[float], scale: float) -> dict[str, float]:
     """MASE, sMAPE (%) and RMSE of one forecast window."""
     errors = [f - a for a, f in zip(actual, forecast, strict=True)]
-    smape_terms = [200 * abs(e) / (abs(a) + abs(f)) for a, f, e in zip(actual, forecast, errors) if abs(a) + abs(f)]
+    smape_terms = [
+        200 * abs(e) / (abs(a) + abs(f)) for a, f, e in zip(actual, forecast, errors, strict=True) if abs(a) + abs(f)
+    ]
     return {
         "mase": sum(abs(e) for e in errors) / len(errors) / scale,
         "smape": sum(smape_terms) / len(smape_terms) if smape_terms else 0.0,
@@ -143,7 +149,8 @@ def forecast_metrics(actual: Sequence[float], forecast: Sequence[float], scale: 
 
 def features_for(ts: TimeSeriesConfig, series: Sequence[Series]) -> ForecastFeatures:
     """The `lightgbm_lags` inputs of a scenario: its lags/rolling/calendar/exogenous, series ids and
-    non-numeric static columns as categories, numeric static columns as numbers."""
+    non-numeric static columns as categories, numeric static columns as numbers.
+    """
     categorical: dict[str, list[str]] = {}
     numeric_static: list[str] = []
     for column in [*ts.series_id_columns, *ts.static_features]:
@@ -206,7 +213,8 @@ def _seasonal_naive(season_length: int) -> Forecaster:
 
 def _auto_ets(season_length: int) -> Forecaster:
     """Additive exponential smoothing per series: no trend or a damped trend, additive seasonality
-    when two full seasons exist — the configuration with the lowest AIC."""
+    when two full seasons exist — the configuration with the lowest AIC.
+    """
 
     def forecast(s: Series, times: Sequence[datetime], _exog: Sequence[dict[str, float]]) -> list[float]:
         y = np.asarray(s.y, dtype=float)
@@ -238,7 +246,8 @@ def fit_candidate(
     name: str, ts: TimeSeriesConfig, features: ForecastFeatures, series: Sequence[Series]
 ) -> tuple[Forecaster, lgb.Booster | None]:
     """A candidate fitted on `series` (the booster too, for `lightgbm_lags`), its forecasts cut at
-    `time_series.target_min`."""
+    `time_series.target_min`.
+    """
     season_length = ts.resolved_season_length()
     booster = None
     if name == "seasonal_naive":
@@ -259,7 +268,8 @@ def fit_candidate(
 
 def backtest_cutoffs(ts: TimeSeriesConfig, length: int) -> list[int]:
     """Training lengths of the backtest windows, oldest first: the last window ends at the last
-    observation, each earlier one `backtest.step` (default: the horizon) steps before."""
+    observation, each earlier one `backtest.step` (default: the horizon) steps before.
+    """
     step = ts.backtest.step or ts.horizon
     cutoffs = [length - ts.horizon - k * step for k in reversed(range(ts.backtest.windows))]
     return [c for c in cutoffs if c > 0]
@@ -269,7 +279,8 @@ def backtest(
     name: str, ts: TimeSeriesConfig, features: ForecastFeatures, series: Sequence[Series]
 ) -> ForecastCandidate:
     """Rolling-origin backtest of one candidate over every series (series of different lengths
-    are cut at the same distance from their own end)."""
+    are cut at the same distance from their own end).
+    """
     season_length = ts.resolved_season_length()
     per_window: list[dict[str, float]] = []
     candidate = ForecastCandidate(name=name, metrics={})
@@ -297,7 +308,8 @@ def select_forecast_candidate(
     candidates: Sequence[ForecastCandidate], metric: str, threshold: float
 ) -> ForecastCandidate:
     """Green Code, lower-is-better: candidates are simplest first; a more complex one replaces the
-    current best only when it lowers `metric` by more than `threshold`."""
+    current best only when it lowers `metric` by more than `threshold`.
+    """
     best = candidates[0]
     for candidate in candidates[1:]:
         gain = best.metrics[metric] - candidate.metrics[metric]
@@ -305,7 +317,14 @@ def select_forecast_candidate(
             logger.info("Selecting {!r} over {!r}: {} lower by {:.4f}", candidate.name, best.name, metric, gain)
             best = candidate
         else:
-            logger.info("Keeping simpler {!r} over {!r}: {} gain {:.4f} <= {:.4f}", best.name, candidate.name, metric, gain, threshold)
+            logger.info(
+                "Keeping simpler {!r} over {!r}: {} gain {:.4f} <= {:.4f}",
+                best.name,
+                candidate.name,
+                metric,
+                gain,
+                threshold,
+            )
     return best
 
 
@@ -314,9 +333,12 @@ def future_times(last: datetime, frequency: str, horizon: int) -> list[datetime]
     return [t.to_pydatetime() for t in pd.date_range(last, periods=horizon + 1, freq=frequency)[1:]]
 
 
-def grouped_importance(booster: lgb.Booster, features: ForecastFeatures, series: Sequence[Series]) -> list[dict[str, Any]]:
+def grouped_importance(
+    booster: lgb.Booster, features: ForecastFeatures, series: Sequence[Series]
+) -> list[dict[str, Any]]:
     """Mean |SHAP| of the LightGBM (its native tree SHAP, `pred_contrib`) over recent rows, summed
-    into what a reader recognises: recent history, calendar, and each exogenous/static feature."""
+    into what a reader recognises: recent history, calendar, and each exogenous/static feature.
+    """
     x, _ = training_matrix(features, series)
     x = x[-IMPORTANCE_SAMPLE_ROWS:]
     contributions = np.abs(np.asarray(booster.predict(x, pred_contrib=True))[:, :-1]).mean(axis=0)

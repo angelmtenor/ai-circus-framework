@@ -22,7 +22,15 @@ export const RISK_RAMP = {
   light: { base: "#aab4c3", tiers: ["#f08c8c", "#d9434a", "#9e1b24"], up: "#e34948", down: "#2a78d6", ring: "#0b1f33" },
 } as const;
 
+// The same shape when the positive class is good news (a likely buyer): a one-hue blue ramp,
+// and the SHAP pair swapped so a push towards the outcome stays blue.
+export const FAVOURABLE_RAMP = {
+  dark: { base: "#465266", tiers: ["#2a6cb0", "#3987e5", "#8fc1ff"], up: "#3987e5", down: "#e66767", ring: "#f3fbff" },
+  light: { base: "#aab4c3", tiers: ["#7aaeea", "#2a78d6", "#14508f"], up: "#2a78d6", down: "#e34948", ring: "#0b1f33" },
+} as const;
+
 export const TIER_GLYPHS = ["●", "▲", "◆", "✖"];
+export const FAVOURABLE_GLYPHS = ["●", "▲", "◆", "★"];
 
 export const NETWORK_PALETTE = {
   dark: {

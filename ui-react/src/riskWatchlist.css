@@ -574,7 +574,17 @@
   }
   .rw-main,
   .rw-profile {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .rw-tiers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rw-search {
+    min-width: 0;
+    width: 100%;
   }
 }
 
