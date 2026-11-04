@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import { predict, datasetSample, type ScenarioSummary, type DatasetSample, type PredictionResult } from "./apiClient";
 import { config, MAX_ROWS } from "./config";
@@ -142,7 +142,11 @@ function BatchMode({ scenario, accessToken }: { scenario: ScenarioSummary; acces
     value: ranked ? ranked.slice(0, 20).map((r) => ({ ...r.record, prediction: r.prediction, top_feature: r.top?.label })) : null,
   });
 
-  const identityColumns = sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : [];
+  // Memoized: a new array each render re-triggers DatasetFilterPanel's onFilteredChange -> re-render loop.
+  const identityColumns = useMemo(
+    () => (sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : []),
+    [sample],
+  );
 
   async function load() {
     setError(null);
