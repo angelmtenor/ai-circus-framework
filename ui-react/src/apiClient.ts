@@ -456,7 +456,26 @@ export type UiExtras =
   | TriageBoardExtra
   | ReadingRoomExtra
   | CameraWallExtra
-  | KnowledgeGraphExtra;
+  | KnowledgeGraphExtra
+  | ForecastBoardExtra;
+
+// Mirrors scenario_schema.ForecastBoardExtra: what-if levers shift one exogenous feature.
+export type ForecastLever = {
+  feature: string;
+  label: string;
+  min_shift: number;
+  max_shift: number;
+  step: number;
+  unit: string;
+};
+export type ForecastBoardExtra = {
+  kind: "forecast_board";
+  tab_label: string;
+  title: string;
+  subtitle: string | null;
+  levers: ForecastLever[];
+  peak_label: string;
+};
 
 // Mirrors ai_circus_shared.network_graph.NetworkGraph — prediction's GET /graph/{slug}.
 export type GraphNode = {
@@ -602,6 +621,19 @@ export type ScenarioSummary = {
   decision_policy?: DecisionPolicy | null;
   // tabular_ml whose assistant also searches reference documents (see DocumentTool).
   document_tool?: DocumentTool | null;
+  // tabular_ml with task_type "forecast" only — mirrors scenario_schema.TimeSeriesConfig.
+  time_series?: TimeSeriesConfig | null;
+};
+
+export type TimeSeriesConfig = {
+  time_column: string;
+  series_id_columns: string[];
+  frequency: string;
+  horizon: number;
+  season_length: number | null;
+  static_features: string[];
+  exogenous_features: string[];
+  prediction_intervals: number[];
 };
 
 // Mirrors scenario_schema.py's DocumentToolConfig: the assistant's document search
@@ -883,6 +915,67 @@ export async function datasetSample(
 
 export async function modelCard(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<ModelCard> {
   const response = await fetch(`${baseUrl}/model/${scenarioSlug}/card`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+/** Mirrors prediction's ForecastSeriesOut (docs/adr/0016-time-series-forecasting.md). */
+export type ForecastSeries = {
+  key: Record<string, string>;
+  label: string;
+  history: { ds: string[]; y: number[] };
+  // bands keyed by level ("80", "95")
+  forecast: { ds: string[]; mean: number[]; bands: Record<string, { lower: number[]; upper: number[] }> };
+  exogenous: Record<string, number>[];
+  peak: { ds: string; value: number };
+};
+
+export type Forecast = {
+  model_name: string;
+  frequency: string;
+  horizon: number;
+  levels: string[];
+  // Whether a what-if re-forecasts (the selected model reads the exogenous features).
+  what_if: boolean;
+  series: ForecastSeries[];
+};
+
+export type ForecastBacktest = {
+  selection_metric: string;
+  selected: string;
+  horizon: number;
+  candidates: { name: string; metrics: Record<string, number> }[];
+  windows: {
+    cutoff: string;
+    series: { key: Record<string, string>; label: string; ds: string[]; actual: number[]; forecasts: Record<string, number[]> }[];
+  }[];
+};
+
+export async function fetchForecast(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<Forecast> {
+  const response = await fetch(`${baseUrl}/forecast/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+export async function forecastWhatIf(
+  baseUrl: string,
+  scenarioSlug: string,
+  series: string | null,
+  shifts: Record<string, number>,
+  accessToken: string | null,
+): Promise<{ re_forecast: boolean; series: ForecastSeries }> {
+  const response = await fetch(`${baseUrl}/forecast/${scenarioSlug}/what-if`, {
+    method: "POST",
+    headers: headers(accessToken),
+    body: JSON.stringify({ series, shifts }),
+  });
+  return asJson(response);
+}
+
+export async function fetchForecastBacktest(
+  baseUrl: string,
+  scenarioSlug: string,
+  accessToken: string | null,
+): Promise<ForecastBacktest> {
+  const response = await fetch(`${baseUrl}/model/${scenarioSlug}/backtest`, { headers: headers(accessToken) });
   return asJson(response);
 }
 

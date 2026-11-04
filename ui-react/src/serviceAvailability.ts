@@ -40,7 +40,6 @@ export const SERVICES: Record<ServiceKey, ServiceInfo> = {
 export function scenarioServices(scenario: Pick<ScenarioSummary, "kind">): { required: ServiceKey[]; optional: ServiceKey[] } {
   switch (scenario.kind) {
     case "tabular_ml":
-    case "tabular_ml_timeseries":
       return { required: ["prediction"], optional: ["assistant"] };
     case "conversational_rag":
       return { required: ["rag-agent"], optional: [] };

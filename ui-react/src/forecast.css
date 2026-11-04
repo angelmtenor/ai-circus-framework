@@ -1,0 +1,133 @@
+/* Forecast workspace (ForecastViews.tsx) — theme tokens only, like charts.tsx. */
+
+.forecast .kpi-row {
+  margin-bottom: 14px;
+}
+
+.forecast-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.forecast-head h3 {
+  margin: 0;
+}
+
+.forecast-series-picker {
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.ts-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.ts-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.ts-tick {
+  fill: var(--dim);
+  font-size: 11px;
+}
+
+.ts-marker {
+  stroke: var(--dim);
+  stroke-dasharray: 2 4;
+}
+
+.ts-hover {
+  stroke: var(--text);
+  opacity: 0.35;
+}
+
+.ts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 1.6em;
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: var(--dim);
+}
+
+.ts-legend-time {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ts-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ts-legend-item i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.ts-legend-item b {
+  color: var(--text);
+}
+
+.forecast-peak-row td {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.forecast-board-title h2 {
+  margin: 0 0 2px;
+}
+
+.forecast-board-title {
+  margin-bottom: 12px;
+}
+
+.forecast-board-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .forecast-board-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.forecast-levers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.forecast-levers h3 {
+  margin: 0;
+}
+
+.forecast-lever {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.88rem;
+}
+
+.forecast-lever b {
+  color: var(--accent);
+}
+
+.forecast-lever input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
