@@ -172,6 +172,34 @@ def test_model_unavailable_error_gets_503_with_cors_headers_not_a_bare_500() -> 
     assert "No trained model artifacts" in response.json()["detail"]
 
 
+def test_models_status_reports_trained_per_entitled_scenario_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GET /models/status: trained flag per served+entitled scenario; unserved/unentitled slugs are omitted."""
+    from fastapi import FastAPI, HTTPException
+
+    import prediction.api as api
+
+    class FakeCache:
+        def is_trained(self, org_id: str, scenario_slug: str) -> bool:
+            assert org_id == "org-1"
+            return scenario_slug == "trained"
+
+    def fake_identity(slug: str, authorization: str | None) -> Identity:
+        if slug == "secret":
+            raise HTTPException(status_code=403, detail="no")
+        return Identity(subject="u", org_id="org-1", roles=frozenset())
+
+    monkeypatch.setattr(api, "resolve_identity", fake_identity)
+    test_app = FastAPI()
+    test_app.include_router(api.router)
+    test_app.state.definitions = {"trained": object(), "untrained": object(), "secret": object()}
+    test_app.dependency_overrides[_model_cache] = lambda: FakeCache()
+
+    response = TestClient(test_app).get("/models/status", params={"scenarios": "trained,untrained,secret,unknown"})
+
+    assert response.status_code == 200
+    assert response.json() == {"trained": {"trained": True, "untrained": False}}
+
+
 async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) fails startup loudly."""
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())

@@ -4,6 +4,31 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.45.0 — 2026-11-04
+
+### Added
+- **"Model not trained" on scenario cards**: a tabular scenario whose model does not exist yet for the caller's tenant (every one
+  on a fresh cluster) is grayed out with "run `make k3s-pipeline`" instead of failing on open. One org-scoped, entitlement-checked
+  request, `GET /models/status` on `prediction`, reads only whether the artifacts exist.
+- **`make k3s-idle-check`**: opens every tab of the scenarios in `IDLE_SCENARIOS` in headless Chromium and fails if one still draws
+  more than 2 frames/s or uses more than 15% CPU while nobody touches it.
+- **`make k3s-embed-onnx`** (optional, off by default): runs `local-embed` on ONNX Runtime instead of torch. Measured on the
+  cluster after one request: llm-gateway 975 MB against 1,300 MB (-25%), 0.18 s against 0.67 s for five texts. The int8 export's
+  vectors differ from torch's (cosine 0.984 to 0.993), so documents already in Qdrant should be re-vectorized after switching;
+  `EMBED_VARIANT=off` goes back. The fp32 export is exact but needs 1.4 GB, more than the pod's limit. torch stays in the image
+  as the fallback.
+
+### Fixed
+- **Data & BI held a CPU core while idle** (found by the new idle check): `DataView` passed fresh arrays to the filter panel on
+  every render, which re-ran its effect and re-rendered the view without end (about 290,000 DOM changes in 8 s, 100% CPU, measured
+  on churn; the view is shared by every tabular scenario). Idle is now 0%. The same pattern in ML Predictions' batch mode is fixed too.
+
+### Known
+- `local-embed` has always served a plain 1024-d Qwen3 backbone (causal attention, no linear head), because the gateway loads
+  `voyageai/voyage-4-nano` without `trust_remote_code`; the model card's 2048-d bidirectional model is not what is deployed.
+  The ONNX export reproduces what is deployed, so existing vectors stay comparable. Switching to the real model would mean
+  re-vectorizing everything and retraining the text challengers; it was not done.
+
 ## v0.44.0 — 2026-11-04
 
 ### Changed

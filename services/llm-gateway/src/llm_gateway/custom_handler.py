@@ -23,9 +23,11 @@ Author: Angel Martinez-Tenor
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Final
 
 import httpx
@@ -46,9 +48,63 @@ DEFAULT_MODEL: Final = "voyageai/voyage-4-nano"
 _loaded_models: dict[str, Any] = {}
 _load_lock = threading.Lock()
 
+# Longest text the ONNX path embeds (tokens); beyond it the text is truncated. The model itself allows
+# 32768, but a run-away document would cost gigabytes of attention memory on a shared gateway pod.
+ONNX_MAX_TOKENS: Final = 8192
+_PAD_MARKER: Final = "<|endoftext|>"  # Qwen3's end-of-text, used as padding
+
+
+def onnx_dir(model_name: str) -> Path:
+    """Where `scripts/export_local_embed_onnx.py` + `make k3s-embed-onnx` put this model's ONNX export:
+    `$LOCAL_EMBED_ONNX_DIR`, else `<HF_HOME>/onnx/<model name without its org>` on the model volume.
+    """
+    explicit = os.environ.get("LOCAL_EMBED_ONNX_DIR")
+    if explicit:
+        return Path(explicit)
+    return Path(os.environ.get("HF_HOME", "~/.cache/huggingface")).expanduser() / "onnx" / model_name.rsplit("/", 1)[-1]
+
+
+class OnnxEmbedder:
+    """The same `encode(texts, normalize_embeddings=True)` as sentence-transformers, on ONNX Runtime.
+
+    The exported graph returns per-token states (bidirectional encoder + head); like the original
+    pipeline this masks padding, mean-pools and L2-normalises. No torch is imported.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        """Load `model.onnx` and `tokenizer.json` from `directory`."""
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        self._tokenizer = Tokenizer.from_file(str(directory / "tokenizer.json"))
+        self._tokenizer.enable_truncation(max_length=ONNX_MAX_TOKENS)
+        pad_id = self._tokenizer.token_to_id(_PAD_MARKER)
+        self._tokenizer.enable_padding(pad_id=pad_id if pad_id is not None else 0, pad_token=_PAD_MARKER)
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = max(1, min(4, os.cpu_count() or 1))
+        options.enable_mem_pattern = False  # lower peak memory; the arena is not worth it for sporadic batches
+        self._session = ort.InferenceSession(
+            str(directory / "model.onnx"), sess_options=options, providers=["CPUExecutionProvider"]
+        )
+
+    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> list[Any]:
+        """One vector per text (L2-normalised when asked)."""
+        import numpy as np
+
+        encodings = self._tokenizer.encode_batch(texts)
+        ids = np.array([e.ids for e in encodings], dtype=np.int64)
+        mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
+        states = np.asarray(self._session.run(None, {"input_ids": ids, "attention_mask": mask})[0])
+        weights = mask[:, :, None].astype(states.dtype)
+        pooled = (states * weights).sum(axis=1) / np.maximum(weights.sum(axis=1), 1.0)
+        if normalize_embeddings:
+            pooled = pooled / np.maximum(np.linalg.norm(pooled, axis=1, keepdims=True), 1e-12)
+        return list(pooled)
+
 
 def _get_model(model_name: str) -> Any:
-    """Load (and cache) the sentence-transformers model, lazily.
+    """Load (and cache) the embedding model, lazily: the ONNX export when it is on the model volume
+    (no torch), else sentence-transformers (the fallback until an export is installed).
 
     Imported lazily, same reasoning as the old LocalEmbeddingProvider: this module
     is only ever exercised when litellm_config.yaml's custom_provider_map is used,
@@ -56,9 +112,18 @@ def _get_model(model_name: str) -> Any:
     """
     with _load_lock:  # aembedding runs on worker threads: load each model once, not per racer
         if model_name not in _loaded_models:
-            from sentence_transformers import SentenceTransformer
+            directory = onnx_dir(model_name)
+            if (directory / "model.onnx").exists() and (directory / "tokenizer.json").exists():
+                logger.info("local-embed: ONNX Runtime export found in {}", directory)
+                _loaded_models[model_name] = OnnxEmbedder(directory)
+            else:
+                logger.warning(
+                    "local-embed: no ONNX export in {} — falling back to in-process torch (`make k3s-embed-onnx`)",
+                    directory,
+                )
+                from sentence_transformers import SentenceTransformer
 
-            _loaded_models[model_name] = SentenceTransformer(model_name)
+                _loaded_models[model_name] = SentenceTransformer(model_name)
         return _loaded_models[model_name]
 
 

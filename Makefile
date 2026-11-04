@@ -15,7 +15,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
 	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
-	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
+	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off k3s-data-demo k3s-data-demo-off \
 	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
@@ -354,6 +354,14 @@ k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl c
 	trap "kill $$pf_pid 2>/dev/null" EXIT; \
 	sleep 2; \
 	$(MAKE) verify
+
+EMBED_VARIANT ?= int8
+k3s-embed-onnx: ## Run local-embed on ONNX Runtime instead of torch: exports the model once on the host, copies EMBED_VARIANT (int8 default, fp32, or off to go back to torch) into llm-gateway's model volume and restarts it
+	@./scripts/k3s_embed_onnx.sh $(EMBED_VARIANT)
+
+IDLE_SCENARIOS ?= Customer Churn Prediction
+k3s-idle-check: ## Open every tab of the scenarios in IDLE_SCENARIOS (card titles, comma-separated) in headless Chromium and fail if one still draws >2 frames/s or >15% CPU idle (needs playwright-core; PW_MODULE/MAX_FPS/MAX_CPU tune it)
+	@set -a; . ./.env; set +a; SCENARIO_TITLES="$(IDLE_SCENARIOS)" node .claude/skills/playwright-headless-verify/k3s-idle-check.js
 
 k3s-down: k3s-portforward-stop ## Delete every applied k8s/base manifest (StatefulSet PVCs are retained by default — delete the k3d cluster entirely for a full wipe: `k3d cluster delete $(K3S_CLUSTER)`)
 	@kubectl delete -k k8s/base --ignore-not-found

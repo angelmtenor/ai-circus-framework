@@ -7,6 +7,7 @@ import {
   scenarioServices,
   SERVICES,
   useServiceAvailability,
+  useUntrainedScenarios,
 } from "./serviceAvailability";
 
 type Category = {
@@ -186,6 +187,8 @@ export function ScenarioPicker({
   );
   const availability = useServiceAvailability(neededServices);
   const [starting, setStarting] = useState<Record<string, string>>({}); // control name -> status line
+  const tabularSlugs = useMemo(() => scenarios.filter((s) => s.kind === "tabular_ml").map((s) => s.slug), [scenarios]);
+  const untrained = useUntrainedScenarios(tabularSlugs, availability.get("prediction") === "up", accessToken);
 
   const startService = (control: string) => {
     setStarting((s) => ({ ...s, [control]: "Starting…" }));
@@ -347,6 +350,22 @@ export function ScenarioPicker({
                   {subtype && <span className="scenario-chip">{subtype}</span>}
                 </>
               );
+              if (missing.length === 0 && untrained.has(scenario.slug)) {
+                return (
+                  <div key={scenario.slug} className="scenario-card scenario-card--unavailable">
+                    {body}
+                    <div className="scenario-card-unavailable" role="status">
+                      <span title="Run: make k3s-pipeline (compose: make pipeline)">
+                        {"⏸ Model not trained (run `make k3s-pipeline`)"}
+                      </span>
+                    </div>
+                    <div className="scenario-card-footer">
+                      {chips}
+                      <span className="scenario-card-open">Unavailable</span>
+                    </div>
+                  </div>
+                );
+              }
               if (missing.length > 0) {
                 // A div, not a button: it cannot be opened, and may hold the admin's Start button
                 // (so no aria-disabled here — it would disable that button for assistive tech too).

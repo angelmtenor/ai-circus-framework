@@ -978,6 +978,17 @@ export async function modelCard(baseUrl: string, scenarioSlug: string, accessTok
   return asJson(response);
 }
 
+/** Per entitled scenario: does a trained model exist for the caller's tenant? (prediction `GET /models/status`) */
+export async function modelsStatus(
+  baseUrl: string,
+  scenarioSlugs: string[],
+  accessToken: string | null,
+): Promise<Record<string, boolean>> {
+  const query = encodeURIComponent(scenarioSlugs.join(","));
+  const response = await fetch(`${baseUrl}/models/status?scenarios=${query}`, { headers: headers(accessToken) });
+  return (await asJson<{ trained: Record<string, boolean> }>(response)).trained;
+}
+
 /** Mirrors prediction's ForecastSeriesOut (docs/adr/0016-time-series-forecasting.md). */
 export type ForecastSeries = {
   key: Record<string, string>;

@@ -188,7 +188,17 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
 
   // The record's identity (id column + display columns such as a name) — leads the
   // sample-rows table and is searchable, but is never a chart axis or model input.
-  const identityColumns = sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : [];
+  // Memoized: DatasetFilterPanel recomputes its filtered rows (and calls setFiltered) whenever these
+  // array *references* change, so fresh literals each render made DataView re-render forever (an idle
+  // tab at ~100% CPU — found by `make k3s-idle-check`).
+  const identityColumns = useMemo(
+    () => (sample ? [sample.id_column, ...(sample.display_columns ?? [])].filter((c): c is string => Boolean(c)) : []),
+    [sample],
+  );
+  const filterColumns = useMemo(
+    () => [...featureColumns, ...(targetName ? [targetName] : [])],
+    [featureColumns, targetName],
+  );
 
   if (error) {
     return (
@@ -258,7 +268,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
       <div className="panel-card">
         <h3>Query the data</h3>
         <DatasetFilterPanel
-          featureColumns={[...featureColumns, ...(targetName ? [targetName] : [])]}
+          featureColumns={filterColumns}
           featureSchema={featureSchemaWithTarget}
           labelFor={labelFor}
           rows={sample.rows}

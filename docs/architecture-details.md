@@ -1,0 +1,211 @@
+# Architecture details
+
+How each feature works, for when you touch it. `CLAUDE.md` holds the rules that apply to every task and points
+here; a rule in `CLAUDE.md` wins if the two ever differ.
+
+## Scenarios and the UI's generic renderers
+
+**Scenario-driven, not per-feature code.** A scenario (`scenarios/<slug>/scenario.yaml`,
+schema in `ai_circus_shared/scenario_schema.py`) is the unit of product content, of one `kind`:
+`tabular_ml`, `conversational_rag`, `assisted_form`, `deep_learning`. Adding one is a YAML file
+plus a `platform-registry` restart (it seeds scenarios) — never new UI or service code. **One
+service instance serves every scenario of its kind**, routed by a `{scenario_slug}` path segment:
+`prediction`/`assistant` (tabular_ml), `rag-agent` (conversational_rag), `form-agent`
+(assisted_form), optional `dl-inference` (deep_learning; onnxruntime only, models from the
+one-shot `dl-training`, artifact contract in `ai_circus_shared/deep_learning.py`). A
+`deep_learning` scenario is `task: classification` (fine-tune) or `task: anomaly_detection`
+(frozen DINOv2 + patch memory bank; same ONNX interface plus an `anomaly_map` output). A classification scenario may read **frame sequences** (`source.type: http_frame_sequences`: per-camera `.tgz` of
+`<ts>_<±offset s>.jpg`, label from the offset, split by camera/station so test cameras are never seen; `clear_only`
+archives are no-event controls): dl-training publishes each sample's `group` (camera) and `seq` in recording order,
+and `ui_extras: camera_wall` (`wildfire_smoke_watch`, `CameraWallView.tsx` + `cameraWallLogic.ts`) plays a pool of them on
+one clock, really scoring every frame through dl-inference (`live` vs `replay`), with an in-app camera picker, an alert
+rule (threshold, N frames, `early_grace_seconds`) and `control_margin_seconds` for controls. `ui-react`
+mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
+`RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
+`ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+scenario's *domain* (industries plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
+build-time config, `etl-tabular`/`training`/`prediction`.
+
+## Official paper forms (`assisted_form`)
+
+An `assisted_form` whose `form` has `sections` renders as an official paper sheet
+(`OfficialFormSheet.tsx`: numbered boxes/`casilla`, `variants` = general + specific models chosen by
+the classification field, `locale` for messages); form-agent prints the same YAML as PDF
+(`core/pdf.py`, reportlab: draft + filed copy with receipt) and serves `form.sample_uploads`.
+
+## Forecasts (`task_type: forecast`)
+
+A tabular scenario can be a **forecast** (`model.task_type: forecast` + `time_series:`, ADR 0016, first user
+`energy_building`): etl-tabular's `clean_series` fails on gaps instead of dropping rows; training backtests
+`seasonal_naive`/`auto_ets`/`lightgbm_lags` by MASE (features in `ai_circus_shared.forecasting`, shared with prediction so
+they cannot skew; no Nixtla libraries, they pin `pandas<3`); prediction serves `GET /forecast/{slug}`, `POST
+/forecast/{slug}/what-if` and `GET /model/{slug}/backtest`, and row-scoring routes answer 409; the assistant gets
+`get_forecast`/`get_forecast_backtest`; `ForecastViews.tsx` replaces ML Predictions/Insights and adds `ui_extras: forecast_board`.
+
+## Fleet health, row triage, case tracker, source library
+
+`ui_extras: fleet_health` (`FleetHealthView.tsx`, DOM and CSS only, no frame loop) replays real dataset rows unit by unit,
+scoring each unit's current row at every tick; health is the model's score, or actual minus predicted when the target is
+not itself a health measure (`health.value: residual`). Its thresholds should come from the real distribution.
+`ui_extras: row_triage` (`RowTriageView.tsx`) routes rows by a threshold over the precomputed out-of-fold scores, so a tick
+calls nothing. **A new tab must leave the page quiet**: prefer DOM/SVG over canvas, cap what it draws, and measure it idle.
+An `assisted_form` may add `ui_extras: case_tracker` (`CaseTrackerView.tsx`; form-agent `GET /submissions/{slug}`, scoped by
+tenant *and* user, reading each object because the owner lives inside it, hence the scan cap). A `conversational_rag` may add
+`ui_extras: source_library` (`SourceLibraryView.tsx`; rag-agent `GET /documents/{slug}` and `/passages`, reading the tenant's
+Qdrant collection, since rag-agent has no object store; etl-vectorize stores each chunk's `chunk` position, so a collection
+indexed earlier shows passages unordered until re-indexed).
+
+## Free-text features, challenger and rubric
+
+A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
+SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
+`explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a
+scenario may add a `model.text_challenger` (sentence embeddings from llm-gateway's `local-embed`,
+cached from the host GPU — the cluster's CPU embedder is ~0.6 s/text; served as `/predict`
+`model: "challenger"`, never auto-promoted) and a `rubric_check` (assistant `POST /rubric-check`: the
+active LLM reads a *description of behaviour* against a YAML rubric — never judges named people).
+
+## Networks, out-of-fold scores, money trail
+
+A tabular scenario may ship a network next to its rows (`dataset.graph`, contract
+`ai_circus_shared.network_graph.NetworkGraph`: `row`/`entity`/`context` nodes, typed edges with
+per-period `series`): etl-tabular validates it and restricts it to the cleaned rows
+(`processed/graph.json`), prediction serves it at `GET /graph/{slug}` (same entitlement,
+fallback-org and TTL cache as the dataset sample) and the `network_explorer` tab draws it
+(canvas + d3-force, `networkScene.ts`; `NetworkTab.tsx` adds a person-centred *Investigate* workspace —
+ego stage, routes to targets, live-scored hypothetical individuals via `ui_extras.tie_features`). Graph position reaches the model only as ordinary
+numeric features computed offline. `model.out_of_fold_scores` (classification only)
+makes training cross-fit every row's probability + SHAP with the selected model — served at
+`GET /model/{slug}/out-of-fold` (per-row SHAP up to 5,000 rows, probabilities only above) — because
+the deployed model is refit on every row and its own scores of them are optimistic; `network_explorer`,
+`shipment_globe` and `money_trail` require it (they reveal real outcomes). `money_trail`
+(`aml_money_trail`, IBM AMLworld) reads a graph whose entities are banks, holders are
+rows/context and flow edges carry an *hourly* `series` (`YYYY-MM-DDTHH` periods): a world map
+replaying the payments hour by hour, with a per-typology reveal — plus a second, *Network graph* view
+that feeds the same network to `network_explorer`'s renderer (`networkExplorerExtras()`).
+
+## Business rules, decision policy, case desk
+
+A tabular scenario whose rows are *applications* (`prestaciones_sociales`) may gate each one through
+**deterministic business rules before the model** (`dataset.business_rules`, `rule_columns`,
+`ai_circus_shared.business_rules`: families of rules `missing/equals/in/lt/gt/contains_any…` with
+outcomes `reject`/`request_info` (blocking) or `review`) and turn the binary model's probability into
+a proposal with `model.decision_policy` (approve ≥ `approve_at`, deny ≤ `deny_at`, else manual review):
+etl-tabular evaluates the rules before `dropna()` and keeps blocked rows for analytics, training never
+fits on them (`rules_excluded_rows`), prediction's `/predict` returns `rules`/`gate`/`decision` (the
+rules are server-side only — the thresholds are mirrored client-side because they are sliders).
+`text_language: es` swaps TF-IDF's stop words (negations kept) and the challenger embeds every text
+column. `ui_extras: case_desk` («Mesa de valoración», `CaseDeskView.tsx`): the rules → model → trays
+circuit, an official paper sheet with per-box SHAP heat, and scanned-document intake — the browser OCRs
+the file (platform-registry `/documents/extract`), assistant's `POST /extract-record/{slug}` maps the
+text onto the boxes with strictly validated, quote-verified JSON, and `GET /intake-samples/{slug}/{file}`
+serves the listed sample scans. Audit-only columns (`audit_columns`, e.g. sex, nationality) are kept out
+of the model and only feed the equity panel.
+
+## A document search as an assistant tool
+
+A `tabular_ml` scenario may also give its assistant a **document search as one more tool**
+(`documents` + `documents.tool` {name, label, description, sample_questions} + `vector_store`, e.g.
+`prestaciones_sociales`' `consultar_normativa` over real BOE/EUR-Lex articles + fictional local rules,
+fetched by `scripts/prepare_prestaciones_normativa.py`): etl-vectorize indexes it like a RAG scenario,
+assistant builds the tool per request (`ai_circus_shared.retrieval` — the one `retrieve`/`format_retrieved`
+rag-agent and form-agent share), serves `GET /documents/{slug}`, and honours AG-UI `forwardedProps.scope:
+"documents"` by building **that tool alone**. ChatPanel labels every reply with the sources its tool
+calls really used (`chatProvenance.ts`); case_desk adds a reading room (`NormativaDesk.tsx`, «📖 Ver norma»
+on a fired rule's `legal_basis` — a libs/shared test checks each one resolves to a shipped document).
+
+## Knowledge graphs
+
+A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same
+`NetworkGraph` contract: typed concept nodes, relations with `citation` + verbatim `evidence`, one node
+per source document linked by `cited_in`): extracted *once, offline* by an LLM and committed
+(`scripts/prepare_aml_regulation_kg.py` — quotes not found in the text are dropped; never extract in
+the pipeline), bootstrapped by etl-vectorize into the tenant's bucket (`KNOWLEDGE_GRAPH_KEY`, re-synced when the committed
+seed's SHA-256 changes; a tenant's own graph is never overwritten) and
+indexed node-by-node and relation-by-relation in `kg_collection_name`. rag-agent then swaps
+`retrieve_docs` for `graph_search` (HippoRAG 2-style: the question *plus 2-4 `key_concepts` the agent
+names in the same call* → node/relation seeds weighted by specificity → Personalized PageRank within
+`hops` over relations, `cited_in` and etl-vectorize's inferred `similar_to` synonymy edges → lines
+ranked by degree-normalised mass, capped at `max_triples` + `max_passages` chunks and at
+`MAX_GRAPH_SEARCHES_PER_RUN` — keep the caps, they are the per-question token bill) and `graph_path`, emits a `knowledge_graph_trace` AG-UI custom event
+before `RUN_FINISHED`, and serves `GET /knowledge-graph/{slug}`; `ui_extras: knowledge_graph` splits
+RagView into chat | `KnowledgeGraphView` (colour = role, glyph = class) lighting up each answer's subgraph.
+
+## Data Platform
+
+**Data Platform (`kind: data_product`, docs/data-platform/ + docs/adr/).** A data product is a
+`data_product` block (schema `ai_circus_shared.data_product`) plus files next to its
+scenario.yaml: JSON Schema `contracts/`, a `simulator/` plugin (`ai_circus_shared.data_simulator`:
+produces only through Kafka / the landing bucket / the `data_sources` ERP database), a `dbt/`
+project and `bi/dashboards.yaml`. Generic services: `data-ingest` (Kafka topics per tenant
+`tenant-<org>.<topic>` → contract → bronze JSONB by key in database `data_platform` schema
+`<slug>`, quarantine, file reconciliation, CDC from `data_sources`, hot-path minute aggregates,
+Iceberg lake), `data-transform` (dbt → `<slug>_silver`/`<slug>_gold` on Postgres, then ClickHouse
+copies silver and rebuilds gold; CronJob in core, Dagster in analytics; `bi_sync` for Superset),
+`data-api` (the governed door: metrics, records + trail, sqlglot-rewritten SQL, lineage, SSE
+pipeline events, simulator; access = `ai_circus_shared.data_policy`: org first, then the role's
+row filter/masks; admin "view as" via `X-Data-View-As`), and `assistant`'s data tools
+(`core/data_tools.py`). Four switchable tiers under `k8s/data-platform/{core,analytics,bi,governance}`
+(`make k3s-data-*-up/down`, `k3s-data-showcase`), never part of `k3s-all`; first data product:
+`surf_retail` — Angel's Surf Co., fictional (ui-react `DataProductView` + `Data*View.tsx`). A data product may
+declare `apps` (`storefront`: a fictional web shop on its catalogue/recommendation datasets whose checkout is a hidden
+simulator action, `StorefrontView.tsx` + `BoardArt.tsx`; `insights`: season heatmap + live forecast board,
+`InsightsView.tsx`) and `ml_exports` (a gold feature mart → a `tabular_ml` scenario's raw CSV, written by
+data-transform after each Postgres build; `make k3s-data-ml` trains them; the assistant gets `ml_predict`).
+
+## Observability
+
+**Observability (admin-only)**, all reachable from ui-react's admin **Platform** view: the health
+dashboard (`data-platform-manager` `GET /platform/status`, `core/platform_status.py` — a
+hand-synced list of every component; add a row for any new container, `tests/test_platform_status.py`
+pins the names; Start/Stop only for `core/workloads.py`'s `OPTIONAL_SERVICES`, whose workloads
+must equal the Role's `resourceNames` — `tests/test_workloads.py`); the resource monitor
+(`GET /platform/resources`, `core/resources.py`: metrics-server + NVML via `k8s/gpu/`'s patch); **Langfuse v4** for GenAI (fed only by llm-gateway's `langfuse_otel` callback —
+never add a Langfuse SDK to an agent; pass request `metadata` via `langfuse_request_metadata`);
+**MLflow** for ML (`training`'s `core/mlflow_tracking.py`, must never fail the job). The
+metrics/logs/traces *stack* is a platform prerequisite, never shipped in `k8s/base` (ADR 0015); each
+service honours the contract — `/metrics`, `telemetry.configure_tracing(app, service)` right after
+`configure_metrics` (OTLP only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; it imports nothing otherwise),
+and `LOG_FORMAT=json` logs with `trace_id` through `core/logger.py`. Exported spans pass
+`RedactingSpanExporter` — a new content-carrying attribute goes into `DROPPED_ATTRIBUTE_PREFIXES`, and
+log messages never carry prompts or personal data. It must stay the only exporter: never add an
+OpenTelemetry distro/auto-instrumentation, and keep `configure_tracing(app, …)` on every FastAPI app —
+it also switches off FastAPI's own `OTEL_*` auto-export, which otherwise ships an unredacted copy.
+The AI-specific pieces live in `observability/` (collector config, dashboards — generated by
+`scripts/generate_observability_dashboards.py` —, alert rules, the optional bundle): llm-gateway's GenAI
+metrics, `prediction`'s drift PSI (`core/drift_monitor.py` against the `drift_reference` training writes,
+`ai_circus_shared.drift`; windows are per tenant — `GET /model/{slug}/drift` and ML Insights' *Data drift* card
+show the caller's own traffic, /metrics sums tenants without a tenant label), DCGM-named GPU gauges
+(`data-platform-manager` `core/gpu_metrics.py`). The admin Platform page lists the bundle's `grafana` and
+`otel-collector` as optional rows. A new
+FastAPI deployment gets the `prometheus.io/*` pod annotations; metric labels never carry tenants or values.
+
+## Governance
+
+**Governance-ready by standards (`docs/governance/`, ADR 0011).** The framework is governable by an
+external tool through open contracts only — never a product name in code, config or docs; it *supports* an
+AI management system, it is not one ("supports"/"provides evidence for", never "compliant"). **Everything
+is off by default** and changes nothing when off: declared `governance:` metadata + stable `ai_system_id`
+per scenario (`ai_circus_shared.governance`, never auto-classified); content-free CloudEvents
+(`governance_events`, log or HMAC webhook via a Valkey outbox, `prediction.recorded` decision records for
+non-LLM models with enforced retention in `decision_records`); a hash-chained admin audit trail
+(platform-registry is the single writer; data-platform-manager reports budget/policy changes to it);
+llm-gateway's pluggable **policy decision point** (`policy_hook.py`: noop/static/OPA/HTTP, explicit
+`POLICY_FAIL_MODE`, HMAC `POST /governance/policy/invalidate` on data-platform-manager); `gen_ai.*` +
+`aicf.*` span attributes (`llm_gateway/tracing.py`, semconv pinned to v1.37.0); a CycloneDX 1.6 AI-BOM at
+`GET /governance/inventory`. **All model calls go through llm-gateway** (a libs/shared test enforces it;
+embeddings included). Rules that bite: `llm-gateway` cannot import `ai_circus_shared`, so shared contracts
+are JSON Schemas under `docs/governance/schemas/` (regenerate with `scripts/export_governance_schemas.py`;
+tests fail on drift); a `GOVERNANCE_*`/`POLICY_*` flag must **never** get a profile default in a
+`settings.yaml` (config is `EnvConfig(**profile)`, so init values beat the environment); governance
+events/audit/records carry ids, metrics and decisions — never prompts or personal data. Optional OPA:
+`make k3s-governance-opa-up|down|test`.
+
+## Maps and dashboard charts
+
+`GeoBubbleMap.tsx` draws the region and watchlist maps in SVG: marks are grouped into one path per style, a pure
+nearest-point search does the hit-testing, and pan and zoom only move a transform. `geoMapFrame.ts` holds the framing,
+shared with `DataStoreMap.tsx`. `dashboardCharts.tsx` draws a data product's line and bar panels at the real pixel width,
+and `dashboardChartLogic.ts` is their pure part (scales, series, and leaving out a day, week or month still in progress).
+A panel declared `chart: pie` or `hbar` is a `BarList`. Measurements are in ADR 0014.

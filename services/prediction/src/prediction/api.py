@@ -19,7 +19,7 @@ from ai_circus_shared.governance_events import PredictionRecordData
 from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from prediction import get_env_config
@@ -436,6 +436,44 @@ def _scenario_definition(scenario_slug: str, request: Request) -> ScenarioDefini
 def healthz() -> dict[str, str]:
     """Liveness check."""
     return {"status": "ok"}
+
+
+MAX_STATUS_SCENARIOS = 100
+
+
+class ModelStatusOut(BaseModel):
+    """Which of the asked scenarios have a trained model for the caller's tenant."""
+
+    trained: dict[str, bool]
+
+
+@router.get("/models/status", response_model=ModelStatusOut)
+def models_status_endpoint(
+    request: Request,
+    scenarios: str = Query(max_length=4000, description="Comma-separated scenario slugs."),
+    authorization: str | None = Header(default=None),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> ModelStatusOut:
+    """Whether a trained model exists, per scenario, for the caller's tenant (org first).
+
+    Only scenarios this instance serves AND the caller is entitled to are reported — an
+    unserved or unentitled slug is left out, never revealed. Reads no model, only existence.
+    """
+    slugs = list(dict.fromkeys(s.strip() for s in scenarios.split(",") if s.strip()))[:MAX_STATUS_SCENARIOS]
+    definitions: dict[str, ScenarioDefinition] = request.app.state.definitions
+    trained: dict[str, bool] = {}
+    for slug in slugs:
+        if slug not in definitions:
+            continue
+        try:
+            identity = resolve_identity(slug, authorization)
+        except HTTPException as exc:
+            if exc.status_code == 401:
+                raise
+            continue  # 403: not entitled — omit
+        assert identity.org_id is not None
+        trained[slug] = model_cache.is_trained(identity.org_id, slug)
+    return ModelStatusOut(trained=trained)
 
 
 @router.post("/predict/{scenario_slug}", response_model=PredictResponse)

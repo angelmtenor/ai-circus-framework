@@ -152,8 +152,14 @@ scenario card can show `Loading dataset…` for several seconds while it fetches
 multi-thousand-row sample — that's normal render time, not a hang; wait it out before concluding
 something's broken.
 
-**Two working scripts live next to this skill — copy them into the scratch dir instead of
+**Three working scripts live next to this skill — copy them into the scratch dir instead of
 rewriting them:**
+
+- `k3s-tab-cost.js` — what one tab costs: CPU to open split by source (app, Plotly, browser), download,
+  heap, DOM, then idle CPU, frames/s and the requests made while idle, plus phone overflow. Env:
+  `SCENARIO_TITLE` (the card's full title, since another card's description can mention the same name),
+  `TAB`, `READY` (a selector meaning "drawn"), `ADMIN_API_KEY`. Run it before the change too: a tab that was
+  already idle gains only in opening cost, and the numbers should say so.
 
 - `k3s-ui-check.js` — login → gallery → churn scenario → **Data & BI** tab (counts Plotly charts
   and table rows) → **ML Predictions** tab; screenshots each step. Env: `OUT_DIR`, `ADMIN_API_KEY`;
