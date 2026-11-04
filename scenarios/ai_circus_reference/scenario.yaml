@@ -57,6 +57,9 @@ vector_store:
   collection_prefix: "ai_circus_reference"
   top_k: 5
 
+ui_extras:
+  kind: source_library
+
 services:
   etl: etl-vectorize
   agent: rag-agent
