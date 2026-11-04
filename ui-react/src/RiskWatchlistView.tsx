@@ -5,14 +5,14 @@ import { config } from "./config";
 import { PlotlyChart } from "./PlotlyChart";
 import type { PlotlyDatum, PlotlyLayout } from "./plotly";
 import { explainByFeature, featureLabel, type Record_ } from "./predictUtils";
-import { RISK_RAMP, surfaceMode, TIER_GLYPHS } from "./riskPalette";
+import { FAVOURABLE_GLYPHS, FAVOURABLE_RAMP, RISK_RAMP, surfaceMode, TIER_GLYPHS } from "./riskPalette";
 import { useTheme } from "./useTheme";
 import "./riskWatchlist.css";
 
 /**
  * Generic 5th workspace tab for a binary-classification tabular_ml scenario whose
- * rows are entities under supervision and whose positive class is the adverse
- * outcome (`ui_extras: {kind: risk_watchlist}`, see scenario_schema.RiskWatchlistExtra)
+ * rows are entities to watch and whose positive class is the outcome to act on
+ * (`ui_extras: {kind: risk_watchlist}`, see scenario_schema.RiskWatchlistExtra)
  * — e.g. `bank_early_warning`. Every row is scored in one batched /predict call
  * (probabilities only), sorted into the scenario's supervisory tiers, and shown three
  * ways at once: a map, a two-ratio "risk landscape", and a ranked watchlist. Picking
@@ -24,11 +24,10 @@ import "./riskWatchlist.css";
  * light/dark surface — validated with the dataviz palette validator, `--ordinal`), with
  * the lowest tier recessive grey (emphasis: ~90% of entities are the context, not the
  * story). A tier never relies on colour alone — every mark and row also carries its
- * glyph and label. Pillar bars use the blue↔red diverging pair.
+ * glyph and label. Pillar bars use the blue↔red diverging pair. A scenario whose positive
+ * class is good news (`positive_is_adverse: false`) takes the blue ramp instead.
  */
 
-const RAMP = RISK_RAMP;
-const GLYPHS = TIER_GLYPHS;
 const TABLE_PAGE = 120;
 
 type Entity = {
@@ -74,7 +73,7 @@ async function loadWatchlist(scenario: ScenarioSummary, extras: RiskWatchlistExt
     return {
       index,
       id: sample.id_column ? String(row[sample.id_column]) : String(index + 1),
-      name: String(row[extras.name_column] ?? ""),
+      name: extras.name_column ? String(row[extras.name_column] ?? "") : shortId(sample.id_column ? String(row[sample.id_column]) : String(index + 1)),
       detail: extras.detail_columns.map((c) => row[c]).filter((v) => v !== null && v !== "").join(", "),
       lat: extras.map ? num(extras.map.lat_column) : null,
       lon: extras.map ? num(extras.map.lon_column) : null,
@@ -94,6 +93,11 @@ async function loadWatchlist(scenario: ScenarioSummary, extras: RiskWatchlistExt
     holdoutAuc: card?.metrics.holdout_roc_auc ?? null,
     truncated: sample.total_rows > sample.rows.length,
   };
+}
+
+/** An id standing in for a name: pseudonymous keys are long hashes, so show their start. */
+function shortId(id: string): string {
+  return id.length > 14 ? `${id.slice(0, 12)}…` : id;
 }
 
 function pct(p: number, digits = 1): string {
@@ -139,7 +143,9 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
   const { theme } = useTheme();
   const bg = theme.cssVars["--bg"] ?? "#05070f";
   const mode = surfaceMode(bg);
-  const colors = RAMP[mode];
+  const colors = (extras.positive_is_adverse ? RISK_RAMP : FAVOURABLE_RAMP)[mode];
+  const hit = extras.positive_is_adverse ? "✖" : "★";
+  const GLYPHS = extras.positive_is_adverse ? TIER_GLYPHS : FAVOURABLE_GLYPHS;
   const tierColor = useCallback((tier: number) => (tier === 0 ? colors.base : colors.tiers[Math.min(tier - 1, 2)]), [colors]);
   const noun = extras.entity_noun;
   const numericFeatures = useMemo(
@@ -241,8 +247,8 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
   const hover = useCallback(
     (e: Entity) =>
       `<b>${e.name}</b><br>${e.detail}<br>${GLYPHS[e.tier] ?? "●"} ${extras.tiers[e.tier].label} · ${pct(e.probability)}` +
-      (revealed ? `<br>${e.actual ? `✖ ${extras.outcome_label}` : "✓ " + (scenario.target_value_labels?.["0"] ?? "No")}` : ""),
-    [extras, revealed, scenario.target_value_labels],
+      (revealed ? `<br>${e.actual ? `${hit} ${extras.outcome_label}` : "· " + (scenario.target_value_labels?.["0"] ?? "No")}` : ""),
+    [extras, revealed, scenario.target_value_labels, hit, GLYPHS],
   );
 
   const traces = useCallback(
@@ -297,7 +303,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
       }
       return out;
     },
-    [extras, visible, hover, tierColor, bg, revealed, colors.ring, selected, theme.cssVars],
+    [extras, visible, hover, tierColor, bg, revealed, colors.ring, selected, theme.cssVars, GLYPHS],
   );
 
   const onPoint = useCallback(
@@ -361,7 +367,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
   const drivers = useMemo(() => (detail ? detail.items.slice(0, 7) : []), [detail]);
 
   useCopilotReadable({
-    description: `${scenario.title} watchlist: every ${noun} scored and sorted into supervisory tiers, plus the ${noun} the user is inspecting (if any). Use it to answer which ${noun}s are highest-risk, how many sit in each tier, or why the selected ${noun} is where it is.`,
+    description: `${scenario.title} watchlist: every ${noun} scored and sorted into tiers, plus the ${noun} the user is inspecting (if any). Use it to answer which ${noun}s are highest-risk, how many sit in each tier, or why the selected ${noun} is where it is.`,
     value: loaded
       ? {
           tiers: extras.tiers.map((t, i) => ({ tier: t.label, from_probability: t.min_probability, count: tierCounts[i].n })),
@@ -373,7 +379,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
                 probability: Number(selected.probability.toFixed(3)),
                 tier: extras.tiers[selected.tier].label,
                 pillar_contributions: pillarBars.map((b) => ({ pillar: b.label, points: Number((b.value * 100).toFixed(1)) })),
-                ...(revealed ? { actual_outcome: selected.actual ? extras.outcome_label : "survived" } : {}),
+                ...(revealed ? { actual_outcome: selected.actual ? extras.outcome_label : (scenario.target_value_labels?.["0"] ?? "no") } : {}),
               }
             : null,
           outcomes_revealed: revealed,
@@ -436,7 +442,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
               </span>
               {revealed && (
                 <span className="rw-tier-failed">
-                  ✖ {tierCounts[t].failed} {extras.outcome_label.toLowerCase()} ({tierCounts[t].n ? pct(tierCounts[t].failed / tierCounts[t].n, 0) : "—"})
+                  {hit} {tierCounts[t].failed} {extras.outcome_label.toLowerCase()} ({tierCounts[t].n ? pct(tierCounts[t].failed / tierCounts[t].n, 0) : "—"})
                 </span>
               )}
             </button>
@@ -450,12 +456,12 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
           </label>
           {revealed ? (
             <p>
-              <b>{flagged}</b> of <b>{totalFailed}</b> {noun}s that went on to fail sat at <em>{extras.tiers[interventionFrom].label}</em> or above
+              <b>{flagged}</b> of <b>{totalFailed}</b> {noun}s that {extras.outcome_past} sat at <em>{extras.tiers[interventionFrom].label}</em> or above
               — {flaggedCount.toLocaleString()} {noun}s flagged ({pct(flaggedCount / entities.length)} of all). In-sample: the model saw these {noun}s
               in training; its honest ranking quality is the cross-validated AUC.
             </p>
           ) : (
-            <p>Hide the outcome, judge the model — then reveal who actually failed.</p>
+            <p>Hide the outcome, judge the model — then reveal who actually {extras.outcome_past}.</p>
           )}
         </div>
       </div>
@@ -471,7 +477,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
             </button>
           </div>
         )}
-        <input className="rw-search" type="search" placeholder={`Search a ${noun}, city or id…`} value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="rw-search" type="search" placeholder={`Search a ${noun}${extras.detail_columns.length ? `, ${extras.detail_columns.join(", ")}` : ""} or id…`} value={query} onChange={(e) => setQuery(e.target.value)} />
         <span className="rw-shown">
           {visible.length.toLocaleString()} of {entities.length.toLocaleString()} {noun}s
           {tierFilter.size > 0 && (
@@ -490,7 +496,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
             <PlotlyChart data={traces(false)} layout={landscapeLayout} height={560} onPointClick={onPoint} />
           )}
           <p className="rw-chart-note">
-            Dot size: {extras.size_feature ? featureLabel(scenario, extras.size_feature).toLowerCase() : noun} (log scale). Click a dot to inspect a {noun}.
+            {extras.size_feature && `Dot size: ${featureLabel(scenario, extras.size_feature).toLowerCase()} (log scale). `}Click a dot to inspect a {noun}.
           </p>
         </div>
 
@@ -500,7 +506,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
               <tr>
                 <th>#</th>
                 <th>{noun[0].toUpperCase() + noun.slice(1)}</th>
-                <th className="rw-num">P(fail)</th>
+                <th className="rw-num">{extras.score_label}</th>
                 {revealed && <th />}
               </tr>
             </thead>
@@ -529,7 +535,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
                       <span>{pct(e.probability)}</span>
                     </span>
                   </td>
-                  {revealed && <td className="rw-outcome">{e.actual ? <span title={extras.outcome_label}>✖</span> : ""}</td>}
+                  {revealed && <td className="rw-outcome">{e.actual ? <span title={extras.outcome_label}>{hit}</span> : ""}</td>}
                 </tr>
               ))}
             </tbody>
@@ -551,8 +557,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
             </span>
             <h4>{selected.name}</h4>
             <p>
-              {selected.detail} · id {selected.id}
-              {extras.size_feature && ` · ${featureLabel(scenario, extras.size_feature)} ${compact(selected.size)}`}
+              {[selected.detail, extras.name_column ? `id ${selected.id}` : "", extras.size_feature ? `${featureLabel(scenario, extras.size_feature)} ${compact(selected.size)}` : ""].filter(Boolean).join(" · ")}
             </p>
             <div className="rw-hero">
               <span className="rw-hero-value">{pct(selected.probability)}</span>
@@ -560,8 +565,8 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
             </div>
             {selectedTier.description && <p className="rw-profile-action">{selectedTier.description}</p>}
             {revealed && (
-              <p className={`rw-profile-outcome${selected.actual ? " rw-profile-outcome--bad" : ""}`}>
-                {selected.actual ? `✖ ${extras.outcome_label}` : `✓ ${scenario.target_value_labels?.["0"] ?? "Survived"}`}
+              <p className={`rw-profile-outcome${selected.actual && extras.positive_is_adverse ? " rw-profile-outcome--bad" : ""}`}>
+                {selected.actual ? `${hit} ${extras.outcome_label}` : `· ${scenario.target_value_labels?.["0"] ?? "No"}`}
               </p>
             )}
             <button type="button" className="rw-close" onClick={() => setSelected(null)}>
@@ -600,7 +605,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
                   })}
                 </div>
                 <p className="rw-legend-line">
-                  <span style={{ color: colors.up }}>■</span> pushes towards failure <span style={{ color: colors.down }}>■</span> pushes towards survival · base
+                  <span style={{ color: colors.up }}>■</span> pushes towards {extras.push_up} <span style={{ color: colors.down }}>■</span> pushes towards {extras.push_down} · base
                   rate {pct(detail.base)}
                 </p>
               </>
@@ -624,7 +629,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
                   </span>
                   {p !== null && (
                     <span className="rw-driver-track" title={`Percentile among all ${noun}s: ${Math.round(p * 100)}`}>
-                      {fp !== null && <span className="rw-driver-failed" style={{ left: `${fp * 100}%` }} title={`Median of ${noun}s that failed`} />}
+                      {fp !== null && <span className="rw-driver-failed" style={{ left: `${fp * 100}%` }} title={`Median of ${noun}s that ${extras.outcome_past}`} />}
                       <span className="rw-driver-dot" style={{ left: `${p * 100}%` }} />
                     </span>
                   )}
@@ -633,7 +638,7 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
             })}
             {drivers.length > 0 && (
               <p className="rw-legend-line">
-                Track = percentile among all {noun}s · <span className="rw-key-failed" /> median of {noun}s that failed
+                Track = percentile among all {noun}s · <span className="rw-key-failed" /> median of {noun}s that {extras.outcome_past}
               </p>
             )}
           </div>

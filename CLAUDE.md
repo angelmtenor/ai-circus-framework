@@ -98,6 +98,9 @@ A tabular scenario can be a **forecast** (`model.task_type: forecast` + `time_se
 they cannot skew; no Nixtla libraries, they pin `pandas<3`); prediction serves `GET /forecast/{slug}`, `POST
 /forecast/{slug}/what-if` and `GET /model/{slug}/backtest`, and row-scoring routes answer 409; the assistant gets
 `get_forecast`/`get_forecast_backtest`; `ForecastViews.tsx` replaces ML Predictions/Insights and adds `ui_extras: forecast_board`.
+`ui_extras: fleet_health` (`FleetHealthView.tsx`, DOM and CSS only, no frame loop) replays real dataset rows unit by unit,
+scoring each unit's current row at every tick; health is the model's score, or actual minus predicted when the target is
+not itself a health measure (`health.value: residual`). Its thresholds should come from the real distribution.
 A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
 SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
 `explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a

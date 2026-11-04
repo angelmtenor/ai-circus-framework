@@ -81,10 +81,10 @@ def test_split_series_one_per_id_with_its_static_values() -> None:
 
 
 def test_metrics_and_scale() -> None:
-    assert seasonal_scale([1, 2, 3, 4], 2) == 2.0
-    assert seasonal_scale([5.0], 24) == 1.0
+    assert seasonal_scale([1, 2, 3, 4], 2) == pytest.approx(2.0)
+    assert seasonal_scale([5.0], 24) == pytest.approx(1.0)
     metrics = forecast_metrics([10, 20], [12, 18], scale=2.0)
-    assert metrics["mase"] == 1.0 and metrics["rmse"] == 2.0
+    assert metrics["mase"] == pytest.approx(1.0) and metrics["rmse"] == pytest.approx(2.0)
     assert math.isclose(metrics["smape"], (200 * 2 / 22 + 200 * 2 / 38) / 2)
 
 
@@ -111,7 +111,10 @@ def test_train_forecast_selects_backtests_and_forecasts_every_series() -> None:
     assert len(first["forecast"]["mean"]) == SERIES.horizon
     lower80, upper80 = first["forecast"]["bands"]["80"]["lower"], first["forecast"]["bands"]["80"]["upper"]
     lower95 = first["forecast"]["bands"]["95"]["lower"]
-    assert all(lo95 <= lo <= m <= hi for lo95, lo, m, hi in zip(lower95, lower80, first["forecast"]["mean"], upper80))
+    assert all(
+        lo95 <= lo <= m <= hi
+        for lo95, lo, m, hi in zip(lower95, lower80, first["forecast"]["mean"], upper80, strict=True)
+    )
     assert first["peak"]["value"] == max(first["forecast"]["mean"])
     assert len(run.backtest["windows"]) == 2
     window = run.backtest["windows"][0]["series"][0]
@@ -151,7 +154,10 @@ def test_the_stored_forecaster_reproduces_the_forecast_through_the_shared_featur
     )
     expected = run.forecast["series"][1]["forecast"]
     assert [round(v, 4) for v in values] == expected["mean"]
-    assert interval_bands([round(v, 4) for v in values], run.forecaster["half_widths"], stored["scale"]) == expected["bands"]
+    assert (
+        interval_bands([round(v, 4) for v in values], run.forecaster["half_widths"], stored["scale"])
+        == expected["bands"]
+    )
 
 
 def test_main_trains_a_forecast_scenario_and_writes_checksummed_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:

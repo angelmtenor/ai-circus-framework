@@ -101,6 +101,35 @@ model:
   target_description: "Whether the loyalty customer bought a surfboard, SUP board, kite or kite board in the 90 days after the snapshot."
   target_value_labels: {"0": "No board", "1": "Buys a board"}
 
+ui_extras:
+  kind: risk_watchlist
+  tab_label: "Buyer watchlist"
+  title: "Who is about to buy a board?"
+  subtitle: >
+    Every loyalty customer scored for a board purchase in the next 90 days. Filter a tier, pick a
+    customer to see what drives their score — then reveal who really bought. Customers are
+    pseudonymised keys: nobody here can be identified, by design.
+  entity_noun: customer
+  size_feature: spend_eur
+  landscape_x: recency_days
+  landscape_y: spend_eur
+  positive_is_adverse: false
+  score_label: "P(buy)"
+  outcome_label: "Bought a board"
+  outcome_past: "bought a board"
+  push_up: "buying"
+  push_down: "not buying"
+  tiers:
+    - {label: "Not now", min_probability: 0.0, description: "No sign of a purchase: leave them out of board campaigns."}
+    - {label: "Warming up", min_probability: 0.15, description: "Above the base rate: include in the seasonal newsletter."}
+    - {label: "Ready", min_probability: 0.35, description: "Worth a personal offer: a demo day or a trade-in."}
+    - {label: "Buying now", min_probability: 0.6, description: "Make sure their shop has the right boards in stock."}
+  pillars:
+    - {label: "Recency", features: [recency_days, days_since_last_board]}
+    - {label: "Engagement", features: [tenure_days, baskets, online_share]}
+    - {label: "Spend", features: [spend_eur, boards_bought, accessory_eur]}
+    - {label: "Discipline", features: [surf_share, sup_share, kite_share]}
+
 services:
   etl: etl-tabular
   training: training

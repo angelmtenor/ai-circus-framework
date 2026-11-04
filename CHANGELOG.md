@@ -4,6 +4,25 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.41.0 — 2026-11-04
+
+### Added
+- **`fleet_health` tab**: a fleet of units replaying real dataset rows, scored live by the deployed model. Health is the
+  model's score, or actual minus predicted when the target is not itself a health measure. DOM and CSS only, with no
+  frame loop. On `turbofan_rul`, `electric_motor`, `luznova_gas_anomaly` and `luznova_ev_charging`.
+- **Watchlists on `churn` and `surf_customer_propensity`**, showing customers by id only. `risk_watchlist` gains an
+  optional `name_column`, `positive_is_adverse` (a blue ramp when the outcome is good news) and its own wording.
+
+### Changed
+- `turbofan_rul` shows `unit_number`, which stays out of the features: rerun its ETL
+  (`./scripts/k3s_ml_train.sh turbofan_rul`).
+
+### Fixed
+- Pages no longer scroll sideways at phone width: the top bar wraps, the tab strip scrolls inside itself, and Data & BI,
+  data tables, sub-tabs and the watchlist fit. Desktop is unchanged.
+- Lint errors in the forecasting files v0.40.0 shipped with (`make check` failed for `prediction` and `training`). The
+  pre-commit hook skips untracked files, so they went unchecked. No behaviour change.
+
 ## v0.40.0 — 2026-11-04
 
 ### Added

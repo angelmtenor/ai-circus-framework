@@ -1081,6 +1081,39 @@ def test_repo_bank_early_warning_has_a_valid_risk_watchlist() -> None:
     assert bank.model is not None and bank.model.selection_metric == "roc_auc"
 
 
+def test_fleet_health_scenarios_are_valid_and_their_rules_hold() -> None:
+    for slug in ("turbofan_rul", "electric_motor", "luznova_gas_anomaly", "luznova_ev_charging"):
+        assert _repo_scenario(slug).ui_extras.kind == "fleet_health"  # type: ignore[union-attr]
+    engines = _repo_scenario("turbofan_rul")
+    extras = engines.ui_extras.model_dump()  # type: ignore[union-attr]
+    assert {"unit_number", "time_in_cycles"} <= {*engines.dataset.display_columns, *engines.dataset.feature_columns}  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="is not the index, a display column or a feature"):
+        _with(engines, ui_extras={**extras, "group_column": "nope"})
+    with pytest.raises(ValidationError, match="needs a group_column"):
+        _with(engines, ui_extras={**extras, "group_column": None})
+    health = extras["health"]
+    with pytest.raises(ValidationError, match="critical_at must be worse"):
+        _with(engines, ui_extras={**extras, "health": {**health, "critical_at": health["warn_at"] + 1}})
+    with pytest.raises(ValidationError, match="only applies to value: residual"):
+        _with(engines, ui_extras={**extras, "health": {**health, "direction": "absolute"}})
+    meters = _repo_scenario("luznova_gas_anomaly")
+    meter_extras = meters.ui_extras.model_dump()  # type: ignore[union-attr]
+    residual = {**meter_extras["health"], "value": "residual"}
+    with pytest.raises(ValidationError, match="requires a regression model"):
+        _with(meters, ui_extras={**meter_extras, "health": residual})
+
+
+def test_risk_watchlist_can_show_ids_only_and_a_favourable_outcome() -> None:
+    """Neither watchlist of people exposes a name, and only the buyers' one is good news."""
+    churn, buyers = _repo_scenario("churn"), _repo_scenario("surf_customer_propensity")
+    assert churn.ui_extras.name_column is None and buyers.ui_extras.name_column is None  # type: ignore[union-attr]
+    assert churn.ui_extras.positive_is_adverse is True  # type: ignore[union-attr]
+    assert buyers.ui_extras.positive_is_adverse is False  # type: ignore[union-attr]
+    # The bank scenario keeps its default wording.
+    bank = _repo_scenario("bank_early_warning").ui_extras
+    assert bank.score_label == "P(fail)" and bank.outcome_past == "failed"  # type: ignore[union-attr]
+
+
 def test_risk_watchlist_rejects_unknown_columns_bad_tiers_and_overlapping_pillars() -> None:
     bank = _repo_scenario("bank_early_warning")
     extras = bank.ui_extras.model_dump()  # type: ignore[union-attr]

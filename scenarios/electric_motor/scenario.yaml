@@ -118,6 +118,19 @@ model:
   target_label: "Motor speed"
   target_description: "The motor's rotational speed, predicted from its voltage, current, and temperature sensors."
 
+ui_extras:
+  kind: fleet_health
+  tab_label: "Motor fleet"
+  title: "Which test profile is behaving unexpectedly?"
+  subtitle: "Each tile is a real test profile. Speed is not health, so the signal is how far the measured speed strays from what the model expects from the other sensors."
+  unit_noun: profile
+  group_column: profile_id
+  unit_count: 12
+  tick_seconds: 3
+  # About the worst 5% and 1% of readings.
+  health: {value: residual, direction: absolute, warn_at: 85, critical_at: 140, label: "Measured minus expected speed", unit: "rpm"}
+  replay_note: "The committed file is a random sample that lost the time order, so consecutive readings are not consecutive moments."
+
 services:
   etl: etl-tabular
   training: training

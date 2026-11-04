@@ -30,6 +30,7 @@ const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default:
 const ForecastPredictView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastPredictView })));
 const ForecastInsightsView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastInsightsView })));
 const ForecastBoardView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastBoardView })));
+const FleetHealthView = lazy(() => import("./FleetHealthView").then((m) => ({ default: m.FleetHealthView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
 
@@ -48,6 +49,7 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   money_trail: { icon: "coins", label: "Money Trail" },
   case_desk: { icon: "desk", label: "Case desk" },
   forecast_board: { icon: "pulse", label: "Forecast board" },
+  fleet_health: { icon: "gauge", label: "Fleet health" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
@@ -176,6 +178,7 @@ function TabularViewContent({
         {tab === "predict" && forecast && <ForecastPredictView scenario={scenario} accessToken={accessToken} />}
         {tab === "explore" && forecast && <ForecastInsightsView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "forecast_board" && <ForecastBoardView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "fleet_health" && <FleetHealthView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (
