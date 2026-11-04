@@ -297,6 +297,18 @@ vector_store:
   collection_prefix: "sede_electronica"
   top_k: 3
 
+ui_extras:
+  kind: case_tracker
+  form_tab_label: "Formulario"
+  tab_label: "Mis trámites"
+  title: "Tus trámites presentados"
+  empty_text: "Todavía no has presentado nada. El trámite aparece aquí en cuanto envías el formulario."
+  filed_label: "Presentado"
+  receipt_label: "Código de verificación"
+  open_pdf_label: "Copia en PDF"
+  details_label: "Datos presentados"
+  truncated_text: "Los trámites más antiguos no aparecen en esta lista."
+
 services:
   etl: etl-vectorize
   agent: form-agent

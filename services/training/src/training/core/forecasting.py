@@ -155,7 +155,7 @@ def features_for(ts: TimeSeriesConfig, series: Sequence[Series]) -> ForecastFeat
     numeric_static: list[str] = []
     for column in [*ts.series_id_columns, *ts.static_features]:
         values = [s.static[column] for s in series]
-        if column in ts.series_id_columns or not all(isinstance(v, int | float) for v in values):
+        if column in ts.series_id_columns or not all(isinstance(v, int | float | np.number) for v in values):
             categorical[column] = sorted({str(v) for v in values})
         else:
             numeric_static.append(column)
@@ -408,7 +408,9 @@ def train_forecast(
                 "history": s.y[-features.lookback() :],
                 "times": _iso(times),
                 "exogenous": exog,
-                "static": {k: (v if isinstance(v, int | float) else str(v)) for k, v in s.static.items()},
+                "static": {
+                    k: (float(v) if isinstance(v, int | float | np.number) else str(v)) for k, v in s.static.items()
+                },
                 "scale": scale,
             })
 

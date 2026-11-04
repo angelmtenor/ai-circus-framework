@@ -132,10 +132,23 @@ model:
   # random forest, so no simpler baseline candidate is evaluated against it.
   candidates: ["lightgbm"]
   accuracy_gain_threshold_for_complexity: 0.02
+  # Every plate scored by a model that never saw it: what the triage tab replays.
+  out_of_fold_scores: true
   explainability: shap
   target_label: "Defect triage outcome"
   target_description: "Whether this plate's scanned defect needs a human inspector's manual review."
   target_value_labels: {"0": "Recognized defect signature", "1": "Needs manual review"}
+
+ui_extras:
+  kind: row_triage
+  tab_label: "Inspection triage"
+  title: "Which plates does an inspector need to see?"
+  subtitle: "Plates come off the line and the model routes each one. Move the threshold: fewer plates for the inspector means more unusual defects passed automatically."
+  item_noun: plate
+  reviewer_noun: inspector
+  auto_lane_label: "Auto-classified"
+  review_lane_label: "Inspector review"
+  review_at: 0.3
 
 # Plain generic block, same consolidated services as churn/electric_motor — the
 # already-running etl-tabular/training/prediction/assistant instances auto-discover

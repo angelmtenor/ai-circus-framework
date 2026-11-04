@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { CopilotKit, useCopilotReadable } from "@copilotkit/react-core";
 import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { draftFormPdf, sampleUpload, submissionPdf, submitForm } from "./apiClient";
@@ -6,16 +6,19 @@ import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
 import { FormPanel } from "./FormPanel";
+import { Icon } from "./Icon";
 import { OfficialFormSheet } from "./OfficialFormSheet";
 import { useConversation } from "./useConversation";
 import { useFormAssistActions, type UpdateFormFieldsArgs } from "./formAssistUi";
 import { selectedVariant, validateForm } from "./formValidation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
-type PdfPreview = { url: string; filename: string; title: string };
+const CaseTrackerView = lazy(() => import("./CaseTrackerView").then((m) => ({ default: m.CaseTrackerView })));
+
+export type PdfPreview = { url: string; filename: string; title: string };
 
 /** A generated PDF shown in-app (the browser's own viewer) with a download link. */
-function PdfPreviewOverlay({ preview, onClose }: { preview: PdfPreview; onClose: () => void }) {
+export function PdfPreviewOverlay({ preview, onClose }: { preview: PdfPreview; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -53,6 +56,33 @@ function PdfPreviewOverlay({ preview, onClose }: { preview: PdfPreview; onClose:
  * afterthought.
  */
 export function AssistedFormView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+  const extras = scenario.ui_extras?.kind === "case_tracker" ? scenario.ui_extras : null;
+  const [tab, setTab] = useState<"form" | "cases">("form");
+  if (!extras) return <FormWorkspace scenario={scenario} accessToken={accessToken} />;
+  return (
+    <div className="workspace">
+      <div className="workspace-tabs">
+        <button className={tab === "form" ? "active" : ""} onClick={() => setTab("form")}>
+          <Icon name="book" /> {extras.form_tab_label}
+        </button>
+        <button className={tab === "cases" ? "active" : ""} onClick={() => setTab("cases")}>
+          <Icon name="desk" /> {extras.tab_label}
+        </button>
+      </div>
+      {/* Kept mounted: a half-filled form and its conversation survive a look at the tray. */}
+      <div hidden={tab !== "form"}>
+        <FormWorkspace scenario={scenario} accessToken={accessToken} />
+      </div>
+      {tab === "cases" && (
+        <Suspense fallback={<div className="app-loading">Loading…</div>}>
+          <CaseTrackerView scenario={scenario} extras={extras} accessToken={accessToken} />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function FormWorkspace({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const conversation = useConversation(config.formAgentUrl, scenario.slug, accessToken);
   const agent = useScenarioAgent(config.formAgentUrl, scenario.slug, conversation.conversationId, accessToken);
   // See TabularView.tsx's identical note: must be memoized, or every re-render
