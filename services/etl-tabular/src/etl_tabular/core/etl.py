@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from ai_circus_shared.business_rules import passes
 from ai_circus_shared.network_graph import parse_graph, restrict_to_rows
-from ai_circus_shared.scenario_schema import TabularDataset
+from ai_circus_shared.scenario_schema import TabularDataset, TimeSeriesConfig
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import GRAPH_KEY, MAX_DATASET_ROWS, NORMALIZED_DATASET_KEY
 
@@ -129,6 +129,71 @@ def clean(df: pd.DataFrame, dataset: TabularDataset) -> pd.DataFrame:
     return df
 
 
+def clean_series(df: pd.DataFrame, dataset: TabularDataset, time_series: TimeSeriesConfig) -> pd.DataFrame:
+    """The forecast counterpart of `clean()` (docs/adr/0016-time-series-forecasting.md).
+
+    A series cannot be deduped, row-sampled or `dropna()`-ed like independent records: a
+    dropped hour is a hole every lag after it reads wrong. So this one fails loudly instead —
+    on an unparseable time, a repeated (series, time), a missing target or a gap against the
+    declared frequency — and only forward-fills missing exogenous/static values within a
+    series. Rows come out sorted by series then time; the time column stays where the raw
+    file had it (the index when it is `index_col`, else a column). Over the row cap, the most
+    recent timestamps are kept (never an evenly-spaced sample, which would break the spacing).
+
+    Raises:
+        ValueError: the raw data is not a regular series at `time_series.frequency`.
+    """
+    time_column, ids = time_series.time_column, time_series.series_id_columns
+    frame = df.reset_index(drop=df.index.name is None)
+    columns = [*dict.fromkeys([time_column, *ids, *dataset.feature_columns, dataset.target])]
+    frame = frame.loc[:, columns].copy()
+    frame[time_column] = pd.to_datetime(frame[time_column], errors="coerce")
+    if frame[time_column].isna().any():
+        raise ValueError(f"{int(frame[time_column].isna().sum())} rows have an unparseable {time_column!r}.")
+    if frame[dataset.target].isna().any():
+        raise ValueError(f"{int(frame[dataset.target].isna().sum())} rows have no {dataset.target!r} value.")
+    key = [*ids, time_column]
+    repeated = int(frame.duplicated(subset=key).sum())
+    if repeated:
+        raise ValueError(f"{repeated} rows repeat a (series, {time_column}) pair.")
+    frame = frame.sort_values(key, kind="stable").reset_index(drop=True)
+
+    groups = frame.groupby(ids, observed=True, sort=False) if ids else [((), frame)]
+    for name, series in groups:
+        expected = pd.date_range(series[time_column].iloc[0], series[time_column].iloc[-1], freq=time_series.frequency)
+        if len(expected) != len(series) or not (expected == pd.DatetimeIndex(series[time_column])).all():
+            missing = len(expected.difference(pd.DatetimeIndex(series[time_column])))
+            raise ValueError(
+                f"series {name or '(single)'} is not regular at frequency {time_series.frequency!r}: "
+                f"{missing} timestamps missing, {len(series)} rows for {len(expected)} expected."
+            )
+    filled = [*time_series.static_features, *time_series.exogenous_features]
+    if filled:
+        frame[filled] = frame.groupby(ids, observed=True)[filled].ffill() if ids else frame[filled].ffill()
+        if frame[filled].isna().any().any():
+            raise ValueError("an exogenous or static feature is missing at the start of a series.")
+
+    if len(frame) > MAX_DATASET_ROWS:
+        times = frame[time_column].drop_duplicates().sort_values()
+        per_time = len(frame) / len(times)
+        cutoff = times.iloc[-max(1, int(MAX_DATASET_ROWS // per_time))]
+        frame = frame[frame[time_column] >= cutoff].reset_index(drop=True)
+        logger.info("Kept the most recent {} rows (from {}) under the row cap", len(frame), cutoff)
+
+    for column in [*ids, *time_series.static_features]:
+        if not pd.api.types.is_numeric_dtype(frame[column]) or pd.api.types.is_bool_dtype(frame[column]):
+            frame[column] = frame[column].astype(str).astype("category")
+    if dataset.index_col == time_column:
+        frame = frame.set_index(time_column)
+    logger.info(
+        "Cleaned series: {} rows, {} series at frequency {}",
+        len(frame),
+        frame.groupby(ids, observed=True).ngroups if ids else 1,
+        time_series.frequency,
+    )
+    return frame
+
+
 def save_normalized(store: ObjectStore, org_id: str, df: pd.DataFrame) -> str:
     """Write the cleaned DataFrame to SeaweedFS as parquet; return the object key."""
     buffer = io.BytesIO()
@@ -164,11 +229,19 @@ def process_graph(store: ObjectStore, org_id: str, dataset: TabularDataset, scen
     return key
 
 
-def run_etl(store: ObjectStore, org_id: str, dataset: TabularDataset, scenario_dir: Path) -> str:
-    """Run the full extract -> transform -> load pipeline; return the output object key."""
+def run_etl(
+    store: ObjectStore,
+    org_id: str,
+    dataset: TabularDataset,
+    scenario_dir: Path,
+    time_series: TimeSeriesConfig | None = None,
+) -> str:
+    """Run the full extract -> transform -> load pipeline; return the output object key.
+    With `time_series` (a forecast scenario) the transform is `clean_series()`.
+    """
     ensure_raw_dataset(store, org_id, dataset, scenario_dir)
     df = load_raw(store, org_id, dataset)
-    df = clean(df, dataset)
+    df = clean(df, dataset) if time_series is None else clean_series(df, dataset, time_series)
     key = save_normalized(store, org_id, df)
     if dataset.graph is not None:
         process_graph(store, org_id, dataset, scenario_dir, df.index)

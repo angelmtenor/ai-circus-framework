@@ -27,6 +27,8 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
     scenarios/<slug>/scenario.yaml) — it supplements, not replaces, the real
     feature-list/accuracy grounding already available from the trained model.
     """
+    if metadata["task_type"] == "forecast":
+        return _forecast_system_prompt(definition, metadata)
     feature_columns = ", ".join(str(c) for c in metadata["feature_columns"])
     if metadata["task_type"] == "regression":
         score_phrase = f"test R² of {float(metadata['test_score']):.3f}"
@@ -88,6 +90,40 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
         "Always pass x_label and y_label describing what each axis represents (include units when relevant, "
         "e.g. 'Balance ($)') — never omit them or leave a chart unlabeled."
         f"{document_tool_instructions(definition)}"
+    )
+
+
+def _forecast_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]) -> str:
+    """A forecast scenario's prompt (docs/adr/0016-time-series-forecasting.md): the selected
+    forecaster and its backtest, what drives it, and the forecast tools instead of row scoring.
+    """
+    series = metadata.get("time_series") or {}
+    metrics: dict[str, float] = metadata.get("metrics") or {}
+    candidates = ", ".join(
+        f"{c['name']} (MASE {c['metrics']['mase']:.3f})" for c in metadata.get("candidate_scores") or []
+    )
+    importance = metadata.get("global_feature_importance") or []
+    drivers = ", ".join(f"{item['feature']} ({item['importance']:.2f})" for item in importance)
+    return (
+        f"You are a data analyst assistant for the '{definition.title}' scenario.\n"
+        f"{definition.chat.context.strip()}\n\n"
+        f"This is a forecast: '{metadata['target']}' is forecast {series.get('horizon')} steps ahead at frequency "
+        f"'{series.get('frequency')}' for {series.get('series', 1)} series. The selected forecaster is "
+        f"{metadata['model_name']}, chosen by a rolling-origin backtest on {series.get('backtest_windows')} past "
+        f"cut-offs: MASE {metrics.get('backtest_mase', float('nan')):.3f} (error scaled by the in-sample error of "
+        "repeating the previous season, so values above 1 are normal on unseen data: judge it against the "
+        f"seasonal_naive candidate's score; lower is better), "
+        f"sMAPE {metrics.get('backtest_smape', float('nan')):.1f}%. "
+        f"Candidates compared, simplest first: {candidates}; a more complex one is kept only when it lowers MASE "
+        f"by more than {metadata.get('accuracy_gain_threshold_for_complexity')}.\n"
+        + (f"What drives it, by mean |SHAP|: {drivers}.\n" if drivers else "")
+        + "\nUse get_forecast for the forecast itself (values, prediction bands, the assumed exogenous values and "
+        "the peak) and for what-if questions (pass shifts, e.g. a few degrees colder); use get_forecast_backtest "
+        "for any accuracy question. Always state the uncertainty: quote the prediction band, not only the point "
+        "value. Future exogenous values are assumptions (see the scenario context), not observations — say so when "
+        "an answer depends on them. Call a tool before describing numbers it could fetch.\n\n"
+        "If a render_chart or render_table tool is available and the question calls for a plot or a table, call it "
+        "with the real values from the tools above, with x_label and y_label (units included)."
     )
 
 

@@ -83,6 +83,85 @@ class _PredictArgs(BaseModel):
     )
 
 
+class _ForecastArgs(BaseModel):
+    series: str | None = Field(
+        None, max_length=200, description="The series label to forecast; omit for the first (or only) series."
+    )
+    shifts: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Optional what-if: exogenous feature name -> amount to add to its assumed values over the whole "
+            "forecast window (e.g. {'T_out': -5} for 5 degrees colder). Omit for the plain forecast."
+        ),
+    )
+
+
+def _compact_forecast(result: dict[str, Any]) -> dict[str, Any]:
+    """A forecast/what-if response cut to what the model needs to read: the recent history
+    tail, the forecast with its bands, the assumed exogenous values and the peak.
+    """
+    entries = [result["series"]] if isinstance(result.get("series"), dict) else result.get("series", [])[:3]
+    compact = []
+    for entry in entries:
+        history = entry["history"]
+        compact.append({
+            "series": entry["label"],
+            "recent_history": {"ds": history["ds"][-48:], "y": history["y"][-48:]},
+            "forecast": entry["forecast"],
+            "assumed_exogenous": entry["exogenous"],
+            "peak": entry["peak"],
+        })
+    header = {
+        k: result[k] for k in ("model_name", "frequency", "horizon", "levels", "what_if", "re_forecast") if k in result
+    }
+    return {**header, "series": compact}
+
+
+def build_forecast_tools(
+    client: PredictionServiceClient, *, scenario_slug: str, authorization: str | None
+) -> list[BaseTool]:
+    """A forecast scenario's tools (docs/adr/0016-time-series-forecasting.md): its forecast (or a
+    what-if of it) and the backtest. Scoped like build_prediction_tools'.
+    """
+
+    def _get_forecast(series: str | None = None, shifts: dict[str, float] | None = None) -> str:
+        try:
+            result = client.forecast(
+                scenario_slug=scenario_slug, authorization=authorization, series=series, shifts=shifts or {}
+            )
+        except httpx.HTTPError as exc:
+            return _error_result("fetch the forecast", exc)
+        return json.dumps(_compact_forecast(result))
+
+    def _get_forecast_backtest() -> str:
+        try:
+            result = client.backtest(scenario_slug=scenario_slug, authorization=authorization)
+        except httpx.HTTPError as exc:
+            return _error_result("fetch the backtest", exc)
+        return json.dumps(result)
+
+    return [
+        StructuredTool.from_function(
+            func=_get_forecast,
+            name="get_forecast",
+            description=(
+                "Fetch the forecast for the next horizon steps — point values with prediction bands, the "
+                "recent history before it, the exogenous values it assumes and the peak — or, with shifts, a "
+                "what-if re-forecast under changed exogenous values."
+            ),
+            args_schema=_ForecastArgs,
+        ),
+        StructuredTool.from_function(
+            func=_get_forecast_backtest,
+            name="get_forecast_backtest",
+            description=(
+                "Fetch how every candidate forecaster did on past cut-offs it never saw: MASE, sMAPE and RMSE "
+                "per candidate, and the actual vs forecast values per window — for any accuracy question."
+            ),
+        ),
+    ]
+
+
 def build_prediction_tools(
     client: PredictionServiceClient, *, scenario_slug: str, authorization: str | None
 ) -> list[BaseTool]:

@@ -101,6 +101,9 @@ class Scenario(Base):
     # Owner-declared AI-system metadata — see ai_circus_shared.governance.resolve_governance
     # (auto-added by ensure_added_columns, like tutorial above).
     governance: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml forecast only — see scenario_schema.TimeSeriesConfig (auto-added by
+    # ensure_added_columns, like tutorial above).
+    time_series: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

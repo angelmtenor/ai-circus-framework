@@ -170,7 +170,7 @@ def shap_importance(artifacts: ModelArtifacts, df: pd.DataFrame, sample_size: in
         x = x.iloc[idx]
 
     text_features = text_columns(artifacts)
-    x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(prepare_text(x, text_features))
+    x_transformed = artifacts.row_pipeline().named_steps["preprocessor"].transform(prepare_text(x, text_features))
     shap_values = shap_matrix(artifacts.explainer, x_transformed)
     if text_features:
         # Same definition as training's global_shap_importance for text models: the
@@ -237,7 +237,7 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
     predicted_class: np.ndarray | None = None
 
     if task_type == "regression":
-        predictions = np.asarray(artifacts.pipeline.predict(x_test), dtype=float)
+        predictions = np.asarray(artifacts.row_pipeline().predict(x_test), dtype=float)
         metrics = {
             "mae": round(float(mean_absolute_error(y_test, predictions)), 4),
             "rmse": round(float(root_mean_squared_error(y_test, predictions)), 4),
@@ -253,7 +253,7 @@ def evaluate(artifacts: ModelArtifacts, df: pd.DataFrame, limit: int) -> Evaluat
             lower = np.asarray(artifacts.pipeline_lower.predict(x_test), dtype=float)
             upper = np.asarray(artifacts.pipeline_upper.predict(x_test), dtype=float)
     else:
-        predictions = np.asarray(artifacts.pipeline.predict_proba(x_test))[:, 1]
+        predictions = np.asarray(artifacts.row_pipeline().predict_proba(x_test))[:, 1]
         predicted_class = (predictions >= 0.5).astype(int)
         metrics = {
             "accuracy": round(float(accuracy_score(y_test, predicted_class)), 4),

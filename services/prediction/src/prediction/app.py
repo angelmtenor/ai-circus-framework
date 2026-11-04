@@ -35,7 +35,7 @@ from prediction import get_env_config
 from prediction.api import router
 from prediction.core.drift_monitor import register_drift_metrics
 from prediction.core.logger import configure_logger, get_logger
-from prediction.core.model_cache import ModelCache, ModelUnavailableError
+from prediction.core.model_cache import ModelCache, ModelUnavailableError, NotARowModelError
 
 logger = get_logger(__name__)
 
@@ -101,6 +101,12 @@ def _model_unavailable_handler(request: Request, exc: ModelUnavailableError) -> 
     """
     logger.warning("{}: {}", request.url.path, exc)
     return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(NotARowModelError)
+def _not_a_row_model_handler(request: Request, exc: NotARowModelError) -> JSONResponse:
+    """A row-scoring route called for a forecast scenario: 409, with CORS headers (see above)."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 def main() -> None:

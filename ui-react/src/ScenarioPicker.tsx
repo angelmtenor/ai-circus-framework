@@ -45,7 +45,7 @@ const CATEGORIES: Category[] = [
   {
     key: "machine_learning",
     label: "Machine Learning",
-    match: (s) => s.kind === "tabular_ml" || s.kind === "tabular_ml_timeseries",
+    match: (s) => s.kind === "tabular_ml",
   },
   {
     key: "deep_learning",
@@ -94,8 +94,10 @@ function categoryFor(scenario: ScenarioSummary): Category {
 }
 
 function mlSubtype(scenario: ScenarioSummary): string | null {
-  if (scenario.kind === "tabular_ml_timeseries") return "Time Series";
-  if (scenario.kind === "tabular_ml") return scenario.task_type === "regression" ? "Regression" : "Classification";
+  if (scenario.kind === "tabular_ml") {
+    if (scenario.task_type === "forecast") return "Time Series";
+    return scenario.task_type === "regression" ? "Regression" : "Classification";
+  }
   if (scenario.kind === "deep_learning") return scenario.deep_learning?.modality === "image" ? "Computer Vision" : "NLP";
   if (scenario.kind === "data_product") return "Lakehouse · marts · governance";
   return null;
@@ -109,7 +111,7 @@ function mlSubtype(scenario: ScenarioSummary): string | null {
 type Technique = { key: string; label: string; match: (scenario: ScenarioSummary) => boolean };
 
 const GRAPH_EXTRAS = new Set(["network_explorer", "money_trail", "knowledge_graph"]);
-const isTabular = (s: ScenarioSummary) => s.kind === "tabular_ml" || s.kind === "tabular_ml_timeseries";
+const isTabular = (s: ScenarioSummary) => s.kind === "tabular_ml";
 const hasTextFeature = (s: ScenarioSummary) =>
   Object.values(s.feature_schema ?? {}).some((spec) => spec.type === "text");
 
@@ -133,7 +135,7 @@ const TECHNIQUES: Technique[] = [
   },
   { key: "graph", label: "Graphs & networks", match: (s) => GRAPH_EXTRAS.has(s.ui_extras?.kind ?? "") },
   { key: "data_platform", label: "Data engineering", match: (s) => s.kind === "data_product" },
-  { key: "time_series", label: "Time series", match: (s) => s.kind === "tabular_ml_timeseries" },
+  { key: "time_series", label: "Time series", match: (s) => s.task_type === "forecast" },
   { key: "custom_tab", label: "With a showcase tab", match: (s) => !!s.ui_extras || !!s.tutorial || s.kind === "data_product" },
 ];
 

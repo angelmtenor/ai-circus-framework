@@ -278,16 +278,99 @@ class TextChallenger(BaseModel):
     estimator: str = "lightgbm_small_data"  # a training candidate name
 
 
+class RollingFeature(BaseModel):
+    """A rolling statistic of the target's own recent history, computed by the forecaster (never leaks)."""
+
+    window: int = Field(gt=1, le=400)
+    stat: Literal["mean", "std", "min", "max"] = "mean"
+
+
+class ForecastBacktest(BaseModel):
+    """Rolling-origin cross-validation: `windows` successive cut-offs, each `step` steps apart
+    (None = the horizon), each scored on the `horizon` steps that follow it."""
+
+    windows: int = Field(default=3, ge=1, le=10)
+    step: int | None = Field(default=None, gt=0)
+
+
+DateFeature = Literal["hour", "dayofweek", "day", "month", "dayofyear", "quarter"]
+
+# How many steps make one season, per pandas offset alias (the prefix before any "-", e.g. "W-MON").
+_SEASON_LENGTHS = {"min": 60, "h": 24, "D": 7, "B": 5, "W": 52, "MS": 12, "ME": 12, "M": 12, "QS": 4, "QE": 4}
+
+
+class TimeSeriesConfig(BaseModel):
+    """A `model.task_type: forecast` scenario's series layout (see docs/adr/0016-time-series-forecasting.md).
+
+    The rows are observations of one or more series at a regular `frequency`: `time_column` orders
+    them, `series_id_columns` (empty = one series) split them. The forecaster builds its own inputs
+    from the target's history — `lags`, `rolling` statistics and `date_features` — so no hand-made
+    lag column can ever leak the future. `static_features` are constant per series;
+    `exogenous_features` change over time and must be known ahead: for the forecast window they are
+    taken from one season earlier (`future_exogenous: seasonal_naive`) or the last value, and the UI's
+    what-if levers shift them.
+    """
+
+    time_column: str
+    series_id_columns: list[str] = []
+    frequency: str = Field(pattern=r"^(\d+)?(min|h|D|B|W(-[A-Z]{3})?|MS|ME|M|QS|QE)$")
+    horizon: int = Field(gt=0, le=366)
+    # Steps per season for the seasonal baselines and the MASE scale — None = derived from frequency.
+    season_length: int | None = Field(default=None, gt=1)
+    lags: list[int] = Field(min_length=1)
+    date_features: list[DateFeature] = []
+    rolling: list[RollingFeature] = []
+    static_features: list[str] = []
+    exogenous_features: list[str] = []
+    future_exogenous: Literal["seasonal_naive", "last_value"] = "seasonal_naive"
+    backtest: ForecastBacktest = ForecastBacktest()
+    prediction_intervals: list[int] = [80, 95]
+    # The target's physical minimum (0 for energy or sales): forecasts and bands never go below it.
+    target_min: float | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> TimeSeriesConfig:
+        if any(lag <= 0 for lag in self.lags) or len(set(self.lags)) != len(self.lags):
+            raise ValueError("time_series.lags must be distinct positive integers.")
+        if any(not 50 <= level <= 99 for level in self.prediction_intervals):
+            raise ValueError("time_series.prediction_intervals must be levels between 50 and 99.")
+        groups = [self.series_id_columns, self.static_features, self.exogenous_features]
+        named = [c for group in groups for c in group]
+        if len(named) != len(set(named)) or self.time_column in named:
+            raise ValueError("time_series columns must be distinct (time, series ids, static, exogenous).")
+        if self.future_exogenous == "seasonal_naive" and self.exogenous_features and self.resolved_season_length() < 2:
+            raise ValueError("time_series.future_exogenous: seasonal_naive needs a season_length.")
+        return self
+
+    def resolved_season_length(self) -> int:
+        """`season_length`, else the usual one for `frequency` (24 for hourly, 7 for daily, 52 for weekly, …)."""
+        if self.season_length is not None:
+            return self.season_length
+        unit = self.frequency.lstrip("0123456789").split("-")[0]
+        return _SEASON_LENGTHS.get(unit, 1)
+
+
+# The forecast candidates training knows (training/core/forecasting.py), simplest first — the Green
+# Code rule keeps the simplest whose MASE is within accuracy_gain_threshold_for_complexity of the best.
+# `lightgbm_lags`: LightGBM on the lags/rolling/calendar/exogenous features of ai_circus_shared.forecasting,
+# forecast recursively.
+FORECAST_CANDIDATES = ("seasonal_naive", "auto_ets", "lightgbm_lags")
+
+
 class TabularModel(BaseModel):
     """Model-selection config for a `tabular_ml` scenario (Green Code policy)."""
 
-    task_type: Literal["classification", "regression"]
+    # `forecast` = a time-series model over `time_series` (see TimeSeriesConfig) instead of one
+    # prediction per independent row.
+    task_type: Literal["classification", "regression", "forecast"]
     candidates: list[str]
     accuracy_gain_threshold_for_complexity: float
     # What the Green Code comparison ranks candidates by — None = the task's default
     # (accuracy for classification, R² for regression). `roc_auc` ranks a classifier
     # by how well it *orders* risk, independent of any 0.5 threshold.
-    selection_metric: Literal["accuracy", "roc_auc", "r2"] | None = None
+    # Forecast: `mase` (default — error relative to a seasonal naive forecast, comparable across
+    # series), `smape` or `rmse`, all lower-is-better.
+    selection_metric: Literal["accuracy", "roc_auc", "r2", "mase", "smape", "rmse"] | None = None
     # 0 = score each candidate once on the 20% hold-out (fast; the default). >= 2 =
     # stratified k-fold cross-validation on the 80% training split instead — a far
     # less noisy comparison on small datasets, where one hold-out of a few hundred
@@ -328,16 +411,38 @@ class TabularModel(BaseModel):
             raise ValueError("model.decision_policy is only available for classification.")
         if self.out_of_fold_scores and self.task_type != "classification":
             raise ValueError("model.out_of_fold_scores is only available for classification.")
-        allowed = {"classification": {"accuracy", "roc_auc"}, "regression": {"r2"}}[self.task_type]
+        allowed = {
+            "classification": {"accuracy", "roc_auc"},
+            "regression": {"r2"},
+            "forecast": {"mase", "smape", "rmse"},
+        }[self.task_type]
         if self.selection_metric is not None and self.selection_metric not in allowed:
             raise ValueError(f"model.selection_metric {self.selection_metric!r} is not valid for {self.task_type}.")
+        if self.task_type == "forecast":
+            unknown = sorted(set(self.candidates) - set(FORECAST_CANDIDATES))
+            if unknown or not self.candidates:
+                raise ValueError(
+                    f"forecast model.candidates must be among {list(FORECAST_CANDIDATES)} (got {unknown})."
+                )
+            if self.text_challenger is not None:
+                raise ValueError("model.text_challenger is not available for forecast.")
+        elif set(self.candidates) & set(FORECAST_CANDIDATES):
+            raise ValueError("forecast candidates need model.task_type: forecast.")
         return self
 
 
 # Tools a tabular_ml assistant already has (its prediction tools and ui-react's
 # generative-UI ones) — a scenario's `documents.tool.name` must not shadow any of them.
 TABULAR_ASSISTANT_TOOL_NAMES = frozenset(
-    {"get_dataset_sample", "get_predictions_vs_actuals", "predict_records", "render_chart", "render_table"}
+    {
+        "get_dataset_sample",
+        "get_predictions_vs_actuals",
+        "predict_records",
+        "render_chart",
+        "render_table",
+        "get_forecast",
+        "get_forecast_backtest",
+    }
 )
 
 
@@ -1142,8 +1247,40 @@ class CaseDeskExtra(BaseModel):
     note: str | None = None  # e.g. "Synthetic data — proposals only, a person decides."
 
 
+class ForecastLever(BaseModel):
+    """A what-if slider on the forecast board: shifts one exogenous feature over the whole forecast
+    window by an amount in [min_shift, max_shift] (e.g. "outdoor temperature -8 to +8 °C")."""
+
+    feature: str
+    label: str
+    min_shift: float
+    max_shift: float
+    step: float = Field(default=1.0, gt=0)
+    unit: str = ""
+
+    @model_validator(mode="after")
+    def _range(self) -> ForecastLever:
+        if not self.min_shift < 0 < self.max_shift:
+            raise ValueError(f"forecast lever {self.feature!r}: min_shift < 0 < max_shift.")
+        return self
+
+
+class ForecastBoardExtra(BaseModel):
+    """`forecast` scenarios only — the forecast board tab (ForecastBoardView.tsx): every series as a
+    sparkline tile (one series = a single focus view), the focus series' history + forecast with its
+    prediction bands and the last backtest, the peak ahead, and what-if `levers` re-forecasting live."""
+
+    kind: Literal["forecast_board"]
+    tab_label: str = "Forecast board"
+    title: str
+    subtitle: str | None = None
+    levers: list[ForecastLever] = []
+    peak_label: str = "Peak"  # what the forecast's maximum is called, e.g. "Peak hour"
+
+
 UiExtras = Annotated[
     RegionMapExtra
+    | ForecastBoardExtra
     | LivePlantExtra
     | ProcessOptimizerExtra
     | VoyageExplorerExtra
@@ -1173,7 +1310,10 @@ _TABULAR_UI_EXTRAS = (
     ShipmentGlobeExtra,
     MoneyTrailExtra,
     CaseDeskExtra,
+    ForecastBoardExtra,
 )
+# A forecast scenario has no single-row model to drive the row-based tabs.
+_FORECAST_UI_EXTRAS = (ForecastBoardExtra, RegionMapExtra)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
 _RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
 
@@ -1892,6 +2032,8 @@ class ScenarioDefinition(BaseModel):
 
     dataset: TabularDataset | None = None
     model: TabularModel | None = None
+    # tabular_ml with model.task_type: forecast only — the series layout (see TimeSeriesConfig).
+    time_series: TimeSeriesConfig | None = None
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
@@ -1939,6 +2081,44 @@ class ScenarioDefinition(BaseModel):
             self.documents is None or self.documents.knowledge_graph is None
         ):
             raise ValueError("ui_extras.knowledge_graph requires documents.knowledge_graph.")
+        return self
+
+    @model_validator(mode="after")
+    def _time_series_matches_forecast(self) -> ScenarioDefinition:
+        """`time_series` is required for (and only for) `model.task_type: forecast`; its columns are
+        exactly the scenario's features (series ids + static + exogenous) and the time column is
+        neither a feature nor the target; nothing that scores independent rows applies to it.
+        """
+        forecast = self.model is not None and self.model.task_type == "forecast"
+        if forecast != (self.time_series is not None):
+            raise ValueError("`time_series` is required for (and only for) model.task_type: forecast.")
+        if isinstance(self.ui_extras, ForecastBoardExtra) and not forecast:
+            raise ValueError("ui_extras.forecast_board requires model.task_type: forecast.")
+        if not forecast or self.dataset is None or self.time_series is None:
+            return self
+        ts, ds = self.time_series, self.dataset
+        expected = [*ts.series_id_columns, *ts.static_features, *ts.exogenous_features]
+        if set(ds.feature_columns) != set(expected):
+            raise ValueError(
+                "a forecast scenario's dataset.feature_columns must be exactly time_series' series ids + "
+                f"static + exogenous features (missing {sorted(set(expected) - set(ds.feature_columns))}, "
+                f"extra {sorted(set(ds.feature_columns) - set(expected))})."
+            )
+        if ts.time_column in {ds.target, *ds.feature_columns}:
+            raise ValueError("time_series.time_column must be neither the target nor a feature.")
+        not_numeric = [c for c in ts.exogenous_features if ds.feature_schema[c].type != "numeric"]
+        if not_numeric:
+            raise ValueError(f"time_series.exogenous_features must be numeric: {not_numeric}.")
+        if ds.business_rules is not None or ds.graph is not None or ds.text_columns():
+            raise ValueError("business_rules, graph and free-text features are not available for forecast.")
+        if self.ui_extras is not None and not isinstance(self.ui_extras, _FORECAST_UI_EXTRAS):
+            raise ValueError(f"ui_extras kind {self.ui_extras.kind!r} is not available for a forecast scenario.")
+        if isinstance(self.ui_extras, ForecastBoardExtra):
+            unknown = sorted({lever.feature for lever in self.ui_extras.levers} - set(ts.exogenous_features))
+            if unknown:
+                raise ValueError(f"ui_extras.forecast_board levers must shift exogenous features, not {unknown}.")
+        if self.tutorial is not None:
+            raise ValueError("tutorial is not available for a forecast scenario yet.")
         return self
 
     @model_validator(mode="after")

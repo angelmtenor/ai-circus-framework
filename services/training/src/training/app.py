@@ -24,6 +24,7 @@ import joblib
 import pandas as pd
 from ai_circus_shared.business_rules import passes
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
+from ai_circus_shared.forecasting import MODEL_BACKTEST_KEY, MODEL_FORECAST_KEY, MODEL_FORECASTER_KEY
 from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
@@ -48,6 +49,7 @@ from sklearn.model_selection import train_test_split
 
 from training import get_env_config
 from training.core.challenger import ChallengerResult, ChallengerUnavailableError, train_text_challenger
+from training.core.forecasting import split_series, train_forecast
 from training.core.governance_events import emit_model_trained
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
@@ -89,6 +91,9 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     )
 
     df = pd.read_parquet(io.BytesIO(store.get(config.ORG_ID, NORMALIZED_DATASET_KEY)))
+    if definition.model.task_type == "forecast":
+        _train_forecast(config, store, slug, definition, df)
+        return
     df, rules_excluded_rows = _drop_rule_stopped_rows(df, definition)
     x = df.loc[:, definition.dataset.feature_columns]
     y = df[definition.dataset.target]
@@ -299,6 +304,87 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     emit_model_trained(config, slug=slug, definition=definition, metadata=metadata, org_id=config.ORG_ID)
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
+
+
+def _train_forecast(
+    config: EnvConfig, store: ObjectStore, slug: str, definition: ScenarioDefinition, df: pd.DataFrame
+) -> None:
+    """A `model.task_type: forecast` scenario (docs/adr/0016-time-series-forecasting.md): backtest,
+    select, refit and forecast (training.core.forecasting), then write the forecast, the backtest,
+    the what-if forecaster (LightGBM only) and the metadata manifest — same checksums, signature,
+    MLflow mirror and governance event as the row models.
+    """
+    assert definition.dataset is not None and definition.model is not None and definition.time_series is not None
+    model, ts = definition.model, definition.time_series
+    selection_metric = model.selection_metric or "mase"
+    series = split_series(df, definition.dataset, ts)
+    run = train_forecast(model.candidates, ts, series, selection_metric, model.accuracy_gain_threshold_for_complexity)
+    logger.success("Selected forecaster: {!r} (backtest {})", run.selected.name, run.selected.metrics)
+
+    checksums: dict[str, str] = {}
+    documents = {"forecast": (MODEL_FORECAST_KEY, run.forecast), "backtest": (MODEL_BACKTEST_KEY, run.backtest)}
+    if run.forecaster is not None:
+        documents["forecaster"] = (MODEL_FORECASTER_KEY, run.forecaster)
+    for name, (key, document) in documents.items():
+        payload = json.dumps(document).encode()
+        store.put(config.ORG_ID, key, payload)
+        checksums[name] = artifact_checksum(payload)
+
+    metadata: dict[str, Any] = {
+        "scenario_slug": slug,
+        "model_name": run.selected.name,
+        "test_score": run.selected.test_score,  # backtest MASE: lower is better
+        "task_type": "forecast",
+        "candidates_evaluated": [c.name for c in run.candidates],
+        "selection_metric": selection_metric,
+        "cv_folds": None,
+        "accuracy_gain_threshold_for_complexity": model.accuracy_gain_threshold_for_complexity,
+        "candidate_scores": [
+            {"name": c.name, "selection_score": c.metrics[selection_metric], "metrics": c.metrics}
+            for c in run.candidates
+        ],
+        "metrics": {f"backtest_{name}": value for name, value in run.selected.metrics.items()},
+        "holdout_evaluation": None,
+        "rules_excluded_rows": 0,
+        "training_rows": run.training_rows,
+        "holdout_rows": 0,
+        "feature_columns": definition.dataset.feature_columns,
+        "global_feature_importance": run.feature_importance or [],
+        "text_columns": [],
+        "challenger": None,
+        "out_of_fold": None,
+        "target": definition.dataset.target,
+        "has_intervals": True,
+        "time_series": {
+            "frequency": ts.frequency,
+            "horizon": ts.horizon,
+            "season_length": ts.resolved_season_length(),
+            "series": len(series),
+            "backtest_windows": len(run.backtest["windows"]),
+            "prediction_intervals": ts.prediction_intervals,
+            "what_if": run.forecaster is not None,
+        },
+        # The what-if inputs are shifts of assumed exogenous values, not observations: no drift reference.
+        "drift_reference": None,
+        MODEL_CHECKSUMS_METADATA_FIELD: checksums,
+    }
+    signature = sign_checksums(checksums)
+    if signature is not None:
+        metadata[MODEL_SIGNATURE_METADATA_FIELD] = signature
+    store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
+
+    log_training_run(
+        config.MLFLOW_TRACKING_URI,
+        org_id=config.ORG_ID,
+        scenario_slug=slug,
+        candidates=run.candidates,
+        selected=run.selected,
+        metadata=metadata,
+        dataset_rows=len(df),
+        accuracy_gain_threshold=model.accuracy_gain_threshold_for_complexity,
+    )
+    emit_model_trained(config, slug=slug, definition=definition, metadata=metadata, org_id=config.ORG_ID)
+    logger.success("forecast training finished for scenario={} org={}", slug, config.ORG_ID)
 
 
 def _drop_rule_stopped_rows(df: pd.DataFrame, definition: ScenarioDefinition) -> tuple[pd.DataFrame, int]:

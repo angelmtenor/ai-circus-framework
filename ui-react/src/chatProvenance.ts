@@ -6,7 +6,8 @@ import type { DocumentTool } from "./apiClient";
  * that turn — never from what the model claims. Every backend tool is one source:
  * the scenario's documents (its `documents.tool`, or rag-agent/form-agent's retrieval),
  * the business rules and the model (`predict_records`, whose result carries `rules`
- * when the scenario has them), the model's evaluation, the dataset, or a chart/table
+ * when the scenario has them, or a forecast's `get_forecast`), the model's evaluation
+ * (`get_forecast_backtest` for a forecast), the dataset, or a chart/table
  * drawn in the chat. A reply that used no tool is labelled as such.
  */
 
@@ -143,7 +144,8 @@ function provenanceOf(
     } else if (name === "predict_records") {
       if (result.includes('"rules"')) keys.add("rules");
       keys.add("model");
-    } else if (name === "get_predictions_vs_actuals") keys.add("evaluation");
+    } else if (name === "get_forecast") keys.add("model");
+    else if (name === "get_predictions_vs_actuals" || name === "get_forecast_backtest") keys.add("evaluation");
     else if (METRIC_TOOLS.has(name)) keys.add("metrics");
     else if (name === "data_health") keys.add("health");
     else if (RECORD_TOOLS.has(name)) keys.add("data");
