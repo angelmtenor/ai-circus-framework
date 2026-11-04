@@ -255,6 +255,19 @@ export type RiskWatchlistExtra = {
   push_up: string;
   push_down: string;
 };
+// Mirrors scenario_schema.RowTriageExtra — see RowTriageView.tsx.
+export type RowTriageExtra = {
+  kind: "row_triage";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  item_noun: string;
+  reviewer_noun: string;
+  auto_lane_label: string;
+  review_lane_label: string;
+  review_at: number;
+  tick_seconds: number;
+};
 // Mirrors scenario_schema.FleetHealthExtra — see FleetHealthView.tsx.
 export type FleetHealthMeasure = {
   value: "score" | "residual";
@@ -486,7 +499,8 @@ export type UiExtras =
   | CameraWallExtra
   | KnowledgeGraphExtra
   | ForecastBoardExtra
-  | FleetHealthExtra;
+  | FleetHealthExtra
+  | RowTriageExtra;
 
 // Mirrors scenario_schema.ForecastBoardExtra: what-if levers shift one exogenous feature.
 export type ForecastLever = {

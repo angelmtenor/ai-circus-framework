@@ -1,0 +1,100 @@
+/* Tabular triage (RowTriageView.tsx) — theme tokens only; no animation at all. */
+
+.triage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.triage-head h2 {
+  margin: 0 0 2px;
+}
+
+.triage-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.triage-kpis,
+.triage-threshold,
+.triage-lanes,
+.triage-detail {
+  margin-bottom: 14px;
+}
+
+.triage-threshold label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.triage-threshold input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.triage-lanes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+}
+
+.triage-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.triage-lane-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.triage-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 1.2rem;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  color: var(--text);
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.triage-card:hover,
+.triage-card--on {
+  border-color: var(--accent-border);
+}
+
+.triage-card-id {
+  overflow: hidden;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.triage-card-score {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.triage-ok {
+  color: var(--green);
+}
+
+.triage-bad {
+  color: var(--red);
+}
