@@ -3,10 +3,11 @@ import { useCopilotReadable } from "@copilotkit/react-core";
 import { predict, type ScenarioSummary, type RegionMapExtra, type RegionMapLevel, type MapRegion } from "./apiClient";
 import { config } from "./config";
 import { useTheme } from "./useTheme";
-import { PlotlyChart } from "./PlotlyChart";
+import { GeoBubbleMap, type GeoFrame, type GeoMark } from "./GeoBubbleMap";
+import { sequentialColour, sequentialGradient } from "./geoMapFrame";
+import { surfaceMode } from "./riskPalette";
 import { BarList } from "./charts";
 import { initialRecord, featureLabel, mapContributions, FeatureInput, type Record_ } from "./predictUtils";
-import type { PlotlyDatum, PlotlyLayout } from "./plotly";
 
 type RegionResult = { region: MapRegion; prediction: number; contributions: Record<string, number> };
 
@@ -24,8 +25,7 @@ type RegionResult = { region: MapRegion; prediction: number; contributions: Reco
  * bubble's own pinned real values (`feature_overrides`) — a single batched /predict
  * call scores the active level's bubbles together, then renders as a Spain bubble
  * map (grouped, spatially) or a flat ranked table (non-grouped) of the same result.
- * Plotly's built-in `scattergeo` needs no GeoJSON file and no mapbox token — see
- * PlotlyChart.tsx.
+ * The map is GeoBubbleMap: plain SVG, framed on the active level's own regions.
  */
 export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const extras = scenario.ui_extras as RegionMapExtra;
@@ -135,83 +135,42 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
     [isRegression, scenario.target_units],
   );
 
-  const mapData: PlotlyDatum[] = useMemo(() => {
-    if (!results) {
-      return [
-        {
-          type: "scattergeo",
-          lat: activeLevel.regions.map((r) => r.lat),
-          lon: activeLevel.regions.map((r) => r.lon),
-          text: activeLevel.regions.map((r) => r.label),
-          mode: "markers",
-          marker: { size: 13, color: theme.categoryPalette[0], opacity: 0.75 },
-          hovertemplate: "%{text}<extra></extra>",
-        },
-      ];
+  // Framed on the ACTIVE level's own regions, not hardcoded to Iberia, so any future
+  // region_map scenario's geography frames correctly at any of its levels.
+  const frame = useMemo<GeoFrame>(() => ({ kind: "places", places: activeLevel.regions }), [activeLevel]);
+  const mode = surfaceMode(theme.cssVars["--bg"] ?? "#05070f");
+  const borderStrong = theme.cssVars["--border-strong"] ?? "#2c5a8a";
+  const accent = theme.cssVars["--accent"] ?? "#33c7ff";
+
+  const range = useMemo(() => {
+    const values = (results ?? []).map((r) => r.prediction);
+    return { lo: Math.min(...values), hi: Math.max(...values) };
+  }, [results]);
+
+  const marks = useMemo<GeoMark[]>(() => {
+    if (!results) return [];
+    const span = range.hi - range.lo || 1;
+    const colour = sequentialColour(mode);
+    const scaled = results.map((r) => ({ r, t: (r.prediction - range.lo) / span }));
+    // Biggest first, so a small area next to a big one stays visible and can be pointed at.
+    const dots = scaled
+      .sort((a, b) => b.t - a.t)
+      .map(({ r, t }): GeoMark => ({
+        id: r.region.key,
+        lat: r.region.lat,
+        lon: r.region.lon,
+        r: 5 + t * 13,
+        fill: colour(t),
+        fillOpacity: 0.9,
+        stroke: borderStrong,
+        strokeWidth: 1,
+      }));
+    if (selected) {
+      const t = (selected.prediction - range.lo) / span;
+      dots.push({ id: selected.region.key, lat: selected.region.lat, lon: selected.region.lon, r: 9 + t * 13, fill: "none", stroke: accent, strokeWidth: 2.5 });
     }
-    const values = results.map((r) => r.prediction);
-    const lo = Math.min(...values);
-    const hi = Math.max(...values);
-    const span = hi - lo || 1;
-    return [
-      {
-        type: "scattergeo",
-        lat: results.map((r) => r.region.lat),
-        lon: results.map((r) => r.region.lon),
-        text: results.map((r) => `${r.region.label}<br>${extras.value_label}: ${formatValue(r.prediction)}`),
-        mode: "markers",
-        marker: {
-          size: results.map((r) => 9 + ((r.prediction - lo) / span) * 26),
-          color: values,
-          colorscale: "YlOrRd",
-          showscale: true,
-          colorbar: { title: { text: extras.value_label }, thickness: 14 },
-          line: { color: theme.cssVars["--border-strong"] ?? "#2c5a8a", width: 1 },
-        },
-        hovertemplate: "%{text}<extra></extra>",
-      },
-    ];
-  }, [results, activeLevel, extras.value_label, theme.categoryPalette, theme.cssVars, formatValue]);
-
-  // Computed from the ACTIVE level's own regions (padded), not hardcoded to Iberia
-  // — so this same renderer frames correctly for any future region_map scenario's
-  // geography, at any of its levels. `scope: "world"` (not "europe") is required
-  // for this to actually work: Plotly's continent-scoped base maps clip to a fixed
-  // template extent regardless of lataxis/lonaxis, which silently drops any region
-  // outside that template's frame (confirmed empirically: Spain's Canary Islands,
-  // well outside mainland Europe's usual frame, disappeared entirely under
-  // scope: "europe").
-  const geoBounds = useMemo(() => {
-    const lats = activeLevel.regions.map((r) => r.lat);
-    const lons = activeLevel.regions.map((r) => r.lon);
-    const pad = 2.5;
-    return {
-      lat: [Math.min(...lats) - pad, Math.max(...lats) + pad] as [number, number],
-      lon: [Math.min(...lons) - pad, Math.max(...lons) + pad] as [number, number],
-    };
-  }, [activeLevel]);
-
-  const geoLayout: PlotlyLayout = {
-    paper_bgcolor: "rgba(0,0,0,0)",
-    geo: {
-      scope: "world",
-      resolution: 50,
-      lataxis: { range: geoBounds.lat },
-      lonaxis: { range: geoBounds.lon },
-      showland: true,
-      landcolor: theme.cssVars["--panel-2"] ?? "#101b36",
-      showocean: true,
-      oceancolor: theme.cssVars["--bg"] ?? "#05070f",
-      showlakes: false,
-      showcountries: true,
-      countrycolor: theme.cssVars["--border-strong"] ?? "#2c5a8a",
-      showcoastlines: true,
-      coastlinecolor: theme.cssVars["--border-strong"] ?? "#2c5a8a",
-      bgcolor: "rgba(0,0,0,0)",
-      framecolor: theme.cssVars["--border"] ?? "#1c3a5e",
-    },
-    margin: { t: 10, r: 10, b: 10, l: 10 },
-  };
+    return dots;
+  }, [results, range, mode, borderStrong, accent, selected]);
 
   const contributionItems = selected
     ? mapContributions(buildRecord(selected.region), selected.contributions).map((item) => ({
@@ -284,15 +243,29 @@ export function RegionMapView({ scenario, accessToken }: { scenario: ScenarioSum
 
           {view === "map" ? (
             <div className="region-map-body">
-              <PlotlyChart
-                data={mapData}
-                layout={geoLayout}
+              <GeoBubbleMap
+                marks={marks}
+                frame={frame}
+                width={760}
                 height={460}
-                onPointClick={(pointIndex) => {
-                  const row = results[pointIndex];
+                label={`${extras.value_label} for ${results.length} ${activeLevel.label.toLowerCase()} areas on a map. The ranked table lists the same values.`}
+                tip={(id) => {
+                  const row = results.find((r) => r.region.key === id);
+                  return row ? { title: row.region.label, lines: [`${extras.value_label}: ${formatValue(row.prediction)}`] } : null;
+                }}
+                onSelect={(id) => {
+                  const row = results.find((r) => r.region.key === id);
                   if (row) setSelected(row);
                 }}
-              />
+              >
+                <div className="geo-map__legend">
+                  <span>{extras.value_label}</span>
+                  <span>{formatValue(range.lo)}</span>
+                  <span className="geo-map__ramp" style={{ background: sequentialGradient(mode) }} />
+                  <span>{formatValue(range.hi)}</span>
+                  <span>Bigger and {mode === "dark" ? "brighter" : "darker"} means higher.</span>
+                </div>
+              </GeoBubbleMap>
               <div className="region-map-detail">{detailPanel}</div>
             </div>
           ) : (

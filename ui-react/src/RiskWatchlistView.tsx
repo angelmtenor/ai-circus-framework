@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import { datasetSample, modelCard, predict, type RiskWatchlistExtra, type ScenarioSummary } from "./apiClient";
 import { config } from "./config";
+import { GeoBubbleMap, type GeoFrame, type GeoMark } from "./GeoBubbleMap";
 import { PlotlyChart } from "./PlotlyChart";
 import type { PlotlyDatum, PlotlyLayout } from "./plotly";
 import { explainByFeature, featureLabel, type Record_ } from "./predictUtils";
@@ -252,18 +253,16 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
   );
 
   const traces = useCallback(
-    (geo: boolean): PlotlyDatum[] => {
-      const type = geo ? "scattergeo" : "scattergl";
+    (): PlotlyDatum[] => {
+      const type = "scattergl";
       const out: PlotlyDatum[] = extras.tiers.map((tier, t) => {
-        const members = visible.filter((e) => e.tier === t && (!geo || (e.lat !== null && Number.isFinite(e.lat))));
-        const coords = geo
-          ? { lat: members.map((e) => e.lat), lon: members.map((e) => e.lon) }
-          : { x: members.map((e) => e.x), y: members.map((e) => e.y) };
+        const members = visible.filter((e) => e.tier === t);
         return {
           type,
           mode: "markers",
           name: `${GLYPHS[t]} ${tier.label}`,
-          ...coords,
+          x: members.map((e) => e.x),
+          y: members.map((e) => e.y),
           customdata: members.map((e) => e.index),
           text: members.map(hover),
           hovertemplate: "%{text}<extra></extra>",
@@ -276,12 +275,13 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
         };
       });
       if (revealed) {
-        const failed = visible.filter((e) => e.actual === 1 && (!geo || (e.lat !== null && Number.isFinite(e.lat))));
+        const failed = visible.filter((e) => e.actual === 1);
         out.push({
           type,
           mode: "markers",
           name: `◯ ${extras.outcome_label}`,
-          ...(geo ? { lat: failed.map((e) => e.lat), lon: failed.map((e) => e.lon) } : { x: failed.map((e) => e.x), y: failed.map((e) => e.y) }),
+          x: failed.map((e) => e.x),
+          y: failed.map((e) => e.y),
           customdata: failed.map((e) => e.index),
           text: failed.map(hover),
           hovertemplate: "%{text}<extra></extra>",
@@ -294,7 +294,8 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
           mode: "markers",
           name: selected.name,
           showlegend: false,
-          ...(geo ? { lat: [selected.lat], lon: [selected.lon] } : { x: [selected.x], y: [selected.y] }),
+          x: [selected.x],
+          y: [selected.y],
           customdata: [selected.index],
           text: [hover(selected)],
           hovertemplate: "%{text}<extra></extra>",
@@ -314,28 +315,44 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
     [entities, select],
   );
 
-  const legend = { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { size: 11 }, bgcolor: "rgba(0,0,0,0)" };
-  const mapLayout: PlotlyLayout = {
-    paper_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 30, r: 0, b: 0, l: 0 },
-    showlegend: true,
-    legend,
-    geo: {
-      scope: extras.map?.scope ?? "world",
-      projection: extras.map?.scope === "usa" ? { type: "albers usa" } : undefined,
-      showland: true,
-      landcolor: theme.cssVars["--panel-2"] ?? "#101b36",
-      showlakes: true,
-      lakecolor: theme.cssVars["--panel"] ?? "#0b1224",
-      showsubunits: true,
-      subunitcolor: theme.cssVars["--border"] ?? "#1c3a5e",
-      showcountries: true,
-      countrycolor: theme.cssVars["--border-strong"] ?? "#2c5a8a",
-      showcoastlines: true,
-      coastlinecolor: theme.cssVars["--border-strong"] ?? "#2c5a8a",
-      bgcolor: "rgba(0,0,0,0)",
+  // ── the map: same tiers and rings as the landscape, drawn by GeoBubbleMap ───
+  const mapFrame = useMemo<GeoFrame>(
+    () =>
+      extras.map?.scope === "usa"
+        ? { kind: "usa" }
+        : { kind: "places", places: entities.filter((e) => e.lat !== null && e.lon !== null).map((e) => ({ lat: e.lat as number, lon: e.lon as number })) },
+    [extras.map?.scope, entities],
+  );
+  const accent = theme.cssVars["--accent"] ?? "#33c7ff";
+  const mapMarks = useMemo<GeoMark[]>(() => {
+    const located = visible.filter((e) => e.lat !== null && e.lon !== null);
+    const at = (e: Entity) => ({ id: String(e.index), lat: e.lat as number, lon: e.lon as number });
+    const radius = (e: Entity) => markerSize(e.size) / 2;
+    const marks: GeoMark[] = extras.tiers.flatMap((_, t) =>
+      located
+        .filter((e) => e.tier === t)
+        .map((e): GeoMark => ({ ...at(e), r: radius(e) * (t === 0 ? 0.7 : 1), fill: tierColor(t), fillOpacity: t === 0 ? 0.6 : 0.9, stroke: t === 0 ? undefined : bg, strokeWidth: t === 0 ? undefined : 1 })),
+    );
+    if (revealed) {
+      for (const e of located) if (e.actual === 1) marks.push({ ...at(e), r: radius(e) + 3, fill: "none", stroke: colors.ring, strokeWidth: 1.6 });
+    }
+    if (selected && selected.lat !== null && selected.lon !== null) {
+      marks.push({ ...at(selected), r: radius(selected) + 7, fill: "none", stroke: accent, strokeWidth: 2.5 });
+    }
+    return marks;
+  }, [visible, extras.tiers, tierColor, bg, revealed, colors.ring, selected, accent]);
+  const mapTip = useCallback(
+    (id: string) => {
+      const e = entities[Number(id)];
+      if (!e) return null;
+      const lines = [e.detail, `${GLYPHS[e.tier] ?? "●"} ${extras.tiers[e.tier].label} · ${pct(e.probability)}`].filter(Boolean);
+      if (revealed) lines.push(e.actual ? `${hit} ${extras.outcome_label}` : "· " + (scenario.target_value_labels?.["0"] ?? "No"));
+      return { title: e.name, lines };
     },
-  };
+    [entities, GLYPHS, extras.tiers, extras.outcome_label, revealed, hit, scenario.target_value_labels],
+  );
+
+  const legend = { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { size: 11 }, bgcolor: "rgba(0,0,0,0)" };
   const range = (feature: string) => {
     const sorted = peers.sorted[feature] ?? [];
     // Keep the low tail (the weakest entities are the story), trim only extreme outliers.
@@ -491,9 +508,33 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
       <div className="rw-main">
         <div className="rw-chart">
           {view === "map" && extras.map ? (
-            <PlotlyChart data={traces(true)} layout={mapLayout} height={560} onPointClick={onPoint} />
+            <GeoBubbleMap
+              marks={mapMarks}
+              frame={mapFrame}
+              tip={mapTip}
+              onSelect={(id) => {
+                const entity = entities[Number(id)];
+                if (entity) select(entity);
+              }}
+              label={`${noun}s on a map, coloured by tier. The ranked watchlist beside it lists the same ${noun}s.`}
+            >
+              <div className="geo-map__legend">
+                {extras.tiers.map((tier, t) => (
+                  <span key={tier.label}>
+                    <i style={{ background: tierColor(t) }} />
+                    {GLYPHS[t]} {tier.label}
+                  </span>
+                ))}
+                {revealed && (
+                  <span>
+                    <i style={{ background: "transparent", border: `1.6px solid ${colors.ring}` }} />
+                    {extras.outcome_label}
+                  </span>
+                )}
+              </div>
+            </GeoBubbleMap>
           ) : (
-            <PlotlyChart data={traces(false)} layout={landscapeLayout} height={560} onPointClick={onPoint} />
+            <PlotlyChart data={traces()} layout={landscapeLayout} height={560} onPointClick={onPoint} />
           )}
           <p className="rw-chart-note">
             {extras.size_feature && `Dot size: ${featureLabel(scenario, extras.size_feature).toLowerCase()} (log scale). `}Click a dot to inspect a {noun}.
