@@ -1081,6 +1081,14 @@ def test_repo_bank_early_warning_has_a_valid_risk_watchlist() -> None:
     assert bank.model is not None and bank.model.selection_metric == "roc_auc"
 
 
+def test_row_triage_needs_out_of_fold_scores() -> None:
+    steel = _repo_scenario("steel_defects")
+    assert steel.ui_extras.kind == "row_triage"  # type: ignore[union-attr]
+    model = steel.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="requires a classification model"):
+        _with(steel, model={**model, "out_of_fold_scores": False})
+
+
 def test_fleet_health_scenarios_are_valid_and_their_rules_hold() -> None:
     for slug in ("turbofan_rul", "electric_motor", "luznova_gas_anomaly", "luznova_ev_charging"):
         assert _repo_scenario(slug).ui_extras.kind == "fleet_health"  # type: ignore[union-attr]
@@ -1642,6 +1650,20 @@ def test_forecast_feature_columns_must_match_time_series() -> None:
         _with(energy, time_series={**ts, "exogenous_features": ["T_out", "RH_out"]}, ui_extras=None)
     with pytest.raises(ValidationError, match="neither the target nor a feature"):
         _with(energy, time_series={**ts, "time_column": "Appliances"})
+
+
+def test_a_forecast_scenario_cannot_take_a_tab_that_scores_rows() -> None:
+    """region_map batch-predicts through /predict, which answers 409 for a forecast."""
+    energy = _repo_scenario("energy_building")
+    region_map = _repo_scenario("luznova_regional_demand").ui_extras.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="not available for a forecast scenario"):
+        _with(energy, ui_extras=region_map)
+
+
+def test_regional_forecast_has_many_series_and_numeric_statics() -> None:
+    regional = _repo_scenario("luznova_regional_forecast")
+    assert regional.time_series is not None and regional.time_series.series_id_columns == ["province"]
+    assert regional.time_series.frequency == "2D" and regional.time_series.resolved_season_length() == 7
 
 
 def test_forecast_board_rules() -> None:

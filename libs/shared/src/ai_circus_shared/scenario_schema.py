@@ -727,6 +727,26 @@ class TriageBoardExtra(BaseModel):
     note: str | None = None  # shown under the title, e.g. "Illustrative routing only — not clinical guidance."
 
 
+class RowTriageExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary `tabular_ml` scenario whose positive class means "a person
+    must look at this": rows arrive one by one and go to the review lane or the automatic one by a
+    threshold the reader moves, with the real workload and misses. Scores and SHAP are the precomputed
+    `model.out_of_fold_scores`, so the numbers are honest and a tick calls nothing. See ui-react's
+    RowTriageView.tsx: DOM only, no frame loop, a capped number of cards per lane.
+    """
+
+    kind: Literal["row_triage"] = "row_triage"
+    tab_label: str = "Triage"
+    title: str
+    subtitle: str | None = None
+    item_noun: str = "item"  # singular, e.g. "plate"
+    reviewer_noun: str = "reviewer"  # e.g. "inspector"
+    auto_lane_label: str = "Automatic"
+    review_lane_label: str = "Human review"
+    review_at: float = Field(default=0.5, gt=0, lt=1)  # the starting threshold on P(needs review)
+    tick_seconds: int = Field(default=2, ge=1, le=60)
+
+
 class ReadingRoomExtra(BaseModel):
     """Opt-in 5th workspace tab for an image `deep_learning` scenario: a simulated
     reading-room worklist of held-out studies, prioritized by the model's probability
@@ -1346,6 +1366,7 @@ UiExtras = Annotated[
     | VoyageExplorerExtra
     | RiskWatchlistExtra
     | FleetHealthExtra
+    | RowTriageExtra
     | NetworkExplorerExtra
     | DispatchTowerExtra
     | ShipmentGlobeExtra
@@ -1362,6 +1383,7 @@ UiExtras = Annotated[
 # deep_learning scenario (or vice versa) would have none of the data it needs.
 _TABULAR_UI_EXTRAS = (
     FleetHealthExtra,
+    RowTriageExtra,
     RegionMapExtra,
     LivePlantExtra,
     ProcessOptimizerExtra,
@@ -1375,7 +1397,7 @@ _TABULAR_UI_EXTRAS = (
     ForecastBoardExtra,
 )
 # A forecast scenario has no single-row model to drive the row-based tabs.
-_FORECAST_UI_EXTRAS = (ForecastBoardExtra, RegionMapExtra)
+_FORECAST_UI_EXTRAS = (ForecastBoardExtra,)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
 _RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
 
@@ -2410,6 +2432,15 @@ class ScenarioDefinition(BaseModel):
         duplicated = sorted({f for f in pillar_features if pillar_features.count(f) > 1})
         if unknown or duplicated:
             raise ValueError(f"{where} pillars: unknown features {unknown}, features in two pillars {duplicated}.")
+
+    @model_validator(mode="after")
+    def _row_triage_has_honest_scores(self) -> ScenarioDefinition:
+        """`row_triage` shows real outcomes next to scores, and never calls the model per tick."""
+        if not isinstance(self.ui_extras, RowTriageExtra) or self.model is None:
+            return self
+        if self.model.task_type != "classification" or not self.model.out_of_fold_scores:
+            raise ValueError("ui_extras.row_triage requires a classification model with model.out_of_fold_scores.")
+        return self
 
     @model_validator(mode="after")
     def _fleet_health_reads_real_columns(self) -> ScenarioDefinition:
