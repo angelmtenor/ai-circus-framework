@@ -4,6 +4,28 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.42.0 — 2026-11-04
+
+### Added
+- **`luznova_regional_forecast`**: the first forecast with many series, 50 Spanish provinces 30 days ahead, from the same
+  synthetic data as `luznova_regional_demand`, which stays a regression because its map scores any area under any
+  conditions. The backtest selects exponential smoothing, so its temperature lever is off and says why.
+- **`row_triage` tab on `steel_defects`**: plates routed to an inspector or automatically by a threshold you move, with the
+  real workload and misses. It uses out-of-fold scores, so a tick calls no model.
+- **`case_tracker` tab on `service_request` and `sede_electronica`**: a user's own filed cases, with receipt, values and
+  filed PDF, through form-agent's new `GET /submissions/{slug}`, scoped by tenant and by user.
+- **`source_library` tab on `ai_circus_reference`**: the documents the assistant really searches, through rag-agent's new
+  `GET /documents/{slug}` and `/passages`, read from the tenant's own collection.
+
+### Changed
+- etl-vectorize stores each chunk's position. Re-run it (`etl-vectorize` Job) so Sources shows passages in order.
+- `steel_defects` trains out-of-fold scores: retrain it (`./scripts/k3s_ml_train.sh steel_defects`).
+
+### Fixed
+- A forecast scenario can no longer take `region_map`, which the schema wrongly allowed: the map scores through `/predict`,
+  which answers 409 for a forecast.
+- A numeric static feature of a forecast could arrive as a numpy number, be treated as a category and fail the artifact.
+
 ## v0.41.0 — 2026-11-04
 
 ### Added
