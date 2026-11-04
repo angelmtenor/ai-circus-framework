@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { geoBounds, geoConicConformal, geoContains, geoGraticule10, geoPath, type GeoPermissibleObjects } from "d3-geo";
+import { geoGraticule10, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import type { Feature, FeatureCollection } from "geojson";
 import countriesUrl from "world-atlas/countries-50m.json?url";
 import { changeLabel, formatMetric, type DashboardPanel, type MetricResult, type MetricSpec } from "./dataApi";
 import type { DataProductProps } from "./DataProductView";
+import { fitPlaces, landInFrame } from "./geoMapFrame";
 import { fetchJsonOnce } from "./logisticsViz";
 
 const W = 760;
@@ -101,49 +102,9 @@ export function DataStoreMap({
   const colourOf = (group: string | null) =>
     group ? (places.group_colours?.[group] ? `var(--${places.group_colours[group]})` : groupColour(group)) : "var(--dim)";
 
-  const projection = useMemo(() => {
-    const located = (rows ?? []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
-    const lons = located.length ? located.map((p) => p.lon) : [-9.4, 3.3];
-    const lats = located.length ? located.map((p) => p.lat) : [36, 43.8];
-    const centre = [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
-    // At least a country's span, so a role that sees one place still gets its surroundings.
-    const halfLon = Math.max(6, (Math.max(...lons) - Math.min(...lons)) / 2 + 1.1);
-    const halfLat = Math.max(4.2, (Math.max(...lats) - Math.min(...lats)) / 2 + 1.1);
-    // Every corner and every place: a conic projection bends the frame, so two corners are not enough.
-    const frame: GeoPermissibleObjects = {
-      type: "MultiPoint",
-      coordinates: [
-        [centre[0] - halfLon, centre[1] - halfLat],
-        [centre[0] + halfLon, centre[1] - halfLat],
-        [centre[0] - halfLon, centre[1] + halfLat],
-        [centre[0] + halfLon, centre[1] + halfLat],
-        ...located.map((p) => [p.lon, p.lat]),
-      ],
-    };
-    return geoConicConformal()
-      .parallels([centre[1] - 4, centre[1] + 4])
-      .rotate([-centre[0], 0])
-      .fitExtent(
-        [
-          [16, 16],
-          [W - 16, H - 16],
-        ],
-        frame,
-      );
-  }, [rows]);
+  const projection = useMemo(() => fitPlaces(rows ?? [], W, H), [rows]);
   const path = useMemo(() => geoPath(projection), [projection]);
-  // The countries inside the frame; those holding a place are drawn as the focus.
-  const land = useMemo(() => {
-    if (!world) return null;
-    const located = (rows ?? []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
-    const [[lon0, lat0], [lon1, lat1]] = [projection.invert!([0, H])!, projection.invert!([W, 0])!];
-    const visible = world.filter((f) => {
-      const [[x0, y0], [x1, y1]] = geoBounds(f);
-      return x1 >= lon0 - 5 && x0 <= lon1 + 5 && y1 >= lat0 - 5 && y0 <= lat1 + 5;
-    });
-    const focus = visible.filter((f) => located.some((p) => geoContains(f, [p.lon, p.lat])));
-    return { focus, context: visible.filter((f) => !focus.includes(f)) };
-  }, [world, rows, projection]);
+  const land = useMemo(() => (world ? landInFrame(world, rows ?? [], projection, W, H) : null), [world, rows, projection]);
   // Labels without what every place shares (e.g. the chain's name).
   const short = useMemo(() => {
     const labels = (rows ?? []).filter((p) => Number.isFinite(p.lat)).map((p) => p.label);

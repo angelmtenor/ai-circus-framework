@@ -4,6 +4,23 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.44.0 — 2026-11-04
+
+### Changed
+- **The region and watchlist maps are plain SVG** (`GeoBubbleMap`, `d3-geo`, no frame loop): opening them takes about 85% less
+  browser CPU, the 8,196-bank map is 20 DOM nodes instead of 8,299, and they no longer fetch map data from `cdn.plot.ly`.
+  Idle was already near zero. The regional map uses a one-hue colour scale, and pan and zoom have a reset button.
+  The watchlist's Risk landscape keeps Plotly's WebGL scatter.
+- **The data product dashboards no longer load Plotly** (`dashboardCharts.tsx`, `BarList`): opening the tab takes about half the
+  browser CPU and a fifth of the download. A panel declared `chart: pie` is drawn as ranked bars with each share beside them.
+- ADR 0014 records both sets of measurements. Plotly now serves only the chart builder, the chat's charts, large scatter
+  plots and 3-D.
+
+### Fixed
+- A dashboard's day, week or month still in progress is left out, with a note, instead of drawn as a sudden collapse.
+- The regional map no longer overflows the page on a phone. 39 banks the US map cannot place are now stated under it, and stay
+  in the ranked list.
+
 ## v0.43.0 — 2026-11-04
 
 ### Added
