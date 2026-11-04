@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import sys
 import types
+from dataclasses import dataclass
+from pathlib import Path
 
+import numpy as np
 import pytest
 from litellm.types.utils import EmbeddingResponse
 
@@ -31,10 +34,13 @@ class _FakeSentenceTransformer:
 
 
 @pytest.fixture(autouse=True)
-def fake_sentence_transformers_module(monkeypatch: pytest.MonkeyPatch) -> None:
+def fake_sentence_transformers_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Inject a fake sentence_transformers module and clear the model cache, so tests
     never depend on the real (heavy, torch-backed) package or leak state between runs.
+    An empty HF_HOME means no ONNX export is found, so the torch fallback is the default path.
     """
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.delenv("LOCAL_EMBED_ONNX_DIR", raising=False)
     fake_module = types.ModuleType("sentence_transformers")
     fake_module.SentenceTransformer = _FakeSentenceTransformer  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
@@ -134,6 +140,91 @@ def test_preload_loads_and_warms_the_default_model(monkeypatch: pytest.MonkeyPat
     # A later real call reuses the warm instance instead of loading again.
     loaded = custom_handler._loaded_models[custom_handler.DEFAULT_MODEL]
     assert custom_handler._get_model(custom_handler.DEFAULT_MODEL) is loaded
+
+
+@dataclass
+class _FakeEncoding:
+    ids: list[int]
+    attention_mask: list[int]
+
+
+class _FakeTokenizer:
+    """tokenizers.Tokenizer stand-in: one token per character, right-padded to the longest text."""
+
+    padding_id: int | None = None
+
+    @classmethod
+    def from_file(cls, path: str) -> _FakeTokenizer:
+        return cls()
+
+    def enable_truncation(self, max_length: int) -> None:
+        self.max_length = max_length
+
+    def token_to_id(self, token: str) -> int | None:
+        return 7
+
+    def enable_padding(self, pad_id: int, pad_token: str) -> None:
+        type(self).padding_id = pad_id
+
+    def encode_batch(self, texts: list[str]) -> list[_FakeEncoding]:
+        width = max(len(t) for t in texts)
+        return [
+            _FakeEncoding([1] * len(t) + [7] * (width - len(t)), [1] * len(t) + [0] * (width - len(t))) for t in texts
+        ]
+
+
+class _FakeSession:
+    """onnxruntime.InferenceSession stand-in: token state = [id, 1.0] for every token (padding included)."""
+
+    def __init__(self, path: str, sess_options: object = None, providers: list[str] | None = None) -> None:
+        self.path = path
+
+    def run(self, _outputs: object, feed: dict[str, np.ndarray]) -> list[np.ndarray]:
+        ids = feed["input_ids"].astype(np.float32)
+        return [np.stack([ids * 3.0, np.ones_like(ids) * 4.0], axis=-1)]
+
+
+def _install_onnx_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
+    ort = types.ModuleType("onnxruntime")
+    ort.InferenceSession = _FakeSession  # type: ignore[attr-defined]
+    ort.SessionOptions = types.SimpleNamespace  # type: ignore[attr-defined]
+    tokenizers = types.ModuleType("tokenizers")
+    tokenizers.Tokenizer = _FakeTokenizer  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "onnxruntime", ort)
+    monkeypatch.setitem(sys.modules, "tokenizers", tokenizers)
+
+
+def test_onnx_embedder_masks_padding_mean_pools_and_normalizes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Padding tokens (state [7*3, 4]) must not leak into the mean: the short text pools only its own tokens."""
+    _install_onnx_fakes(monkeypatch)
+    embedder = custom_handler.OnnxEmbedder(tmp_path)
+
+    short, long_ = embedder.encode(["ab", "abcd"], normalize_embeddings=True)
+
+    # Real tokens have state [3, 4] -> normalized [0.6, 0.8]; a leaked pad [21, 4] would change it.
+    assert np.allclose(short, [0.6, 0.8])
+    assert np.allclose(long_, [0.6, 0.8])
+    assert _FakeTokenizer.padding_id == 7
+    raw = embedder.encode(["ab"], normalize_embeddings=False)[0]
+    assert np.allclose(raw, [3.0, 4.0])
+
+
+def test_get_model_prefers_the_onnx_export_and_falls_back_to_torch_without_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_onnx_fakes(monkeypatch)
+    assert isinstance(custom_handler._get_model("org/model-x"), _FakeSentenceTransformer)  # no export yet
+
+    export = tmp_path / "hf" / "onnx" / "model-y"
+    export.mkdir(parents=True)
+    (export / "model.onnx").write_bytes(b"x")
+    (export / "tokenizer.json").write_text("{}")
+    assert isinstance(custom_handler._get_model("org/model-y"), custom_handler.OnnxEmbedder)
+
+
+def test_onnx_dir_honours_the_explicit_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("LOCAL_EMBED_ONNX_DIR", str(tmp_path / "elsewhere"))
+    assert custom_handler.onnx_dir("voyageai/voyage-4-nano") == tmp_path / "elsewhere"
 
 
 @pytest.mark.parametrize(
