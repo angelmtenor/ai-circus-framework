@@ -1081,6 +1081,21 @@ def test_repo_bank_early_warning_has_a_valid_risk_watchlist() -> None:
     assert bank.model is not None and bank.model.selection_metric == "roc_auc"
 
 
+def test_source_library_is_for_rag_scenarios_only() -> None:
+    assert _repo_scenario("ai_circus_reference").ui_extras.kind == "source_library"  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="is not available for kind"):
+        _with(_repo_scenario("service_request"), ui_extras={"kind": "source_library"})
+
+
+def test_case_tracker_is_for_assisted_forms_only() -> None:
+    form = _repo_scenario("service_request")
+    assert form.ui_extras.kind == "case_tracker"  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="is not available for kind"):
+        _with(_repo_scenario("churn"), ui_extras={"kind": "case_tracker"})
+    with pytest.raises(ValidationError, match="is not available for kind"):
+        _with(form, ui_extras=_repo_scenario("churn").ui_extras.model_dump())  # type: ignore[union-attr]
+
+
 def test_row_triage_needs_out_of_fold_scores() -> None:
     steel = _repo_scenario("steel_defects")
     assert steel.ui_extras.kind == "row_triage"  # type: ignore[union-attr]

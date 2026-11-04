@@ -727,6 +727,36 @@ class TriageBoardExtra(BaseModel):
     note: str | None = None  # shown under the title, e.g. "Illustrative routing only — not clinical guidance."
 
 
+class SourceLibraryExtra(BaseModel):
+    """Opt-in tab of a `conversational_rag` scenario: browse the documents its assistant really searches,
+    read back passage by passage from the tenant's collection (rag-agent's GET /documents/{slug}). See
+    ui-react's SourceLibraryView.tsx: DOM only, and a document's passages load when it is opened.
+    """
+
+    kind: Literal["source_library"] = "source_library"
+    chat_tab_label: str = "Chat"
+    tab_label: str = "Sources"
+    title: str = "What the assistant can read"
+
+
+class CaseTrackerExtra(BaseModel):
+    """Opt-in second tab of an `assisted_form` scenario: the signed-in user's own filed cases, with
+    their receipt, values and filed PDF (form-agent's GET /submissions/{slug}). See ui-react's
+    CaseTrackerView.tsx. There is no case workflow behind a filing, so it shows no invented status.
+    """
+
+    kind: Literal["case_tracker"] = "case_tracker"
+    form_tab_label: str = "Form"
+    tab_label: str = "My cases"
+    title: str = "Your filed cases"
+    empty_text: str = "Nothing filed yet. A case appears here once you submit the form."
+    filed_label: str = "Filed"
+    receipt_label: str = "Verification code"
+    open_pdf_label: str = "Filed PDF"
+    details_label: str = "Values"
+    truncated_text: str = "Older cases are not listed."
+
+
 class RowTriageExtra(BaseModel):
     """Opt-in 5th workspace tab for a binary `tabular_ml` scenario whose positive class means "a person
     must look at this": rows arrive one by one and go to the review lane or the automatic one by a
@@ -1367,6 +1397,8 @@ UiExtras = Annotated[
     | RiskWatchlistExtra
     | FleetHealthExtra
     | RowTriageExtra
+    | CaseTrackerExtra
+    | SourceLibraryExtra
     | NetworkExplorerExtra
     | DispatchTowerExtra
     | ShipmentGlobeExtra
@@ -1399,7 +1431,8 @@ _TABULAR_UI_EXTRAS = (
 # A forecast scenario has no single-row model to drive the row-based tabs.
 _FORECAST_UI_EXTRAS = (ForecastBoardExtra,)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
-_RAG_UI_EXTRAS = (KnowledgeGraphExtra,)
+_RAG_UI_EXTRAS = (KnowledgeGraphExtra, SourceLibraryExtra)
+_FORM_UI_EXTRAS = (CaseTrackerExtra,)
 
 
 class HuggingFaceFilesSource(BaseModel):
@@ -2156,9 +2189,11 @@ class ScenarioDefinition(BaseModel):
             return self
         if is_data:
             raise ValueError("ui_extras is not available for kind='data_product' (DataProductView is its renderer).")
-        allowed = {"deep_learning": _DEEP_LEARNING_UI_EXTRAS, "conversational_rag": _RAG_UI_EXTRAS}.get(
-            self.kind, _TABULAR_UI_EXTRAS
-        )
+        allowed = {
+            "deep_learning": _DEEP_LEARNING_UI_EXTRAS,
+            "conversational_rag": _RAG_UI_EXTRAS,
+            "assisted_form": _FORM_UI_EXTRAS,
+        }.get(self.kind, _TABULAR_UI_EXTRAS)
         if not isinstance(self.ui_extras, allowed):
             raise ValueError(f"ui_extras kind {self.ui_extras.kind!r} is not available for kind={self.kind!r}.")
         if isinstance(self.ui_extras, KnowledgeGraphExtra) and (
