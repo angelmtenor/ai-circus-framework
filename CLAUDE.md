@@ -33,6 +33,8 @@ make k3s-all                 # cluster -> build -> import -> secrets -> up -> wa
 make k3s-all-lite            # same, without mlflow/agui-voice (~1.2 GB less RAM); `make k3s-full` restores
 make k3s-pipeline            # REQUIRED on a fresh cluster: etl-tabular -> training Jobs, then restarts prediction
 make k3s-verify              # curl checks (admin + engineering-demo tenants); then a real browser check
+make k3s-idle-check IDLE_SCENARIOS="Title A,Title B"  # every tab of those scenarios, headless: fails if one still draws >2 fps or >15% CPU idle (a new tab must pass)
+make k3s-embed-onnx          # OPTIONAL, off by default: local-embed on ONNX Runtime int8 (pod RSS -25%, ~4x faster, but vectors differ: cosine >= 0.98 vs torch, so re-vectorize); EMBED_VARIANT=off reverts
 make k3s-pause / k3s-resume-lite
 make k3s-demo / k3s-demo-off  # live demo on a 16 GB laptop: scale observability + admin Platform to 0 (~2.5 GB); verify with VERIFY_SKIP="langfuse mlflow"
 make k3s-data-demo / k3s-data-demo-off  # multi-scenario demo incl. data core+analytics+bi; governance, MLflow, voice off (~8.8 of 11.7 GiB)
@@ -155,7 +157,8 @@ dependencies out of the entry chunk. Every animated canvas runs on `sceneLoop.ts
 `moving`/`ambient`/`idle`; ambient motion rests 15 s after the last input, nothing draws while
 hidden) — a new scene must not run its own endless `requestAnimationFrame`. `ScenarioPicker` grays
 out a scenario whose backend is down (`serviceAvailability.ts`: each service's `/healthz` through
-Traefik, one shared 30 s poll). Charts: ADR 0014 (Plotly only for the chart builder, chat charts, large scatters and 3-D; a
+Traefik, one shared 30 s poll), and one whose model is not trained for the caller's tenant (`prediction`'s org-scoped
+`GET /models/status`; "run `make k3s-pipeline`"). Charts: ADR 0014 (Plotly only for the chart builder, chat charts, large scatters and 3-D; a
 new small chart uses `charts.tsx` or `dashboardCharts.tsx`, a new map `GeoBubbleMap`/`d3-geo`). The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
