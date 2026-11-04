@@ -54,7 +54,8 @@ class Forecaster:
 
     def forecast(self, index: int, shifts: dict[str, float]) -> tuple[list[float], dict[str, Any]]:
         """Series `index` re-forecast with its assumed exogenous values moved by `shifts`;
-        returns the values and their bands."""
+        returns the values and their bands.
+        """
         stored = self.series[index]
         exogenous = shift_exogenous(stored["exogenous"], shifts)
 
@@ -87,7 +88,8 @@ def what_if(
     forecast: dict[str, Any], forecaster: Forecaster | None, label: str | None, shifts: dict[str, float]
 ) -> tuple[dict[str, Any], bool]:
     """The series' forecast under `shifts`, and whether the model could re-forecast it (False =
-    the selected model ignores exogenous features: the stored forecast, unchanged)."""
+    the selected model ignores exogenous features: the stored forecast, unchanged).
+    """
     index = series_index(forecast, label)
     entry = dict(forecast["series"][index])
     if forecaster is None or not any(shifts.values()):
