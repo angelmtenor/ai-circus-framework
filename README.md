@@ -528,6 +528,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **Steel Plate Defect Triage** (`steel_defects`) | `tabular_ml` — classification | Unrecognized optical-scan defect flag | UCI — Steel Plates Faults |
 | **Turbofan Engine Remaining Useful Life** (`turbofan_rul`) | `tabular_ml` — regression | Jet engine RUL (operating cycles) | NASA C-MAPSS FD001 |
 | **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression | Daily electricity demand per region (MWh) — with a live Spain regional map tab | Original content (synthetic, real Spain geography) |
+| **Regional Electricity Forecast** (`luznova_regional_forecast`) | `tabular_ml` — forecast | Electricity demand of each of 50 provinces, 30 days ahead (MWh) | Original content (synthetic, real Spain geography) |
 | **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
@@ -571,6 +572,8 @@ reuse it with a few lines of YAML and no UI code:
 | `ui_extras.kind` | Tab | Used by | What it does |
 |---|---|---|---|
 | `region_map` | Regional Map | `luznova_regional_demand`, `luznova_gas_prospects` | One shared context batch-predicted for every area of a level (Comunidad / Provincia, Municipio / census area), bubbles on a Spain map, SHAP per bubble |
+| `forecast_board` | Forecast board | `energy_building`, `luznova_regional_forecast` | History, forecast and prediction bands, with levers that shift the assumed future values and re-forecast |
+| `fleet_health` | Fleet health | `turbofan_rul`, `electric_motor`, `luznova_gas_anomaly`, `luznova_ev_charging` | Real rows replayed unit by unit and scored live; health is the model's score, or actual minus predicted |
 | `live_plant` | Live Plant | `mpm` | A simulated floor of machines that age every tick, scored by the unmodified `/predict/{slug}`; client-side-only Shut down / Replace |
 | `process_optimizer` | Optimizer | `cnc_surface_finish` | The *take-action* stage: ~200 candidate recipes scored and costed with a per-part economics model from the YAML, the best in-spec one recommended — then a live line where an auto-pilot re-optimizes as the tool wears, against a static baseline |
 | `voyage_explorer` | Voyage / The Office | `titanic` (`scene: ocean_liner`), `toxic_leadership` (`scene: office_tower`) | Every row placed in an illustrated scene, coloured by the model; reveal, surprises, cohort filters, SHAP waterfall, live what-if |

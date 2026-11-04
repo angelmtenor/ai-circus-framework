@@ -101,6 +101,8 @@ they cannot skew; no Nixtla libraries, they pin `pandas<3`); prediction serves `
 `ui_extras: fleet_health` (`FleetHealthView.tsx`, DOM and CSS only, no frame loop) replays real dataset rows unit by unit,
 scoring each unit's current row at every tick; health is the model's score, or actual minus predicted when the target is
 not itself a health measure (`health.value: residual`). Its thresholds should come from the real distribution.
+`ui_extras: row_triage` (`RowTriageView.tsx`) routes rows by a threshold over the precomputed out-of-fold scores, so a tick
+calls nothing. **A new tab must leave the page quiet**: prefer DOM/SVG over canvas, cap what it draws, and measure it idle.
 A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
 SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
 `explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a
