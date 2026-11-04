@@ -24,10 +24,11 @@ from pydantic import BaseModel, Field
 
 from prediction import get_env_config
 from prediction.core import dataset as dataset_core
+from prediction.core import forecast as forecast_core
 from prediction.core.drift_monitor import MONITOR as DRIFT_MONITOR
 from prediction.core.drift_monitor import SCORED_ROWS
 from prediction.core.identity import resolve_identity
-from prediction.core.model_cache import ModelCache
+from prediction.core.model_cache import ModelArtifacts, ModelCache
 from prediction.core.predict import (
     MAX_TEXT_EXPLAIN_RECORDS,
     ChallengerUnavailableError,
@@ -308,6 +309,110 @@ class DatasetExplainabilityOut(BaseModel):
     sample_size: int
 
 
+class ForecastBandOut(BaseModel):
+    """One prediction band (e.g. the 80% one) along the forecast window."""
+
+    lower: list[float]
+    upper: list[float]
+
+
+class ForecastValuesOut(BaseModel):
+    """A series' forecast: timestamps, point values, and bands keyed by level ("80", "95")."""
+
+    ds: list[str]
+    mean: list[float]
+    bands: dict[str, ForecastBandOut]
+
+
+class ForecastHistoryOut(BaseModel):
+    """The most recent observations before the forecast."""
+
+    ds: list[str]
+    y: list[float]
+
+
+class ForecastPeakOut(BaseModel):
+    """The forecast window's highest value."""
+
+    ds: str
+    value: float
+
+
+class ForecastSeriesOut(BaseModel):
+    """One series: its id values (empty for a single-series scenario), history, forecast, the
+    exogenous values the forecast assumes, and its peak.
+    """
+
+    key: dict[str, str]
+    label: str
+    history: ForecastHistoryOut
+    forecast: ForecastValuesOut
+    exogenous: list[dict[str, float]]
+    peak: ForecastPeakOut
+
+
+class ForecastOut(BaseModel):
+    """Response body for GET /forecast/{scenario_slug} (docs/adr/0016-time-series-forecasting.md)."""
+
+    model_name: str
+    frequency: str
+    horizon: int
+    levels: list[str]
+    # Whether POST /forecast/{slug}/what-if re-forecasts (the selected model reads exogenous features).
+    what_if: bool
+    series: list[ForecastSeriesOut]
+
+
+class WhatIfRequest(BaseModel):
+    """Shift the assumed exogenous values of one series (None = the first) over its forecast window."""
+
+    series: str | None = Field(default=None, max_length=200)
+    shifts: dict[str, float] = Field(default={}, max_length=64)
+
+
+class WhatIfOut(BaseModel):
+    """Response body for POST /forecast/{scenario_slug}/what-if. `re_forecast` False: the selected
+    model ignores exogenous features, so this is the stored forecast.
+    """
+
+    re_forecast: bool
+    series: ForecastSeriesOut
+
+
+class BacktestCandidateOut(BaseModel):
+    """One candidate's backtest metrics (mase, smape, rmse — lower is better)."""
+
+    name: str
+    metrics: dict[str, float]
+
+
+class BacktestSeriesOut(BaseModel):
+    """One series in one backtest window: actual values and every candidate's forecast."""
+
+    key: dict[str, str]
+    label: str
+    ds: list[str]
+    actual: list[float]
+    forecasts: dict[str, list[float]]
+
+
+class BacktestWindowOut(BaseModel):
+    """One rolling-origin window: trained on data up to `cutoff`, scored on the steps after."""
+
+    cutoff: str
+    series: list[BacktestSeriesOut]
+
+
+class BacktestOut(BaseModel):
+    """Response body for GET /model/{scenario_slug}/backtest."""
+
+    selection_metric: str
+    selected: str
+    horizon: int
+    candidates: list[BacktestCandidateOut]
+    windows: list[BacktestWindowOut]
+
+
 def _model_cache(request: Request) -> ModelCache:
     return request.app.state.model_cache
 
@@ -577,6 +682,87 @@ def model_card_endpoint(
         },
         challenger=ChallengerCardOut(**metadata["challenger"]) if metadata.get("challenger") else None,
     )
+
+
+def _forecast_artifacts(model_cache: ModelCache, org_id: str, definition: ScenarioDefinition) -> ModelArtifacts:
+    """The caller's forecast artifacts; 409 for a scenario that is not a forecast."""
+    artifacts = model_cache.get(org_id, definition.slug)
+    if artifacts.forecast is None or artifacts.backtest is None:
+        raise HTTPException(status_code=409, detail=f"Scenario {definition.slug!r} is not a forecast.")
+    return artifacts
+
+
+@router.get("/forecast/{scenario_slug}", response_model=ForecastOut)
+def forecast_endpoint(
+    series: str | None = Query(default=None, max_length=200),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> ForecastOut:
+    """The caller's forecast: every series (or the one labelled `series`), with history and bands."""
+    assert identity.org_id is not None
+    artifacts = _forecast_artifacts(model_cache, identity.org_id, definition)
+    forecast = artifacts.forecast
+    assert forecast is not None
+    entries = forecast["series"]
+    if series is not None:
+        try:
+            entries = [entries[forecast_core.series_index(forecast, series)]]
+        except forecast_core.UnknownSeriesError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ForecastOut(
+        model_name=forecast["model_name"],
+        frequency=forecast["frequency"],
+        horizon=forecast["horizon"],
+        levels=forecast["levels"],
+        what_if=artifacts.forecaster is not None,
+        series=[ForecastSeriesOut(**entry) for entry in entries],
+    )
+
+
+@router.post("/forecast/{scenario_slug}/what-if", response_model=WhatIfOut)
+def forecast_what_if_endpoint(
+    body: WhatIfRequest,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> WhatIfOut:
+    """Re-forecast one series with its assumed exogenous values shifted — only features the
+    scenario declares exogenous, within its forecast board's lever range when it has one.
+    """
+    assert identity.org_id is not None
+    if definition.time_series is None:
+        raise HTTPException(status_code=409, detail=f"Scenario {definition.slug!r} is not a forecast.")
+    allowed = set(definition.time_series.exogenous_features)
+    unknown = sorted(set(body.shifts) - allowed)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Not exogenous features: {unknown}.")
+    levers = {lever.feature: lever for lever in getattr(definition.ui_extras, "levers", [])}
+    for feature, shift in body.shifts.items():
+        lever = levers.get(feature)
+        if lever is not None and not lever.min_shift <= shift <= lever.max_shift:
+            raise HTTPException(
+                status_code=422, detail=f"{feature!r} shift must be in [{lever.min_shift}, {lever.max_shift}]."
+            )
+    artifacts = _forecast_artifacts(model_cache, identity.org_id, definition)
+    assert artifacts.forecast is not None
+    try:
+        entry, re_forecast = forecast_core.what_if(artifacts.forecast, artifacts.forecaster, body.series, body.shifts)
+    except forecast_core.UnknownSeriesError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return WhatIfOut(re_forecast=re_forecast, series=ForecastSeriesOut(**entry))
+
+
+@router.get("/model/{scenario_slug}/backtest", response_model=BacktestOut)
+def model_backtest_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> BacktestOut:
+    """How every forecast candidate did on the last cut-offs it never saw (rolling origin)."""
+    assert identity.org_id is not None
+    backtest = _forecast_artifacts(model_cache, identity.org_id, definition).backtest
+    return BacktestOut(**backtest)  # type: ignore[arg-type]
 
 
 @router.get("/model/{scenario_slug}/out-of-fold", response_model=OutOfFoldOut)
