@@ -1,0 +1,92 @@
+/* Source library (SourceLibraryView.tsx) — theme tokens only, no animation. */
+
+.library {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.library-list,
+.library-reader {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.library-list h3,
+.library-reader h3 {
+  margin-top: 0;
+}
+
+.library-list input[type="search"] {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.library-folders summary {
+  padding: 6px 0;
+  font-weight: 600;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.library-folders summary span {
+  font-weight: 400;
+  color: var(--dim);
+}
+
+.library-doc {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.library-doc span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-doc small {
+  flex: none;
+  color: var(--dim);
+}
+
+.library-doc:hover,
+.library-doc--on {
+  background: var(--panel-2);
+  border-color: var(--accent-border);
+}
+
+.library-passage {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.library-passage p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-passage-index {
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+@media (max-width: 900px) {
+  .library {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -4,12 +4,14 @@ import type { ChatModel, KnowledgeGraphTrace, ScenarioSummary } from "./apiClien
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
+import { Icon } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
 // Canvas + d3-force: loaded only for a scenario that ships a knowledge graph.
 const KnowledgeGraphView = lazy(() => import("./KnowledgeGraphView"));
+const SourceLibraryView = lazy(() => import("./SourceLibraryView").then((m) => ({ default: m.SourceLibraryView })));
 
 // The chat | graph split: the chat's share of the width, dragged on the divider and
 // remembered per browser.
@@ -29,9 +31,8 @@ function storedSplit(): number {
 
 /**
  * conversational_rag workspace — a full-page ChatGPT-style window grounded in the
- * scenario's vectorized documents. rag-agent exposes no document-listing endpoint
- * (see api.py), so there is no real "browse the uploaded documents" list to show
- * here — the chat itself (with cited sources per reply) is the exploration surface.
+ * scenario's vectorized documents, with cited sources per reply. `ui_extras` may add a
+ * knowledge graph beside the chat, or a tab to browse the documents (SourceLibraryView).
  */
 export function RagView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
@@ -76,6 +77,8 @@ function RagViewContent({
   useChatGenerativeUiActions();
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
+  const libraryExtras = scenario.ui_extras?.kind === "source_library" ? scenario.ui_extras : null;
+  const [tab, setTab] = useState<"chat" | "library">("chat");
   const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
   const [chatPct, setChatPct] = useState(storedSplit);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -168,7 +171,27 @@ function RagViewContent({
             <p title={graphExtras ? scenario.description : undefined}>{scenario.description}</p>
           </div>
         </div>
-        {graphExtras ? (
+        {libraryExtras && (
+          <div className="workspace-tabs">
+            <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>
+              <Icon name="chat" /> {libraryExtras.chat_tab_label}
+            </button>
+            <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>
+              <Icon name="book" /> {libraryExtras.tab_label}
+            </button>
+          </div>
+        )}
+        {libraryExtras && tab === "library" && (
+          <Suspense fallback={<div className="app-loading">Loading…</div>}>
+            <SourceLibraryView scenarioSlug={scenario.slug} extras={libraryExtras} accessToken={accessToken} />
+          </Suspense>
+        )}
+        {libraryExtras ? (
+          // Kept mounted: the conversation survives a look at the sources.
+          <div className="rag-chat-tab" hidden={tab !== "chat"}>
+            {chat}
+          </div>
+        ) : graphExtras ? (
           <div className="rag-split" ref={splitRef} style={{ gridTemplateColumns: `minmax(300px, ${chatPct}fr) 0.75rem minmax(320px, ${100 - chatPct}fr)` }}>
             {chat}
             <div

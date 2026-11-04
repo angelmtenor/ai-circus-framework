@@ -138,8 +138,10 @@ def build_points(docs: dict[str, str], documents: DocumentsConfig, provider: Emb
         if not chunks:
             continue
         embeddings = provider.encode_documents(chunks)
-        for chunk, vector in zip(chunks, embeddings, strict=True):
-            points.append(PointStruct(id=str(uuid.uuid4()), vector=vector, payload={"text": chunk, "source": source}))
+        # `chunk`: its position in the document — ids are random, and a reader needs the order.
+        for index, (chunk, vector) in enumerate(zip(chunks, embeddings, strict=True)):
+            payload = {"text": chunk, "source": source, "chunk": index}
+            points.append(PointStruct(id=str(uuid.uuid4()), vector=vector, payload=payload))
     return points
 
 

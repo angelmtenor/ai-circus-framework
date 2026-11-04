@@ -26,6 +26,7 @@ from tests.test_app import _run_main
 from training.core.forecasting import (
     ForecastCandidate,
     backtest_cutoffs,
+    features_for,
     forecast_metrics,
     future_times,
     seasonal_scale,
@@ -119,6 +120,19 @@ def test_train_forecast_selects_backtests_and_forecasts_every_series() -> None:
     assert len(run.backtest["windows"]) == 2
     window = run.backtest["windows"][0]["series"][0]
     assert len(window["actual"]) == SERIES.horizon and set(window["forecasts"]) == {c.name for c in run.candidates}
+
+
+def test_numeric_static_features_stay_numbers_for_the_forecaster() -> None:
+    """Whether they arrive as Python or numpy numbers, and through the stored what-if document."""
+    config = SERIES.model_copy(update={"static_features": ["size"]})
+    frame = _hourly_sites().assign(size=lambda d: d["site"].map({"a": 10, "b": 20}).astype(int))
+    series = split_series(frame, DATASET, config)
+    features = features_for(config, series)
+    assert features.numeric_static == ["size"] and list(features.categorical) == ["site"]
+    run = train_forecast(["lightgbm_lags"], config, series, "mase", 0.05)
+    assert run.forecaster is not None
+    json.dumps(run.forecaster)  # a numpy number here would fail the artifact's upload
+    assert run.forecaster["series"][1]["static"] == {"site": "b", "size": 20.0}
 
 
 def test_target_min_floors_forecasts_and_bands_for_every_candidate() -> None:

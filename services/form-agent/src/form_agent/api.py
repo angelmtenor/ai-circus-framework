@@ -36,7 +36,7 @@ from form_agent.core.identity import resolve_identity
 from form_agent.core.logger import get_logger
 from form_agent.core.pdf import render_form_pdf
 from form_agent.core.prompt import build_form_system_prompt
-from form_agent.core.submissions import filing_of, load_submission, submit
+from form_agent.core.submissions import filing_of, list_submissions, load_submission, submit
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -67,6 +67,22 @@ class SubmissionOut(BaseModel):
     """Response body for a successfully persisted submission."""
 
     case_number: str
+
+
+class CaseOut(BaseModel):
+    """One of the caller's own filed submissions."""
+
+    case_number: str
+    submitted_at: str | None = None
+    verification_code: str | None = None
+    fields: dict[str, str]
+
+
+class CasesOut(BaseModel):
+    """Response body for GET /submissions/{scenario_slug}. `truncated`: older cases were left out."""
+
+    cases: list[CaseOut]
+    truncated: bool
 
 
 class ConversationOut(BaseModel):
@@ -397,6 +413,32 @@ async def agui_endpoint(
             await run_in_threadpool(_persist_turn, store, input_data, identity, assistant_text_by_message_id)
 
     return StreamingResponse(event_generator(), media_type=encoder.get_content_type())
+
+
+@router.get("/submissions/{scenario_slug}", response_model=CasesOut)
+def list_submissions_endpoint(
+    scenario_slug: str,
+    response: Response,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    store: ObjectStore = Depends(_store),
+) -> CasesOut:
+    """The caller's own filed cases, newest first: scoped by tenant and by user, as the filed PDF is."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    response.headers["Cache-Control"] = "no-store"  # personal data
+    cases, truncated = list_submissions(store, identity.org_id, definition.slug, identity.subject)
+    return CasesOut(
+        cases=[
+            CaseOut(
+                case_number=c["case_number"],
+                submitted_at=c.get("submitted_at"),
+                verification_code=c.get("verification_code"),
+                fields=c.get("fields") or {},
+            )
+            for c in cases
+        ],
+        truncated=truncated,
+    )
 
 
 @router.post("/submissions/{scenario_slug}")

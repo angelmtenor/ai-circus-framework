@@ -391,11 +391,13 @@ export function ForecastInsightsView({ scenario, accessToken }: { scenario: Scen
         <div className="panel-card">
           <h3>What drives the forecast</h3>
           {card.global_feature_importance.length ? (
-            <BarList items={card.global_feature_importance.map((f) => ({ label: schema[f.feature]?.label ?? f.feature, value: f.importance }))} signed={false} valueFormatter={(v) => fmt(v)} />
+            <>
+              <BarList items={card.global_feature_importance.map((f) => ({ label: schema[f.feature]?.label ?? f.feature, value: f.importance }))} signed={false} valueFormatter={(v) => fmt(v)} />
+              <p className="panel-hint">Mean |SHAP| of the LightGBM, grouped: recent history (lags and rolling statistics), calendar, and each other input.</p>
+            </>
           ) : (
             <p className="panel-hint">The selected forecaster is statistical: it reads only the series' own past, so there is nothing else to attribute.</p>
           )}
-          <p className="panel-hint">Mean |SHAP| of the LightGBM, grouped: recent history (lags and rolling statistics), calendar, and each other input.</p>
         </div>
       </div>
       <div className="panel-card">

@@ -1,0 +1,103 @@
+# A `forecast` scenario with many series (docs/adr/0016-time-series-forecasting.md): the same synthetic
+# Luznova Utilities data as luznova_regional_demand, as one series per province, built from its
+# committed sample by scripts/prepare_luznova_regional_forecast.py. luznova_regional_demand stays a
+# regression because its map scores any area under any conditions; this one answers "what comes next?".
+
+slug: luznova_regional_forecast
+kind: tabular_ml
+title: "Regional Electricity Forecast"
+description: >
+  Forecasts the electricity demand of each of Spain's 50 provinces for the next 30 days, with
+  prediction bands and a backtest on past weeks that picks the simplest forecaster that holds up.
+  Luznova Utilities is fictional and the data synthetic.
+role_required: "scenario:luznova_regional_forecast"
+industry: energy_utilities
+icon: "🗓️"
+
+chat:
+  context: >
+    Luznova Utilities, a fictional Spanish distributor: a forecast of each province's electricity demand
+    (MWh per day), with a reading every second day, 30 days ahead. Candidates run from repeating the
+    previous fortnight, through exponential smoothing per province, to LightGBM across all provinces
+    on recent demand, the calendar and the temperature; the backtest keeps the simplest that holds up.
+    Only LightGBM reads the temperature, so a what-if on it changes nothing when a simpler forecaster
+    was selected: say so. National holidays are not modelled. The data is synthetic, from a designed
+    demand formula on real geography. Say how uncertain a forecast is.
+  sample_questions:
+    - "What will demand be in madrid_prov over the next 30 days?"
+    - "How accurate was the forecast on past weeks?"
+    - "Why was this forecaster selected over LightGBM?"
+
+dataset:
+  bucket: "scenario-luznova-regional-forecast"
+  raw_object: "raw/luznova_regional_forecast.csv"
+  seed_file: "sample_data/luznova_regional_forecast.csv"
+  index_col: "date"
+  target: "demand_mwh"
+  feature_columns:
+    - province
+    - population_thousands
+    - industrial_index
+    - mean_temperature_c
+  feature_schema:
+    province:
+      {type: categorical, label: "Province (Provincia)",
+       options: [sevilla, malaga, cadiz, cordoba, granada, jaen, almeria, huelva, barcelona, tarragona, girona, lleida, valencia, alicante, castellon, a_coruna, pontevedra, lugo, ourense, valladolid, leon, burgos, salamanca, palencia, zamora, avila, segovia, soria, vizcaya, guipuzcoa, alava, toledo, ciudad_real, albacete, cuenca, guadalajara, las_palmas, santa_cruz_tenerife, zaragoza, huesca, teruel, badajoz, caceres, asturias, baleares, cantabria, madrid_prov, murcia, navarra, la_rioja],
+       default: madrid_prov,
+       info: "Which of Spain's 50 provincias the series is for."}
+    population_thousands:
+      {type: numeric, label: "Population", min: 90, max: 8600, default: 6700, step: 10,
+       info: "The province's population, in thousands. Constant per province."}
+    industrial_index:
+      {type: numeric, label: "Industrial intensity index", min: 0, max: 100, default: 55, step: 1,
+       info: "A 0-100 proxy for how industrial the province's economy is. Constant per province."}
+    mean_temperature_c:
+      {type: numeric, label: "Mean temperature", min: -3.0, max: 31.0, default: 15.0, step: 0.5,
+       info: "The day's mean temperature in °C. Demand rises both well below and well above a mild ~18°C."}
+  default_charts:
+    - {type: scatter, x: mean_temperature_c, y: demand_mwh, color_by: province}
+    - {type: bar, x: province, y: demand_mwh, agg: mean}
+
+model:
+  task_type: forecast
+  # Green Code, simplest first: see energy_building.
+  candidates: ["seasonal_naive", "auto_ets", "lightgbm_lags"]
+  accuracy_gain_threshold_for_complexity: 0.05
+  selection_metric: mase
+  explainability: shap
+  target_units: "MWh"
+  target_label: "Electricity demand"
+  target_description: "A province's total electricity demand on a day, in megawatt-hours."
+
+time_series:
+  time_column: date
+  series_id_columns: [province]
+  frequency: 2D
+  # 15 readings, every second day, are 30 days. A weekday repeats every 7 readings (14 days): the
+  # default season for a daily frequency, which is what the seasonal baselines need here too.
+  horizon: 15
+  lags: [1, 2, 7, 14]
+  date_features: [dayofweek, month]
+  rolling:
+    - {window: 7, stat: mean}
+  static_features: [population_thousands, industrial_index]
+  exogenous_features: [mean_temperature_c]
+  future_exogenous: seasonal_naive
+  backtest: {windows: 4, step: 7}
+  prediction_intervals: [80, 95]
+  target_min: 0
+
+ui_extras:
+  kind: forecast_board
+  tab_label: "Forecast board"
+  title: "The next 30 days, province by province"
+  subtitle: "Pick a province and see its forecast with 80% and 95% bands. The lever only works when the backtest selects a forecaster that reads the temperature."
+  peak_label: "Peak day"
+  levers:
+    - {feature: mean_temperature_c, label: "Temperature", min_shift: -8, max_shift: 8, step: 1, unit: "°C"}
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

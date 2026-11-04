@@ -125,6 +125,10 @@ class FakeObjectStore:
         """The last bytes put under this tenant's key."""
         return next(data for org, key, data in reversed(self.puts) if org == tenant_org_id and key == path)
 
+    def list(self, tenant_org_id: str, prefix: str = "") -> list[str]:
+        """This tenant's keys under a prefix."""
+        return [key for org, key, _ in self.puts if org == tenant_org_id and key.startswith(prefix)]
+
 
 def _fake_definition(*, classification: bool) -> SimpleNamespace:
     form = FormConfig(
@@ -361,6 +365,22 @@ def test_filed_pdf_is_served_only_to_the_user_who_submitted_it() -> None:
     assert response.content.startswith(b"%PDF")
     assert f'filename="{case}.pdf"' in response.headers["content-disposition"]
     assert stranger.get(f"/submissions/service_request/{case}/pdf").status_code == 404
+
+
+def test_cases_lists_only_the_callers_own_filings() -> None:
+    store = FakeObjectStore()
+    owner = _client_with(FakeToolCallingModel(responses=[]), store=store)
+    fields = {"full_name": "Jane Doe", "email": "jane@example.com"}
+    case = owner.post("/submissions/service_request", json={"fields": fields}).json()["case_number"]
+    stranger = _client_with(FakeToolCallingModel(responses=[]), store=store, subject="user-2")
+
+    mine = owner.get("/submissions/service_request")
+
+    assert mine.status_code == 200
+    assert mine.headers["cache-control"] == "no-store"
+    assert [c["case_number"] for c in mine.json()["cases"]] == [case]
+    assert mine.json()["cases"][0]["fields"]["full_name"] == "Jane Doe"
+    assert stranger.get("/submissions/service_request").json() == {"cases": [], "truncated": False}
 
 
 def test_filed_pdf_404s_for_an_unknown_or_malformed_case_number() -> None:

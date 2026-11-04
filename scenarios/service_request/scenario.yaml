@@ -123,6 +123,9 @@ vector_store:
   collection_prefix: "service_request"
   top_k: 3
 
+ui_extras:
+  kind: case_tracker
+
 services:
   etl: etl-vectorize
   agent: form-agent

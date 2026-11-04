@@ -19,9 +19,9 @@ from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.network_graph import GraphEdge, GraphNode, NetworkGraph
 from ai_circus_shared.observability import langfuse_request_metadata
-from ai_circus_shared.scenario_schema import ScenarioDefinition, kg_collection_name
+from ai_circus_shared.scenario_schema import ScenarioDefinition, kg_collection_name, qdrant_collection_name
 from copilotkit import LangGraphAGUIAgent
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from langchain_core.tools import BaseTool
@@ -33,6 +33,7 @@ from rag_agent import get_env_config
 from rag_agent.core.agent import ModelUsageCallback, build_agui_agent, build_graph_tools, build_retrieve_tool
 from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.identity import resolve_identity
+from rag_agent.core.library import list_sources, passages_of
 from rag_agent.core.logger import get_logger
 
 router = APIRouter()
@@ -213,6 +214,66 @@ def knowledge_graph_endpoint(
             for e in graph.edges
         ],
     )
+
+
+class SourceOut(BaseModel):
+    """One indexed document of the caller's tenant."""
+
+    source: str
+    passages: int
+
+
+class SourcesOut(BaseModel):
+    """Response body for GET /documents/{scenario_slug}. `truncated`: the scan cap left some out."""
+
+    sources: list[SourceOut]
+    truncated: bool
+
+
+class PassagesOut(BaseModel):
+    """Response body for GET /documents/{scenario_slug}/passages."""
+
+    source: str
+    passages: list[str]
+
+
+def _library_collection(definition: ScenarioDefinition, org_id: str, qdrant: QdrantClient) -> str | None:
+    """The tenant's chunk collection, or None when nothing has been indexed for it yet."""
+    if definition.vector_store is None:
+        raise HTTPException(status_code=404, detail="This scenario has no documents.")
+    collection = qdrant_collection_name(definition.vector_store, org_id)
+    return collection if qdrant.collection_exists(collection) else None
+
+
+@router.get("/documents/{scenario_slug}", response_model=SourcesOut)
+def documents_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    qdrant: QdrantClient = Depends(_qdrant),
+) -> SourcesOut:
+    """What the caller's tenant's agent can search: every indexed source and its passage count."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    collection = _library_collection(definition, identity.org_id, qdrant)
+    if collection is None:
+        return SourcesOut(sources=[], truncated=False)
+    sources, truncated = list_sources(qdrant, collection)
+    return SourcesOut(sources=[SourceOut(**s) for s in sources], truncated=truncated)
+
+
+@router.get("/documents/{scenario_slug}/passages", response_model=PassagesOut)
+def document_passages_endpoint(
+    source: str = Query(min_length=1, max_length=500),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    qdrant: QdrantClient = Depends(_qdrant),
+) -> PassagesOut:
+    """One source's indexed passages, in order; 404 when this tenant's collection does not hold it."""
+    assert identity.org_id is not None  # resolve_identity() already guarantees this (401s otherwise)
+    collection = _library_collection(definition, identity.org_id, qdrant)
+    passages = passages_of(qdrant, collection, source) if collection else []
+    if not passages:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return PassagesOut(source=source, passages=passages)
 
 
 @router.get("/conversations/{scenario_slug}", response_model=list[ConversationOut])
