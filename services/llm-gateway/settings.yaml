@@ -124,6 +124,12 @@ env_variables:
     mandatory: false
     secret: false
 
+  - name: VLLM_API_BASE
+    description: "Base URL of the optional vLLM server (vllm-qwen model only); unset/not started = unreachable"
+    type: string
+    mandatory: false
+    secret: false
+
   # GenAI observability — read by app.py (which switches LiteLLM's `langfuse_otel`
   # callback on only when both keys are present) and then by litellm itself. Every
   # completion through this gateway becomes a Langfuse trace; see k8s/base/langfuse.yaml.

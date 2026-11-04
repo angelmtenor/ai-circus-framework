@@ -214,7 +214,8 @@ re-implementing:
 
 **LLM routing.** `llm-gateway` runs the real LiteLLM proxy; `assistant`/`rag-agent`/`form-agent`/
 `ui-react` call it by `model_name` (routing table: `services/llm-gateway/litellm_config.yaml`),
-never a provider SDK. It also serves the `local-embed` model (sentence-transformers, in-process
+never a provider SDK. Local options sit behind it too: Ollama (CPU fallback, compose only) and vLLM (`make
+k3s-vllm-up`, holds the GPU, ADR 0017). It also serves the `local-embed` model (sentence-transformers, in-process
 torch — the reason it is the biggest app pod). A new provider key = edit `.env`, then
 `make k3s-secrets` + restart; switching the active model is live from the Settings page.
 

@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
@@ -492,6 +492,14 @@ k3s-dl-up: ## Deploy the optional Deep Learning overlay (k8s/deep-learning/: dl-
 
 k3s-dl-down: ## Remove the Deep Learning overlay (trained models stay in SeaweedFS)
 	@kubectl delete -k k8s/deep-learning --ignore-not-found
+
+k3s-vllm-up: ## Deploy the optional vLLM overlay (k8s/llm-serving/, needs a GPU, holds it whole): llm-gateway's vllm-qwen model. The first start pulls ~33 GB of image and 3.1 GB of weights (ADR 0017)
+	@kubectl apply -k k8s/llm-serving
+	@kubectl -n ai-circus rollout status deployment/vllm --timeout=3600s
+	@echo "✓ vLLM up — pick 'vllm-qwen' in Settings, or: LLM_MODEL=vllm-qwen"
+
+k3s-vllm-down: ## Remove the vLLM overlay and free the GPU. Keeps the weights' volume: `kubectl -n ai-circus delete pvc vllm-model-cache` to reclaim it
+	@kubectl -n ai-circus delete deployment,service vllm --ignore-not-found
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }
