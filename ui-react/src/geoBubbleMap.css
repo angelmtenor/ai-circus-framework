@@ -1,0 +1,123 @@
+.geo-map {
+  min-width: 0;
+}
+
+.geo-map__stage {
+  position: relative;
+}
+
+.geo-map__surface {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.geo-map__surface:active {
+  cursor: grabbing;
+}
+
+.geo-map__surface--pointing {
+  cursor: pointer;
+}
+
+.geo-map__land {
+  fill: var(--panel-2);
+  stroke: var(--border-strong);
+  stroke-width: 0.7;
+  vector-effect: non-scaling-stroke;
+}
+
+.geo-map__land--context {
+  fill-opacity: 0.45;
+  stroke: var(--border);
+}
+
+.geo-map__borders {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.geo-map__marks path {
+  vector-effect: non-scaling-stroke;
+}
+
+.geo-map__hover {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.geo-map__tip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-width: 17rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translate(0.8rem, -50%);
+}
+
+.geo-map__tip[data-side="left"] {
+  transform: translate(calc(-100% - 0.8rem), -50%);
+}
+
+.geo-map__tip b {
+  color: var(--text);
+}
+
+.geo-map__reset {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.geo-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.9rem;
+  margin: 0.4rem 0.4rem 0;
+  color: var(--dim);
+  font-size: 0.78rem;
+}
+
+.geo-map__legend i {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+}
+
+.geo-map__ramp {
+  display: inline-block;
+  width: 9rem;
+  height: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.geo-map__note {
+  margin: 0.3rem 0.4rem 0;
+}

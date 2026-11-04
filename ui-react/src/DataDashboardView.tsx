@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { BarList, CATEGORY_PALETTE } from "./charts";
+import { DashBarChart, DashLineChart } from "./dashboardCharts";
+import { formatDate, isIsoDate, panelSeries } from "./dashboardChartLogic";
 import { changeLabel, formatMetric, type DashboardPanel, type MetricResult, type MetricSpec } from "./dataApi";
 import type { DataProductProps } from "./DataProductView";
 import { config } from "./config";
 import { DataStoreMap } from "./DataStoreMap";
 import { Icon } from "./Icon";
-import { PlotlyChart } from "./PlotlyChart";
-import type { PlotlyDatum } from "./plotly";
 
 const PERIODS: { key: string; label: string }[] = [
   { key: "today", label: "Today" },
@@ -18,12 +19,6 @@ const COMPARES: { key: string; label: string }[] = [
   { key: "same_period_last_week", label: "vs same days last week" },
   { key: "previous_period", label: "vs previous period" },
 ];
-
-/** Plot-ready value: money in euros, everything else as is. */
-function plotValue(value: number | null, format: MetricSpec["format"]): number | null {
-  if (value === null) return null;
-  return format === "currency_cents" ? value / 100 : value;
-}
 
 /**
  * Native, governed dashboards of a data product: the `kpis` and `dashboard` panels the
@@ -154,41 +149,24 @@ function Panel({
     return () => controller.abort();
   }, [client, panel, period, compare]);
 
-  const data = useMemo<PlotlyDatum[]>(() => {
-    if (!result) return [];
-    const [x, split] = panel.dims;
-    const val = (v: number | null | undefined) => plotValue(v ?? null, spec.format);
-    if (panel.chart === "pie") {
-      return [{ type: "pie", labels: result.rows.map((r) => String(r[x])), values: result.rows.map((r) => val(r.value)), hole: 0.45, sort: false }];
-    }
-    if (panel.chart === "hbar") {
-      const rows = [...result.rows].reverse();
-      return [{ type: "bar", orientation: "h", y: rows.map((r) => String(r[x])), x: rows.map((r) => val(r.value)), name: spec.label }];
-    }
-    if (split) {
-      const groups = new Map<string, typeof result.rows>();
-      for (const row of result.rows) {
-        const key = String(row[split]);
-        groups.set(key, [...(groups.get(key) ?? []), row]);
-      }
-      return [...groups.entries()].map(([name, rows]) => ({
-        type: panel.chart === "line" ? "scatter" : "bar",
-        mode: "lines+markers",
-        name,
-        x: rows.map((r) => r[x]),
-        y: rows.map((r) => val(r.value)),
-      }));
-    }
-    const traces: PlotlyDatum[] = [
-      { type: panel.chart === "line" ? "scatter" : "bar", name: result.period.from === result.period.to ? result.period.from : "this period", x: result.rows.map((r) => String(r[x])), y: result.rows.map((r) => val(r.value)) },
-    ];
-    if (panel.compare && result.compare) {
-      traces.push({ type: "bar", name: "comparison", x: result.rows.map((r) => String(r[x])), y: result.rows.map((r) => val(r.compare_value)), opacity: 0.45 });
-    }
-    return traces;
-  }, [result, panel, spec]);
+  const isList = panel.chart === "hbar" || panel.chart === "pie";
+  const [now] = useState(() => new Date());
+  const view = useMemo(() => (result && !isList ? panelSeries(panel, result, now) : null), [result, panel, isList, now]);
+  const formatValue = (value: number | null) => formatMetric(value, spec.format);
+  const tipTitle = (category: string) => {
+    if (!isIsoDate(category)) return category;
+    return panel.dims[0] === "week" ? `Week of ${formatDate(category)}` : formatDate(category);
+  };
+  const chartProps = view && {
+    categories: view.categories,
+    series: view.series,
+    format: spec.format,
+    label: `${panel.title}: ${spec.label} across ${view.categories.length} ${panel.dims[0]} values.`,
+    tipTitle,
+    formatValue,
+  };
+  const listTotal = result?.rows.reduce((sum, r) => sum + Math.abs(r.value ?? 0), 0) ?? 0;
 
-  const unit = spec.format === "currency_cents" ? "€" : spec.format === "percent" ? "%" : "";
   return (
     <div className={`panel-card dp-panel${panel.wide ? " dp-panel--wide" : ""}`}>
       <div className="dp-panel-head">
@@ -198,19 +176,23 @@ function Panel({
       {error && <p className="panel-hint dp-restricted">{error.includes("Role") || error.includes("only sees") ? `Not available for your role — ${error}` : error}</p>}
       {!error && !result && <div style={{ height: 260 }} aria-busy="true" />}
       {result && result.rows.length === 0 && <p className="panel-hint">No data in this period.</p>}
-      {result && result.rows.length > 0 && (
-        <PlotlyChart
-          data={data}
-          height={panel.chart === "hbar" ? Math.max(260, result.rows.length * 26) : 280}
-          layout={{
-            barmode: "group",
-            margin: { l: panel.chart === "hbar" ? 180 : 48, r: 12, t: 8, b: 48 },
-            showlegend: data.length > 1 || panel.chart === "pie",
-            legend: { orientation: "h", y: -0.2 },
-            yaxis: panel.chart === "hbar" ? { automargin: true } : { title: { text: unit }, rangemode: "tozero" },
-            xaxis: panel.chart === "hbar" ? { title: { text: unit } } : { automargin: true },
-          }}
+      {result && result.rows.length > 0 && isList && (
+        // A part-to-whole panel ("pie") reads as ranked bars with each share written next to it.
+        <BarList
+          items={result.rows.map((r) => ({ label: String(r[panel.dims[0]]), value: r.value ?? 0 }))}
+          signed={false}
+          neutralColor={CATEGORY_PALETTE[0]}
+          valueFormatter={(v) => (panel.chart === "pie" && listTotal > 0 ? `${formatValue(v)} · ${((100 * v) / listTotal).toFixed(0)}%` : formatValue(v))}
         />
+      )}
+      {chartProps && view.categories.length > 0 && (panel.chart === "line" ? <DashLineChart {...chartProps} /> : <DashBarChart {...chartProps} />)}
+      {view?.inProgress && (
+        <p className="panel-hint dp-metric-def">
+          {view.inProgress.dim === "day" || view.inProgress.dim === "date"
+            ? "Today is"
+            : `The ${view.inProgress.dim} of ${formatDate(view.inProgress.bucket)} is`}{" "}
+          still in progress, so it is left out.
+        </p>
       )}
       <p className="panel-hint dp-metric-def">
         <code>{spec.name}</code> = {spec.expression} over <code>{spec.dataset}</code>
