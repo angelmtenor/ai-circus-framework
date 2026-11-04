@@ -574,6 +574,9 @@ reuse it with a few lines of YAML and no UI code:
 | `region_map` | Regional Map | `luznova_regional_demand`, `luznova_gas_prospects` | One shared context batch-predicted for every area of a level (Comunidad / Provincia, Municipio / census area), bubbles on a Spain map, SHAP per bubble |
 | `forecast_board` | Forecast board | `energy_building`, `luznova_regional_forecast` | History, forecast and prediction bands, with levers that shift the assumed future values and re-forecast |
 | `fleet_health` | Fleet health | `turbofan_rul`, `electric_motor`, `luznova_gas_anomaly`, `luznova_ev_charging` | Real rows replayed unit by unit and scored live; health is the model's score, or actual minus predicted |
+| `row_triage` | Inspection triage | `steel_defects` | Rows routed to a person or automatically by a threshold you move, with the real workload and misses, over out-of-fold scores |
+| `case_tracker` | My cases | `service_request`, `sede_electronica` | The signed-in user's own filed cases: receipt, values and filed PDF |
+| `source_library` | Sources | `ai_circus_reference` | The documents the assistant really searches, read back passage by passage from the tenant's collection |
 | `live_plant` | Live Plant | `mpm` | A simulated floor of machines that age every tick, scored by the unmodified `/predict/{slug}`; client-side-only Shut down / Replace |
 | `process_optimizer` | Optimizer | `cnc_surface_finish` | The *take-action* stage: ~200 candidate recipes scored and costed with a per-part economics model from the YAML, the best in-spec one recommended — then a live line where an auto-pilot re-optimizes as the tool wears, against a static baseline |
 | `voyage_explorer` | Voyage / The Office | `titanic` (`scene: ocean_liner`), `toxic_leadership` (`scene: office_tower`) | Every row placed in an illustrated scene, coloured by the model; reveal, surprises, cohort filters, SHAP waterfall, live what-if |
