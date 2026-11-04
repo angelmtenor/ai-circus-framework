@@ -1,0 +1,8 @@
+# Optional local LLM serving on a GPU — vLLM, reached only through llm-gateway's `vllm-qwen` route.
+# Deliberately NOT part of k8s/base: it holds the node's one GPU, about 33 GB of image on disk and
+# 3.1 GB of weights. `make k3s-vllm-up` / `make k3s-vllm-down`. See docs/adr/0017-vllm-alongside-ollama.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - vllm.yaml

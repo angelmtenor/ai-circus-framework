@@ -178,6 +178,18 @@ PROVIDERS: dict[str, ProviderSpec] = {
             "different (3B+) Ollama model instead."
         ),
     ),
+    "vllm": ProviderSpec(
+        key="vllm",
+        label="vLLM (local GPU)",
+        models=(ProviderModel(model_name="vllm-qwen", label="qwen2.5-1.5b"),),
+        needs_key=False,
+        needs_base=True,
+        env_vars=("VLLM_API_BASE",),
+        hint=(
+            "Optional, no API key, needs a GPU: run `make k3s-vllm-up` (about 33 GB of image and "
+            "3.1 GB of weights on the first start; it holds the whole GPU while it runs)."
+        ),
+    ),
 }
 
 

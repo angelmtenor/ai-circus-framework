@@ -5,7 +5,7 @@
 # backend services (services/*), then the UI. Traefik is the single entrypoint; a few
 # stateful/internal services publish a loopback-only port for non-container local dev.
 # Optional profiles: `pipeline` (one-shot ETL/training jobs), `deep-learning`,
-# `data-platform` (Kafka), `ollama` (free local LLM).
+# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM).
 
 name: ai-circus-framework
 
@@ -72,6 +72,8 @@ volumes:
   qdrant-storage:
   seaweedfs-data:
   ollama-data:
+  # vLLM's model weights (3.1 GB for the default model), kept across restarts.
+  vllm-model-cache:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
   # (Renamed from `voice-model-cache` when agui-voice stopped running as root: the old
@@ -723,6 +725,8 @@ services:
       # so this is only reachable once you run `make ollama-up`. Override in .env to
       # point at an Ollama instance you run yourself instead.
       OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
+      # The optional `vllm` container below (profile "vllm"): a GPU backend, see ADR 0017.
+      VLLM_API_BASE: ${VLLM_API_BASE:-http://vllm:8000/v1}
       # GenAI observability: LiteLLM's `langfuse_otel` callback (litellm_config.yaml,
       # switched on by app.py only when both keys are set) exports every completion
       # to the langfuse-web service below, tagged with the calling tenant + scenario.
@@ -783,6 +787,32 @@ services:
         condition: service_started
     networks: [ai-circus]
     mem_limit: 512m
+
+  # Local GPU serving for llm-gateway's `vllm-qwen` model — OPTIONAL (profile "vllm") and needs an
+  # NVIDIA GPU: `docker compose --profile vllm up -d vllm`. Same arguments as k8s/llm-serving/vllm.yaml,
+  # no published port and no Traefik route: only llm-gateway calls it. See docs/adr/0017.
+  vllm:
+    image: vllm/vllm-openai:v0.33.0
+    profiles: ["vllm"]
+    command:
+      - --model=Qwen/Qwen2.5-1.5B-Instruct
+      - --served-model-name=vllm-default
+      - --download-dir=/models
+      - --max-model-len=8192
+      - --gpu-memory-utilization=0.55
+      - --enable-auto-tool-choice
+      - --tool-call-parser=hermes
+      - --port=8000
+    environment:
+      VLLM_USE_V2_MODEL_RUNNER: "0"
+      HF_HOME: /models/hf
+    gpus: all
+    shm_size: 1g
+    volumes:
+      - vllm-model-cache:/models
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 8g
 
   # Long-running: chat-over-tabular-data for every tabular_ml scenario in SCENARIOS
   # (empty/unset = all), grounded in each scenario's chat.context and the trained

@@ -1,0 +1,130 @@
+# vLLM's OpenAI-compatible server on the node's GPU. ClusterIP only and no IngressRoute: every model
+# call goes through llm-gateway. The defaults fit an 8 GB laptop GPU under WSL, where a 7B model runs out
+# of GPU memory (ADR 0017): a 1.5B model, an 8k context.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-model-cache
+  namespace: ai-circus
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: ai-circus
+spec:
+  selector:
+    app: vllm
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: ai-circus
+  labels:
+    app: vllm
+spec:
+  replicas: 1
+  # A first start pulls a ~33 GB image (7 min) and then the weights; the default 10 min fails the rollout.
+  progressDeadlineSeconds: 3600
+  # One GPU: a second pod could never start, so the old one must go first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      runtimeClassName: nvidia
+      # A Service named vllm would inject VLLM_PORT=tcp://…, which vLLM reads as its own setting and dies.
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.33.0
+          args:
+            - --model=Qwen/Qwen2.5-1.5B-Instruct
+            # The name llm-gateway's route asks for: swapping the weights changes no route.
+            - --served-model-name=vllm-default
+            - --download-dir=/models
+            - --max-model-len=8192
+            # Weights plus KV cache. Under WSL allocations fail at about 5.5 of the GPU's 8 GiB, and vLLM
+            # needs room above this share: at 0.6 a start can fail in warm-up, at 0.5 no KV cache is left.
+            - --gpu-memory-utilization=0.55
+            # The agents call tools; without these vLLM rejects a request that carries any.
+            - --enable-auto-tool-choice
+            - --tool-call-parser=hermes
+            - --port=8000
+          env:
+            # Without pinned memory (WSL) the V2 runner keeps its transfer buffers on the GPU: 748 MiB+ gone.
+            - name: VLLM_USE_V2_MODEL_RUNNER
+              value: "0"
+            - name: HF_HOME
+              value: /models/hf
+            - name: HOME
+              value: /tmp
+          ports:
+            - containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 3Gi
+            limits:
+              memory: 8Gi
+              nvidia.com/gpu: 1
+          # /health answers once the weights are on the GPU. The first start also downloads them.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 180
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-model-cache
+        - name: tmp
+          emptyDir: {}
+        # vLLM's workers share tensors over shared memory; the container default of 64 MiB is too small.
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
