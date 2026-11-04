@@ -523,7 +523,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **[Supply Chain Shipping ETA](docs/scenarios/logistics.md#supply-chain-shipping-eta--the-dispatch-tower)** (`supply_chain`) | `tabular_ml` — regression, domain `logistics` | Days to delivery — a **Dispatch Tower** tab: the 8 hubs with real shipments in flight, each hub's ETA landscape (a 33×33 grid of destinations scored at once, drawn as isochrones) and a race of every carrier × priority to a pinned destination with 90% prediction intervals — fastest option and safest promise date | AWS SageMaker workshop (synthetic) |
 | **Supermarket Weekly Sales** (`supermarket_sales`) | `tabular_ml` — regression | Weekly department sales | Kaggle — Walmart dataset |
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
-| **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression | Appliance energy use (Wh) | UCI — Appliances Energy Prediction |
+| **Building Energy Forecast** (`energy_building`) | `tabular_ml` — forecast | Appliance energy use (Wh), hourly, 24 hours ahead | UCI — Appliances Energy Prediction |
 | **CNC Turning Surface Finish** (`cnc_surface_finish`) | `tabular_ml` — regression | Machined-part surface roughness (Ra) | Original content (synthetic, physically grounded) |
 | **Steel Plate Defect Triage** (`steel_defects`) | `tabular_ml` — classification | Unrecognized optical-scan defect flag | UCI — Steel Plates Faults |
 | **Turbofan Engine Remaining Useful Life** (`turbofan_rul`) | `tabular_ml` — regression | Jet engine RUL (operating cycles) | NASA C-MAPSS FD001 |
@@ -813,7 +813,7 @@ that tool's own UI) to take effect.
 
 The dropdown's other option, **demo engineering**, is the same bypass mechanism scoped to a
 narrower demo tenant — entitled to only the three engineering scenarios (Predictive Maintenance,
-Electric Motor Speed, Building Energy Consumption), not every scenario. Its key/password is
+Electric Motor Speed, Building Energy Forecast), not every scenario. Its key/password is
 `.env`'s `ENGINEERING_DEMO_API_KEY` (`ai-circus-engineering-2026` by default; leave it blank to
 disable this login option). It's provisioned automatically wherever `ADMIN_API_KEY` is — no
 separate setup step — and `make verify` (part of `make all`) checks that it's scoped correctly:
