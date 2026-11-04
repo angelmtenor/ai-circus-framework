@@ -122,6 +122,19 @@ are normal; a pod still waiting after ~2 min means that dependency is really dow
 
 ## Machine-level notes
 
+- **Driving WSL from the Windows desktop app.** Write a script to the scratchpad and run
+  `wsl -d Ubuntu-26.04 -- bash /mnt/c/.../script.sh`: inline `wsl bash -c` breaks on `$` and on
+  PATH expansion. A plain `wsl` shell has neither `kubectl`/`k3d` (`~/.local/bin`) nor `node`/`npm`
+  (`~/.nvm/versions/node/*/bin`), so set `PATH` in the script. `python` doesn't exist on Windows; use
+  `python3` inside WSL.
+- Long foreground `wsl` runs can die with the session. Start them with
+  `setsid nohup bash script.sh > ~/.cache/x.log 2>&1 < /dev/null &`, print a final marker, and wait for
+  the marker in a separate call. A log piped through `cut` or `grep` stays empty until the run ends.
+- **ui-react only:** `make k3s-ui-image`, `k3d image import ai-circus/ui-react:local -c ai-circus`,
+  `kubectl -n ai-circus rollout restart deployment/ui-react`, `rollout status`, then wait about 20 s:
+  a browser run straight after can time out on the login page.
+- **`ErrImageNeverPull` after scaling a workload back up:** k3s garbage-collects images of workloads at 0,
+  and any image near 85% disk. Re-run `k3d image import` for it before restoring.
 - A clean `systemctl restart docker` mid-build just fails that build (`Unavailable: error
   reading from server: EOF`) — re-run. A WSL restart mid-build is Gotcha 6.
 - `apt-get` lock held on a fresh Ubuntu boot = unattended-upgrades; wait with
