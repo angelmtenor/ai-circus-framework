@@ -55,7 +55,7 @@ def main() -> None:
             access_key=config.OBJECT_STORE_ACCESS_KEY,
             secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
         )
-        run_etl(store, config.ORG_ID, definition.dataset, scenarios_dir / slug)
+        run_etl(store, config.ORG_ID, definition.dataset, scenarios_dir / slug, definition.time_series)
         logger.success("etl-tabular finished for scenario={} org={}", slug, config.ORG_ID)
 
 
