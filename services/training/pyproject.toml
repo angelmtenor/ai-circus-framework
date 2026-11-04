@@ -39,6 +39,7 @@ dependencies = [
     "PyYAML>=6.0.2",
     "scikit-learn>=1.9.0",
     "shap>=0.52.0",
+    "statsmodels>=0.14.5",
 ]
 
 [project.urls]
