@@ -115,6 +115,33 @@ model:
   target_description: "Whether the customer closed their account (churned) or stayed."
   target_value_labels: {"0": "Stayed", "1": "Churned"}
 
+ui_extras:
+  kind: risk_watchlist
+  tab_label: "Retention watchlist"
+  title: "Who is about to leave?"
+  subtitle: >
+    Every customer scored by the churn model and sorted into tiers. Filter a tier, pick a customer to
+    see what drives their risk — then reveal who really closed their account. Customers are shown by
+    id only: surnames are kept out of the model and out of this list.
+  entity_noun: customer
+  size_feature: Balance
+  landscape_x: Age
+  landscape_y: Balance
+  score_label: "P(churn)"
+  outcome_label: "Churned"
+  outcome_past: "churned"
+  push_up: "leaving"
+  push_down: "staying"
+  tiers:
+    - {label: "Settled", min_probability: 0.0, description: "No sign of leaving: routine service."}
+    - {label: "Watch", min_probability: 0.2, description: "Above the bank's base rate: include in the next retention campaign."}
+    - {label: "At risk", min_probability: 0.4, description: "More likely than most to leave: a personal call from the relationship manager."}
+    - {label: "Likely to leave", min_probability: 0.7, description: "Act now: review the products and the offer with the customer."}
+  pillars:
+    - {label: "Relationship", features: [Tenure, NumOfProducts, HasCrCard, IsActiveMember]}
+    - {label: "Finances", features: [CreditScore, Balance, EstimatedSalary]}
+    - {label: "Demographics", features: [Age, Geography]}
+
 services:
   etl: etl-tabular
   training: training

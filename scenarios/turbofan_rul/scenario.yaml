@@ -66,10 +66,10 @@ dataset:
   # electric_motor's profile_id.
   index_col: "row_id"
   target: "RUL"
-  # Responsible AI / leakage prevention: unit_number is an arbitrary 1-100 engine
-  # label with no physical relationship to wear — dropped before training regardless
-  # of predictive value, same treatment as mpm's UDI.
-  protected_features_excluded: ["unit_number"]
+  # Leakage prevention: unit_number is an arbitrary 1-100 engine label with no physical
+  # relationship to wear, so it is never a feature. It is not sensitive, so it can be shown:
+  # the fleet tab groups the replay by it.
+  display_columns: [unit_number]
   feature_columns:
     - time_in_cycles
     - op_setting_1
@@ -165,6 +165,20 @@ model:
   target_units: "cycles"
   target_label: "Remaining useful life"
   target_description: "How many more operating cycles this jet engine is predicted to run before failure."
+
+ui_extras:
+  kind: fleet_health
+  tab_label: "Engine fleet"
+  title: "How long has each engine got?"
+  subtitle: "Real run-to-failure engines replayed cycle by cycle, with the model's estimate of the cycles each has left."
+  unit_noun: engine
+  group_column: unit_number
+  order_column: time_in_cycles
+  unit_count: 12
+  tick_seconds: 3
+  rows_per_tick: 2
+  health: {value: score, direction: lower_is_worse, warn_at: 50, critical_at: 20, label: "Predicted cycles left", unit: "cycles"}
+  replay_note: "The committed file is a sample of each engine's cycles, so the replay skips some."
 
 services:
   etl: etl-tabular
