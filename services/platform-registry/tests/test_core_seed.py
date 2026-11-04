@@ -146,7 +146,13 @@ def test_seed_scenarios_populates_ui_extras_for_opted_in_scenarios_only(session:
     assert optimizer.ui_extras["spec_default"] == pytest.approx(3.2)
     assert optimizer.ui_extras["economics"]["tool_life"]["feature"] == "cutting_speed"
 
-    assert session.get(Scenario, "churn").ui_extras is None
+    fleet = session.get(Scenario, "turbofan_rul")
+    assert fleet.ui_extras["kind"] == "fleet_health"
+    assert fleet.ui_extras["health"]["direction"] == "lower_is_worse"
+
+    assert session.get(Scenario, "churn").ui_extras["name_column"] is None  # ids only: no surnames
+
+    assert session.get(Scenario, "supermarket_sales").ui_extras is None
 
 
 def test_seed_scenarios_populates_deep_learning_scenarios(session: Session) -> None:
