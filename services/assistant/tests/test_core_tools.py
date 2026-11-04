@@ -10,7 +10,7 @@ import httpx
 import pytest
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 
-from assistant.core.tools import build_document_tool, build_prediction_tools
+from assistant.core.tools import build_document_tool, build_forecast_tools, build_prediction_tools
 from tests.test_core_chat import DEFINITION_WITH_DOCUMENTS
 
 
@@ -211,3 +211,49 @@ def test_document_tool_reports_an_unreachable_index_instead_of_failing_the_answe
     content = _document_tool(_DownQdrant([])).invoke({"query": "requisitos"})
 
     assert content.startswith("Could not search the documents")
+
+
+class _FakeForecastClient:
+    """Stand-in for PredictionServiceClient's forecast/backtest calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.raise_error: httpx.HTTPError | None = None
+
+    def forecast(
+        self, *, scenario_slug: str, authorization: str | None, series: str | None, shifts: dict[str, float]
+    ) -> dict[str, Any]:
+        self.calls.append(("forecast", {"scenario_slug": scenario_slug, "series": series, "shifts": shifts}))
+        if self.raise_error:
+            raise self.raise_error
+        entry = {
+            "label": "all",
+            "history": {"ds": [f"h{i}" for i in range(60)], "y": list(range(60))},
+            "forecast": {"ds": ["t1"], "mean": [5.0], "bands": {"80": {"lower": [4.0], "upper": [6.0]}}},
+            "exogenous": [{"T_out": 7.0}],
+            "peak": {"ds": "t1", "value": 5.0},
+        }
+        if shifts:
+            return {"re_forecast": True, "series": entry}
+        return {"model_name": "lightgbm_lags", "frequency": "h", "horizon": 1, "levels": ["80"], "series": [entry]}
+
+    def backtest(self, *, scenario_slug: str, authorization: str | None) -> dict[str, Any]:
+        self.calls.append(("backtest", {"scenario_slug": scenario_slug}))
+        return {"selected": "lightgbm_lags", "candidates": []}
+
+
+def test_forecast_tools_fetch_the_forecast_a_what_if_and_the_backtest() -> None:
+    client = _FakeForecastClient()
+    tools = build_forecast_tools(client, scenario_slug="energy_building", authorization="Bearer tok")  # type: ignore[arg-type]
+    assert {tool.name for tool in tools} == {"get_forecast", "get_forecast_backtest"}
+
+    plain = json.loads(_tool_named(tools, "get_forecast").invoke({}))
+    assert plain["model_name"] == "lightgbm_lags" and len(plain["series"][0]["recent_history"]["y"]) == 48
+    shifted = json.loads(_tool_named(tools, "get_forecast").invoke({"shifts": {"T_out": -5}}))
+    assert shifted["re_forecast"] is True and shifted["series"][0]["peak"]["ds"] == "t1"
+    assert json.loads(_tool_named(tools, "get_forecast_backtest").invoke({}))["selected"] == "lightgbm_lags"
+    assert [name for name, _ in client.calls] == ["forecast", "forecast", "backtest"]
+    assert client.calls[1][1]["shifts"] == {"T_out": -5}
+
+    client.raise_error = httpx.ConnectError("down")
+    assert _tool_named(tools, "get_forecast").invoke({}).startswith("Could not fetch the forecast")
