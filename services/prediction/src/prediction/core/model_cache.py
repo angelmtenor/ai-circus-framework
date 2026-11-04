@@ -224,6 +224,18 @@ class ModelCache:
             self._sources[requester] = source
         return source
 
+    def is_trained(self, org_id: str, scenario_slug: str) -> bool:
+        """Whether `org_id` would be served a trained model for this scenario (its own, else the
+        shared fallback's) — without loading it. Two cheap existence checks at most.
+        """
+        if scenario_slug not in self._stores:
+            return False
+        try:
+            self._source_org(org_id, scenario_slug)
+        except ModelNotTrainedError:
+            return False
+        return True
+
     def get(self, org_id: str, scenario_slug: str) -> ModelArtifacts:
         """The tenant's model artifacts for this scenario, loading+caching on first call.
 

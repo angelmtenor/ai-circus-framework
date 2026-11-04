@@ -10,7 +10,7 @@
  * any non-2xx or network error reads as "down". One shared poll, cached for every caller.
  */
 import { useEffect, useState } from "react";
-import type { ScenarioSummary } from "./apiClient";
+import { modelsStatus, type ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 
 export type ServiceKey = "prediction" | "assistant" | "rag-agent" | "form-agent" | "dl-inference" | "data-api";
@@ -149,6 +149,48 @@ export function useServiceAvailability(keys: readonly ServiceKey[]): ReadonlyMap
 export function refreshServiceAvailability(): void {
   void pollOnce();
 }
+
+/**
+ * Slugs of tabular scenarios whose model is not trained for the caller's tenant (a fresh cluster
+ * before `make k3s-pipeline`). One request for all of them to prediction's org-scoped
+ * `/models/status`, re-asked every 30 s while the page is visible; empty while the service is
+ * down or the answer has not arrived (never blocks a card on a failed check).
+ */
+export function useUntrainedScenarios(
+  slugs: readonly string[],
+  predictionUp: boolean,
+  accessToken: string | null,
+): ReadonlySet<string> {
+  const signature = [...slugs].sort().join(",");
+  const [untrained, setUntrained] = useState<ReadonlySet<string>>(new Set());
+
+  useEffect(() => {
+    if (!signature || !predictionUp) return;
+    let cancelled = false;
+    const check = () => {
+      if (document.hidden) return;
+      modelsStatus(config.predictionUrl, signature.split(","), accessToken)
+        .then((trained) => {
+          if (cancelled) return;
+          const next = Object.keys(trained).filter((slug) => !trained[slug]);
+          setUntrained((prev) => (prev.size === next.length && next.every((s) => prev.has(s)) ? prev : new Set(next)));
+        })
+        .catch(() => undefined);
+    };
+    check();
+    const timer = window.setInterval(check, POLL_MS);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [signature, predictionUp, accessToken]);
+
+  return signature && predictionUp ? untrained : NO_SCENARIOS;
+}
+
+const NO_SCENARIOS: ReadonlySet<string> = new Set();
 
 /** The required services that are down, in the order the scenario lists them. */
 export function missingServices(scenario: Pick<ScenarioSummary, "kind">, availability: ReadonlyMap<ServiceKey, Availability>): ServiceKey[] {
