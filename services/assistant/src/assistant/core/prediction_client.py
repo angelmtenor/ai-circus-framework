@@ -56,6 +56,39 @@ class PredictionServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def forecast(
+        self, *, scenario_slug: str, authorization: str | None, series: str | None, shifts: dict[str, float]
+    ) -> dict[str, Any]:
+        """A forecast scenario's forecast of one series — `GET /forecast/{scenario_slug}`, or its
+        what-if under shifted exogenous values — `POST /forecast/{scenario_slug}/what-if`.
+        """
+        if shifts:
+            response = httpx.post(
+                f"{self.base_url}/forecast/{scenario_slug}/what-if",
+                json={"series": series, "shifts": shifts},
+                headers=self._headers(authorization),
+                timeout=self.timeout_seconds,
+            )
+        else:
+            response = httpx.get(
+                f"{self.base_url}/forecast/{scenario_slug}",
+                params={"series": series} if series else {},
+                headers=self._headers(authorization),
+                timeout=self.timeout_seconds,
+            )
+        response.raise_for_status()
+        return response.json()
+
+    def backtest(self, *, scenario_slug: str, authorization: str | None) -> dict[str, Any]:
+        """How each forecast candidate did on past cut-offs — `GET /model/{scenario_slug}/backtest`."""
+        response = httpx.get(
+            f"{self.base_url}/model/{scenario_slug}/backtest",
+            headers=self._headers(authorization),
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def predict(
         self, *, scenario_slug: str, authorization: str | None, records: list[dict[str, Any]]
     ) -> dict[str, Any]:

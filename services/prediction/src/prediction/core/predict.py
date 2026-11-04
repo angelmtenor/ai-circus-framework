@@ -131,7 +131,7 @@ def explain_tokens(
     SHAP value (relative to an average document); that remainder is the feature's total
     contribution minus the sum of these weights.
     """
-    vectorizer = artifacts.pipeline.named_steps["preprocessor"].named_transformers_[text_transformer_name(column)]
+    vectorizer = artifacts.row_pipeline().named_steps["preprocessor"].named_transformers_[text_transformer_name(column)]
     preprocess = vectorizer.build_preprocessor()
     stop_words = set(vectorizer.get_stop_words() or ())
     column_of_term = {}
@@ -188,9 +188,9 @@ def predict(
     x = prepare_text(records.loc[:, feature_columns], text_features)
 
     if artifacts.metadata["task_type"] == "regression":
-        predictions = np.asarray(artifacts.pipeline.predict(x))
+        predictions = np.asarray(artifacts.row_pipeline().predict(x))
     else:
-        predictions = np.asarray(artifacts.pipeline.predict_proba(x))[:, 1]
+        predictions = np.asarray(artifacts.row_pipeline().predict_proba(x))[:, 1]
     lower = artifacts.pipeline_lower.predict(x) if artifacts.pipeline_lower is not None else None
     upper = artifacts.pipeline_upper.predict(x) if artifacts.pipeline_upper is not None else None
     if not explain:
@@ -204,7 +204,7 @@ def predict(
             for i, prediction in enumerate(predictions)
         ]
 
-    x_transformed = artifacts.pipeline.named_steps["preprocessor"].transform(x)
+    x_transformed = artifacts.row_pipeline().named_steps["preprocessor"].transform(x)
     shap_values = shap_matrix(artifacts.explainer, x_transformed)
     feature_names: list[str] = artifacts.metadata["transformed_feature_names"]
 

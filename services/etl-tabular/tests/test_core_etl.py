@@ -9,11 +9,19 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from ai_circus_shared.network_graph import NetworkGraph
-from ai_circus_shared.scenario_schema import TabularDataset, TabularGraph
+from ai_circus_shared.scenario_schema import TabularDataset, TabularGraph, TimeSeriesConfig
 from ai_circus_shared.tabular_ml import GRAPH_KEY, MAX_DATASET_ROWS
 from pydantic import ValidationError
 
-from etl_tabular.core.etl import clean, ensure_raw_dataset, load_raw, process_graph, run_etl, save_normalized
+from etl_tabular.core.etl import (
+    clean,
+    clean_series,
+    ensure_raw_dataset,
+    load_raw,
+    process_graph,
+    run_etl,
+    save_normalized,
+)
 
 DATASET = TabularDataset(
     bucket="scenario-churn",
@@ -405,3 +413,82 @@ def test_clean_keeps_rule_stopped_rows_with_gaps_but_drops_incomplete_passing_on
     assert list(cleaned.index) == [1, 2, 4]
     assert {"Sex", "HasId"} <= set(cleaned.columns)
     assert cleaned["HasId"].dtype == "category"
+
+
+# --- forecast (docs/adr/0016-time-series-forecasting.md) ---------------------------------------
+
+SERIES_DATASET = TabularDataset(
+    bucket="scenario-energy",
+    raw_object="raw/hourly.csv",
+    seed_file="sample_data/hourly.csv",
+    index_col="date",
+    target="load",
+    feature_columns=["temp"],
+    feature_schema={"temp": {"type": "numeric", "label": "Temp", "min": -10, "max": 40, "default": 10}},
+)
+SERIES = TimeSeriesConfig(time_column="date", frequency="h", horizon=2, lags=[1], exogenous_features=["temp"])
+
+
+def _hourly(hours: int, start: str = "2026-01-01 00:00") -> pd.DataFrame:
+    dates = pd.date_range(start, periods=hours, freq="h").strftime("%Y-%m-%d %H:%M:%S")
+    frame = pd.DataFrame({
+        "date": dates,
+        "temp": [float(i) for i in range(hours)],
+        "load": [10.0 + i for i in range(hours)],
+    })
+    return frame.set_index("date")
+
+
+def test_clean_series_sorts_parses_and_keeps_the_time_index() -> None:
+    raw = _hourly(5).iloc[::-1]  # out of order on purpose
+    raw.iloc[1, raw.columns.get_loc("temp")] = None  # a missing exogenous value -> forward-filled
+    cleaned = clean_series(raw, SERIES_DATASET, SERIES)
+    assert cleaned.index.name == "date" and cleaned.index.is_monotonic_increasing
+    assert pd.api.types.is_datetime64_any_dtype(cleaned.index)
+    assert list(cleaned.columns) == ["temp", "load"]
+    assert cleaned["temp"].notna().all()
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda f: f.drop(f.index[2]), "not regular at frequency"),
+        (lambda f: pd.concat([f, f.iloc[[0]]]), "repeat a"),
+        (lambda f: f.assign(load=[None, *f["load"].iloc[1:]]), "have no 'load' value"),
+        (lambda f: f.rename(index={f.index[0]: "not a date"}), "unparseable"),
+    ],
+)
+def test_clean_series_fails_loudly_instead_of_dropping_rows(mutate: object, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        clean_series(mutate(_hourly(6)), SERIES_DATASET, SERIES)  # type: ignore[operator]
+
+
+def test_clean_series_checks_each_series_and_keeps_the_most_recent_rows_over_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset = SERIES_DATASET.model_copy(
+        update={
+            "feature_columns": ["site", "temp"],
+            "feature_schema": {
+                **SERIES_DATASET.feature_schema,
+                "site": {"type": "categorical", "label": "Site", "options": ["a", "b"], "default": "a"},
+            },
+        }
+    )
+    config = SERIES.model_copy(update={"series_id_columns": ["site"]})
+    raw = pd.concat([_hourly(6).assign(site="a"), _hourly(4, "2026-01-01 02:00").assign(site="b")])
+    monkeypatch.setattr("etl_tabular.core.etl.MAX_DATASET_ROWS", 4)
+    cleaned = clean_series(raw, dataset, config)
+    assert len(cleaned) == 4 and cleaned.index.min() == pd.Timestamp("2026-01-01 04:00")
+    assert cleaned["site"].dtype == "category"
+    with pytest.raises(ValueError, match=r"series \('b',\) is not regular"):
+        clean_series(pd.concat([raw.iloc[:7], raw.iloc[8:]]), dataset, config)  # b loses 03:00
+
+
+def test_run_etl_uses_the_series_path_for_a_forecast_scenario(tmp_path: Path) -> None:
+    (tmp_path / "sample_data").mkdir()
+    _hourly(4).to_csv(tmp_path / "sample_data/hourly.csv")
+    store = FakeObjectStore()
+    key = run_etl(store, "org-1", SERIES_DATASET, tmp_path, SERIES)
+    saved = pd.read_parquet(io.BytesIO(store.get("org-1", key.split("/", 1)[1])))
+    assert len(saved) == 4 and pd.api.types.is_datetime64_any_dtype(saved.index)

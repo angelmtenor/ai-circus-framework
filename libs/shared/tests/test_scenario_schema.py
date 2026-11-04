@@ -1556,3 +1556,69 @@ def test_collection_names_reject_an_unsafe_org_id() -> None:
             qdrant_collection_name(store, bad)
         with pytest.raises(ValueError, match="Invalid org id"):
             kg_collection_name(store, bad)
+
+
+# --- forecast (docs/adr/0016-time-series-forecasting.md) -------------------------------------
+
+
+def test_energy_building_is_a_valid_forecast_scenario() -> None:
+    energy = _repo_scenario("energy_building")
+    assert energy.model is not None and energy.model.task_type == "forecast"
+    assert energy.time_series is not None
+    assert energy.time_series.resolved_season_length() == 24  # hourly -> daily season
+    assert energy.ui_extras is not None and energy.ui_extras.kind == "forecast_board"
+
+
+def test_time_series_is_required_for_and_only_for_forecast() -> None:
+    energy = _repo_scenario("energy_building")
+    with pytest.raises(ValidationError, match=r"required for \(and only for\)"):
+        _with(energy, time_series=None)
+    churn = _repo_scenario("churn")
+    with pytest.raises(ValidationError, match=r"required for \(and only for\)"):
+        _with(churn, time_series=energy.time_series.model_dump())  # type: ignore[union-attr]
+
+
+def test_forecast_candidates_are_checked_both_ways() -> None:
+    energy = _repo_scenario("energy_building")
+    model = energy.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match=r"forecast model\.candidates must be among"):
+        _with(energy, model={**model, "candidates": ["seasonal_naive", "random_forest"]})
+    churn = _repo_scenario("churn")
+    churn_model = churn.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match=r"need model\.task_type: forecast"):
+        _with(churn, model={**churn_model, "candidates": [*churn_model["candidates"], "auto_ets"]})
+
+
+def test_time_series_config_rules() -> None:
+    energy = _repo_scenario("energy_building")
+    ts = energy.time_series.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="lags must be distinct"):
+        _with(energy, time_series={**ts, "lags": [1, 1, 24]})
+    with pytest.raises(ValidationError, match="between 50 and 99"):
+        _with(energy, time_series={**ts, "prediction_intervals": [80, 100]})
+    with pytest.raises(ValidationError, match="String should match pattern"):
+        _with(energy, time_series={**ts, "frequency": "fortnight"})
+    with pytest.raises(ValidationError, match="columns must be distinct"):
+        _with(energy, time_series={**ts, "static_features": ["T_out"]})
+
+
+def test_forecast_feature_columns_must_match_time_series() -> None:
+    energy = _repo_scenario("energy_building")
+    ts = energy.time_series.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match=r"missing \[\], extra \['Windspeed'\]"):
+        _with(energy, time_series={**ts, "exogenous_features": ["T_out", "RH_out"]}, ui_extras=None)
+    with pytest.raises(ValidationError, match="neither the target nor a feature"):
+        _with(energy, time_series={**ts, "time_column": "Appliances"})
+
+
+def test_forecast_board_rules() -> None:
+    energy = _repo_scenario("energy_building")
+    board = energy.ui_extras.model_dump()  # type: ignore[union-attr]
+    lever = board["levers"][0]
+    with pytest.raises(ValidationError, match="min_shift < 0 < max_shift"):
+        _with(energy, ui_extras={**board, "levers": [{**lever, "min_shift": 1}]})
+    with pytest.raises(ValidationError, match="levers must shift exogenous features"):
+        _with(energy, ui_extras={**board, "levers": [{**lever, "feature": "Appliances"}]})
+    churn = _repo_scenario("churn")
+    with pytest.raises(ValidationError, match=r"forecast_board requires model\.task_type: forecast"):
+        _with(churn, ui_extras={**board, "levers": []})

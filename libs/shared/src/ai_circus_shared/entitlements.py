@@ -177,6 +177,9 @@ class ScenarioSummary(BaseModel):
     # ai_circus_shared.governance.resolve_governance): always carries the stable
     # `ai_system_id` and a `declared` flag; a plain dict like `form`.
     governance: dict[str, Any] | None = None
+    # tabular_ml with task_type "forecast" only — the series layout (see
+    # scenario_schema.TimeSeriesConfig: time column, series ids, frequency, horizon, …).
+    time_series: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

@@ -92,6 +92,12 @@ An `assisted_form` whose `form` has `sections` renders as an official paper shee
 (`OfficialFormSheet.tsx`: numbered boxes/`casilla`, `variants` = general + specific models chosen by
 the classification field, `locale` for messages); form-agent prints the same YAML as PDF
 (`core/pdf.py`, reportlab: draft + filed copy with receipt) and serves `form.sample_uploads`.
+A tabular scenario can be a **forecast** (`model.task_type: forecast` + `time_series:`, ADR 0016, first user
+`energy_building`): etl-tabular's `clean_series` fails on gaps instead of dropping rows; training backtests
+`seasonal_naive`/`auto_ets`/`lightgbm_lags` by MASE (features in `ai_circus_shared.forecasting`, shared with prediction so
+they cannot skew; no Nixtla libraries, they pin `pandas<3`); prediction serves `GET /forecast/{slug}`, `POST
+/forecast/{slug}/what-if` and `GET /model/{slug}/backtest`, and row-scoring routes answer 409; the assistant gets
+`get_forecast`/`get_forecast_backtest`; `ForecastViews.tsx` replaces ML Predictions/Insights and adds `ui_extras: forecast_board`.
 A tabular feature can be `type: text` (free text): TF-IDF step `text_<col>` inside the pipeline,
 SHAP terms rolled up server-side (`tabular_ml.original_feature`), per-word spans via `/predict`
 `explain_text`; `explain: false` is the fast bulk path (TreeExplainer SHAP ≈5 ms/row). Such a

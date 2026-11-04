@@ -68,6 +68,7 @@ def test_main_runs_the_etl_pipeline_for_every_resolved_scenario(monkeypatch: pyt
 
     class FakeDefinition:
         dataset = fake_dataset
+        time_series = None
 
     connect_calls: list[dict[str, object]] = []
     etl_calls: list[tuple[object, ...]] = []
@@ -93,7 +94,7 @@ def test_main_runs_the_etl_pipeline_for_every_resolved_scenario(monkeypatch: pyt
             "secret_key": "s3cret",
         }
     ]
-    assert etl_calls == [("fake-store", "demo", fake_dataset, app.Path("/scenarios/churn"))]
+    assert etl_calls == [("fake-store", "demo", fake_dataset, app.Path("/scenarios/churn"), None)]
     assert fake_logger.success_messages
 
 

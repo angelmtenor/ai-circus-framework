@@ -26,6 +26,10 @@ const ShipmentGlobeView = lazy(() => import("./ShipmentGlobeView").then((m) => (
 const MoneyTrailView = lazy(() => import("./MoneyTrailView").then((m) => ({ default: m.MoneyTrailView })));
 const CaseDeskView = lazy(() => import("./CaseDeskView").then((m) => ({ default: m.CaseDeskView })));
 const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default: m.TutorialView })));
+// A forecast scenario's Predictions/Insights/board tabs (docs/adr/0016-time-series-forecasting.md).
+const ForecastPredictView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastPredictView })));
+const ForecastInsightsView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastInsightsView })));
+const ForecastBoardView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastBoardView })));
 
 type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
 
@@ -43,6 +47,7 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   shipment_globe: { icon: "globe", label: "Globe" },
   money_trail: { icon: "coins", label: "Money Trail" },
   case_desk: { icon: "desk", label: "Case desk" },
+  forecast_board: { icon: "pulse", label: "Forecast board" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
@@ -112,6 +117,7 @@ function TabularViewContent({
   // A tutorial scenario opens on its tutorial — that *is* the scenario's front page.
   const [tab, setTab] = useState<Tab>(scenario.tutorial ? "tutorial" : "scenario");
   const extraTab = scenario.ui_extras ? EXTRA_TABS[scenario.ui_extras.kind] : undefined;
+  const forecast = scenario.task_type === "forecast";
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
@@ -151,8 +157,8 @@ function TabularViewContent({
 
       {tab === "scenario" && <ScenarioView scenario={scenario} />}
       {tab === "data" && <DataView scenario={scenario} accessToken={accessToken} />}
-      {tab === "predict" && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
-      {tab === "explore" && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
+      {tab === "predict" && !forecast && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
+      {tab === "explore" && !forecast && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "region_map" && <RegionMapView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "live_plant" && <LivePlantView scenario={scenario} accessToken={accessToken} />}
       {tab === "extra" && scenario.ui_extras?.kind === "process_optimizer" && <ProcessOptimizerView scenario={scenario} accessToken={accessToken} />}
@@ -167,6 +173,9 @@ function TabularViewContent({
         {tab === "extra" && scenario.ui_extras?.kind === "shipment_globe" && <ShipmentGlobeView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "money_trail" && <MoneyTrailView scenario={scenario} accessToken={accessToken} />}
         {tab === "extra" && scenario.ui_extras?.kind === "case_desk" && <CaseDeskView scenario={scenario} accessToken={accessToken} />}
+        {tab === "predict" && forecast && <ForecastPredictView scenario={scenario} accessToken={accessToken} />}
+        {tab === "explore" && forecast && <ForecastInsightsView scenario={scenario} accessToken={accessToken} />}
+        {tab === "extra" && scenario.ui_extras?.kind === "forecast_board" && <ForecastBoardView scenario={scenario} accessToken={accessToken} />}
       </Suspense>
 
       {chatOpen && (

@@ -148,3 +148,24 @@ def test_documents_only_instructions_switch_off_the_data_and_model() -> None:
     text = documents_only_instructions(DEFINITION_WITH_DOCUMENTS)
 
     assert "DOCUMENTS-ONLY MODE" in text and "consultar_normativa" in text
+
+
+def test_forecast_prompt_cites_the_backtest_and_the_forecast_tools() -> None:
+    metadata = {
+        "model_name": "lightgbm_lags",
+        "task_type": "forecast",
+        "target": "Appliances",
+        "test_score": 0.86,
+        "metrics": {"backtest_mase": 0.8565, "backtest_smape": 33.9},
+        "candidate_scores": [
+            {"name": "seasonal_naive", "metrics": {"mase": 1.18}},
+            {"name": "lightgbm_lags", "metrics": {"mase": 0.8565}},
+        ],
+        "accuracy_gain_threshold_for_complexity": 0.05,
+        "global_feature_importance": [{"feature": "Recent history", "importance": 370.2}],
+        "time_series": {"horizon": 24, "frequency": "h", "series": 1, "backtest_windows": 7},
+    }
+    prompt = build_system_prompt(DEFINITION, metadata)
+    assert "MASE 0.857" in prompt and "seasonal_naive (MASE 1.180)" in prompt
+    assert "get_forecast" in prompt and "get_forecast_backtest" in prompt
+    assert "Recent history (370.20)" in prompt and "predict_records" not in prompt

@@ -23,6 +23,7 @@ from typing import Any
 
 import joblib
 import pandas as pd
+from ai_circus_shared.forecasting import MODEL_BACKTEST_KEY, MODEL_FORECAST_KEY, MODEL_FORECASTER_KEY
 from ai_circus_shared.network_graph import NetworkGraph
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
@@ -42,6 +43,7 @@ from ai_circus_shared.tabular_ml import (
 )
 from sklearn.pipeline import Pipeline
 
+from prediction.core.forecast import Forecaster
 from prediction.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -71,6 +73,13 @@ class ModelNotTrainedError(ModelUnavailableError):
     """
 
 
+class NotARowModelError(RuntimeError):
+    """A forecast scenario has no model that scores independent rows: /predict, the dataset
+    evaluation and explainability answer 409 for it (app.py) — its forecast, backtest and
+    what-if have their own routes (docs/adr/0016-time-series-forecasting.md).
+    """
+
+
 def _download_checked(
     store: ObjectStore, org_id: str, key: str, checksums: dict[str, str], artifact_name: str
 ) -> bytes:
@@ -96,9 +105,13 @@ class ModelArtifacts:
     `pipeline_lower`/`pipeline_upper` are the 90% prediction-interval models — only
     present for regression scenarios (see training/core/training.py's
     fit_quantile_pipelines()), None otherwise.
+
+    A forecast scenario has no `pipeline`/`explainer` (use `row_pipeline()` where one is
+    required): its `forecast`/`backtest` documents, and `forecaster` when the selected
+    model can re-forecast a what-if.
     """
 
-    pipeline: Pipeline
+    pipeline: Pipeline | None
     explainer: Any
     metadata: dict[str, Any]
     pipeline_lower: Pipeline | None = None
@@ -110,6 +123,17 @@ class ModelArtifacts:
     # `model.out_of_fold_scores` scenarios: every row's cross-fitted probability and
     # SHAP contributions (see training.core.training.out_of_fold_scores).
     out_of_fold: dict[str, Any] | None = None
+    forecast: dict[str, Any] | None = None
+    backtest: dict[str, Any] | None = None
+    forecaster: Forecaster | None = None
+
+    def row_pipeline(self) -> Pipeline:
+        """The pipeline that scores rows; NotARowModelError for a forecast scenario."""
+        if self.pipeline is None:
+            raise NotARowModelError(
+                f"{self.metadata.get('scenario_slug', 'This scenario')!r} is a forecast: use /forecast instead."
+            )
+        return self.pipeline
 
 
 #: Each entry holds a full sklearn pipeline + SHAP explainer (can be multi-MB) — bound
@@ -273,6 +297,8 @@ class ModelCache:
                 f"Unsigned or wrongly signed model metadata (org={load_org_id}, scenario={scenario_slug}) — "
                 "refusing to load it."
             )
+        if metadata.get("task_type") == "forecast":
+            return self._load_forecast(store, load_org_id, metadata, checksums)
         pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
         explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
         pipeline_lower = pipeline_upper = None
@@ -301,6 +327,26 @@ class ModelCache:
             challenger_pipeline=challenger_pipeline,
             challenger_explainer=challenger_explainer,
             out_of_fold=out_of_fold,
+        )
+
+    @staticmethod
+    def _load_forecast(
+        store: ObjectStore, org_id: str, metadata: dict[str, Any], checksums: dict[str, str]
+    ) -> ModelArtifacts:
+        """A forecast scenario's checksum-verified documents (and booster, when stored)."""
+        forecast = json.loads(_download_checked(store, org_id, MODEL_FORECAST_KEY, checksums, "forecast"))
+        backtest = json.loads(_download_checked(store, org_id, MODEL_BACKTEST_KEY, checksums, "backtest"))
+        forecaster = None
+        if "forecaster" in checksums:
+            document = json.loads(_download_checked(store, org_id, MODEL_FORECASTER_KEY, checksums, "forecaster"))
+            forecaster = Forecaster.from_document(document)
+        return ModelArtifacts(
+            pipeline=None,
+            explainer=None,
+            metadata=metadata,
+            forecast=forecast,
+            backtest=backtest,
+            forecaster=forecaster,
         )
 
     def dataset(self, org_id: str, scenario_slug: str) -> pd.DataFrame:

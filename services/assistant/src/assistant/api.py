@@ -41,7 +41,7 @@ from assistant.core.logger import get_logger
 from assistant.core.prediction_client import PredictionServiceClient
 from assistant.core.prompt_cache import SystemPromptCache
 from assistant.core.rubric import build_rubric_prompt, parse_rubric_response
-from assistant.core.tools import build_document_tool, build_prediction_tools
+from assistant.core.tools import build_document_tool, build_forecast_tools, build_prediction_tools
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -567,7 +567,8 @@ async def agui_endpoint(
         )
     elif scope == SCOPE_ALL:
         prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
-        tools = build_prediction_tools(
+        forecast = definition.model is not None and definition.model.task_type == "forecast"
+        tools = (build_forecast_tools if forecast else build_prediction_tools)(
             prediction_client, scenario_slug=scenario_slug, authorization=request.headers.get("authorization")
         )
     else:
