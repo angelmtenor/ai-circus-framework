@@ -255,6 +255,21 @@ export type RiskWatchlistExtra = {
   push_up: string;
   push_down: string;
 };
+// Mirrors scenario_schema.SourceLibraryExtra — see SourceLibraryView.tsx.
+export type SourceLibraryExtra = { kind: "source_library"; chat_tab_label: string; tab_label: string; title: string };
+// Mirrors scenario_schema.CaseTrackerExtra — see CaseTrackerView.tsx.
+export type CaseTrackerExtra = {
+  kind: "case_tracker";
+  form_tab_label: string;
+  tab_label: string;
+  title: string;
+  empty_text: string;
+  filed_label: string;
+  receipt_label: string;
+  open_pdf_label: string;
+  details_label: string;
+  truncated_text: string;
+};
 // Mirrors scenario_schema.RowTriageExtra — see RowTriageView.tsx.
 export type RowTriageExtra = {
   kind: "row_triage";
@@ -500,7 +515,9 @@ export type UiExtras =
   | KnowledgeGraphExtra
   | ForecastBoardExtra
   | FleetHealthExtra
-  | RowTriageExtra;
+  | RowTriageExtra
+  | CaseTrackerExtra
+  | SourceLibraryExtra;
 
 // Mirrors scenario_schema.ForecastBoardExtra: what-if levers shift one exogenous feature.
 export type ForecastLever = {
@@ -1314,6 +1331,28 @@ export async function draftFormPdf(
 }
 
 /** The filed copy of one of the caller's own submissions — stamp, signature, receipt page. */
+/** Mirrors rag-agent's SourcesOut: what the caller's tenant's agent can search. */
+export type IndexedSources = { sources: { source: string; passages: number }[]; truncated: boolean };
+
+export async function indexedSources(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<IndexedSources> {
+  const response = await fetch(`${baseUrl}/documents/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+export async function sourcePassages(baseUrl: string, scenarioSlug: string, source: string, accessToken: string | null): Promise<{ source: string; passages: string[] }> {
+  const response = await fetch(`${baseUrl}/documents/${scenarioSlug}/passages?source=${encodeURIComponent(source)}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
+/** Mirrors form-agent's CasesOut: the caller's own filed cases, newest first. */
+export type FiledCase = { case_number: string; submitted_at: string | null; verification_code: string | null; fields: Record<string, string> };
+export type FiledCases = { cases: FiledCase[]; truncated: boolean };
+
+export async function filedCases(baseUrl: string, scenarioSlug: string, accessToken: string | null): Promise<FiledCases> {
+  const response = await fetch(`${baseUrl}/submissions/${scenarioSlug}`, { headers: headers(accessToken) });
+  return asJson(response);
+}
+
 export async function submissionPdf(
   baseUrl: string,
   scenarioSlug: string,

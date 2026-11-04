@@ -772,6 +772,16 @@ select:focus {
   min-height: 0;
 }
 
+.rag-chat-tab {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.rag-chat-tab[hidden] {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .workspace--rag {
     flex-direction: column;
