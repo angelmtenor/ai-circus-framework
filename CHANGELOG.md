@@ -4,6 +4,17 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.43.0 — 2026-11-04
+
+### Added
+- **vLLM as an optional GPU backend beside Ollama** (ADR 0017): `make k3s-vllm-up` or the `vllm` compose profile, reached
+  only through llm-gateway as the `vllm-qwen` model, listed in Settings and the health page, off by default. Its first start
+  needs about 33 GB of disk for the image and 3.1 GB for the weights, and it holds the whole GPU while it runs.
+
+### Changed
+- ADR 0014 is decided: Plotly stays for the chart builder, large scatter plots and 3-D, with measurements against Vega-Lite.
+  New small charts use the SVG primitives and new maps use `d3-geo`.
+
 ## v0.42.0 — 2026-11-04
 
 ### Added

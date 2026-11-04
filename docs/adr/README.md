@@ -19,6 +19,7 @@ pointer to its replacement.
 | [0011](0011-governance-ready-by-standards.md) | Governance-ready through open standards (JSON Schema, CloudEvents, OTel, CycloneDX, OPA-compatible), not a product; everything off by default |
 | [0012](0012-hot-path.md) | Hot path: ingest-side minute aggregates, in every tier |
 | [0013](0013-simulator-as-scenario-plugin.md) | Data product simulators are scenario-shipped Python plugins (numbered 0011 until the governance ADR took that number) |
-| [0014](0014-charting-and-bi-strategy.md) | *Proposed:* Vega-Lite as the app's one chart grammar, Superset for BI, Power BI by contract (marts + Deneb specs) |
+| [0014](0014-charting-and-bi-strategy.md) | Plotly stays for the chart builder, large scatters and 3-D; SVG primitives and `d3-geo` own small charts and maps; Superset for BI, Power BI by contract |
 | [0015](0015-observability-platform-contract.md) | The metrics/logs/traces stack is a platform prerequisite; each service honours a contract: `/metrics`, OTLP traces when an endpoint is set, JSON logs with trace ids, no content |
 | [0016](0016-time-series-forecasting.md) | Forecasting is a third tabular task (`task_type: forecast` + `time_series:`), backtested by MASE under the Green Code rule, with a `forecast_board` tab |
+| [0017](0017-vllm-alongside-ollama.md) | vLLM is an optional GPU backend alongside Ollama, reached only through llm-gateway |

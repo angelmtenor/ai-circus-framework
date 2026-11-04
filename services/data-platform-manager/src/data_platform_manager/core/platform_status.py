@@ -98,6 +98,14 @@ TARGETS: tuple[Target, ...] = (
         optional=True,
     ),
     Target(
+        "vllm",
+        "services",
+        "http://vllm:8000/health",
+        "Local LLM serving on the GPU, behind llm-gateway — optional overlay (make k3s-vllm-up)",
+        app_label="vllm",
+        optional=True,
+    ),
+    Target(
         "assistant", "services", "http://assistant:8000/healthz", "tabular_ml chat agent (AG-UI)", app_label="assistant"
     ),
     Target(

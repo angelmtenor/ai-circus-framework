@@ -80,6 +80,10 @@ class EnvConfig(BaseSettings):
         description="Base URL of the optional Ollama instance (llama3 model only); unset/not started = unreachable",
         default=None,
     )
+    VLLM_API_BASE: str | None = Field(
+        description="Base URL of the optional vLLM server (vllm-qwen model only); unset/not started = unreachable",
+        default=None,
+    )
     LANGFUSE_HOST: str | None = Field(
         description="Langfuse base URL (in-cluster, e.g. http://langfuse-web:3000); unset = no tracing", default=None
     )
@@ -160,7 +164,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "8a82aca29b4c44e783e6b28eb97f4f81a5de9f8a44c014376d69480a9d9af353"
+_SOURCE_YAML_HASH = "4b95f02696ecdc4b852c84fbd61b1502456803dac6c9c95cf3bb28e7c4069269"
 
 
 EnvConfig.model_rebuild()

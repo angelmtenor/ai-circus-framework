@@ -1301,10 +1301,16 @@ see [Reserved for later](#reserved-for-later-documented-not-built).
 | `openrouter` | OpenRouter | `OPENROUTER_API_KEY` | One key, many vendors |
 | `azure-gpt4o` | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_API_BASE` | Also edit the `azure/<deployment>` line in `litellm_config.yaml` |
 | `llama3` | Ollama (local) | none | **Optional**, off by default — see below |
+| `vllm-qwen` | vLLM (local GPU) | none | **Optional**, off by default, needs an NVIDIA GPU — see below |
 
 `ollama` is **not started by `make up`** — it's a real container with real RAM/disk cost, gated
 behind the `ollama` compose profile. `make ollama-up` starts it and pulls a small model
 automatically on first run.
+
+`vllm` is the same idea for a machine with a GPU: `make k3s-vllm-up` on k3s, or the `vllm` compose
+profile. It holds the whole GPU while it runs, and the first start takes about 33 GB of disk for the
+image and 3.1 GB for the weights. The default is a small 1.5B model, because under WSL an 8 GB GPU can
+only use about 5.5 GiB. See [ADR 0017](docs/adr/0017-vllm-alongside-ollama.md).
 
 Runtime key *rotation* from the browser isn't possible (this deployment doesn't run LiteLLM's
 DB-backed proxy mode) — a new key always means edit `.env`, then

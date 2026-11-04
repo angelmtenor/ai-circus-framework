@@ -242,6 +242,7 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "platform-registry",
         "prediction",
         "dl-inference",
+        "vllm",
         "assistant",
         "rag-agent",
         "form-agent",
@@ -273,6 +274,7 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
     assert {t.name for t in platform_status.TARGETS if t.optional} == {
         "kafka",
         "dl-inference",
+        "vllm",
         "opa",
     } | data_tiers | obs_bundle
     assert {t.name for t in platform_status.TARGETS if t.console_url} == {

@@ -221,6 +221,18 @@ model_list:
       rpm: 20
       tpm: 200000
 
+  # Local GPU serving (docs/adr/0017-vllm-alongside-ollama.md) — routes to the optional `vllm`
+  # service: `make k3s-vllm-up`, or compose's `vllm` profile. The model name is vLLM's
+  # --served-model-name, which stays put when its weights are swapped. vLLM wants no key, but
+  # LiteLLM's client needs some string.
+  - model_name: vllm-qwen
+    litellm_params:
+      model: hosted_vllm/vllm-default
+      api_base: os.environ/VLLM_API_BASE
+      api_key: "none"
+      rpm: 60
+      tpm: 400000
+
   # Local, no-API-key embedding backend for EMBEDDING_PROVIDER=local (etl-vectorize/
   # rag-agent/form-agent — see ai_circus_shared.embeddings' GatewayEmbeddingProvider).
   # Routed to the `local-embed` custom provider registered below, which runs a
