@@ -34,6 +34,9 @@ SUBMISSIONS_BUCKET = "form-agent-submissions"
 
 CASE_NUMBER_RE = re.compile(r"^[A-Z0-9_]{1,80}-[0-9A-F]{8}$")
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I — read aloud, typed back
+# GET /submissions/{scenario_slug} bounds: a person's tray, not a bulk export.
+MAX_SCANNED_CASES = 500
+MAX_LISTED_CASES = 100
 
 
 def case_number(scenario_slug: str) -> str:
@@ -94,6 +97,29 @@ def load_submission(
     if payload.get("submitted_by") != submitted_by:
         return None
     return payload
+
+
+def list_submissions(
+    store: ObjectStore, org_id: str, scenario_slug: str, submitted_by: str | None
+) -> tuple[list[dict[str, Any]], bool]:
+    """This user's own submissions in this tenant, newest first, at most MAX_LISTED_CASES, and
+    whether that cap or MAX_SCANNED_CASES (each object is one read) left any out.
+
+    The owner lives inside each object, so listing means reading: a shared-login demo tenant
+    with many filings is what the scan cap is for.
+    """
+    keys = [key for key in store.list(org_id, f"{scenario_slug}/") if key.endswith(".json")]
+    truncated = len(keys) > MAX_SCANNED_CASES
+    own: list[dict[str, Any]] = []
+    for key in keys[:MAX_SCANNED_CASES]:
+        try:
+            payload = json.loads(store.get(org_id, key))
+        except json.JSONDecodeError:
+            continue  # same answer as load_submission's "unknown/malformed": not listed
+        if payload.get("submitted_by") == submitted_by:
+            own.append(payload)
+    own.sort(key=lambda p: p.get("submitted_at") or "", reverse=True)
+    return own[:MAX_LISTED_CASES], truncated or len(own) > MAX_LISTED_CASES
 
 
 def filing_of(payload: dict[str, Any]) -> Filing:

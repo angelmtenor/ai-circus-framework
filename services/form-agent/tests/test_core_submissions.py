@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from ai_circus_shared.scenario_schema import ChatConfig, FormConfig, FormFieldSpec, ScenarioDefinition
 
 from form_agent.core.submissions import (
     SUBMISSIONS_BUCKET,
     case_number,
     filing_of,
+    list_submissions,
     load_submission,
     submit,
     verification_code,
@@ -35,6 +37,40 @@ class FakeObjectStore:
     def get(self, tenant_org_id: str, path: str) -> bytes:
         """The last bytes put under this tenant's key."""
         return next(data for org, key, data in reversed(self.puts) if org == tenant_org_id and key == path)
+
+    def list(self, tenant_org_id: str, prefix: str = "") -> list[str]:
+        """This tenant's keys under a prefix."""
+        return [key for org, key, _ in self.puts if org == tenant_org_id and key.startswith(prefix)]
+
+
+def _filed(store: FakeObjectStore, org: str, case: str, by: str, when: str) -> None:
+    payload = {"case_number": case, "submitted_by": by, "submitted_at": when, "fields": {}}
+    store.put(org, f"s/{case}.json", json.dumps(payload).encode())
+
+
+def test_list_submissions_is_scoped_by_tenant_and_user_newest_first() -> None:
+    store = FakeObjectStore()
+    _filed(store, "org-1", "S-00000001", "user-1", "2026-01-01T00:00:00+00:00")
+    _filed(store, "org-1", "S-00000002", "user-1", "2026-03-01T00:00:00+00:00")
+    _filed(store, "org-1", "S-00000003", "user-2", "2026-02-01T00:00:00+00:00")
+    _filed(store, "org-2", "S-00000004", "user-1", "2026-04-01T00:00:00+00:00")
+    store.put("org-1", "s/broken.json", b"not json")
+
+    cases, truncated = list_submissions(store, "org-1", "s", "user-1")  # type: ignore[arg-type]
+
+    assert [c["case_number"] for c in cases] == ["S-00000002", "S-00000001"]
+    assert truncated is False
+
+
+def test_list_submissions_says_when_a_cap_left_cases_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = FakeObjectStore()
+    for i in range(3):
+        _filed(store, "org-1", f"S-0000000{i}", "user-1", f"2026-01-0{i + 1}T00:00:00+00:00")
+    monkeypatch.setattr("form_agent.core.submissions.MAX_LISTED_CASES", 2)
+    cases, truncated = list_submissions(store, "org-1", "s", "user-1")  # type: ignore[arg-type]
+    assert len(cases) == 2 and truncated is True
+    monkeypatch.setattr("form_agent.core.submissions.MAX_SCANNED_CASES", 1)
+    assert list_submissions(store, "org-1", "s", "user-1")[1] is True  # type: ignore[arg-type]
 
 
 def _definition(form: FormConfig) -> ScenarioDefinition:
