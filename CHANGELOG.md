@@ -4,6 +4,23 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.40.0 — 2026-11-04
+
+### Added
+- **Time-series forecasting** as a third tabular task (`model.task_type: forecast` + `time_series:`, ADR 0016), with no
+  new service. Training backtests seasonal naive, exponential smoothing and LightGBM on lags on past cut-offs and
+  selects by MASE under the Green Code rule, with conformal prediction bands.
+- `prediction` serves `GET /forecast/{slug}`, `POST /forecast/{slug}/what-if` and `GET /model/{slug}/backtest`.
+- The assistant gets `get_forecast` and `get_forecast_backtest` on a forecast scenario.
+- ui-react: forecast variants of ML Predictions and ML Insights, and the opt-in `forecast_board` what-if tab.
+- The gallery's *Time Series* filter now finds real scenarios; it used to test for a scenario kind nothing produced.
+
+### Changed
+- **`energy_building` is now a forecast**: a home's appliance energy, hourly, 24 hours ahead. It is re-seeded from the
+  10-minute sample under a new raw object key and needs retraining (`make k3s-pipeline`, or
+  `./scripts/k3s_ml_train.sh energy_building`). Its `/predict`, dataset evaluation and explainability now answer 409.
+- `training` depends on statsmodels. mlforecast and statsforecast were the first choice but pin `pandas<3`.
+
 ## v0.39.0 — 2026-11-03
 
 ### Added
