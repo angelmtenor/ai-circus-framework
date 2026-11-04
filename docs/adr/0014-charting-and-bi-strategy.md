@@ -24,11 +24,12 @@ Power BI-style reports, and some already use Deneb (Vega / Vega-Lite inside Powe
 - **Power BI is reached by contract, never run in the cluster:** DirectQuery/import on the gold
   marts (Postgres or ClickHouse views, with the data product's row filters as roles).
 
-**Consequences.** The overlap that remains is known and small: `DataDashboardView` draws fixed charts through
-Plotly. Moving it stops that view loading Plotly but does not shrink the bundle, since the builder still needs
-it. `RegionMapView` and `RiskWatchlistView`'s maps have moved to `GeoBubbleMap` (see *Measured: the maps*);
-the watchlist's Risk landscape keeps Plotly's WebGL scatter. Superset and Power BI keep their own chart
-engines; portability between them is at the level of metrics and marts, not pixels.
+**Consequences.** The overlap this decision found is gone: `RegionMapView` and `RiskWatchlistView`'s maps moved
+to `GeoBubbleMap`, and `DataDashboardView`'s fixed charts to `dashboardCharts.tsx` and `BarList` (see the
+measurements below). Neither shrinks the bundle, since the builder still needs Plotly; those views just stop
+loading it. The watchlist's Risk landscape keeps Plotly's WebGL scatter. A dashboard panel declared `pie` is
+drawn as ranked bars with each share written beside it. Superset and Power BI keep their own chart engines;
+portability between them is at the level of metrics and marts, not pixels.
 
 **Reopen this if** customers need the same chart specs in the app and in Power BI through Deneb, the
 assistant has to write full chart specs (which must be validated, not executed: Vega compiles expressions
@@ -73,3 +74,16 @@ Again **idle was never the problem**: the gain is opening and interacting, and t
 need an outside CDN for their map data. The rest of the watchlist's download is its own data.
 `geoAlbersUsa` cannot place points outside the 50 states, so 39 banks are off the map; the map says so,
 and they stay in the ranked list.
+
+**Measured: the dashboards (2026-11-04).** `surf_retail`'s Dashboards tab, its map and 9 chart panels, Plotly
+against `dashboardCharts.tsx` and `BarList`, measured the same way:
+
+| | Plotly | SVG |
+|---|---|---|
+| Browser CPU to open | 1.47 s (0.62 s in Plotly's own code) | 0.71 s |
+| Downloaded on opening the tab | 1.71 MB | 0.34 MB |
+| JS heap | 43 MB | 24 MB |
+| DOM nodes on the page | 3,068 | 786 |
+| CPU to change the period | 0.51 s | 0.30 s |
+
+The page's idle cost, under 1% with 0 frames per second, is its 10-second poll of `/overview`, not its charts.

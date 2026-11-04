@@ -1,0 +1,112 @@
+.dash-chart {
+  min-width: 0;
+}
+
+.dash-chart__plot {
+  position: relative;
+  min-height: 1px;
+  /* The SVG is sized from this box's width, so it must not hold the box open when the page narrows. */
+  contain: inline-size;
+}
+
+.dash-chart__plot svg {
+  display: block;
+}
+
+.dash-chart__axis line {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.dash-chart__axis text {
+  fill: var(--dim);
+}
+
+.dash-chart__crosshair {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.dash-chart__point {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.dash-chart__band {
+  fill: var(--text);
+  fill-opacity: 0.07;
+}
+
+.dash-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  margin-top: 0.3rem;
+  color: var(--dim);
+  font-size: 0.76rem;
+}
+
+.dash-chart__legend i {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  margin-right: 0.35rem;
+  border-radius: 3px;
+}
+
+.dash-chart__legend i.dash-chart__swatch--dashed {
+  width: 1rem;
+  height: 0;
+  border-top: 2px dashed;
+  border-radius: 0;
+  vertical-align: middle;
+}
+
+.dash-chart__tip {
+  position: absolute;
+  top: 0.4rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  max-width: 17rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(0.7rem);
+}
+
+.dash-chart__tip[data-side="left"] {
+  transform: translateX(calc(-100% - 0.7rem));
+}
+
+.dash-chart__tip b,
+.dash-chart__tip strong {
+  color: var(--text);
+}
+
+.dash-chart__tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.dash-chart__tip-row i {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.35rem;
+  border-radius: 2px;
+}
+
+@media (max-width: 600px) {
+  .dp-panel .bar-row {
+    grid-template-columns: 7rem 1fr 4.5rem;
+  }
+}
