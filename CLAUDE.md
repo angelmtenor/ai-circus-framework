@@ -273,7 +273,7 @@ dependencies out of the entry chunk. Every animated canvas runs on `sceneLoop.ts
 `moving`/`ambient`/`idle`; ambient motion rests 15 s after the last input, nothing draws while
 hidden) — a new scene must not run its own endless `requestAnimationFrame`. `ScenarioPicker` grays
 out a scenario whose backend is down (`serviceAvailability.ts`: each service's `/healthz` through
-Traefik, one shared 30 s poll). Charting direction: ADR 0014 (Vega-Lite, Plotly being phased out). The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
+Traefik, one shared 30 s poll). Charts: ADR 0014 (Plotly only for the chart builder, large scatters and 3-D; a new small chart uses `charts.tsx`, a new map `d3-geo`). The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
 provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
