@@ -15,10 +15,10 @@ RESET := $(shell tput sgr0 2>/dev/null)
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
 	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
-	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
+	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off k3s-data-demo k3s-data-demo-off \
-	dl-gpu-check dl-data dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
+	dl-gpu-check dl-data dl-artifacts-export dl-artifacts-import dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke \
 	k3s-obs-up k3s-obs-down k3s-obs-restart
 
@@ -346,7 +346,13 @@ k3s-pipeline: ## Run the one-shot ETL -> training pipeline (every tabular_ml sce
 	@kubectl apply -f k8s/jobs/training-job.yaml
 	@kubectl -n ai-circus wait --for=condition=complete job/training --timeout=600s
 	@kubectl -n ai-circus rollout restart deployment/prediction
-	@echo "✓ tabular_ml pipeline complete (every scenario in SCENARIOS, empty/unset = all)"
+	@echo "✓ tabular_ml pipeline complete (every scenario in SCENARIOS, empty/unset = all) — documents are separate: make k3s-vectorize"
+
+k3s-vectorize: ## Index every scenario's documents into Qdrant and the tenant's bucket (RAG, forms, the case desk's reading room) — REQUIRED on a fresh cluster for those; ~20 min on CPU, so run it detached
+	@kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
+	@kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
+	@kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=1800s
+	@echo "✓ documents indexed (every scenario with documents)"
 
 k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl checks unchanged (same *.localhost + localhost:$${PLATFORM_REGISTRY_PORT:-8010} assertions, now against k3d's Traefik)
 	@kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-verify-port-forward.log 2>&1 & \
@@ -460,6 +466,12 @@ dl-gpu-check: ## Report whether this machine has an NVIDIA GPU dl-train-* can us
 
 dl-data: ## Download + checksum-verify every deep_learning scenario's public data into SeaweedFS (no training; SCENARIOS=… to narrow)
 	@./scripts/dl_train_host.sh --download-only "$(SCENARIOS)"
+
+dl-artifacts-export: ## Pack trained deep_learning models from this stack into FILE (default dl-models.tar) to serve them from another machine — SCENARIOS=… to narrow
+	@cd services/dl-training && uv run -q --frozen python ../../scripts/dl_artifacts.py export "$(abspath $(or $(FILE),dl-models.tar))" --scenarios "$(SCENARIOS)"
+
+dl-artifacts-import: ## Publish a dl-artifacts-export FILE into this stack; then: kubectl -n ai-circus rollout restart deployment/dl-inference
+	@cd services/dl-training && uv run -q --frozen python ../../scripts/dl_artifacts.py import "$(abspath $(or $(FILE),dl-models.tar))"
 
 dl-train: ## Fine-tune every deep_learning scenario on this machine (GPU if present; CPU asks first) and publish to SeaweedFS — SCENARIOS=… to narrow
 	@./scripts/dl_train_host.sh "$(SCENARIOS)"

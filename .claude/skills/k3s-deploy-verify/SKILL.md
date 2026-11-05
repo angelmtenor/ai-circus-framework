@@ -30,8 +30,9 @@ curl -sSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | USE_SUD
 4. After any rebuild on an existing cluster: `make k3s-import`, then
    `kubectl -n ai-circus rollout restart deployment/<each rebuilt service>` (Gotcha 5).
 5. `make k3s-pipeline` — **required on every fresh/recreated cluster** (Gotcha 9). For
-   `conversational_rag`/`assisted_form` document catalogs (Qdrant):
-   `kubectl -n ai-circus delete job etl-vectorize --ignore-not-found && kubectl apply -f k8s/jobs/etl-vectorize-job.yaml && kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=300s`
+   `conversational_rag`/`assisted_form` catalogs and the case desk's reading room: `make k3s-vectorize`
+   (~20 min on CPU, run it detached). Forgetting it looks like an app bug: RAG finds nothing and
+   «📚 Normativa» lists no documents.
 6. `make k3s-verify` (curl checks: admin + engineering-demo tenants, Traefik hosts, Langfuse,
    MLflow). `make k3s-wait` also starts a standing port-forward to platform-registry on
    `localhost:8010`, which the browser needs (Gotcha 2).
