@@ -25,7 +25,12 @@ import pandas as pd
 from ai_circus_shared.business_rules import passes
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.forecasting import MODEL_BACKTEST_KEY, MODEL_FORECAST_KEY, MODEL_FORECASTER_KEY
-from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
+from ai_circus_shared.scenario_schema import (
+    ScenarioDefinition,
+    base_scenario_slug,
+    expand_model_views,
+    resolve_scenarios,
+)
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.tabular_ml import (
     MAX_OUT_OF_FOLD_EXPLAINED_ROWS,
@@ -39,6 +44,7 @@ from ai_circus_shared.tabular_ml import (
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
+    MODEL_RECOMMENDATIONS_KEY,
     MODEL_SIGNATURE_METADATA_FIELD,
     NORMALIZED_DATASET_KEY,
     artifact_checksum,
@@ -53,6 +59,7 @@ from training.core.forecasting import split_series, train_forecast
 from training.core.governance_events import emit_model_trained
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
+from training.core.recommender import train_recommender
 from training.core.training import (
     DEFAULT_SELECTION_METRIC,
     build_explainer,
@@ -93,6 +100,9 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
     df = pd.read_parquet(io.BytesIO(store.get(config.ORG_ID, NORMALIZED_DATASET_KEY)))
     if definition.model.task_type == "forecast":
         _train_forecast(config, store, slug, definition, df)
+        return
+    if definition.model.task_type == "recommendation":
+        _train_recommendation(config, store, slug, definition, df)
         return
     df, rules_excluded_rows = _drop_rule_stopped_rows(df, definition)
     x = df.loc[:, definition.dataset.feature_columns]
@@ -301,7 +311,9 @@ def _train_one(config: EnvConfig, slug: str, definition: ScenarioDefinition) -> 
         accuracy_gain_threshold=definition.model.accuracy_gain_threshold_for_complexity,
     )
 
-    emit_model_trained(config, slug=slug, definition=definition, metadata=metadata, org_id=config.ORG_ID)
+    emit_model_trained(
+        config, slug=base_scenario_slug(slug), definition=definition, metadata=metadata, org_id=config.ORG_ID
+    )
 
     logger.success("training finished for scenario={} org={}", slug, config.ORG_ID)
 
@@ -383,8 +395,71 @@ def _train_forecast(
         dataset_rows=len(df),
         accuracy_gain_threshold=model.accuracy_gain_threshold_for_complexity,
     )
-    emit_model_trained(config, slug=slug, definition=definition, metadata=metadata, org_id=config.ORG_ID)
+    emit_model_trained(
+        config, slug=base_scenario_slug(slug), definition=definition, metadata=metadata, org_id=config.ORG_ID
+    )
     logger.success("forecast training finished for scenario={} org={}", slug, config.ORG_ID)
+
+
+def _train_recommendation(
+    config: EnvConfig, store: ObjectStore, slug: str, definition: ScenarioDefinition, df: pd.DataFrame
+) -> None:
+    """A `model.task_type: recommendation` (training.core.recommender): score the candidates on
+    hidden basket items, then write every candidate's neighbours and the metadata manifest — same
+    checksums, signature, MLflow mirror and governance event as the row models.
+    """
+    assert definition.dataset is not None and definition.model is not None and definition.recommender is not None
+    model = definition.model
+    run = train_recommender(df, definition.recommender, model.candidates, model.accuracy_gain_threshold_for_complexity)
+    logger.success("Selected recommender: {!r} ({})", run.selected.name, run.selected.metrics)
+    payload = json.dumps(run.document).encode()
+    store.put(config.ORG_ID, MODEL_RECOMMENDATIONS_KEY, payload)
+    checksums = {"recommendations": artifact_checksum(payload)}
+    metadata: dict[str, Any] = {
+        "scenario_slug": slug,
+        "model_name": run.selected.name,
+        "test_score": run.selected.test_score,
+        "task_type": "recommendation",
+        "candidates_evaluated": [c.name for c in run.candidates],
+        "selection_metric": model.selection_metric or "hit_rate",
+        "cv_folds": None,
+        "accuracy_gain_threshold_for_complexity": model.accuracy_gain_threshold_for_complexity,
+        "candidate_scores": [
+            {"name": c.name, "selection_score": c.selection_score, "metrics": c.metrics} for c in run.candidates
+        ],
+        "metrics": {**run.selected.metrics, "popularity_hit_rate": run.popularity_hit_rate},
+        "holdout_evaluation": None,
+        "rules_excluded_rows": 0,
+        "training_rows": run.baskets,
+        "holdout_rows": 0,
+        "feature_columns": definition.dataset.feature_columns,
+        "global_feature_importance": [],
+        "text_columns": [],
+        "challenger": None,
+        "out_of_fold": None,
+        "target": definition.dataset.target,
+        "has_intervals": False,
+        "drift_reference": None,
+        MODEL_CHECKSUMS_METADATA_FIELD: checksums,
+    }
+    signature = sign_checksums(checksums)
+    if signature is not None:
+        metadata[MODEL_SIGNATURE_METADATA_FIELD] = signature
+    store.put(config.ORG_ID, MODEL_METADATA_KEY, json.dumps(metadata, indent=2).encode())
+    log_training_run(
+        config.MLFLOW_TRACKING_URI,
+        org_id=config.ORG_ID,
+        scenario_slug=slug,
+        candidates=run.candidates,
+        selected=run.selected,
+        metadata=metadata,
+        dataset_rows=len(df),
+        accuracy_gain_threshold=model.accuracy_gain_threshold_for_complexity,
+    )
+    emit_model_trained(
+        config, slug=base_scenario_slug(slug), definition=definition, metadata=metadata, org_id=config.ORG_ID
+    )
+    logger.success("recommender training finished for scenario={} org={}", slug, config.ORG_ID)
 
 
 def _drop_rule_stopped_rows(df: pd.DataFrame, definition: ScenarioDefinition) -> tuple[pd.DataFrame, int]:
@@ -530,7 +605,8 @@ def main() -> None:
         sys.exit(1)
 
     failed_slugs: list[str] = []
-    for slug, definition in definitions.items():
+    # Every model of every scenario, by address: a failed one costs only itself (docs/adr/0018).
+    for slug, definition in expand_model_views(definitions).items():
         try:
             _train_one(config, slug, definition)
         except Exception:

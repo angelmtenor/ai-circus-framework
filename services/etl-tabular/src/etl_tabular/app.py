@@ -48,15 +48,17 @@ def main() -> None:
         sys.exit(1)
 
     for slug, definition in definitions.items():
-        assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
-        store = ObjectStore.connect(
-            bucket=definition.dataset.bucket,
-            endpoint_url=config.OBJECT_STORE_ENDPOINT,
-            access_key=config.OBJECT_STORE_ACCESS_KEY,
-            secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
-        )
-        run_etl(store, config.ORG_ID, definition.dataset, scenarios_dir / slug, definition.time_series)
-        logger.success("etl-tabular finished for scenario={} org={}", slug, config.ORG_ID)
+        # Each of the scenario's models has its own dataset and bucket (docs/adr/0018).
+        for address, view in definition.model_views().items():
+            assert view.dataset is not None  # guaranteed by kind="tabular_ml" filter
+            store = ObjectStore.connect(
+                bucket=view.dataset.bucket,
+                endpoint_url=config.OBJECT_STORE_ENDPOINT,
+                access_key=config.OBJECT_STORE_ACCESS_KEY,
+                secret_key=config.OBJECT_STORE_SECRET_KEY.get_secret_value(),
+            )
+            run_etl(store, config.ORG_ID, view.dataset, scenarios_dir / slug, view.time_series)
+            logger.success("etl-tabular finished for scenario={} org={}", address, config.ORG_ID)
 
 
 if __name__ == "__main__":

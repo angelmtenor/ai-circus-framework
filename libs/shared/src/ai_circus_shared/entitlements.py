@@ -180,6 +180,10 @@ class ScenarioSummary(BaseModel):
     # tabular_ml with task_type "forecast" only — the series layout (see
     # scenario_schema.TimeSeriesConfig: time column, series ids, frequency, horizon, …).
     time_series: dict[str, Any] | None = None
+    # tabular_ml with several models (docs/adr/0018): each one's `id`, `title`, its address as
+    # `slug`, and its own copy of the model fields above. ui-react renders each as a scenario.
+    extra_models: list[dict[str, Any]] | None = None
+    main_model_title: str | None = None
 
 
 @dataclass(frozen=True)

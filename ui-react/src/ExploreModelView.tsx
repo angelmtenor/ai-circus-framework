@@ -350,7 +350,7 @@ function DriftSection({ scenario, accessToken }: { scenario: ScenarioSummary; ac
       {drift?.available && !enoughRows && (
         <p className="panel-hint">
           Collecting traffic: {drift.window_rows} of the {drift.min_rows} scored rows needed before drift is meaningful. Score
-          some records in ML Predictions or the Data tab.
+          some records in Predictions or the Data tab.
         </p>
       )}
       {drift && enoughRows && level && (

@@ -683,6 +683,10 @@ export type ScenarioSummary = {
   document_tool?: DocumentTool | null;
   // tabular_ml with task_type "forecast" only — mirrors scenario_schema.TimeSeriesConfig.
   time_series?: TimeSeriesConfig | null;
+  // More models of this scenario (docs/adr/0018): each overrides the model fields above, and its
+  // `slug` is its address (`slug~id`), which is all prediction's routes need. See modelViews().
+  extra_models?: (Partial<ScenarioSummary> & { id: string; title: string; slug: string })[] | null;
+  main_model_title?: string | null;
 };
 
 export type TimeSeriesConfig = {
@@ -2005,4 +2009,47 @@ export async function trainDeepLearningScenario(
   accessToken: string | null,
 ): Promise<{ job: string; scenario_slug: string; gpu: boolean; triggered_at: string }> {
   return asJson(await fetch(`${baseUrl}/deep-learning/${slug}/train`, { method: "POST", headers: headers(accessToken) }));
+}
+
+/** Every model of a scenario as a scenario of its own: the main one first, then its extra models. */
+export function modelViews(scenario: ScenarioSummary): ScenarioSummary[] {
+  return [
+    scenario,
+    ...(scenario.extra_models ?? []).map((extra) => ({
+      ...scenario,
+      ...extra,
+      extra_models: null,
+      tutorial: null,
+      rubric_check: null,
+      document_tool: null,
+    })),
+  ];
+}
+
+// prediction's GET /recommend/{slug} — what goes with an item, per candidate (docs/adr/0018).
+export type RecommendedItem = { item: string; label: string; score: number };
+export type Recommendations = {
+  item: string;
+  label: string;
+  selected: string;
+  candidates: Record<string, RecommendedItem[]>;
+};
+export type RecommendableItem = { item: string; label: string; baskets: number };
+
+export async function fetchRecommendableItems(
+  baseUrl: string,
+  scenarioSlug: string,
+  accessToken: string | null,
+): Promise<RecommendableItem[]> {
+  return asJson(await fetch(`${baseUrl}/recommend/${scenarioSlug}/items`, { headers: headers(accessToken) }));
+}
+
+export async function fetchRecommendations(
+  baseUrl: string,
+  scenarioSlug: string,
+  item: string,
+  accessToken: string | null,
+): Promise<Recommendations> {
+  const query = encodeURIComponent(item);
+  return asJson(await fetch(`${baseUrl}/recommend/${scenarioSlug}?item=${query}`, { headers: headers(accessToken) }));
 }

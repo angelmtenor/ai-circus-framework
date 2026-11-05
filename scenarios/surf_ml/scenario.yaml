@@ -1,0 +1,250 @@
+# The models of Angel's Surf Co. (fictional — see scenarios/surf_retail), one scenario with several
+# models (docs/adr/0018-several-models-per-scenario.md). Demand and buyers are trained on the data
+# product's gold feature marts, which data-transform exports here as their raw datasets after every
+# successful build (data_product.ml_exports). The committed samples are slices of those exports, so
+# the scenario also runs without the data tier. Customers are pseudonymised keys: no name or card
+# number ever reaches a model.
+
+slug: surf_ml
+kind: tabular_ml
+title: "Angel's Surf Co. — Models"
+description: >
+  The models of Angel's Surf Co. (fictional), trained on the surf_retail data platform's history. How
+  many surfboards, SUP and kite gear will each shop sell next week? Which loyalty customers are
+  about to buy a new board? What goes with this product? Customers are pseudonymised keys only, and
+  the recommenders see anonymous baskets only.
+role_required: "scenario:surf_ml"
+industry: retail
+icon: "🌊"
+
+credits:
+  source: "Synthetic — the surf_retail data product's gold marts"
+  url: "https://github.com/angelmtenor/ai-circus-framework/tree/develop/scenarios/surf_retail"
+  note: >
+    Fictional: Angel's Surf Co. was invented by the framework's author, Ángel Martínez Tenor,
+    a surf enthusiast; every customer and sale behind these models is simulated.
+
+chat:
+  context: >
+    The models of Angel's Surf Co., a fictional chain of surf, SUP and kite shops on Europe's coasts.
+    Weekly demand predicts the units a shop will sell next week for one rider group (surf, SUP, kite
+    or accessories) from the shop's profile, the season and its recent weeks: say when the season,
+    rather than recent sales, drives a number. Board buyers predicts, from a loyalty customer's
+    pseudonymised purchase history, the chance they buy a board in the next 90 days: never try to
+    identify a customer, the key is a pseudonym by design. Explain with feature contributions. The
+    recommenders answer what goes with a product from anonymous baskets: association rules, and item
+    factors trained on the same baskets.
+  sample_questions:
+    - "What drives next week's SUP sales the most?"
+    - "How accurate is the demand forecast, in units per week?"
+    - "How much does the same week last year matter compared to last week?"
+    - "What makes a customer likely to buy a new board soon?"
+    - "How well does the model separate buyers from non-buyers?"
+    - "What goes with a surfboard, and do the two recommenders agree?"
+
+dataset:
+  bucket: "scenario-surf-demand"
+  raw_object: "raw/surf_demand_weekly.csv"
+  seed_file: "sample_data/surf_demand_weekly.csv"
+  index_col: "row_id"
+  target: "units_next_week"
+  display_columns: [week]
+  feature_columns:
+    - store_id
+    - rider_group
+    - country
+    - spot
+    - store_size
+    - next_week_of_year
+    - next_month
+    - store_age_weeks
+    - units_this_week
+    - units_last_week
+    - units_4w_avg
+    - units_next_week_last_year
+  feature_schema:
+    store_id:
+      {type: categorical, label: "Shop", options: [S001, S002, S003, S004, S005, S006, S007, S008, S009, S010, S011, S012, S013, S014, S015, S016, S017, S018, S019, S020, S021, S022, S023, S024, WEB], default: S001,
+       info: "The shop (WEB = the web shop's home deliveries)."}
+    rider_group:
+      {type: categorical, label: "Rider group", options: [surf, sup, kite, accessory], default: surf,
+       info: "What is being forecast: surfboards, SUP boards, kite gear or accessories."}
+    country:
+      {type: categorical, label: "Country", options: [Spain, France, Italy, Greece, Cyprus, Malta, Online], default: Spain,
+       info: "The shop's country."}
+    spot:
+      {type: categorical, label: "Coast", options: [atlantic, surf, kite, flat, online], default: kite,
+       info: "The water the shop serves: Atlantic surf, Mediterranean surf breaks, kite spots or flat-water bays."}
+    store_size:
+      {type: categorical, label: "Shop size", options: [S, M, L, online], default: L,
+       info: "Small, medium or large shop."}
+    next_week_of_year:
+      {type: numeric, label: "Week of the year", min: 1, max: 53, default: 27, step: 1,
+       info: "ISO week being forecast — the season."}
+    next_month:
+      {type: numeric, label: "Month", min: 1, max: 12, default: 7, step: 1,
+       info: "Month of the week being forecast."}
+    store_age_weeks:
+      {type: numeric, label: "Shop age (weeks)", min: 0, max: 520, default: 200, step: 1,
+       info: "Weeks since the shop opened — new shops ramp up."}
+    units_this_week:
+      {type: numeric, label: "Units this week", min: 0, max: 400, default: 20, step: 1,
+       info: "Units of this rider group sold this (complete) week."}
+    units_last_week:
+      {type: numeric, label: "Units last week", min: 0, max: 400, default: 18, step: 1,
+       info: "Units sold the week before."}
+    units_4w_avg:
+      {type: numeric, label: "4-week average", min: 0, max: 400, default: 19, step: 0.25,
+       info: "Average weekly units over the last four weeks."}
+    units_next_week_last_year:
+      {type: numeric, label: "Same week last year", min: 0, max: 400, default: 22, step: 1,
+       info: "Units sold in the forecast week, one year earlier (0 if the shop was not open)."}
+  default_charts:
+    - {type: box, x: rider_group, y: units_next_week, color_by: rider_group}
+    - {type: scatter, x: units_next_week_last_year, y: units_next_week, color_by: rider_group}
+    - {type: bar, x: next_month, y: units_next_week, agg: mean, color_by: rider_group}
+
+model:
+  task_type: regression
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  explainability: shap
+  target_units: "units"
+  target_label: "Units next week"
+  target_description: "Units of the rider group the shop sells in the coming week."
+
+main_model_title: "Weekly demand"
+extra_models:
+  - id: buyers
+    title: "Board buyers"
+    dataset:
+      bucket: "scenario-surf-propensity"
+      raw_object: "raw/surf_customers.csv"
+      seed_file: "sample_data/surf_customers.csv"
+      index_col: "customer_key"
+      target: "buys_board_next_90d"
+      feature_columns:
+        - recency_days
+        - tenure_days
+        - baskets
+        - spend_eur
+        - boards_bought
+        - accessory_eur
+        - surf_share
+        - sup_share
+        - kite_share
+        - online_share
+        - days_since_last_board
+      feature_schema:
+        recency_days:
+          {type: numeric, label: "Days since last visit", min: 0, max: 1900, default: 45, step: 1,
+           info: "Days between the customer's last basket and the snapshot."}
+        tenure_days:
+          {type: numeric, label: "Days as a customer", min: 0, max: 1900, default: 600, step: 1,
+           info: "Days since the customer's first basket."}
+        baskets:
+          {type: numeric, label: "Baskets", min: 1, max: 200, default: 6, step: 1,
+           info: "Receipts and online orders with the loyalty card."}
+        spend_eur:
+          {type: numeric, label: "Total spend (€)", min: 0, max: 30000, default: 900, step: 10,
+           info: "Net spend before the snapshot, tax included."}
+        boards_bought:
+          {type: numeric, label: "Boards bought", min: 0, max: 30, default: 1, step: 1,
+           info: "Surfboards, SUP boards, kites and kite boards bought."}
+        accessory_eur:
+          {type: numeric, label: "Accessory spend (€)", min: 0, max: 5000, default: 120, step: 5,
+           info: "Spend on leashes, fins, wax, bags, paddles…"}
+        surf_share:
+          {type: numeric, label: "Surf share of spend", min: 0, max: 1, default: 0.6, step: 0.01,
+           info: "Share of spend on surfboards."}
+        sup_share:
+          {type: numeric, label: "SUP share of spend", min: 0, max: 1, default: 0.1, step: 0.01,
+           info: "Share of spend on SUP boards."}
+        kite_share:
+          {type: numeric, label: "Kite share of spend", min: 0, max: 1, default: 0.1, step: 0.01,
+           info: "Share of spend on kite gear."}
+        online_share:
+          {type: numeric, label: "Online share of baskets", min: 0, max: 1, default: 0.3, step: 0.01,
+           info: "Share of baskets bought in the web shop."}
+        days_since_last_board:
+          {type: numeric, label: "Days since last board", min: 0, max: 3650, default: 500, step: 1,
+           info: "Days since the last board purchase (3650 = never bought one)."}
+      default_charts:
+        - {type: histogram, x: recency_days, color_by: buys_board_next_90d}
+        - {type: box, x: buys_board_next_90d, y: days_since_last_board, color_by: buys_board_next_90d}
+        - {type: scatter, x: baskets, y: spend_eur, color_by: buys_board_next_90d}
+
+    model:
+      task_type: classification
+      candidates: ["lightgbm"]
+      accuracy_gain_threshold_for_complexity: 0.02
+      explainability: shap
+      target_label: "Buys a board in the next 90 days"
+      target_description: "Whether the loyalty customer bought a surfboard, SUP board, kite or kite board in the 90 days after the snapshot."
+      target_value_labels: {"0": "No board", "1": "Buys a board"}
+
+    ui_extras:
+      kind: risk_watchlist
+      tab_label: "Buyer watchlist"
+      title: "Who is about to buy a board?"
+      subtitle: >
+        Every loyalty customer scored for a board purchase in the next 90 days. Filter a tier, pick a
+        customer to see what drives their score — then reveal who really bought. Customers are
+        pseudonymised keys: nobody here can be identified, by design.
+      entity_noun: customer
+      size_feature: spend_eur
+      landscape_x: recency_days
+      landscape_y: spend_eur
+      positive_is_adverse: false
+      score_label: "P(buy)"
+      outcome_label: "Bought a board"
+      outcome_past: "bought a board"
+      push_up: "buying"
+      push_down: "not buying"
+      tiers:
+        - {label: "Not now", min_probability: 0.0, description: "No sign of a purchase: leave them out of board campaigns."}
+        - {label: "Warming up", min_probability: 0.15, description: "Above the base rate: include in the seasonal newsletter."}
+        - {label: "Ready", min_probability: 0.35, description: "Worth a personal offer: a demo day or a trade-in."}
+        - {label: "Buying now", min_probability: 0.6, description: "Make sure their shop has the right boards in stock."}
+      pillars:
+        - {label: "Recency", features: [recency_days, days_since_last_board]}
+        - {label: "Engagement", features: [tenure_days, baskets, online_share]}
+        - {label: "Spend", features: [spend_eur, boards_bought, accessory_eur]}
+        - {label: "Discipline", features: [surf_share, sup_share, kite_share]}
+
+
+  # Anonymous baskets, sampled from the simulator's receipts by scripts/prepare_surf_ml_samples.py.
+  # The web shop keeps reading the Data Platform's own rules (gold mart_product_affinity).
+  - id: recommender
+    title: "Recommenders"
+    dataset:
+      bucket: "scenario-surf-baskets"
+      raw_object: "raw/surf_baskets.csv"
+      seed_file: "sample_data/surf_baskets.csv"
+      index_col: "row_id"
+      target: "rider_group"
+      display_columns: [category]
+      feature_columns: [basket_id, sku, product_name]
+      feature_schema:
+        basket_id: {type: text, label: "Basket", max_length: 40, info: "An anonymous receipt or order id."}
+        sku: {type: text, label: "SKU", max_length: 20, info: "The product's id."}
+        product_name: {type: text, label: "Product", max_length: 120, info: "The product's name."}
+      default_charts:
+        - {type: histogram, x: rider_group, color_by: rider_group}
+    model:
+      task_type: recommendation
+      candidates: ["association_rules", "item_factors"]
+      accuracy_gain_threshold_for_complexity: 0.02
+      target_label: "Goes with this product"
+      target_description: "Products bought together with it, from anonymous baskets."
+    recommender:
+      basket_column: basket_id
+      item_column: sku
+      label_column: product_name
+      top_k: 8
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

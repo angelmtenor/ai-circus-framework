@@ -41,8 +41,8 @@ const out = process.env.OUT_DIR;
     const rows = await page.$$('table tbody tr');
     console.log('data tab: plotlyCharts=' + plots.length + ' tableRows=' + rows.length);
 
-    // ML Predictions tab — depends on training's model artifact + the prediction service
-    await page.click('text=ML Predictions');
+    // ML model tab (opens on Predictions) — depends on training's model artifact + the prediction service
+    await page.click('text=ML model');
     await page.waitForLoadState('networkidle', { timeout: 60000 });
     await page.waitForTimeout(2000);
     const predictBtn = await page.$('button:has-text("Predict")');

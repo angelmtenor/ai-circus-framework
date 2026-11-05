@@ -17,7 +17,7 @@ from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.governance_events import PredictionRecordData
 from ai_circus_shared.network_graph import NetworkGraph
-from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.scenario_schema import ScenarioDefinition, base_scenario_slug
 from ai_circus_shared.tabular_ml import MAX_DATASET_ROWS
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -542,7 +542,7 @@ def _decision_record(
         (out.decision or out.gate or "scored" for out in outputs), (out.prediction for out in outputs)
     )
     return PredictionRecordData(
-        scenario_slug=definition.slug,
+        scenario_slug=base_scenario_slug(definition.slug),
         ai_system_id=ai_system_id_of(definition),
         org_id=org_id,
         model_name=name or str(metadata.get("model_name", "unknown")),
@@ -801,6 +801,78 @@ def model_backtest_endpoint(
     assert identity.org_id is not None
     backtest = _forecast_artifacts(model_cache, identity.org_id, definition).backtest
     return BacktestOut(**backtest)  # type: ignore[arg-type]
+
+
+class RecommendedItemOut(BaseModel):
+    """One recommended item; `score` means what its candidate says (lift, or cosine similarity)."""
+
+    item: str
+    label: str
+    score: float
+
+
+class RecommendationsOut(BaseModel):
+    """Response body for GET /recommend/{scenario_slug}: every candidate's list, side by side."""
+
+    item: str
+    label: str
+    selected: str
+    candidates: dict[str, list[RecommendedItemOut]]
+
+
+class RecommendableItemOut(BaseModel):
+    """An item that can be asked about, and in how many baskets it was seen."""
+
+    item: str
+    label: str
+    baskets: int
+
+
+def _recommendations(model_cache: ModelCache, org_id: str, definition: ScenarioDefinition) -> dict[str, Any]:
+    """The caller's recommender; 409 for a model that is not one."""
+    recommendations = model_cache.get(org_id, definition.slug).recommendations
+    if recommendations is None:
+        raise HTTPException(status_code=409, detail=f"Model {definition.slug!r} is not a recommender.")
+    return recommendations
+
+
+@router.get("/recommend/{scenario_slug}/items", response_model=list[RecommendableItemOut])
+def recommendable_items_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> list[RecommendableItemOut]:
+    """Every item the caller's recommender knows, most common first."""
+    assert identity.org_id is not None
+    items = _recommendations(model_cache, identity.org_id, definition)["items"]
+    return [RecommendableItemOut(item=item, **info) for item, info in items.items()]
+
+
+@router.get("/recommend/{scenario_slug}", response_model=RecommendationsOut)
+def recommend_endpoint(
+    item: str = Query(max_length=200),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+    model_cache: ModelCache = Depends(_model_cache),
+) -> RecommendationsOut:
+    """What goes with `item`, according to every candidate of the caller's recommender."""
+    assert identity.org_id is not None
+    document = _recommendations(model_cache, identity.org_id, definition)
+    items = document["items"]
+    if item not in items:
+        raise HTTPException(status_code=404, detail=f"Unknown item {item!r}.")
+    return RecommendationsOut(
+        item=item,
+        label=items[item]["label"],
+        selected=document["selected"],
+        candidates={
+            name: [
+                RecommendedItemOut(item=entry["item"], label=items[entry["item"]]["label"], score=entry["score"])
+                for entry in neighbours.get(item, [])
+            ]
+            for name, neighbours in document["candidates"].items()
+        },
+    )
 
 
 @router.get("/model/{scenario_slug}/out-of-fold", response_model=OutOfFoldOut)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,7 +11,12 @@ import httpx
 import pytest
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 
-from assistant.core.tools import build_document_tool, build_forecast_tools, build_prediction_tools
+from assistant.core.tools import (
+    build_document_tool,
+    build_forecast_tools,
+    build_model_tools,
+    build_prediction_tools,
+)
 from tests.test_core_chat import DEFINITION_WITH_DOCUMENTS
 
 
@@ -257,3 +263,32 @@ def test_forecast_tools_fetch_the_forecast_a_what_if_and_the_backtest() -> None:
 
     client.raise_error = httpx.ConnectError("down")
     assert _tool_named(tools, "get_forecast").invoke({}).startswith("Could not fetch the forecast")
+
+
+def test_model_tools_cover_every_model_of_the_scenario() -> None:
+    """docs/adr/0018: the main model keeps its tool names; an extra model's end in _<id> and call its address."""
+    energy = ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/energy_building/scenario.yaml")
+    client = _FakeForecastClient()
+    tools = build_model_tools(client, energy, authorization="Bearer tok")  # type: ignore[arg-type]
+    names = {tool.name for tool in tools}
+    assert {"predict_records", "get_dataset_sample", "get_forecast_forecast", "get_forecast_backtest_forecast"} <= names
+    _tool_named(tools, "get_forecast_backtest_forecast").invoke({})
+    assert client.calls[-1] == ("backtest", {"scenario_slug": "energy_building~forecast"})
+
+
+def test_recommender_tools_are_suffixed_and_call_the_models_address() -> None:
+    surf = ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/surf_ml/scenario.yaml")
+    calls: list[tuple[str, str]] = []
+
+    class Client:
+        def recommend(self, *, scenario_slug: str, authorization: str | None, item: str) -> dict[str, Any]:
+            calls.append((scenario_slug, item))
+            return {"item": item}
+
+    tools = build_model_tools(Client(), surf, authorization="Bearer tok")  # type: ignore[arg-type]
+    names = {tool.name for tool in tools}
+    assert {"predict_records", "predict_records_buyers", "get_recommendations_recommender"} <= names
+    assert json.loads(_tool_named(tools, "get_recommendations_recommender").invoke({"item": "FSH-1"})) == {
+        "item": "FSH-1"
+    }
+    assert calls == [("surf_ml~recommender", "FSH-1")]

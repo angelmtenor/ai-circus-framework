@@ -15,7 +15,7 @@ from ai_circus_shared.auth import Identity, _string_claims
 from ai_circus_shared.contracts import Contract, get_one, get_path, parse_timestamp
 from ai_circus_shared.data_policy import AccessDeniedError, resolve_access
 from ai_circus_shared.data_product import ContractRule, MetricSpec, check_files, layer_schema
-from ai_circus_shared.scenario_schema import ScenarioDefinition, load_all
+from ai_circus_shared.scenario_schema import ScenarioDefinition, base_scenario_slug, expand_model_views, load_all
 
 SCENARIOS = Path(__file__).resolve().parents[3] / "scenarios"
 
@@ -39,9 +39,9 @@ def test_every_ml_export_trains_a_shipped_tabular_scenario() -> None:
     exports = [(d, e) for d in scenarios.values() if d.data_product for e in d.data_product.ml_exports]
     assert exports
     for product, export in exports:
-        child = scenarios.get(export.scenario)
+        child = expand_model_views(scenarios).get(export.scenario)
         assert child is not None and child.kind == "tabular_ml" and child.dataset is not None, export
-        seed = SCENARIOS / child.slug / child.dataset.seed_file
+        seed = SCENARIOS / base_scenario_slug(child.slug) / child.dataset.seed_file
         assert seed.exists(), f"{child.slug} ships no {child.dataset.seed_file}"
         header = seed.read_text().splitlines()[0].split(",")
         needed = {child.dataset.index_col, child.dataset.target, *child.dataset.feature_columns}

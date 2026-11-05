@@ -206,9 +206,9 @@ async def test_agui_endpoint_builds_prediction_tools_scoped_to_the_request(monke
     """
     captured: dict[str, object] = {}
 
-    def fake_build_prediction_tools(client: object, *, scenario_slug: str, authorization: str | None) -> list[str]:
+    def fake_build_model_tools(client: object, definition: object, *, authorization: str | None) -> list[str]:
         captured["base_url"] = client.base_url  # type: ignore[attr-defined]
-        captured["scenario_slug"] = scenario_slug
+        captured["scenario_slug"] = definition.slug  # type: ignore[attr-defined]
         captured["authorization"] = authorization
         return ["prediction-tool-sentinel"]
 
@@ -217,7 +217,7 @@ async def test_agui_endpoint_builds_prediction_tools_scoped_to_the_request(monke
         return "fake-graph"
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", fake_build_prediction_tools)
+    monkeypatch.setattr(api_module, "build_model_tools", fake_build_model_tools)
     monkeypatch.setattr(api_module, "build_agui_agent", fake_build_agui_agent)
     monkeypatch.setattr(
         api_module,
@@ -265,7 +265,7 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
             return self
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(api_module, "build_model_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
     monkeypatch.setattr(
         api_module,
@@ -314,7 +314,7 @@ async def test_agui_endpoint_turns_a_mid_run_exception_into_a_run_error_event(mo
         raise RuntimeError("GroqException - rate_limit_exceeded")
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(api_module, "build_model_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
     monkeypatch.setattr(
         api_module, "LangGraphAGUIAgent", lambda *, name, graph, config=None: SimpleNamespace(run=_raising_agent_run)
@@ -364,7 +364,7 @@ async def test_agui_endpoint_emits_model_fallback_event_when_served_model_differ
         return SimpleNamespace(run=_fake_agent_run)
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(api_module, "build_model_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
     monkeypatch.setattr(api_module, "LangGraphAGUIAgent", _fake_langgraph_agui_agent)
 
@@ -481,7 +481,7 @@ async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
         yield TextMessageEndEvent(type=EventType.TEXT_MESSAGE_END, message_id="m1")
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: [])
+    monkeypatch.setattr(api_module, "build_model_tools", lambda *_a, **_kw: [])
     monkeypatch.setattr(api_module, "build_agui_agent", lambda *_a, **_kw: "fake-graph")
     monkeypatch.setattr(
         api_module, "LangGraphAGUIAgent", lambda *, name, graph, config=None: SimpleNamespace(run=_fake_agent_run)
@@ -551,7 +551,7 @@ async def _run_agui_with_documents(monkeypatch: pytest.MonkeyPatch, forwarded_pr
         return "fake-graph"
 
     monkeypatch.setattr(api_module, "get_env_config", lambda: _FakePredictionEnvConfig())
-    monkeypatch.setattr(api_module, "build_prediction_tools", lambda *_a, **_kw: ["prediction-tool"])
+    monkeypatch.setattr(api_module, "build_model_tools", lambda *_a, **_kw: ["prediction-tool"])
     monkeypatch.setattr(api_module, "build_document_tool", lambda *_a, **kw: f"document-tool:{kw['org_id']}")
     monkeypatch.setattr(api_module, "build_agui_agent", fake_build_agui_agent)
     monkeypatch.setattr(

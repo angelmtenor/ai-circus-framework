@@ -228,6 +228,7 @@ def test_main_trains_selects_explains_and_saves(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": fake_definition})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
 
     app.main()
@@ -262,6 +263,7 @@ def test_main_trains_regression_scenario_without_stratify(
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"supply_chain": fake_regression_definition})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
 
     app.main()
@@ -293,6 +295,7 @@ def test_main_continues_after_one_scenario_fails_and_exits_nonzero(
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(
         app,
         "resolve_scenarios",
@@ -317,6 +320,7 @@ def test_main_exits_if_no_scenario_matches(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
 
     with pytest.raises(SystemExit) as exc_info:
         app.main()
@@ -353,6 +357,7 @@ def _run_main(monkeypatch: pytest.MonkeyPatch, definition: object, df: pd.DataFr
     monkeypatch.setattr(app, "configure_logger", lambda: None)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": definition})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **_kwargs: store))
     app.main()
     return store

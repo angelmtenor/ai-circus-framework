@@ -148,7 +148,7 @@ def test_model_cache_loads_a_forecast_and_refuses_row_scoring() -> None:
     artifacts = cache.get("org-1", "energy")
     assert artifacts.forecast == forecast and artifacts.backtest == backtest
     assert artifacts.forecaster is not None and artifacts.pipeline is None
-    with pytest.raises(NotARowModelError, match="is a forecast"):
+    with pytest.raises(NotARowModelError, match="does not score rows"):
         artifacts.row_pipeline()
 
 

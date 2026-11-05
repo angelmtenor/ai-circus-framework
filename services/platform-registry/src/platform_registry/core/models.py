@@ -104,6 +104,10 @@ class Scenario(Base):
     # tabular_ml forecast only — see scenario_schema.TimeSeriesConfig (auto-added by
     # ensure_added_columns, like tutorial above).
     time_series: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml with several models — each one's id, title and the fields ui-react's views read
+    # (see ai_circus_shared.scenario_schema.ExtraModel; auto-added by ensure_added_columns).
+    extra_models: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None)
+    main_model_title: Mapped[str | None] = mapped_column(String, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

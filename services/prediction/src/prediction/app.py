@@ -22,7 +22,7 @@ import uvicorn
 from ai_circus_shared.decision_records import build_recorder
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.observability import configure_metrics
-from ai_circus_shared.scenario_schema import resolve_scenarios
+from ai_circus_shared.scenario_schema import expand_model_views, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI, Request
@@ -49,6 +49,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         raise RuntimeError(
             f"No tabular_ml scenario matched SCENARIOS={config.SCENARIOS!r} under {config.SCENARIOS_DIR!r}."
         )
+    # Every model by address (`slug`, `slug~id`): to the routes and the cache, each is one definition.
+    definitions = expand_model_views(definitions)
 
     stores = {}
     for slug, definition in definitions.items():

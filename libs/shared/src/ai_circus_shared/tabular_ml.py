@@ -24,6 +24,8 @@ GRAPH_KEY = "processed/graph.json"
 MODEL_PIPELINE_KEY = "model/pipeline.joblib"
 MODEL_EXPLAINER_KEY = "model/explainer.joblib"
 MODEL_METADATA_KEY = "model/metadata.json"
+# `task_type: recommendation`: every candidate's ranked neighbours of every item (JSON).
+MODEL_RECOMMENDATIONS_KEY = "model/recommendations.json"
 # Regression-only: LightGBM quantile-objective pipelines giving a 90% prediction
 # interval around MODEL_PIPELINE_KEY's point estimate — absent for classification
 # scenarios (see training/core/training.py's fit_quantile_pipelines()).

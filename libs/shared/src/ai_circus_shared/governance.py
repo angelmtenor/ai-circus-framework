@@ -25,6 +25,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 # Safe inside a Valkey key and a URL path segment: no whitespace, `:` or `/`.
+# Separates a scenario from one of its models in a model address, `slug~id` (docs/adr/0018).
+MODEL_ADDRESS_SEPARATOR = "~"
 AI_SYSTEM_ID_PATTERN = r"^[a-z0-9][a-z0-9_.-]{0,63}$"
 
 AiActRole = Literal["provider", "deployer"]
@@ -103,11 +105,12 @@ def resolve_governance(slug: str, declared: GovernanceConfig | None) -> dict[str
 
 
 def ai_system_id_of(definition: object) -> str:
-    """The scenario's stable AI-system id: the declared `governance.ai_system_id`, else its slug.
+    """The scenario's stable AI-system id: the declared `governance.ai_system_id`, else its slug
+    (the scenario's, for a model view: all of a scenario's models are one AI system).
 
     Takes anything with `.slug` and an optional `.governance` (a `ScenarioDefinition`), so the
     agent services can tag their gateway calls without importing the scenario schema here.
     """
     governance = getattr(definition, "governance", None)
     declared = getattr(governance, "ai_system_id", None)
-    return str(declared or definition.slug)  # type: ignore[attr-defined]
+    return str(declared or definition.slug.split(MODEL_ADDRESS_SEPARATOR, 1)[0])  # type: ignore[attr-defined]

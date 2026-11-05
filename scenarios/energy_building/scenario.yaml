@@ -2,19 +2,20 @@
 # Postgres schema by services/platform-registry at bootstrap. etl-tabular / training /
 # prediction also read it as build-time config (dataset schema, model candidates).
 #
-# A `forecast` scenario (docs/adr/0016-time-series-forecasting.md): one hourly series —
-# a home's appliance energy — forecast 24 hours ahead from its own history, the calendar
-# and the outdoor weather. Ported from smart-data-science's scenario_energy_building.py;
-# the hourly seed is built from the committed 10-minute sample by
-# scripts/prepare_energy_building_hourly.py.
+# Two models of one home's appliance energy (docs/adr/0018-several-models-per-scenario.md).
+# The main one is a `regression` on 10-minute readings: what is the load under these conditions?
+# The extra one is a `forecast` (docs/adr/0016-time-series-forecasting.md): what comes in the next
+# 24 hours, from its own history, the calendar and the outdoor weather. Ported from
+# smart-data-science's scenario_energy_building.py; the hourly seed is built from the committed
+# 10-minute sample by scripts/prepare_energy_building_hourly.py.
 
 slug: energy_building
 kind: tabular_ml
-title: "Building Energy Forecast"
+title: "Building Energy Consumption"
 description: >
-  Forecasts a home's appliance energy use for the next 24 hours, hour by hour, from its own
-  recent consumption, the time of day and week, and the outdoor weather — with prediction
-  bands, a backtest of how the forecast did on past days, and what-ifs on the weather.
+  Two models of a home's appliance energy: one predicts the use (in Wh) under given indoor climate,
+  outdoor weather and time of day, the other forecasts the next 24 hours hour by hour, with
+  prediction bands, a backtest on past days and what-ifs on the weather.
 role_required: "scenario:energy_building"
 industry: energy_utilities
 icon: "🏠"
@@ -23,84 +24,166 @@ credits:
   source: "UCI Machine Learning Repository — Appliances Energy Prediction"
   url: "https://archive.ics.uci.edu/ml/datasets/Appliances+energy+prediction"
   note: >
-    Ported via smart-data-science's scenario_energy_building.py. The committed 10,000-row random
-    sample of the 10-minute data is averaged per hour (scripts/prepare_energy_building_hourly.py):
+    Ported via smart-data-science's scenario_energy_building.py. A 10,000-row random sample of the
+    10-minute data, also averaged per hour for the forecast (scripts/prepare_energy_building_hourly.py):
     3,289 hours from January to May 2016, 40 of them interpolated.
 
 chat:
   context: >
-    A residential energy forecast: appliance electricity use of one home, hour by hour, 24 hours
-    ahead. The model learns from the home's own recent hours (the previous hours, the same hour
-    yesterday and last week), the hour of the day and the day of the week, and the outdoor
-    temperature, humidity and wind speed. Each forecast comes with 80% and 95% prediction bands,
-    and a backtest shows how it did on days it never saw. Explain a forecast with what drives it —
-    recent history, the calendar or the weather — and say how uncertain it is.
+    Appliance electricity use of one home, with two models. The main one predicts the use (Wh) from
+    10-minute-averaged indoor temperature and humidity in three zones (kitchen, living room, laundry
+    room), outdoor weather (temperature, pressure, humidity, wind speed, visibility, dew point) and
+    the time of day, week and holiday status. The forecast predicts the next 24 hours from the home's
+    own recent hours, the hour and day of the week, and the outdoor temperature, humidity and wind,
+    with 80% and 95% prediction bands and a backtest on days it never saw. Say which model an answer
+    comes from, and how uncertain it is.
   sample_questions:
+    - "Which factors matter most for predicting appliance energy use?"
+    - "How does outdoor temperature affect predicted energy use?"
     - "What will appliance use be tomorrow evening?"
     - "When is the peak hour in the next 24 hours?"
     - "How accurate was the forecast on past days?"
-    - "Does recent history matter more than the weather?"
-    - "What happens to the forecast if it gets 5 °C colder?"
 
 dataset:
   bucket: "scenario-energy-building"
-  # New key for the hourly series: a tenant's stored copy of the old 10-minute sample is never reused.
-  raw_object: "raw/energy_building_hourly.csv"
-  seed_file: "sample_data/energy_building_hourly.csv"
+  # SeaweedFS key once uploaded; etl-tabular reads it from there.
+  raw_object: "raw/energy_building.csv"
+  # Tracked local file (relative to this scenario's directory) etl-tabular uploads to
+  # SeaweedFS on first run if raw_object doesn't exist yet for the tenant — demo bootstrap only.
+  seed_file: "sample_data/energy_building.csv"
   index_col: "date"
   target: "Appliances"
+  # Responsible AI / data-quality: dropped before training regardless of predictive
+  # value — "lights" is a separate submeter excluded per the original study's own
+  # cleaning; rv1/rv2 are random noise columns the original dataset ships for
+  # benchmarking, not real signal; T4-T9/RH_4-RH_9 are additional house zones dropped
+  # as redundant with zones 1-3 (T1/RH_1, T2/RH_2, T3/RH_3), again per the original
+  # study; "year" is constant (2016) across this sample, so carries no signal.
+  protected_features_excluded:
+    ["lights", "rv1", "rv2", "T4", "RH_4", "T5", "RH_5", "T6", "RH_6", "T7", "RH_7", "T8", "RH_8", "T9", "RH_9", "year"]
   feature_columns:
+    - T1
+    - RH_1
+    - T2
+    - RH_2
+    - T3
+    - RH_3
     - T_out
+    - Press_mm_hg
     - RH_out
     - Windspeed
+    - Visibility
+    - Tdewpoint
+    - month
+    - day
+    - hour
+    - day_of_week
+    - is_holiday
+
+  # Drives both UIs' generic form renderer (see libs/shared/scenario_schema.py) —
+  # ranges taken from the real dataset's min/max (10,000-row sample).
   feature_schema:
-    T_out: {type: numeric, label: "Outdoor temperature", min: -5.0, max: 26.0, default: 7.0, step: 0.5, info: "Hourly mean outdoor air temperature, in °C, from the nearest weather station."}
-    RH_out: {type: numeric, label: "Outdoor humidity", min: 25.0, max: 100.0, default: 80.0, step: 1.0, info: "Hourly mean outdoor relative humidity, in %."}
-    Windspeed: {type: numeric, label: "Wind speed", min: 0.0, max: 13.0, default: 4.0, step: 0.5, info: "Hourly mean outdoor wind speed, in metres per second."}
+    T1: {type: numeric, label: "Kitchen temperature", min: 16.0, max: 27.0, default: 21.0, step: 0.1, info: "Indoor temperature in the kitchen, in °C."}
+    RH_1: {type: numeric, label: "Kitchen humidity", min: 27.0, max: 64.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the kitchen, in %."}
+    T2: {type: numeric, label: "Living room temperature", min: 16.0, max: 30.0, default: 20.0, step: 0.1, info: "Indoor temperature in the living room, in °C."}
+    RH_2: {type: numeric, label: "Living room humidity", min: 20.0, max: 57.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the living room, in %."}
+    T3: {type: numeric, label: "Laundry room temperature", min: 17.0, max: 30.0, default: 22.0, step: 0.1, info: "Indoor temperature in the laundry room, in °C."}
+    RH_3: {type: numeric, label: "Laundry room humidity", min: 29.0, max: 50.0, default: 40.0, step: 0.5, info: "Indoor relative humidity in the laundry room, in %."}
+    T_out: {type: numeric, label: "Outdoor temperature", min: -5.0, max: 27.0, default: 10.0, step: 0.5, info: "Outdoor air temperature, in °C, from the nearest weather station."}
+    Press_mm_hg: {type: numeric, label: "Atmospheric pressure", min: 729.0, max: 773.0, default: 755.0, step: 1.0, info: "Outdoor atmospheric pressure, in mm of mercury."}
+    RH_out: {type: numeric, label: "Outdoor humidity", min: 24.0, max: 100.0, default: 80.0, step: 1.0, info: "Outdoor relative humidity, in %."}
+    Windspeed: {type: numeric, label: "Wind speed", min: 0.0, max: 13.0, default: 4.0, step: 0.5, info: "Outdoor wind speed, in metres per second."}
+    Visibility: {type: numeric, label: "Visibility", min: 1.0, max: 66.0, default: 40.0, step: 1.0, info: "Outdoor visibility distance, in km."}
+    Tdewpoint: {type: numeric, label: "Dew point", min: -7.0, max: 16.0, default: 4.0, step: 0.5, info: "Outdoor dew point temperature, in °C — the temperature air must cool to for dew to form."}
+    month: {type: numeric, label: "Month", min: 1, max: 5, default: 3, step: 1,
+       info: "Calendar month (1 = January); this dataset spans January-May, so seasonal heating/lighting load only partially shows up."}
+    day: {type: numeric, label: "Day of month", min: 1, max: 31, default: 15, step: 1,
+       info: "Day of the calendar month (1-31) — mainly useful in combination with month/day_of_week rather than on its own."}
+    hour: {type: numeric, label: "Hour of day", min: 0, max: 23, default: 12, step: 1, info: "Hour on a 24-hour clock (0 = midnight, 12 = noon)."}
+    day_of_week: {type: numeric, label: "Day of week", min: 0, max: 6, default: 3, step: 1, info: "0 = Monday through 6 = Sunday."}
+    is_holiday: {type: categorical, label: "Holiday", options: ["False", "True"], default: "False", info: "Whether this day is a public holiday."}
+
+  # Seeds ui-react's Data tab dashboard (see libs/shared/scenario_schema.py's
+  # ChartSpec) — still user-editable/addable there, just a sensible starting point.
   default_charts:
-    - {type: histogram, x: Appliances}
-    - {type: scatter, x: T_out, y: Appliances}
-    - {type: box, x: Windspeed, y: Appliances}
+    - {type: histogram, x: Appliances, color_by: is_holiday}
+    - {type: scatter, x: T_out, y: Appliances, color_by: is_holiday}
+    - {type: bar, x: hour, y: Appliances, agg: mean, color_by: is_holiday}
 
 model:
-  task_type: forecast
-  # Green Code, simplest first: a seasonal naive forecast (same hour yesterday), exponential
-  # smoothing, then LightGBM on lags + calendar + weather — the more complex one is kept only
-  # when its backtest MASE beats the simpler one's by the threshold below.
-  candidates: ["seasonal_naive", "auto_ets", "lightgbm_lags"]
-  accuracy_gain_threshold_for_complexity: 0.05
-  selection_metric: mase
+  task_type: regression
+  # Green Code: LightGBM alone — more accurate and efficient than a classic
+  # random forest, so no simpler baseline candidate is evaluated against it.
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
   explainability: shap
   target_units: "Wh"
-  target_label: "Appliance energy per hour"
-  target_description: "Electricity used by the home's appliances in each hour, in watt-hours."
+  target_label: "Appliance energy use"
+  target_description: "Electricity consumed by household appliances over this 10-minute window, in watt-hours."
 
-time_series:
-  time_column: date
-  frequency: h
-  horizon: 24
-  lags: [1, 2, 3, 24, 48, 168]
-  date_features: [hour, dayofweek]
-  rolling:
-    - {window: 24, stat: mean}
-  exogenous_features: [T_out, RH_out, Windspeed]
-  # Tomorrow's weather is taken as today's, hour by hour (a stand-in for a weather forecast);
-  # the forecast board's lever shifts it.
-  future_exogenous: seasonal_naive
-  # A week of daily cut-offs: 7 × 24 backtest errors calibrate the prediction bands.
-  backtest: {windows: 7, step: 24}
-  prediction_intervals: [80, 95]
-  target_min: 0
+main_model_title: "Energy use"
+extra_models:
+  - id: forecast
+    title: "24-hour forecast"
+    dataset:
+      bucket: "scenario-energy-building-forecast"
+      raw_object: "raw/energy_building_hourly.csv"
+      seed_file: "sample_data/energy_building_hourly.csv"
+      index_col: "date"
+      target: "Appliances"
+      feature_columns:
+        - T_out
+        - RH_out
+        - Windspeed
+      feature_schema:
+        T_out: {type: numeric, label: "Outdoor temperature", min: -5.0, max: 26.0, default: 7.0, step: 0.5, info: "Hourly mean outdoor air temperature, in °C, from the nearest weather station."}
+        RH_out: {type: numeric, label: "Outdoor humidity", min: 25.0, max: 100.0, default: 80.0, step: 1.0, info: "Hourly mean outdoor relative humidity, in %."}
+        Windspeed: {type: numeric, label: "Wind speed", min: 0.0, max: 13.0, default: 4.0, step: 0.5, info: "Hourly mean outdoor wind speed, in metres per second."}
+      default_charts:
+        - {type: histogram, x: Appliances}
+        - {type: scatter, x: T_out, y: Appliances}
+        - {type: box, x: Windspeed, y: Appliances}
 
-ui_extras:
-  kind: forecast_board
-  tab_label: "Forecast board"
-  title: "The next 24 hours of appliance load"
-  subtitle: "Hour by hour, with 80% and 95% bands — and what tomorrow looks like if the weather changes."
-  peak_label: "Peak hour"
-  levers:
-    - {feature: T_out, label: "Outdoor temperature", min_shift: -8, max_shift: 8, step: 1, unit: "°C"}
-    - {feature: Windspeed, label: "Wind speed", min_shift: -4, max_shift: 4, step: 1, unit: "m/s"}
+    model:
+      task_type: forecast
+      # Green Code, simplest first: a seasonal naive forecast (same hour yesterday), exponential
+      # smoothing, then LightGBM on lags + calendar + weather — the more complex one is kept only
+      # when its backtest MASE beats the simpler one's by the threshold below.
+      candidates: ["seasonal_naive", "auto_ets", "lightgbm_lags"]
+      accuracy_gain_threshold_for_complexity: 0.05
+      selection_metric: mase
+      explainability: shap
+      target_units: "Wh"
+      target_label: "Appliance energy per hour"
+      target_description: "Electricity used by the home's appliances in each hour, in watt-hours."
+
+    time_series:
+      time_column: date
+      frequency: h
+      horizon: 24
+      lags: [1, 2, 3, 24, 48, 168]
+      date_features: [hour, dayofweek]
+      rolling:
+        - {window: 24, stat: mean}
+      exogenous_features: [T_out, RH_out, Windspeed]
+      # Tomorrow's weather is taken as today's, hour by hour (a stand-in for a weather forecast);
+      # the forecast board's lever shifts it.
+      future_exogenous: seasonal_naive
+      # A week of daily cut-offs: 7 × 24 backtest errors calibrate the prediction bands.
+      backtest: {windows: 7, step: 24}
+      prediction_intervals: [80, 95]
+      target_min: 0
+
+    ui_extras:
+      kind: forecast_board
+      tab_label: "Forecast board"
+      title: "The next 24 hours of appliance load"
+      subtitle: "Hour by hour, with 80% and 95% bands — and what tomorrow looks like if the weather changes."
+      peak_label: "Peak hour"
+      levers:
+        - {feature: T_out, label: "Outdoor temperature", min_shift: -8, max_shift: 8, step: 1, unit: "°C"}
+        - {feature: Windspeed, label: "Wind speed", min_shift: -4, max_shift: 4, step: 1, unit: "m/s"}
+
 
 services:
   etl: etl-tabular

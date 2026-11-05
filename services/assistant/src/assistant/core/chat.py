@@ -29,6 +29,8 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
     """
     if metadata["task_type"] == "forecast":
         return _forecast_system_prompt(definition, metadata)
+    if metadata["task_type"] == "recommendation":
+        return _recommendation_system_prompt(definition, metadata)
     feature_columns = ", ".join(str(c) for c in metadata["feature_columns"])
     if metadata["task_type"] == "regression":
         score_phrase = f"test R² of {float(metadata['test_score']):.3f}"
@@ -90,6 +92,24 @@ def build_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]
         "Always pass x_label and y_label describing what each axis represents (include units when relevant, "
         "e.g. 'Balance ($)') — never omit them or leave a chart unlabeled."
         f"{document_tool_instructions(definition)}"
+    )
+
+
+def _recommendation_system_prompt(definition: ScenarioDefinition, metadata: dict[str, Any]) -> str:
+    """A recommender's prompt (docs/adr/0018): its candidates, and how each did on hidden basket items."""
+    metrics: dict[str, float] = metadata.get("metrics") or {}
+    candidates = ", ".join(
+        f"{c['name']} (hit rate {c['metrics']['hit_rate']:.3f})" for c in metadata.get("candidate_scores") or []
+    )
+    return (
+        f"You are a data analyst assistant for the '{definition.title}' model.\n"
+        f"{definition.chat.context.strip()}\n\n"
+        "This is a recommender: what goes with an item, from what is bought together in anonymous baskets. "
+        f"Candidates, simplest first: {candidates}; the hit rate is how often an item hidden from a held-out "
+        f"basket is in the top list, against {metrics.get('popularity_hit_rate', float('nan')):.3f} for simply "
+        f"listing the most popular items. The selected one is {metadata['model_name']}.\n"
+        "Use list_recommendable_items to find an item's id and get_recommendations for what goes with it; both "
+        "candidates answer, so say when they disagree. Together in a basket does not mean one causes the other."
     )
 
 

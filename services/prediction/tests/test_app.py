@@ -113,6 +113,7 @@ async def test_lifespan_sets_up_model_cache_from_resolved_scenarios(monkeypatch:
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(
         app.ObjectStore, "connect", staticmethod(lambda **kwargs: connect_calls.append(kwargs) or "fake-store")
     )
@@ -204,6 +205,7 @@ async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.Mon
     """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) fails startup loudly."""
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
 
     with pytest.raises(RuntimeError, match="No tabular_ml scenario matched"):
         async with app.lifespan(app.app):

@@ -1,6 +1,6 @@
 # 🏄 Angel's Surf Co. — a governed data platform (`data_product`)
 
-> Domain: **Retail** · Kind: `data_product` (the fifth scenario kind) · Scenario: [`scenarios/surf_retail/scenario.yaml`](../../scenarios/surf_retail/scenario.yaml) · Child ML scenarios: [`surf_demand_forecast`](../../scenarios/surf_demand_forecast/scenario.yaml), [`surf_customer_propensity`](../../scenarios/surf_customer_propensity/scenario.yaml)
+> Domain: **Retail** · Kind: `data_product` (the fifth scenario kind) · Scenario: [`scenarios/surf_retail/scenario.yaml`](../../scenarios/surf_retail/scenario.yaml) · ML scenario: [`surf_ml`](../../scenarios/surf_ml/scenario.yaml)
 
 <p align="center">
   <img src="../screenshots/surf_retail/guided-tour.webp" alt="The Guided tour: a live map of the platform — sources, capture, quality, store, transform, serve — lighting up as a sale travels through it" width="900">
@@ -29,7 +29,7 @@ nothing is for sale and no payment is taken.
 | Tab | What it shows |
 |---|---|
 | **Guided tour** | The platform as a live map: eleven steps, each at three depths (*Simple*, *Detailed*, *Engineer*), with live numbers and a *try it* button that does the real thing — ring up a sale, send a malformed receipt, re-send a duplicate, view as a store manager, ask the assistant |
-| **Surf HQ** | Five years of seasons as a heatmap (summer lights up SUP, spring and autumn light up kites, Black Friday flashes every row) and next week's forecast, shop by shop, from `surf_demand_forecast` |
+| **Surf HQ** | Five years of seasons as a heatmap (summer lights up SUP, spring and autumn light up kites, Black Friday flashes every row) and next week's forecast, shop by shop, from `surf_ml` |
 | **Data product** | The product's overview: domain, number of sources, curated datasets and governed metrics, today's live tiles, and the four platform tiers with whether each is on |
 | **Live flow** | Per-minute live tiles, the path every record takes (till / web shop / migration → Kafka → contract + rules → bronze → live tile → Iceberg lake → dbt → gold marts → API · BI · assistant), pipeline events, and controls to simulate sales, malformed receipts, legacy files with a missing receipt and ERP price changes |
 | **Dashboards** | Governed KPIs, map and ranking of the shops, period and comparison pickers, all from the same metrics every other door uses |
@@ -56,8 +56,9 @@ has run.
 
 | Scenario | Task | Predicts |
 |---|---|---|
-| `surf_demand_forecast` | LightGBM regression | Units sold next week per shop and category: season, recent weeks, the same week last year; explained with SHAP |
-| `surf_customer_propensity` | LightGBM classification | Whether a loyalty customer buys a board in the next 90 days: recency, frequency, spend; customers are pseudonymised keys only |
+| `surf_ml` | LightGBM regression | Units sold next week per shop and category: season, recent weeks, the same week last year; explained with SHAP |
+| `surf_ml~recommender` | Association rules and trained item factors, side by side | What goes with a product, from a committed sample of anonymous baskets (`scripts/prepare_surf_ml_samples.py`), so it runs without the data tier; the web shop keeps its dbt rules |
+| `surf_ml~buyers` | LightGBM classification | Whether a loyalty customer buys a board in the next 90 days: recency, frequency, spend; customers are pseudonymised keys only |
 
 The assistant calls them through its `ml_predict` tool, next to its governed data and catalogue
 tools — it never estimates a figure the tools did not return.

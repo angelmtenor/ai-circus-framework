@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate scenarios/luznova_regional_forecast/sample_data/luznova_regional_forecast.csv from
+"""Regenerate scenarios/luznova_regional_demand/sample_data/luznova_regional_forecast.csv from
 luznova_regional_demand's committed sample (docs/adr/0016-time-series-forecasting.md).
 
 Same synthetic rows, as series: the date comes out of `row_id` ("20240101_sevilla"), and each of the
@@ -18,7 +18,7 @@ import pandas as pd
 
 SCENARIOS = Path(__file__).resolve().parent.parent / "scenarios"
 SOURCE = SCENARIOS / "luznova_regional_demand" / "sample_data" / "luznova_regional_demand.csv"
-OUT = SCENARIOS / "luznova_regional_forecast" / "sample_data" / "luznova_regional_forecast.csv"
+OUT = SCENARIOS / "luznova_regional_demand" / "sample_data" / "luznova_regional_forecast.csv"
 COLUMNS = ["date", "province", "population_thousands", "industrial_index", "mean_temperature_c", "demand_mwh"]
 
 

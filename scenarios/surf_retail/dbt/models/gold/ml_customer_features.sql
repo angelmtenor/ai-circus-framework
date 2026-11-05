@@ -1,4 +1,4 @@
--- Training data of the board-purchase propensity model (child scenario surf_customer_propensity):
+-- Training data of the board-purchase propensity model (surf_ml~buyers):
 -- every loyalty customer (pseudonymised key) seen before a snapshot 90 days before the latest
 -- data, described only by what they bought before it, and whether they bought a board in the
 -- 90 days after (the target). Kite bars and harnesses are gear, not boards.

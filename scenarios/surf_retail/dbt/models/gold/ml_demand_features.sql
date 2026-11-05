@@ -1,4 +1,4 @@
--- Training data of the weekly demand forecast (child scenario surf_demand_forecast): one row
+-- Training data of the weekly demand forecast (the main model of surf_ml): one row
 -- per shop × rider group × week with what was known at the end of that week, and the units
 -- sold the week after (the target). The latest week has no target yet: its row is what the
 -- forecast is asked about now (is_latest). Lags are joins on week offsets, so the same SQL

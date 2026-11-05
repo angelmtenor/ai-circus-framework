@@ -17,7 +17,7 @@ import json
 from typing import Any
 
 import httpx
-from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.scenario_schema import ScenarioDefinition, expand_model_views
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
@@ -142,11 +142,8 @@ def build_data_tools(
     config = definition.data_product
     assert config is not None
     shop = config.apps.storefront
-    models = {
-        e.scenario: (e, definitions[e.scenario])
-        for e in config.ml_exports
-        if definitions and e.scenario in definitions and definitions[e.scenario].dataset is not None
-    }
+    views = expand_model_views({k: v for k, v in (definitions or {}).items() if v.kind == "tabular_ml"})
+    models = {e.scenario: (e, views[e.scenario]) for e in config.ml_exports if e.scenario in views}
     metric_names = ", ".join(m.name for m in config.metrics)
     records = config.records  # bound here: the closures below don't keep the `assert` narrowing
     entities = ", ".join(r.entity for r in records)

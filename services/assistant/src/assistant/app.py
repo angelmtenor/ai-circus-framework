@@ -25,7 +25,7 @@ from ai_circus_shared.conversations import init_engine
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
 from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.observability import configure_metrics
-from ai_circus_shared.scenario_schema import resolve_scenarios
+from ai_circus_shared.scenario_schema import expand_model_views, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI
@@ -57,7 +57,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         )
 
     stores = {}
-    for slug, definition in tabular.items():
+    # One per model (docs/adr/0018): the prompt describes all of a scenario's models.
+    for slug, definition in expand_model_views(tabular).items():
         assert definition.dataset is not None  # guaranteed by kind="tabular_ml" filter
         stores[slug] = ObjectStore.connect(
             bucket=definition.dataset.bucket,

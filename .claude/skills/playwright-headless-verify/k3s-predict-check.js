@@ -14,7 +14,7 @@ const out = process.env.OUT_DIR;
   await page.waitForLoadState('networkidle');
   await page.click('text=Customer Churn Prediction');
   await page.waitForLoadState('networkidle');
-  await page.click('text=ML Predictions');
+  await page.click('text=ML model');
   await page.waitForLoadState('networkidle');
 
   const [resp] = await Promise.all([

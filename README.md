@@ -348,10 +348,10 @@ that store.
   <img src="docs/screenshots/surf_retail/web-shop.webp" alt="The fictional web shop with best sellers and a cart" width="49%">
 </p>
 
-**Two models on the gold marts.** `surf_demand_forecast` (LightGBM regression: units sold next week per shop and
-category, from the season, recent weeks and the same week last year) and `surf_customer_propensity` (classification:
+**Models on the gold marts.** The `surf_ml` scenario holds weekly demand (LightGBM regression: units sold next week per shop and
+category, from the season, recent weeks and the same week last year) and board buyers (`surf_ml~buyers`, classification:
 will a loyalty customer buy a board in the next 90 days — customers are pseudonymised keys only) are ordinary
-`tabular_ml` scenarios whose training data is exported from the gold marts, so they are trained by the same pipeline as
+`tabular_ml` models whose training data is exported from the gold marts, so they are trained by the same pipeline as
 every other model and the assistant can call them (`ml_predict`) next to its governed data and catalogue tools.
 
 **Run it.** It is optional and never part of `make k3s-all`; see the [tier table](#data-products--an-open-source-data-platform-optional-tiers)
@@ -523,12 +523,11 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **[Supply Chain Shipping ETA](docs/scenarios/logistics.md#supply-chain-shipping-eta--the-dispatch-tower)** (`supply_chain`) | `tabular_ml` — regression, domain `logistics` | Days to delivery — a **Dispatch Tower** tab: the 8 hubs with real shipments in flight, each hub's ETA landscape (a 33×33 grid of destinations scored at once, drawn as isochrones) and a race of every carrier × priority to a pinned destination with 90% prediction intervals — fastest option and safest promise date | AWS SageMaker workshop (synthetic) |
 | **Supermarket Weekly Sales** (`supermarket_sales`) | `tabular_ml` — regression | Weekly department sales | Kaggle — Walmart dataset |
 | **Electric Motor Speed** (`electric_motor`) | `tabular_ml` — regression | Motor rotational speed (rpm) | Kaggle — Electric Motor Temperature |
-| **Building Energy Forecast** (`energy_building`) | `tabular_ml` — forecast | Appliance energy use (Wh), hourly, 24 hours ahead | UCI — Appliances Energy Prediction |
+| **Building Energy Consumption** (`energy_building`) | `tabular_ml` — regression + forecast | Appliance energy use (Wh) under given conditions; and hourly, 24 hours ahead | UCI — Appliances Energy Prediction |
 | **CNC Turning Surface Finish** (`cnc_surface_finish`) | `tabular_ml` — regression | Machined-part surface roughness (Ra) | Original content (synthetic, physically grounded) |
 | **Steel Plate Defect Triage** (`steel_defects`) | `tabular_ml` — classification | Unrecognized optical-scan defect flag | UCI — Steel Plates Faults |
 | **Turbofan Engine Remaining Useful Life** (`turbofan_rul`) | `tabular_ml` — regression | Jet engine RUL (operating cycles) | NASA C-MAPSS FD001 |
-| **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression | Daily electricity demand per region (MWh) — with a live Spain regional map tab | Original content (synthetic, real Spain geography) |
-| **Regional Electricity Forecast** (`luznova_regional_forecast`) | `tabular_ml` — forecast | Electricity demand of each of 50 provinces, 30 days ahead (MWh) | Original content (synthetic, real Spain geography) |
+| **Regional Electricity Demand Forecasting** (`luznova_regional_demand`) | `tabular_ml` — regression + forecast | Daily electricity demand per region (MWh) — with a live Spain regional map tab; a second model forecasts each of 50 provinces 30 days ahead | Original content (synthetic, real Spain geography) |
 | **Gas Meter Anomaly Detection** (`luznova_gas_anomaly`) | `tabular_ml` — classification | Anomalous gas meter reading probability | Original content (synthetic, physically grounded) |
 | **EV Charging Session Energy Prediction** (`luznova_ev_charging`) | `tabular_ml` — regression | Energy delivered per charging session (kWh) | Original content (synthetic, physically grounded) |
 | **Gas Contract Conversion & Revenue Potential** (`luznova_gas_prospects`) | `tabular_ml` — classification | Whether a household prospect in a gas-network expansion area signs a supply contract, plus its revenue potential | Original content (synthetic, real Spain geography) |
@@ -544,8 +543,7 @@ code (see [Adding a new scenario](#adding-a-new-scenario-or-service)).
 | **[Follow the Money](docs/scenarios/aml_money_trail.md)** (`aml_money_trail`) | `tabular_ml` — classification + a bank-consortium network, domain `banking_finance` | Which account holders — people and companies — behave like the ones a money-laundering scheme runs through, from ten days of payments at 13 banks in 13 countries — a **Money Trail** tab with two views — a world map replaying every payment hour by hour (shape = payment format), a ledger, a watchlist, a SHAP dossier per holder, and a force-directed **network graph** of holders and banks like Enron's — and a reveal of the eight laundering typologies and how many of each the model flags · LightGBM, 5-fold CV ROC AUC ≈ 0.83, out-of-fold 0.84 (≈ 0.81 without the ACH-heavy format mix) | IBM AMLworld HI-Small (synthetic, CDLA-Sharing-1.0) — Altman et al., NeurIPS 2023 |
 | **[AML Rulebook Knowledge Graph](docs/scenarios/aml_regulation_kg.md)** (`aml_regulation_kg`) | `conversational_rag` + a knowledge graph (GraphRAG), domain `banking_finance` | N/A — agentic Q&A over 18 articles of the EU Anti-Money Laundering Regulation through a knowledge graph of obliged entities, obligations, triggers, authorities, records and limits (135 nodes, 144 relations, each citing its article with a verbatim quote); HippoRAG 2-style retrieval (seed linking + Personalized PageRank) and a panel that lights up the subgraph behind each answer | Regulation (EU) 2024/1624 (AMLR), EUR-Lex — © European Union, reuse authorised |
 | **[Angel's Surf Co. — Data Platform](docs/scenarios/surf_retail.md)** (`surf_retail`) | `data_product`, domain `retail` | N/A — a fictional surf-retail chain (24 shops, web shop, ERP, five years of history) run through the real pipeline: Kafka → bronze → lake → dbt silver/gold → governed `data-api`, dashboards and assistant tools; includes a web shop and the Surf HQ control room (optional tiers, see [Data products](#data-products--an-open-source-data-platform-optional-tiers)) | Original content (synthetic, simulator-generated) |
-| **[Angel's Surf Co. — Weekly Demand Forecast](docs/scenarios/surf_retail.md#two-models-on-the-gold-marts)** (`surf_demand_forecast`) | `tabular_ml` — regression, domain `retail` | Units sold next week, trained on a `surf_retail` gold feature mart (`make k3s-data-ml`) | Original content (derived from `surf_retail`) |
-| **[Angel's Surf Co. — Board Purchase Propensity](docs/scenarios/surf_retail.md#two-models-on-the-gold-marts)** (`surf_customer_propensity`) | `tabular_ml` — classification, domain `retail` | Whether a customer buys a board in the next 90 days, trained on a `surf_retail` gold feature mart | Original content (derived from `surf_retail`) |
+| **[Angel's Surf Co. — Models](docs/scenarios/surf_retail.md#two-models-on-the-gold-marts)** (`surf_ml`) | `tabular_ml` — several models, domain `retail` | Units sold next week per shop and rider group (regression); whether a loyalty customer buys a board in 90 days (classification, pseudonymised keys only); what goes with a product (two recommenders) | Synthetic, from `surf_retail`'s gold marts |
 | **Patient Symptom Triage (NLP)** (`symptom_triage`) | `deep_learning` — text | Likely condition (22 classes) from a patient's own symptom description — fine-tuned BioClinical ModernBERT, word-level explanations, a live **Triage Board** tab | Hugging Face — gretelai/symptom_to_diagnosis |
 | **Chest X-ray Pneumonia Screening (CV)** (`chest_xray_pneumonia`) | `deep_learning` — image | Pneumonia on a paediatric chest X-ray — fine-tuned ConvNeXt V2, occlusion heatmaps, an AI-prioritized **Reading Room** tab | MedMNIST — PneumoniaMNIST (Kermany et al.) |
 | **PCB Visual Inspection (CV Anomaly Detection)** (`pcb_visual_inspection`) | `deep_learning` — image, `task: anomaly_detection` | Defective printed circuit board, learned from good boards only — frozen DINOv2 patch features + PatchCore-style memory bank (AnomalyDINO), anomaly maps vs. ground-truth defect masks, a live **Inspection Line** tab | Amazon VisA — PCB1 (Zou et al., ECCV 2022) |
@@ -572,7 +570,7 @@ reuse it with a few lines of YAML and no UI code:
 | `ui_extras.kind` | Tab | Used by | What it does |
 |---|---|---|---|
 | `region_map` | Regional Map | `luznova_regional_demand`, `luznova_gas_prospects` | One shared context batch-predicted for every area of a level (Comunidad / Provincia, Municipio / census area), bubbles on a Spain map, SHAP per bubble |
-| `forecast_board` | Forecast board | `energy_building`, `luznova_regional_forecast` | History, forecast and prediction bands, with levers that shift the assumed future values and re-forecast |
+| `forecast_board` | Forecast board | `energy_building~forecast`, `luznova_regional_demand~forecast` | History, forecast and prediction bands, with levers that shift the assumed future values and re-forecast |
 | `fleet_health` | Fleet health | `turbofan_rul`, `electric_motor`, `luznova_gas_anomaly`, `luznova_ev_charging` | Real rows replayed unit by unit and scored live; health is the model's score, or actual minus predicted |
 | `row_triage` | Inspection triage | `steel_defects` | Rows routed to a person or automatically by a threshold you move, with the real workload and misses, over out-of-fold scores |
 | `case_tracker` | My cases | `service_request`, `sede_electronica` | The signed-in user's own filed cases: receipt, values and filed PDF |
@@ -1176,8 +1174,7 @@ k3s cluster, switched on tier by tier. The first data product is **Angel's Surf 
 enthusiast — with 24 shops on Europe's coasts, a web shop, an ERP and five years of history. On
 top of it: a fictional **web shop** with a recommender (association rules over every basket)
 whose orders travel the real pipeline, **Surf HQ** (five years of seasons and a live forecast
-board) and two **ML models** trained on gold feature marts (`surf_demand_forecast`,
-`surf_customer_propensity`) that the assistant can call. The services are generic — a new data
+board) and **ML models** trained on gold feature marts (the `surf_ml` scenario) that the assistant can call. The services are generic — a new data
 product is a scenario folder (contracts, simulator, dbt project, dashboards), not code. Design and decisions: [docs/data-platform](docs/data-platform/README.md)
 and [docs/adr](docs/adr/README.md).
 

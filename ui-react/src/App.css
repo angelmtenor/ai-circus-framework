@@ -726,6 +726,37 @@ select:focus {
   text-shadow: var(--glow-accent-soft);
 }
 
+.recommender-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.model-section-switch {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.model-section-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--dim);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.model-section-switch button.active {
+  color: var(--accent-2);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 .rag-hero {
   display: flex;
   gap: 1rem;

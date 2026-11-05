@@ -176,6 +176,7 @@ def test_the_stored_forecaster_reproduces_the_forecast_through_the_shared_featur
 
 def test_main_trains_a_forecast_scenario_and_writes_checksummed_artifacts(monkeypatch: pytest.MonkeyPatch) -> None:
     energy = ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/energy_building/scenario.yaml")
+    energy = energy.model_views()["energy_building~forecast"]
     rng = np.random.default_rng(1)
     hours = 24 * 30
     times = pd.date_range("2026-01-01", periods=hours, freq="h")
