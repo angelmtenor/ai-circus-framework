@@ -4,7 +4,7 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
-## Unreleased
+## v0.46.0 — 2026-11-05
 
 ### Added
 - **Several models in one scenario** (`extra_models:`, ADR 0018): each model is a validated view of the scenario with its own
