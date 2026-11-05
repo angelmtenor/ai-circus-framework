@@ -685,7 +685,7 @@ services:
         condition: service_started
     networks: [ai-circus]
     restart: unless-stopped
-    mem_limit: 1536m  # ~1 GB with all four deep_learning models loaded
+    mem_limit: 3g  # peak ~2.4 GB while loading symptom_triage's fp32 model (~600 MB) next to the others
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.dl-inference.rule=Host(`dl-inference.localhost`)"

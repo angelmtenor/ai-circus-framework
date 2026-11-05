@@ -8,7 +8,10 @@ on purpose: it traces ModernBERT/ConvNeXt with sdpa attention into plain ONNX op
 keeps dynamic batch/sequence axes, with fp32 outputs matching PyTorch to ~1e-6.
 Quantization (text encoders) shrinks the model ~4x (600 MB -> 150 MB) and roughly
 halves CPU latency; its accuracy cost is measured, not assumed — the pipeline always
-evaluates the file this returns.
+evaluates the file this returns. Weights use `reduce_range` (7 bits): at full range,
+onnxruntime's integer kernels saturate on x86 CPUs without VNNI, which turned a model at
+95% test accuracy into chance level on an AVX2 laptop. The same file can score well on a
+VNNI CPU and fail on another, so a model trained elsewhere must not depend on the CPU.
 """
 
 from __future__ import annotations
@@ -57,7 +60,7 @@ def export_onnx(task: Task, example: Split, out_dir: Path, *, quantize: bool) ->
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
     int8_path = out_dir / "model_int8.onnx"
-    quantize_dynamic(str(fp32_path), str(int8_path), weight_type=QuantType.QInt8, per_channel=True)
+    quantize_dynamic(str(fp32_path), str(int8_path), weight_type=QuantType.QInt8, per_channel=True, reduce_range=True)
     logger.info("Quantized ONNX model to int8 ({:.1f} MB)", int8_path.stat().st_size / 1e6)
     return int8_path
 

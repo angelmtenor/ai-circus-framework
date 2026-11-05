@@ -36,9 +36,10 @@ spec:
             - secretRef: {name: dl-inference-secrets}
           resources:
             requests: {cpu: 100m, memory: 256Mi}
-            # ~1 GB RSS with all four models loaded (the anomaly detector's kNN over its
-            # 16k-patch memory bank alone needs ~300 MB of onnxruntime arena).
-            limits: {cpu: "4", memory: 1536Mi}
+            # The anomaly detector's kNN over its 16k-patch memory bank needs ~300 MB of
+            # onnxruntime arena, and symptom_triage's fp32 model ~600 MB (twice while it
+            # loads: the bytes and the session), which OOM-killed the pod at 1536Mi.
+            limits: {cpu: "4", memory: 3Gi}
           volumeMounts:
             - {name: scenarios, mountPath: /app/scenarios, readOnly: true}
           # startupProbe gates the other two until the app first answers, polled every 2s
