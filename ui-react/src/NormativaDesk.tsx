@@ -144,6 +144,7 @@ export function NormativaDesk({
           <input type="search" value={filter} placeholder={w.filterLaw} onChange={(e) => setFilter(e.target.value)} />
           {error && <div className="cd-error">{error}</div>}
           {!docs && !error && <span className="cd-spinner" />}
+          {docs?.length === 0 && <div className="cd-error">{w.noLawDocs}</div>}
           {groups.map(([group, members]) => (
             <div key={group} className="nd-group">
               <h6>
