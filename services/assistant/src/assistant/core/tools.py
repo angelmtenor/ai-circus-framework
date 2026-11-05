@@ -226,6 +226,63 @@ def build_prediction_tools(
     ]
 
 
+class _RecommendArgs(BaseModel):
+    item: str = Field(max_length=200, description="The item id to find companions for, e.g. a SKU.")
+
+
+def build_recommender_tools(
+    client: PredictionServiceClient, *, scenario_slug: str, authorization: str | None
+) -> list[BaseTool]:
+    """A recommendation model's tools (docs/adr/0018): what it knows, and what goes with an item."""
+
+    def _list_items() -> str:
+        try:
+            return json.dumps(client.recommendable_items(scenario_slug=scenario_slug, authorization=authorization))
+        except httpx.HTTPError as exc:
+            return _error_result("list the items", exc)
+
+    def _recommend(item: str) -> str:
+        try:
+            return json.dumps(client.recommend(scenario_slug=scenario_slug, authorization=authorization, item=item))
+        except httpx.HTTPError as exc:
+            return _error_result("fetch recommendations", exc)
+
+    return [
+        StructuredTool.from_function(
+            func=_list_items,
+            name="list_recommendable_items",
+            description="List the items the recommender knows, with their ids and how many baskets each is in.",
+        ),
+        StructuredTool.from_function(
+            func=_recommend,
+            name="get_recommendations",
+            description="What goes with an item, by item id: every candidate recommender's ranked list, side by side.",
+            args_schema=_RecommendArgs,
+        ),
+    ]
+
+
+def build_model_tools(
+    client: PredictionServiceClient, definition: ScenarioDefinition, *, authorization: str | None
+) -> list[BaseTool]:
+    """The tools of every model in the scenario (docs/adr/0018): the main model's under their usual
+    names, an extra model's with `_<id>` appended and its title in the description.
+    """
+    tools: list[BaseTool] = []
+    for address, view in definition.model_views().items():
+        task_type = view.model.task_type if view.model is not None else None
+        builder = {"forecast": build_forecast_tools, "recommendation": build_recommender_tools}.get(
+            task_type or "", build_prediction_tools
+        )
+        built = builder(client, scenario_slug=address, authorization=authorization)
+        if view.model_id is not None:
+            for tool in built:
+                tool.name = f"{tool.name}_{view.model_id}"
+                tool.description = f"Model '{view.title}': {tool.description}"
+        tools.extend(built)
+    return tools
+
+
 def build_document_tool(
     qdrant: VectorSearchClient,
     embedder: EmbeddingProvider,

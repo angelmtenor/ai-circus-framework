@@ -92,10 +92,7 @@ def test_system_prompt_lists_the_metrics(definition: ScenarioDefinition) -> None
 
 def test_catalogue_recommendation_and_ml_tools(monkeypatch: pytest.MonkeyPatch, definition: ScenarioDefinition) -> None:
     """find_products searches the catalogue; ml_predict scores the 'now' rows of a feature mart."""
-    children = {
-        slug: ScenarioDefinition.load(RETAIL.parents[1] / slug / "scenario.yaml")
-        for slug in ("surf_demand_forecast", "surf_customer_propensity")
-    }
+    children = {"surf_ml": ScenarioDefinition.load(RETAIL.parents[1] / "surf_ml" / "scenario.yaml")}
     calls: list[tuple[str, Any]] = []
 
     def fake_get(url: str, params: Any = None, headers: Any = None, timeout: float = 0) -> httpx.Response:
@@ -112,7 +109,7 @@ def test_catalogue_recommendation_and_ml_tools(monkeypatch: pytest.MonkeyPatch, 
 
     class FakePrediction:
         def predict(self, *, scenario_slug: str, authorization: str | None, records: list[dict[str, Any]]) -> Any:
-            assert scenario_slug == "surf_demand_forecast" and authorization == "Bearer t"
+            assert scenario_slug == "surf_ml" and authorization == "Bearer t"
             return {"predictions": [{"prediction": 9.5, "contributions": {f"f{i}": i for i in range(10)}}]}
 
     monkeypatch.setattr(data_tools.httpx, "get", fake_get)
@@ -130,9 +127,7 @@ def test_catalogue_recommendation_and_ml_tools(monkeypatch: pytest.MonkeyPatch, 
     assert found["matches"] == 1 and found["products"][0]["sku"] == "FSH-0102"
     tools["bought_together"].invoke({"product_id": "FSH-0102"})
     assert calls[-1][1]["where"] == "sku=FSH-0102"
-    result = json.loads(
-        tools["ml_predict"].invoke({"model": "surf_demand_forecast", "where": {"store_id": "S001"}, "limit": 1})
-    )
+    result = json.loads(tools["ml_predict"].invoke({"model": "surf_ml", "where": {"store_id": "S001"}, "limit": 1}))
     assert calls[-1][1]["where"] == ["store_id=S001"]
     first = result["results"][0]
     assert first["actual"] is None and first["week"] == "2026-10-26"  # the week still to come comes first

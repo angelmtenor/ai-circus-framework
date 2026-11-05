@@ -523,10 +523,10 @@ data_product:
 
   bi_dashboards: bi/dashboards.yaml
 
-  # Gold feature marts that train the chain's two models (child tabular_ml scenarios).
+  # Gold feature marts that train the chain's models (the tabular_ml scenario surf_ml).
   ml_exports:
-    - {dataset: ml_demand_features, scenario: surf_demand_forecast}
-    - {dataset: ml_customer_features, scenario: surf_customer_propensity}
+    - {dataset: ml_demand_features, scenario: surf_ml}
+    - {dataset: ml_customer_features, scenario: "surf_ml~buyers"}
 
   apps:
     insights:
@@ -538,7 +538,7 @@ data_product:
         rows: rider_group
       forecast:
         title: "Next week, shop by shop"
-        model: surf_demand_forecast
+        model: surf_ml
         latest_flag: is_latest
         row: store_id
         column: rider_group

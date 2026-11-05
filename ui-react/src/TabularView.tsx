@@ -1,6 +1,6 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
-import type { ChatModel, ScenarioSummary, UiExtras } from "./apiClient";
+import { modelViews, type ChatModel, type ScenarioSummary, type UiExtras } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
@@ -30,10 +30,14 @@ const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default:
 const ForecastPredictView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastPredictView })));
 const ForecastInsightsView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastInsightsView })));
 const ForecastBoardView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastBoardView })));
+const RecommenderPredictView = lazy(() => import("./RecommenderViews").then((m) => ({ default: m.RecommenderPredictView })));
+const RecommenderInsightsView = lazy(() => import("./RecommenderViews").then((m) => ({ default: m.RecommenderInsightsView })));
 const FleetHealthView = lazy(() => import("./FleetHealthView").then((m) => ({ default: m.FleetHealthView })));
 const RowTriageView = lazy(() => import("./RowTriageView").then((m) => ({ default: m.RowTriageView })));
 
-type Tab = "scenario" | "tutorial" | "data" | "predict" | "explore" | "extra";
+// `model:<i>` / `extra:<i>`: the i-th model's tab and its ui_extras tab (see modelViews).
+type Tab = "scenario" | "tutorial" | "data" | `model:${number}` | `extra:${number}`;
+type ModelSection = "predictions" | "insights";
 
 // Tab chrome per ui_extras kind — the renderer itself is picked below. Partial: the
 // deep_learning-only kinds (triage_board, reading_room) never reach a tabular scenario
@@ -70,15 +74,16 @@ function extraTabIcon(extras: UiExtras, fallback: IconName): IconName {
  * /dataset endpoints — no scenario-specific code, so this same component renders
  * churn, mpm, supply_chain, or any future tabular_ml scenario.
  *
- * Four tabs, each a distinct concern (no overlap): Scenario (what/why — description,
+ * Three tabs, each a distinct concern (no overlap): Scenario (what/why — description,
  * data source, feature glossary), Data & BI (the data itself, no model — query
- * builder plus a chart dashboard), ML Predictions (running the model — one record or
- * a batch/query), ML Insights (understanding the model — global SHAP importance,
- * partial dependence, held-out performance). The assistant chat is a single
+ * builder plus a chart dashboard) and the model, with a switch between Predictions
+ * (running it — one record or a batch/query) and Insights (understanding it — global
+ * SHAP importance, partial dependence, held-out performance). A scenario with several
+ * models (docs/adr/0018) has one such tab per model. The assistant chat is a single
  * persistent dock here rather than duplicated per tab, since it's the same
  * scenario-grounded conversation regardless of which tab is open.
  *
- * A 5th tab is opt-in per scenario via `scenario.ui_extras` (see
+ * One more tab per model is opt-in via `scenario.ui_extras` (see
  * libs/shared/scenario_schema.py's UiExtras) — still no scenario-specific UI code:
  * RegionMapView/LivePlantView/ProcessOptimizerView are three generic renderers any
  * tabular_ml scenario can reuse by setting the matching YAML block, the same way
@@ -106,6 +111,76 @@ export function TabularView({ scenario, accessToken }: { scenario: ScenarioSumma
   );
 }
 
+/** One model: running it and understanding it, a switch apart. */
+function ModelTab({
+  scenario,
+  accessToken,
+  section,
+  onSection,
+}: {
+  scenario: ScenarioSummary;
+  accessToken: string | null;
+  section: ModelSection;
+  onSection: (section: ModelSection) => void;
+}) {
+  const forecast = scenario.task_type === "forecast";
+  const recommender = scenario.task_type === "recommendation";
+  const rows = !forecast && !recommender;
+  return (
+    <>
+      <div className="model-section-switch" role="group" aria-label="Model section">
+        <button className={section === "predictions" ? "active" : ""} onClick={() => onSection("predictions")}>
+          <Icon name="target" /> Predictions
+        </button>
+        <button className={section === "insights" ? "active" : ""} onClick={() => onSection("insights")}>
+          <Icon name="scan" /> Insights
+        </button>
+      </div>
+      {section === "predictions" && rows && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
+      {section === "insights" && rows && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
+      {section === "predictions" && recommender && <RecommenderPredictView scenario={scenario} accessToken={accessToken} />}
+      {section === "insights" && recommender && <RecommenderInsightsView scenario={scenario} accessToken={accessToken} />}
+      {section === "predictions" && forecast && <ForecastPredictView scenario={scenario} accessToken={accessToken} />}
+      {section === "insights" && forecast && <ForecastInsightsView scenario={scenario} accessToken={accessToken} />}
+    </>
+  );
+}
+
+/** A model's optional `ui_extras` tab. */
+function ExtraTab({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+  const props = { scenario, accessToken };
+  switch (scenario.ui_extras?.kind) {
+    case "region_map":
+      return <RegionMapView {...props} />;
+    case "live_plant":
+      return <LivePlantView {...props} />;
+    case "process_optimizer":
+      return <ProcessOptimizerView {...props} />;
+    case "voyage_explorer":
+      return <VoyageView {...props} />;
+    case "risk_watchlist":
+      return <RiskWatchlistView {...props} />;
+    case "network_explorer":
+      return <NetworkTab {...props} />;
+    case "dispatch_tower":
+      return <DispatchTowerView {...props} />;
+    case "shipment_globe":
+      return <ShipmentGlobeView {...props} />;
+    case "money_trail":
+      return <MoneyTrailView {...props} />;
+    case "case_desk":
+      return <CaseDeskView {...props} />;
+    case "forecast_board":
+      return <ForecastBoardView {...props} />;
+    case "fleet_health":
+      return <FleetHealthView {...props} />;
+    case "row_triage":
+      return <RowTriageView {...props} />;
+    default:
+      return null;
+  }
+}
+
 function TabularViewContent({
   scenario,
   accessToken,
@@ -120,8 +195,10 @@ function TabularViewContent({
   useChatGenerativeUiActions();
   // A tutorial scenario opens on its tutorial — that *is* the scenario's front page.
   const [tab, setTab] = useState<Tab>(scenario.tutorial ? "tutorial" : "scenario");
-  const extraTab = scenario.ui_extras ? EXTRA_TABS[scenario.ui_extras.kind] : undefined;
-  const forecast = scenario.task_type === "forecast";
+  const views = useMemo(() => modelViews(scenario), [scenario]);
+  const [section, setSection] = useState<ModelSection>("predictions");
+  const [dataModel, setDataModel] = useState(0);
+  const hasMainExtra = Boolean(scenario.ui_extras && EXTRA_TABS[scenario.ui_extras.kind]);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
@@ -141,18 +218,22 @@ function TabularViewContent({
         <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>
           <Icon name="data" /> Data & BI
         </button>
-        <button className={tab === "predict" ? "active" : ""} onClick={() => setTab("predict")}>
-          <Icon name="target" /> ML Predictions
-        </button>
-        <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
-          <Icon name="scan" /> ML Insights
-        </button>
-        {extraTab && (
-          <button className={tab === "extra" ? "active" : ""} onClick={() => setTab("extra")}>
-            <Icon name={extraTabIcon(scenario.ui_extras!, extraTab.icon)} />
-            {extraTabLabel(scenario.ui_extras!)}
-          </button>
-        )}
+        {views.map((view, index) => {
+          const extraTab = view.ui_extras ? EXTRA_TABS[view.ui_extras.kind] : undefined;
+          return (
+            <Fragment key={view.slug}>
+              <button className={tab === `model:${index}` ? "active" : ""} onClick={() => setTab(`model:${index}`)}>
+                <Icon name="target" /> {index === 0 ? (scenario.main_model_title ?? "ML model") : view.title}
+              </button>
+              {extraTab && (
+                <button className={tab === `extra:${index}` ? "active" : ""} onClick={() => setTab(`extra:${index}`)}>
+                  <Icon name={extraTabIcon(view.ui_extras!, extraTab.icon)} />
+                  {extraTabLabel(view.ui_extras!)}
+                </button>
+              )}
+            </Fragment>
+          );
+        })}
       </div>
 
       <button className="chat-dock-toggle" onClick={() => setChatOpen((o) => !o)}>
@@ -160,28 +241,32 @@ function TabularViewContent({
       </button>
 
       {tab === "scenario" && <ScenarioView scenario={scenario} />}
-      {tab === "data" && <DataView scenario={scenario} accessToken={accessToken} />}
-      {tab === "predict" && !forecast && <MlPredictionsView scenario={scenario} accessToken={accessToken} />}
-      {tab === "explore" && !forecast && <ExploreModelView scenario={scenario} accessToken={accessToken} />}
-      {tab === "extra" && scenario.ui_extras?.kind === "region_map" && <RegionMapView scenario={scenario} accessToken={accessToken} />}
-      {tab === "extra" && scenario.ui_extras?.kind === "live_plant" && <LivePlantView scenario={scenario} accessToken={accessToken} />}
-      {tab === "extra" && scenario.ui_extras?.kind === "process_optimizer" && <ProcessOptimizerView scenario={scenario} accessToken={accessToken} />}
+      {tab === "data" && (
+        <>
+          {views.length > 1 && (
+            <div className="model-section-switch" role="group" aria-label="Dataset">
+              {views.map((view, index) => (
+                <button key={view.slug} className={dataModel === index ? "active" : ""} onClick={() => setDataModel(index)}>
+                  {index === 0 ? (scenario.main_model_title ?? "ML model") : view.title}
+                </button>
+              ))}
+            </div>
+          )}
+          <DataView key={views[dataModel].slug} scenario={views[dataModel]} accessToken={accessToken} />
+        </>
+      )}
       <Suspense fallback={<div className="app-loading">Loading…</div>}>
         {tab === "tutorial" && scenario.tutorial && (
-          <TutorialView scenario={scenario} accessToken={accessToken} onOpenExtra={extraTab ? () => setTab("extra") : undefined} />
+          <TutorialView scenario={scenario} accessToken={accessToken} onOpenExtra={hasMainExtra ? () => setTab("extra:0") : undefined} />
         )}
-        {tab === "extra" && scenario.ui_extras?.kind === "voyage_explorer" && <VoyageView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "risk_watchlist" && <RiskWatchlistView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "network_explorer" && <NetworkTab scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "dispatch_tower" && <DispatchTowerView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "shipment_globe" && <ShipmentGlobeView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "money_trail" && <MoneyTrailView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "case_desk" && <CaseDeskView scenario={scenario} accessToken={accessToken} />}
-        {tab === "predict" && forecast && <ForecastPredictView scenario={scenario} accessToken={accessToken} />}
-        {tab === "explore" && forecast && <ForecastInsightsView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "forecast_board" && <ForecastBoardView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "fleet_health" && <FleetHealthView scenario={scenario} accessToken={accessToken} />}
-        {tab === "extra" && scenario.ui_extras?.kind === "row_triage" && <RowTriageView scenario={scenario} accessToken={accessToken} />}
+        {views.map((view, index) => (
+          <Fragment key={view.slug}>
+            {tab === `model:${index}` && (
+              <ModelTab scenario={view} accessToken={accessToken} section={section} onSection={setSection} />
+            )}
+            {tab === `extra:${index}` && <ExtraTab scenario={view} accessToken={accessToken} />}
+          </Fragment>
+        ))}
       </Suspense>
 
       {chatOpen && (

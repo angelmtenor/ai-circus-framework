@@ -16,7 +16,7 @@ import io
 from collections.abc import Callable
 from pathlib import Path
 
-from ai_circus_shared.scenario_schema import ScenarioDefinition, resolve_scenarios
+from ai_circus_shared.scenario_schema import ScenarioDefinition, expand_model_views, resolve_scenarios
 from ai_circus_shared.storage import ObjectStore
 from sqlalchemy import Engine, text
 
@@ -29,7 +29,7 @@ MAX_ROWS = 500_000  # a feature mart is aggregated; anything bigger is a modelli
 
 def _children(scenarios_dir: Path) -> dict[str, ScenarioDefinition]:
     # Only tabular_ml files are validated: another kind's newer schema never breaks this service.
-    return resolve_scenarios(scenarios_dir, "", kind="tabular_ml")
+    return expand_model_views(resolve_scenarios(scenarios_dir, "", kind="tabular_ml"))
 
 
 def export_features(

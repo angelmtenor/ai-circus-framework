@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from platform_registry.core.models import Base, Entitlement, LlmSetting, Scenario, VoiceSetting
@@ -39,7 +39,6 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "steel_defects",
         "turbofan_rul",
         "luznova_regional_demand",
-        "luznova_regional_forecast",
         "luznova_gas_anomaly",
         "luznova_ev_charging",
         "luznova_gas_prospects",
@@ -61,8 +60,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "sede_electronica",
         "prestaciones_sociales",
         "surf_retail",
-        "surf_demand_forecast",
-        "surf_customer_propensity",
+        "surf_ml",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -238,7 +236,6 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "steel_defects",
         "turbofan_rul",
         "luznova_regional_demand",
-        "luznova_regional_forecast",
         "luznova_gas_anomaly",
         "luznova_ev_charging",
         "luznova_gas_prospects",
@@ -260,8 +257,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "sede_electronica",
         "prestaciones_sociales",
         "surf_retail",
-        "surf_demand_forecast",
-        "surf_customer_propensity",
+        "surf_ml",
     }
 
 
@@ -278,8 +274,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 34
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 34
+    assert session.query(Scenario).count() == 32
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 32
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 
@@ -468,3 +464,35 @@ def test_seed_scenarios_refreshes_governance_on_reseed(session: Session) -> None
     seed_scenarios(session, SCENARIOS_DIR)
 
     assert session.get(Scenario, "churn").governance["ai_system_id"] == "churn"
+
+
+def test_seed_scenarios_serves_every_extra_model_to_the_ui(session: Session) -> None:
+    """docs/adr/0018: each extra model carries its address and the fields ui-react's views read."""
+    seed_scenarios(session, SCENARIOS_DIR)
+    energy = session.get(Scenario, "energy_building")
+    assert energy is not None and energy.task_type == "regression"
+    assert energy.main_model_title == "Energy use"
+    forecast = energy.extra_models[0]
+    assert forecast["slug"] == "energy_building~forecast" and forecast["task_type"] == "forecast"
+    assert forecast["time_series"]["horizon"] == 24 and forecast["ui_extras"]["kind"] == "forecast_board"
+
+
+def test_seed_scenarios_moves_a_retired_scenarios_entitlements_to_its_successor(session: Session) -> None:
+    """A merged scenario leaves the picker, and a tenant entitled to it keeps access through the successor."""
+    session.add(
+        Scenario(
+            slug="surf_demand_forecast",
+            kind="tabular_ml",
+            title="old",
+            description="old",
+            icon="x",
+            role_required="r",
+            industry="retail",
+        )
+    )
+    session.add(Entitlement(org_id="acme", scenario_slug="surf_demand_forecast"))
+    session.commit()
+    seed_scenarios(session, SCENARIOS_DIR)
+    assert session.get(Scenario, "surf_demand_forecast") is None
+    slugs = session.scalars(select(Entitlement.scenario_slug).where(Entitlement.org_id == "acme")).all()
+    assert slugs == ["surf_ml"]

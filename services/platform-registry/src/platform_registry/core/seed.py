@@ -10,10 +10,11 @@ resolve scenario metadata through this service's API instead of the filesystem.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
 from ai_circus_shared.governance import resolve_governance
-from ai_circus_shared.scenario_schema import load_all
+from ai_circus_shared.scenario_schema import ScenarioDefinition, load_all
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,57 @@ logger = get_logger(__name__)
 # demo" login is deliberately scoped to these three tabular_ml scenarios only, not
 # every scenario like ADMIN_ORG_ID (see resolve_caller_identity in ai_circus_shared.auth).
 ENGINEERING_DEMO_SCENARIOS = frozenset({"mpm", "electric_motor", "energy_building"})
+
+# Scenarios merged into another (docs/adr/0018): a tenant entitled to one keeps access through its successor.
+RETIRED_SCENARIOS = {
+    "surf_demand_forecast": "surf_ml",
+    "surf_customer_propensity": "surf_ml",
+    "luznova_regional_forecast": "luznova_regional_demand",
+}
+
+
+def _retire_scenarios(session: Session) -> None:
+    """Remove `RETIRED_SCENARIOS` from an existing database, moving their entitlements to the successor."""
+    for retired, successor in RETIRED_SCENARIOS.items():
+        scenario = session.get(Scenario, retired)
+        if scenario is None:
+            continue
+        for entitlement in session.scalars(select(Entitlement).where(Entitlement.scenario_slug == retired)).all():
+            kept = select(Entitlement).where(
+                Entitlement.org_id == entitlement.org_id, Entitlement.scenario_slug == successor
+            )
+            if session.scalars(kept).first() is None:
+                session.add(Entitlement(org_id=entitlement.org_id, scenario_slug=successor))
+            session.delete(entitlement)
+        session.flush()
+        session.delete(scenario)
+        logger.info("Retired scenario {} in favour of {}", retired, successor)
+
+
+def _model_view_summary(view: ScenarioDefinition) -> dict[str, Any]:
+    """An extra model as ui-react reads it: the `ScenarioSummary` fields of the model (docs/adr/0018)."""
+    assert view.dataset is not None and view.model is not None
+    dataset, model = view.dataset, view.model
+    return {
+        "id": view.model_id,
+        "title": view.title,
+        "slug": view.slug,
+        "feature_columns": dataset.feature_columns,
+        "feature_schema": {k: v.model_dump() for k, v in dataset.feature_schema.items()},
+        "default_charts": [c.model_dump() for c in dataset.default_charts],
+        "target": dataset.target,
+        "task_type": model.task_type,
+        "target_units": model.target_units,
+        "target_label": model.target_label,
+        "target_description": model.target_description,
+        "target_value_labels": model.target_value_labels,
+        "ui_extras": view.ui_extras.model_dump() if view.ui_extras is not None else None,
+        "text_challenger": model.text_challenger.model_dump() if model.text_challenger is not None else None,
+        "rule_columns": {k: v.model_dump() for k, v in dataset.rule_columns.items()} or None,
+        "business_rules": dataset.business_rules.model_dump() if dataset.business_rules is not None else None,
+        "decision_policy": model.decision_policy.model_dump() if model.decision_policy is not None else None,
+        "time_series": view.time_series.model_dump() if view.time_series is not None else None,
+    }
 
 
 def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
@@ -106,6 +158,10 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.data_product = definition.data_product.model_dump() if definition.data_product is not None else None
         existing.governance = resolve_governance(definition.slug, definition.governance)
         existing.time_series = definition.time_series.model_dump() if definition.time_series is not None else None
+        existing.main_model_title = definition.main_model_title
+        existing.extra_models = [
+            _model_view_summary(view) for view in definition.model_views().values() if view.model_id is not None
+        ] or None
         if definition.deep_learning is not None:
             # Reuse the generic target columns so the picker/ScenarioView need no
             # deep_learning special case to show what the model predicts.
@@ -134,6 +190,8 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
 
         slugs.append(definition.slug)
 
+    session.flush()
+    _retire_scenarios(session)
     session.commit()
     logger.info("Seeded {} scenario(s) from {}: {}", len(slugs), scenarios_dir, ", ".join(slugs))
     return slugs

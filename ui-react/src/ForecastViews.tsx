@@ -259,7 +259,7 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
       <div className="kpi-row">
         <StatTile label="Peak" value={`${fmt(series.peak.value)} ${target.unit}`} sub={timeLabel(series.peak.ds, forecast.frequency)} highlight />
         <StatTile label={`Total, next ${forecast.horizon} steps`} value={`${fmt(total)} ${target.unit}`} />
-        <StatTile label="Forecaster" value={candidateLabel(forecast.model_name)} sub="chosen by backtest (ML Insights)" />
+        <StatTile label="Forecaster" value={candidateLabel(forecast.model_name)} sub="chosen by backtest (Insights)" />
       </div>
       <div className="panel-card">
         <div className="forecast-head">

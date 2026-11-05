@@ -56,6 +56,27 @@ class PredictionServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def recommendable_items(self, *, scenario_slug: str, authorization: str | None) -> list[dict[str, Any]]:
+        """A recommender's items — `GET /recommend/{scenario_slug}/items`."""
+        response = httpx.get(
+            f"{self.base_url}/recommend/{scenario_slug}/items",
+            headers=self._headers(authorization),
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def recommend(self, *, scenario_slug: str, authorization: str | None, item: str) -> dict[str, Any]:
+        """What goes with an item — `GET /recommend/{scenario_slug}`."""
+        response = httpx.get(
+            f"{self.base_url}/recommend/{scenario_slug}",
+            params={"item": item},
+            headers=self._headers(authorization),
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def forecast(
         self, *, scenario_slug: str, authorization: str | None, series: str | None, shifts: dict[str, float]
     ) -> dict[str, Any]:

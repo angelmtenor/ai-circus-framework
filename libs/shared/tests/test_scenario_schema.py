@@ -29,6 +29,7 @@ from ai_circus_shared.scenario_schema import (
     TextFeatureUI,
     ToolLifeModel,
     VectorStoreConfig,
+    base_scenario_slug,
     qdrant_collection_name,
 )
 
@@ -1128,7 +1129,7 @@ def test_fleet_health_scenarios_are_valid_and_their_rules_hold() -> None:
 
 def test_risk_watchlist_can_show_ids_only_and_a_favourable_outcome() -> None:
     """Neither watchlist of people exposes a name, and only the buyers' one is good news."""
-    churn, buyers = _repo_scenario("churn"), _repo_scenario("surf_customer_propensity")
+    churn, buyers = _repo_scenario("churn"), _repo_scenario("surf_ml").model_views()["surf_ml~buyers"]
     assert churn.ui_extras.name_column is None and buyers.ui_extras.name_column is None  # type: ignore[union-attr]
     assert churn.ui_extras.positive_is_adverse is True  # type: ignore[union-attr]
     assert buyers.ui_extras.positive_is_adverse is False  # type: ignore[union-attr]
@@ -1617,8 +1618,12 @@ def test_collection_names_reject_an_unsafe_org_id() -> None:
 # --- forecast (docs/adr/0016-time-series-forecasting.md) -------------------------------------
 
 
+def _energy_forecast() -> ScenarioDefinition:
+    return _repo_scenario("energy_building").model_views()["energy_building~forecast"]
+
+
 def test_energy_building_is_a_valid_forecast_scenario() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     assert energy.model is not None and energy.model.task_type == "forecast"
     assert energy.time_series is not None
     assert energy.time_series.resolved_season_length() == 24  # hourly -> daily season
@@ -1626,7 +1631,7 @@ def test_energy_building_is_a_valid_forecast_scenario() -> None:
 
 
 def test_time_series_is_required_for_and_only_for_forecast() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     with pytest.raises(ValidationError, match=r"required for \(and only for\)"):
         _with(energy, time_series=None)
     churn = _repo_scenario("churn")
@@ -1635,7 +1640,7 @@ def test_time_series_is_required_for_and_only_for_forecast() -> None:
 
 
 def test_forecast_candidates_are_checked_both_ways() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     model = energy.model.model_dump()  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match=r"forecast model\.candidates must be among"):
         _with(energy, model={**model, "candidates": ["seasonal_naive", "random_forest"]})
@@ -1646,7 +1651,7 @@ def test_forecast_candidates_are_checked_both_ways() -> None:
 
 
 def test_time_series_config_rules() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     ts = energy.time_series.model_dump()  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match="lags must be distinct"):
         _with(energy, time_series={**ts, "lags": [1, 1, 24]})
@@ -1659,7 +1664,7 @@ def test_time_series_config_rules() -> None:
 
 
 def test_forecast_feature_columns_must_match_time_series() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     ts = energy.time_series.model_dump()  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match=r"missing \[\], extra \['Windspeed'\]"):
         _with(energy, time_series={**ts, "exogenous_features": ["T_out", "RH_out"]}, ui_extras=None)
@@ -1669,20 +1674,20 @@ def test_forecast_feature_columns_must_match_time_series() -> None:
 
 def test_a_forecast_scenario_cannot_take_a_tab_that_scores_rows() -> None:
     """region_map batch-predicts through /predict, which answers 409 for a forecast."""
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     region_map = _repo_scenario("luznova_regional_demand").ui_extras.model_dump()  # type: ignore[union-attr]
     with pytest.raises(ValidationError, match="not available for a forecast scenario"):
         _with(energy, ui_extras=region_map)
 
 
 def test_regional_forecast_has_many_series_and_numeric_statics() -> None:
-    regional = _repo_scenario("luznova_regional_forecast")
+    regional = _repo_scenario("luznova_regional_demand").model_views()["luznova_regional_demand~forecast"]
     assert regional.time_series is not None and regional.time_series.series_id_columns == ["province"]
     assert regional.time_series.frequency == "2D" and regional.time_series.resolved_season_length() == 7
 
 
 def test_forecast_board_rules() -> None:
-    energy = _repo_scenario("energy_building")
+    energy = _energy_forecast()
     board = energy.ui_extras.model_dump()  # type: ignore[union-attr]
     lever = board["levers"][0]
     with pytest.raises(ValidationError, match="min_shift < 0 < max_shift"):
@@ -1692,3 +1697,72 @@ def test_forecast_board_rules() -> None:
     churn = _repo_scenario("churn")
     with pytest.raises(ValidationError, match=r"forecast_board requires model\.task_type: forecast"):
         _with(churn, ui_extras={**board, "levers": []})
+
+
+# --- several models per scenario (docs/adr/0018-several-models-per-scenario.md) --------------
+
+
+def test_energy_building_keeps_its_regression_next_to_its_forecast() -> None:
+    energy = _repo_scenario("energy_building")
+    assert energy.model is not None and energy.model.task_type == "regression"
+    views = energy.model_views()
+    assert list(views) == ["energy_building", "energy_building~forecast"]
+    view = views["energy_building~forecast"]
+    assert view.model_id == "forecast" and view.extra_models == []
+    assert view.model is not None and view.model.task_type == "forecast"
+    assert view.ui_extras is not None and view.ui_extras.kind == "forecast_board"
+    assert view.dataset is not None and energy.dataset is not None
+    assert view.dataset.bucket != energy.dataset.bucket
+
+
+def test_every_model_needs_its_own_bucket_and_id() -> None:
+    energy = _repo_scenario("energy_building")
+    extra = energy.extra_models[0].model_dump()
+    assert energy.dataset is not None
+    same_bucket = {**extra, "dataset": {**extra["dataset"], "bucket": energy.dataset.bucket}}
+    with pytest.raises(ValidationError, match=r"its own dataset\.bucket"):
+        _with(energy, extra_models=[same_bucket])
+    other_bucket = {**extra, "dataset": {**extra["dataset"], "bucket": "scenario-other"}}
+    with pytest.raises(ValidationError, match="ids must be distinct"):
+        _with(energy, extra_models=[extra, other_bucket])
+
+
+def test_an_extra_model_is_held_to_the_rules_of_its_task_type() -> None:
+    energy = _repo_scenario("energy_building")
+    extra = energy.extra_models[0].model_dump()
+    with pytest.raises(ValidationError, match=r"required for \(and only for\)"):
+        _with(energy, extra_models=[{**extra, "time_series": None}])
+
+
+def test_extra_models_are_tabular_only_and_a_slug_cannot_hold_the_separator() -> None:
+    energy = _repo_scenario("energy_building")
+    with pytest.raises(ValidationError, match="must not contain"):
+        _with(energy, slug="energy~building")
+    sede = _repo_scenario("sede_electronica")
+    with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
+        _with(sede, extra_models=[energy.extra_models[0].model_dump()])
+
+
+def test_base_scenario_slug_strips_the_model() -> None:
+    assert base_scenario_slug("energy_building~forecast") == "energy_building"
+    assert base_scenario_slug("energy_building") == "energy_building"
+
+
+def test_surf_ml_holds_demand_buyers_and_a_recommender() -> None:
+    views = _repo_scenario("surf_ml").model_views()
+    assert list(views) == ["surf_ml", "surf_ml~buyers", "surf_ml~recommender"]
+    tasks = [view.model.task_type for view in views.values()]  # type: ignore[union-attr]
+    assert tasks == ["regression", "classification", "recommendation"]
+
+
+def test_recommender_block_is_required_for_and_only_for_recommendation() -> None:
+    surf = _repo_scenario("surf_ml")
+    extra = next(e for e in surf.extra_models if e.id == "recommender").model_dump()
+    others = [e.model_dump() for e in surf.extra_models if e.id != "recommender"]
+    with pytest.raises(ValidationError, match=r"required for \(and only for\) model\.task_type: recommendation"):
+        _with(surf, extra_models=[*others, {**extra, "recommender": None}])
+    with pytest.raises(ValidationError, match="recommender columns"):
+        _with(surf, extra_models=[*others, {**extra, "recommender": {**extra["recommender"], "item_column": "x"}}])
+    model = {**extra["model"], "candidates": ["association_rules", "lightgbm"]}
+    with pytest.raises(ValidationError, match=r"candidates must be among"):
+        _with(surf, extra_models=[*others, {**extra, "model": model}])

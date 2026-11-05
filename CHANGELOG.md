@@ -4,6 +4,23 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.46.0 — 2026-11-05
+
+### Added
+- **Several models in one scenario** (`extra_models:`, ADR 0018): each model is a validated view of the scenario with its own
+  dataset and bucket, addressed as `slug~id` (the bare slug is the main model, so every existing URL is unchanged). Entitlement is
+  to the scenario. The assistant gets every model's tools; an extra model's end in `_<id>`.
+- **Recommenders** (`model.task_type: recommendation`): association rules and trained item factors, served side by side by
+  `GET /recommend/{slug}`, scored on items hidden from held-out baskets next to a popularity baseline. First user `surf_ml~recommender`,
+  from a committed sample of anonymous baskets (`scripts/prepare_surf_ml_samples.py`), so it runs without the data tier.
+
+### Changed
+- **`energy_building` has its regression back** next to its 24-hour forecast, which replaced it in v0.40.0.
+- **`surf_demand_forecast` and `surf_customer_propensity` are now one scenario, `surf_ml`**; `luznova_regional_forecast` is now a model of
+  `luznova_regional_demand`. The seed moves a tenant's entitlements to the successor (`RETIRED_SCENARIOS`).
+- **ML Predictions and ML Insights are one tab per model**, with a Predictions / Insights switch, in every tabular scenario.
+- `make k3s-idle-check` also visits a model tab's Insights, fails a tab on a backend 5xx or 404, and saves screenshots with `SHOT_DIR`.
+
 ## v0.45.0 — 2026-11-04
 
 ### Added

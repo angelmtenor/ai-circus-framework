@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field, model_validator
 
 SQL_IDENTIFIER = r"^[a-z][a-z0-9_]{0,47}$"
 Identifier = Annotated[str, Field(pattern=SQL_IDENTIFIER)]
+# A tabular_ml model: its scenario's slug, or `slug~id` for an extra model (docs/adr/0018).
+ModelAddress = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(~[a-z][a-z0-9_]*)?$")]
 # A dotted path into a JSON payload; `[*]` fans out over an array ("lines[*].qty").
 PayloadPath = Annotated[str, Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*(\[\*\])?(\.[A-Za-z_][A-Za-z0-9_]*(\[\*\])?)*$")]
 TOPIC = r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+){2,}\.v[0-9]+$"
@@ -347,7 +349,7 @@ class MlExport(BaseModel):
     prediction then run unchanged."""
 
     dataset: Identifier  # a gold dataset of this data product
-    scenario: Identifier  # the tabular_ml scenario's slug
+    scenario: ModelAddress  # the tabular_ml model it trains
 
 
 class SeasonHeatmap(BaseModel):
@@ -363,7 +365,7 @@ class ForecastBoard(BaseModel):
     through the prediction service and laid out as a `row` by `column` board."""
 
     title: str
-    model: Identifier  # an ml_exports scenario
+    model: ModelAddress  # an ml_exports scenario
     latest_flag: Identifier  # boolean column of the feature mart: the rows to forecast now
     row: Identifier
     column: Identifier

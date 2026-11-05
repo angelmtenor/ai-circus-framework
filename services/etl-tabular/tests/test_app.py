@@ -70,6 +70,9 @@ def test_main_runs_the_etl_pipeline_for_every_resolved_scenario(monkeypatch: pyt
         dataset = fake_dataset
         time_series = None
 
+        def model_views(self) -> dict[str, object]:
+            return {"churn": self}
+
     connect_calls: list[dict[str, object]] = []
     etl_calls: list[tuple[object, ...]] = []
 

@@ -110,3 +110,17 @@ def test_entitled_caller_resolves_successfully(monkeypatch: pytest.MonkeyPatch) 
     identity = identity_module.resolve_identity(scenario_slug="churn", authorization="Bearer good-token")
 
     assert identity.org_id == "org-1"
+
+
+def test_a_model_address_is_entitled_through_its_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
+    """docs/adr/0018: `/predict/energy_building~forecast` checks the entitlement to energy_building."""
+    monkeypatch.setattr(identity_module, "get_env_config", FakeConfig)
+    captured: dict[str, object] = {}
+
+    def fake_resolve(**kwargs: object) -> Identity:
+        captured.update(kwargs)
+        return Identity(subject="admin", org_id="admin", roles=frozenset())
+
+    monkeypatch.setattr(identity_module, "resolve_caller_identity", fake_resolve)
+    identity_module.resolve_identity(scenario_slug="energy_building~forecast", authorization="Bearer t")
+    assert captured["scenario_slug"] == "energy_building"

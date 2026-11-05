@@ -121,6 +121,7 @@ async def test_lifespan_sets_up_prompt_cache_and_chat_llm_clients(monkeypatch: p
 
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"churn": FakeDefinition()})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(
         app.ObjectStore, "connect", staticmethod(lambda **kwargs: connect_calls.append(kwargs) or "fake-store")
     )
@@ -151,6 +152,7 @@ async def test_lifespan_rejects_when_no_scenario_matches(monkeypatch: pytest.Mon
     """An empty SCENARIOS resolution (no tabular_ml scenarios found at all) fails startup loudly."""
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
 
     with pytest.raises(RuntimeError, match="No tabular_ml or data_product scenario matched"):
         async with app.lifespan(app.app):
@@ -175,6 +177,7 @@ async def test_lifespan_builds_the_document_search_for_a_scenario_with_documents
     provider_calls: list[dict[str, object]] = []
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
     monkeypatch.setattr(app, "resolve_scenarios", lambda *_a, **_kw: {"aid": FakeDefinition()})
+    monkeypatch.setattr(app, "expand_model_views", lambda definitions: definitions)
     monkeypatch.setattr(app.ObjectStore, "connect", staticmethod(lambda **kwargs: f"store:{kwargs['bucket']}"))
     monkeypatch.setattr(app, "init_engine", lambda _config: "fake-conversations-engine")
     monkeypatch.setattr(app.ConversationsBase.metadata, "create_all", lambda engine: None)

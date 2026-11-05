@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from ai_circus_shared.auth import AuthSettingsAdapter, Identity, TokenValidationError, resolve_caller_identity
 from ai_circus_shared.entitlements import EntitlementDeniedError
+from ai_circus_shared.scenario_schema import base_scenario_slug
 from fastapi import Header, HTTPException
 
 from prediction import get_env_config
@@ -26,7 +27,8 @@ def resolve_identity(scenario_slug: str, authorization: str | None = Header(defa
     `scenario_slug` is injected from the route's path parameter of the same name
     (see e.g. `POST /predict/{scenario_slug}`) — FastAPI resolves path params into a
     `Depends()` sub-dependency by parameter name, regardless of which function in the
-    dependency tree declares them.
+    dependency tree declares them. It may be a model's address (`slug~id`, docs/adr/0018):
+    entitlement is to the scenario, so one covers all of its models.
 
     Raises:
         HTTPException: 401 if the token is missing/invalid, 403 if the tenant isn't
@@ -34,7 +36,9 @@ def resolve_identity(scenario_slug: str, authorization: str | None = Header(defa
     """
     settings = AuthSettingsAdapter.from_config(get_env_config())
     try:
-        return resolve_caller_identity(authorization=authorization, scenario_slug=scenario_slug, settings=settings)
+        return resolve_caller_identity(
+            authorization=authorization, scenario_slug=base_scenario_slug(scenario_slug), settings=settings
+        )
     except TokenValidationError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except EntitlementDeniedError as exc:

@@ -36,6 +36,7 @@ from ai_circus_shared.tabular_ml import (
     MODEL_PIPELINE_KEY,
     MODEL_PIPELINE_LOWER_KEY,
     MODEL_PIPELINE_UPPER_KEY,
+    MODEL_RECOMMENDATIONS_KEY,
     MODEL_SIGNATURE_METADATA_FIELD,
     artifact_checksum,
     checksums_signature_valid,
@@ -126,12 +127,15 @@ class ModelArtifacts:
     forecast: dict[str, Any] | None = None
     backtest: dict[str, Any] | None = None
     forecaster: Forecaster | None = None
+    # `task_type: recommendation`: every candidate's neighbours of every item.
+    recommendations: dict[str, Any] | None = None
 
     def row_pipeline(self) -> Pipeline:
         """The pipeline that scores rows; NotARowModelError for a forecast scenario."""
         if self.pipeline is None:
             raise NotARowModelError(
-                f"{self.metadata.get('scenario_slug', 'This scenario')!r} is a forecast: use /forecast instead."
+                f"{self.metadata.get('scenario_slug', 'This scenario')!r} does not score rows: "
+                "use /forecast or /recommend instead."
             )
         return self.pipeline
 
@@ -311,6 +315,11 @@ class ModelCache:
             )
         if metadata.get("task_type") == "forecast":
             return self._load_forecast(store, load_org_id, metadata, checksums)
+        if metadata.get("task_type") == "recommendation":
+            document = _download_checked(store, load_org_id, MODEL_RECOMMENDATIONS_KEY, checksums, "recommendations")
+            return ModelArtifacts(
+                pipeline=None, explainer=None, metadata=metadata, recommendations=json.loads(document)
+            )
         pipeline = _load_checked(store, load_org_id, MODEL_PIPELINE_KEY, checksums, "pipeline")
         explainer = _load_checked(store, load_org_id, MODEL_EXPLAINER_KEY, checksums, "explainer")
         pipeline_lower = pipeline_upper = None

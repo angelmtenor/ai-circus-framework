@@ -64,6 +64,18 @@ class SystemPromptCache:
                 self._locks[key] = threading.Lock()
             return self._locks[key]
 
+    def _extra_model_prompt(self, view: ScenarioDefinition, org_id: str) -> str:
+        """One more model of the scenario (docs/adr/0018), for the end of its prompt; empty until it is trained."""
+        store = self._stores[view.slug]
+        load_org_id = org_id if store.exists(org_id, MODEL_METADATA_KEY) else self._fallback_org_id
+        if not store.exists(load_org_id, MODEL_METADATA_KEY):
+            return ""
+        metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
+        return (
+            f"\n\nThis scenario has another model, '{view.title}'. The names of its tools end in "
+            f"_{view.model_id}: use those for questions about it. {build_system_prompt(view, metadata)}"
+        )
+
     def get(self, org_id: str, scenario_slug: str) -> str:
         """Return the tenant's grounding system prompt for this scenario, building+caching on first call."""
         key = (org_id, scenario_slug)
@@ -91,7 +103,11 @@ class SystemPromptCache:
                 )
             logger.info("Building system prompt for org={} scenario={} (cache miss)", org_id, scenario_slug)
             metadata = json.loads(store.get(load_org_id, MODEL_METADATA_KEY))
-            prompt = build_system_prompt(self._definitions[scenario_slug], metadata)
+            definition = self._definitions[scenario_slug]
+            prompt = build_system_prompt(definition, metadata)
+            for view in definition.model_views().values():
+                if view.model_id is not None:
+                    prompt += self._extra_model_prompt(view, org_id)
 
             with self._cache_guard:
                 if key not in self._cache:

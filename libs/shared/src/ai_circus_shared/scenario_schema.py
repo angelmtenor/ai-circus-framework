@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ai_circus_shared.business_rules import BusinessRules, DecisionPolicy
 from ai_circus_shared.data_product import DataProductConfig
-from ai_circus_shared.governance import GovernanceConfig
+from ai_circus_shared.governance import MODEL_ADDRESS_SEPARATOR, GovernanceConfig
 
 
 class NumericFeatureUI(BaseModel):
@@ -355,6 +355,23 @@ class TimeSeriesConfig(BaseModel):
 # `lightgbm_lags`: LightGBM on the lags/rolling/calendar/exogenous features of ai_circus_shared.forecasting,
 # forecast recursively.
 FORECAST_CANDIDATES = ("seasonal_naive", "auto_ets", "lightgbm_lags")
+# The recommendation candidates training knows (training/core/recommender.py), simplest first:
+# association rules ranked by confidence, then item factors learned from the baskets (truncated SVD).
+RECOMMENDER_CANDIDATES = ("association_rules", "item_factors")
+
+
+class RecommenderConfig(BaseModel):
+    """A `model.task_type: recommendation`'s layout: rows are (basket, item) pairs, and it answers
+    "what goes with this item?" from what is bought together. Every candidate is served, side by side.
+    """
+
+    basket_column: str
+    item_column: str
+    label_column: str  # the item's name, shown instead of its id
+    top_k: int = Field(default=8, ge=1, le=20)
+    # A rule needs this many baskets with both items: one coincidence must not top a list.
+    min_baskets: int = Field(default=3, ge=1)
+    factors: int = Field(default=48, ge=2, le=200)
 
 
 class TabularModel(BaseModel):
@@ -362,7 +379,8 @@ class TabularModel(BaseModel):
 
     # `forecast` = a time-series model over `time_series` (see TimeSeriesConfig) instead of one
     # prediction per independent row.
-    task_type: Literal["classification", "regression", "forecast"]
+    # `recommendation` = what goes with an item, from baskets (see RecommenderConfig).
+    task_type: Literal["classification", "regression", "forecast", "recommendation"]
     candidates: list[str]
     accuracy_gain_threshold_for_complexity: float
     # What the Green Code comparison ranks candidates by — None = the task's default
@@ -370,7 +388,8 @@ class TabularModel(BaseModel):
     # by how well it *orders* risk, independent of any 0.5 threshold.
     # Forecast: `mase` (default — error relative to a seasonal naive forecast, comparable across
     # series), `smape` or `rmse`, all lower-is-better.
-    selection_metric: Literal["accuracy", "roc_auc", "r2", "mase", "smape", "rmse"] | None = None
+    # Recommendation: `hit_rate` (default — how often a hidden basket item is in the top list).
+    selection_metric: Literal["accuracy", "roc_auc", "r2", "mase", "smape", "rmse", "hit_rate"] | None = None
     # 0 = score each candidate once on the 20% hold-out (fast; the default). >= 2 =
     # stratified k-fold cross-validation on the 80% training split instead — a far
     # less noisy comparison on small datasets, where one hold-out of a few hundred
@@ -415,6 +434,7 @@ class TabularModel(BaseModel):
             "classification": {"accuracy", "roc_auc"},
             "regression": {"r2"},
             "forecast": {"mase", "smape", "rmse"},
+            "recommendation": {"hit_rate"},
         }[self.task_type]
         if self.selection_metric is not None and self.selection_metric not in allowed:
             raise ValueError(f"model.selection_metric {self.selection_metric!r} is not valid for {self.task_type}.")
@@ -428,6 +448,11 @@ class TabularModel(BaseModel):
                 raise ValueError("model.text_challenger is not available for forecast.")
         elif set(self.candidates) & set(FORECAST_CANDIDATES):
             raise ValueError("forecast candidates need model.task_type: forecast.")
+        recommending = self.task_type == "recommendation"
+        if recommending and (not self.candidates or set(self.candidates) - set(RECOMMENDER_CANDIDATES)):
+            raise ValueError(f"recommendation model.candidates must be among {list(RECOMMENDER_CANDIDATES)}.")
+        if not recommending and set(self.candidates) & set(RECOMMENDER_CANDIDATES):
+            raise ValueError("recommendation candidates need model.task_type: recommendation.")
         return self
 
 
@@ -2131,6 +2156,27 @@ class DatasetCredits(BaseModel):
     note: str | None = None
 
 
+def base_scenario_slug(address: str) -> str:
+    """The scenario a model address (`slug` or `slug~id`, see ExtraModel) belongs to."""
+    return address.split(MODEL_ADDRESS_SEPARATOR, 1)[0]
+
+
+class ExtraModel(BaseModel):
+    """One more model of a `tabular_ml` scenario, next to its main `model:` (docs/adr/0018).
+
+    Addressed as `slug~id`. Its own bucket keeps its data and artifacts apart from the
+    scenario's other models; every rule of its task type holds through `model_views()`.
+    """
+
+    id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,30}$")
+    title: str = Field(min_length=1, max_length=40)
+    dataset: TabularDataset
+    model: TabularModel
+    time_series: TimeSeriesConfig | None = None
+    recommender: RecommenderConfig | None = None
+    ui_extras: UiExtras | None = None
+
+
 class ScenarioDefinition(BaseModel):
     """Full scenario.yaml schema, discriminated by `kind`."""
 
@@ -2151,6 +2197,14 @@ class ScenarioDefinition(BaseModel):
     model: TabularModel | None = None
     # tabular_ml with model.task_type: forecast only — the series layout (see TimeSeriesConfig).
     time_series: TimeSeriesConfig | None = None
+    # tabular_ml with model.task_type: recommendation only — see RecommenderConfig.
+    recommender: RecommenderConfig | None = None
+    # tabular_ml only — more models in this scenario (see ExtraModel, docs/adr/0018).
+    extra_models: list[ExtraModel] = []
+    # The main model's tab name when there are extra models (None = "ML model").
+    main_model_title: str | None = Field(default=None, max_length=40)
+    # Set only on a view from model_views(): which of the scenario's extra models it is.
+    model_id: str | None = None
     documents: DocumentsConfig | None = None
     vector_store: VectorStoreConfig | None = None
     form: FormConfig | None = None
@@ -2239,6 +2293,75 @@ class ScenarioDefinition(BaseModel):
         if self.tutorial is not None:
             raise ValueError("tutorial is not available for a forecast scenario yet.")
         return self
+
+    @model_validator(mode="after")
+    def _recommender_matches_recommendation(self) -> ScenarioDefinition:
+        """`recommender` is required for (and only for) `model.task_type: recommendation`, reads real
+        columns, and nothing that scores independent rows applies to it."""
+        recommending = self.model is not None and self.model.task_type == "recommendation"
+        if recommending != (self.recommender is not None):
+            raise ValueError("`recommender` is required for (and only for) model.task_type: recommendation.")
+        if self.recommender is None or self.dataset is None:
+            return self
+        config, ds = self.recommender, self.dataset
+        unknown = {config.basket_column, config.item_column, config.label_column} - set(ds.feature_columns)
+        if unknown:
+            raise ValueError(f"recommender columns must be dataset.feature_columns (got {sorted(unknown)}).")
+        if self.ui_extras is not None or self.tutorial is not None or ds.business_rules is not None:
+            raise ValueError("ui_extras, tutorial and business_rules are not available for a recommendation.")
+        return self
+
+    @model_validator(mode="after")
+    def _extra_models_are_valid_views(self) -> ScenarioDefinition:
+        """Extra models belong to a tabular_ml scenario, each in its own bucket, and each one
+        passes every rule above as a scenario of its own (a forecast has no row-scoring tab, ...).
+        """
+        if self.model_id is None and MODEL_ADDRESS_SEPARATOR in self.slug:
+            raise ValueError(f"slug must not contain {MODEL_ADDRESS_SEPARATOR!r}: it separates a model's address.")
+        if not self.extra_models:
+            return self
+        if self.kind != "tabular_ml":
+            raise ValueError("extra_models is only available for kind='tabular_ml'.")
+        ids = [extra.id for extra in self.extra_models]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"extra_models ids must be distinct (got {ids}).")
+        assert self.dataset is not None
+        buckets = [self.dataset.bucket, *(extra.dataset.bucket for extra in self.extra_models)]
+        if len(buckets) != len(set(buckets)):
+            raise ValueError(f"every model needs its own dataset.bucket (got {buckets}).")
+        for extra in self.extra_models:
+            if isinstance(extra.ui_extras, CaseDeskExtra):
+                raise ValueError("ui_extras.case_desk calls the assistant by scenario: main model only.")
+        self.model_views()
+        return self
+
+    def model_views(self) -> dict[str, ScenarioDefinition]:
+        """Every model of this scenario by address, as a complete definition: the main model is the
+        scenario itself, an extra one the scenario with that model's blocks in place of the main ones.
+        Tutorials, rubric checks and documents belong to the scenario, so a view has none.
+        """
+        views: dict[str, ScenarioDefinition] = {self.slug: self}
+        fields = {name: getattr(self, name) for name in type(self).model_fields}
+        for extra in self.extra_models:
+            address = f"{self.slug}{MODEL_ADDRESS_SEPARATOR}{extra.id}"
+            views[address] = ScenarioDefinition.model_validate(
+                {
+                    **fields,
+                    "slug": address,
+                    "model_id": extra.id,
+                    "title": extra.title,
+                    "dataset": extra.dataset,
+                    "model": extra.model,
+                    "time_series": extra.time_series,
+                    "recommender": extra.recommender,
+                    "ui_extras": extra.ui_extras,
+                    "extra_models": [],
+                    "tutorial": None,
+                    "rubric_check": None,
+                    "documents": None,
+                }
+            )
+        return views
 
     @model_validator(mode="after")
     def _deep_learning_ui_extras_reference_real_labels(self) -> ScenarioDefinition:
@@ -2806,6 +2929,11 @@ class ScenarioDefinition(BaseModel):
         """Parse and validate a single `scenario.yaml` file."""
         raw = yaml.safe_load(path.read_text())
         return cls.model_validate(raw)
+
+
+def expand_model_views(definitions: dict[str, ScenarioDefinition]) -> dict[str, ScenarioDefinition]:
+    """`resolve_scenarios`' result with every model of every scenario, by address (docs/adr/0018)."""
+    return {address: view for definition in definitions.values() for address, view in definition.model_views().items()}
 
 
 def load_all(scenarios_dir: Path) -> list[ScenarioDefinition]:

@@ -1,5 +1,7 @@
 # 0016 — Time-series forecasting is a third tabular task, not a new kind
 
+*"A scenario is one or the other" is superseded by [ADR 0018](0018-several-models-per-scenario.md): a model is.*
+
 **Context.** Several tabular scenarios are really series: `energy_building` (a home's appliance
 energy, sampled every 10 minutes), `surf_demand_forecast` (weekly sales per store × rider group,
 with hand-made lag columns), `luznova_regional_demand` (daily load per province). Trained as

@@ -727,7 +727,7 @@ k3s-data-seed: ## Generate the data product's history through the real pipeline 
 	@./scripts/k3s_data_seed.sh "$(DATA_PRODUCT)" "$(DAYS)"
 
 k3s-data-ml: ## Train the tabular_ml scenarios the data product exports (ml_exports) — after a transform has built its feature marts
-	@./scripts/k3s_ml_train.sh "$(if $(ML_SCENARIOS),$(ML_SCENARIOS),surf_demand_forecast,surf_customer_propensity)"
+	@./scripts/k3s_ml_train.sh "$(if $(ML_SCENARIOS),$(ML_SCENARIOS),surf_ml)"
 
 k3s-data-seed-lite: ## Same with one year of history (laptops short of memory/disk; the default is the scenario's history_days)
 	@./scripts/k3s_data_seed.sh "$(DATA_PRODUCT)" 365
