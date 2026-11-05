@@ -4,6 +4,24 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.47.0 — 2026-11-05
+
+### Added
+- **`make k3s-vectorize`**: runs the `etl-vectorize` Job, which a fresh cluster needs for RAG, forms and the case desk's reading
+  room. About 20 min on CPU, so run it detached.
+- **`make dl-artifacts-export` / `dl-artifacts-import`**: move trained deep-learning models between stacks as one tar file, so one
+  machine can train on a GPU and another can serve on CPU (`scripts/dl_artifacts.py`). `raw/` stays behind, and the manifest goes last.
+
+### Changed
+- **`symptom_triage` is served unquantized**: 600 MB fp32 ONNX, 96.2% on test with the CPU budget. `dl-inference`'s memory limit goes
+  from 1536Mi to 3Gi in both deploy paths (measured peak 2.4 GiB).
+
+### Fixed
+- **int8 models could fail depending on the CPU**: on an AVX2 CPU without VNNI, the quantized `symptom_triage` scored 4% on test
+  against 95% for the same model in torch and fp32 ONNX, consistent with onnxruntime's documented saturation on such CPUs. The export
+  now uses `reduce_range` (91.5% on the same model).
+- **The case desk's reading room was blank when no documents were indexed**: it now says so and names the command to run.
+
 ## v0.46.0 — 2026-11-05
 
 ### Added

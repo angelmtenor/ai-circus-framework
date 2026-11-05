@@ -232,6 +232,7 @@ export const WORDS = {
     cited: "Citado en la última respuesta",
     filterLaw: "Filtrar artículos…",
     pickArticle: "Elige un artículo para leerlo entero.",
+    noLawDocs: "Todavía no hay normativa cargada para esta organización: falta indexar los documentos (make k3s-vectorize).",
     lawIntro:
       "Lo que el asistente puede consultar: leyes reales, literales, y las bases y protocolos ficticios de la entidad. En este chat solo ve la normativa — ni los datos ni el modelo.",
     askLegalBasis: (basis: string, rule: string, caseRef: string) =>
@@ -285,6 +286,7 @@ export const WORDS = {
     cited: "Cited in the latest answer",
     filterLaw: "Filter articles…",
     pickArticle: "Pick an article to read it in full.",
+    noLawDocs: "No documents loaded for this organization yet: they still need indexing (make k3s-vectorize).",
     lawIntro:
       "What the assistant can look up: real laws, verbatim, and the organisation's fictional rules and protocols. In this chat it only sees these documents — neither the data nor the model.",
     askLegalBasis: (basis: string, rule: string, caseRef: string) =>

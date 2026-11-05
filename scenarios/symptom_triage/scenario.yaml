@@ -50,8 +50,9 @@ deep_learning:
       test.jsonl: "7581c68031d7433fcce22c9aac08f35595b67402ceef92a7dd7336207f3b6195"
     text_field: input_text
     label_field: output_text
-  # State of the art clinical encoder at a laptop-friendly size (150M params). The
-  # exported ONNX is int8-quantized (`quantize`) so dl-inference serves it in ~200 MB.
+  # State of the art clinical encoder at a laptop-friendly size (150M params). Exported
+  # as fp32 ONNX (~600 MB): `quantize: true` would serve it in ~200 MB, at a measured cost
+  # of ~3 accuracy points.
   # Lighter alternative with the same architecture: jhu-clsp/ettin-encoder-32m.
   base_model: "thomas-sounack/BioClinical-ModernBERT-base"
   base_model_revision: "c3648aa87af95837c809e6f0c5f85d08160db437"
@@ -61,7 +62,7 @@ deep_learning:
   target_description: "The most likely of 22 common conditions given the described symptoms — a triage hint for a clinician, never a diagnosis."
   disclaimer: "Demonstration only — not a medical device and not clinically validated. Never use it for a real diagnosis."
   max_length: 128
-  quantize: true
+  quantize: false
   input_examples:
     - "I've had a high fever for three days, a pounding headache behind my eyes and my joints ache so much I can barely move. There's a rash spreading on my arms."
     - "My nose has been running constantly, I keep sneezing and my throat is a bit scratchy, but otherwise I feel fine."

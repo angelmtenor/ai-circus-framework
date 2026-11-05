@@ -32,6 +32,7 @@ Rules most likely to matter mid-task:
 make k3s-all                 # cluster -> build -> import -> secrets -> up -> wait (+ port-forward to platform-registry)
 make k3s-all-lite            # same, without mlflow/agui-voice (~1.2 GB less RAM); `make k3s-full` restores
 make k3s-pipeline            # REQUIRED on a fresh cluster: etl-tabular -> training Jobs, then restarts prediction
+make k3s-vectorize           # REQUIRED on a fresh cluster for RAG/forms/the case desk's reading room: etl-vectorize Job (~20 min on CPU, run detached)
 make k3s-verify              # curl checks (admin + engineering-demo tenants); then a real browser check
 make k3s-idle-check IDLE_SCENARIOS="Title A,Title B"  # every tab of those scenarios, headless: fails if one still draws >2 fps or >15% CPU idle (a new tab must pass)
 make k3s-embed-onnx          # OPTIONAL, off by default: local-embed on ONNX Runtime int8 (pod RSS -25%, ~4x faster, but vectors differ: cosine >= 0.98 vs torch, so re-vectorize); EMBED_VARIANT=off reverts

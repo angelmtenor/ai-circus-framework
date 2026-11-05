@@ -486,3 +486,29 @@ def test_baked_position_grid_matches_the_resampled_one() -> None:
     with torch.no_grad():
         resampled = fresh(pixel_values=pixels).last_hidden_state
     assert torch.allclose(baked, resampled, atol=1e-5)
+
+
+def test_quantization_uses_reduce_range(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full-range int8 weights saturate on x86 CPUs without VNNI: a 95% model served at chance level."""
+    from onnxruntime import quantization
+
+    from dl_training.core import export
+
+    calls: list[dict[str, object]] = []
+
+    def fake_quantize(_source: str, target: str, **kwargs: object) -> None:
+        Path(target).write_bytes(b"")
+        calls.append(kwargs)
+
+    monkeypatch.setattr(quantization, "quantize_dynamic", fake_quantize)
+
+    class LinearTask:
+        def export_spec(
+            self, _example: object
+        ) -> tuple[torch.nn.Module, tuple[torch.Tensor], list[str], list[str], dict]:
+            return torch.nn.Linear(2, 2), (torch.zeros(1, 2),), ["x"], ["y"], {}
+
+    path = export.export_onnx(LinearTask(), None, tmp_path, quantize=True)  # type: ignore[arg-type]
+
+    assert path.name == "model_int8.onnx"
+    assert calls[0]["reduce_range"] is True

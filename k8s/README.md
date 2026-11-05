@@ -65,15 +65,11 @@ artifacts in SeaweedFS. Skipping it doesn't fail loudly at deploy time: `k3s-up`
 `k3s-verify` all pass, because they only check that `prediction` is reachable, not that any
 scenario actually has a model — the first real prediction request 503s instead, with `No trained
 model artifacts for scenario='<slug>' (org='<org>', fallback org='demo' also has none — has
-`training` run for it?)`. There's no equivalent `make k3s-*` target yet for
-`k8s/jobs/etl-vectorize-job.yaml` (the `conversational_rag` counterpart — plus every `assisted_form`/`tabular_ml` scenario with `documents` — seeding
-each scenario's document catalog into Qdrant) — apply it the same way as the other Jobs when a
-RAG-backed scenario needs its documents seeded on a fresh cluster:
-```bash
-kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
-kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
-kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=300s
-```
+`training` run for it?)`. `make k3s-vectorize` runs `k8s/jobs/etl-vectorize-job.yaml` (the
+`conversational_rag` counterpart — plus every `assisted_form`/`tabular_ml` scenario with `documents` — seeding
+each scenario's document catalog into Qdrant and the tenant's bucket). A fresh cluster needs it too, or
+RAG answers find nothing and the case desk's reading room lists no documents. It takes ~20 min on CPU
+(`local-embed`), so run it detached.
 
 ### Deep learning (optional) and GPUs
 
@@ -124,6 +120,14 @@ GPU) and gets no CUDA libraries; on a CPU-only cluster the target does nothing.
 With a GPU in the cluster, `make k3s-dl-build` builds the CUDA flavour of the dl-training image
 (`DL_TRAINING_TORCH=auto`), and data-platform-manager requests `nvidia.com/gpu` + the `nvidia`
 RuntimeClass for every training Job it starts; without one, Jobs use each scenario's CPU budget.
+
+
+**Train on another machine, serve here.** dl-inference only needs a CPU. On the GPU machine, with
+this repo's revision and its stack running: `make dl-train SCENARIOS=…`, then
+`make dl-artifacts-export SCENARIOS=… FILE=dl-models.tar`. Copy the file over, then here:
+`make dl-artifacts-import FILE=dl-models.tar` and `kubectl -n ai-circus rollout restart deployment/dl-inference`.
+Metrics in a manifest are the training machine's: int8 weights used to depend on the CPU
+(`reduce_range`, `services/dl-training/src/dl_training/core/export.py`).
 
 ### Pausing vs. tearing down
 
