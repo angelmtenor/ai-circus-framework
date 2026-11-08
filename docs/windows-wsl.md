@@ -260,23 +260,53 @@ it fills the Windows drive the VM stalls (see Troubleshooting). Three habits kee
    exit
    ```
 
-2. **Cap Docker's build cache.** BuildKit reserves a percentage of the disk by default — on WSL's
-   nominally 1 TB virtual disk that's ~100 GB of cache before it garbage-collects anything. Cap
-   it in `/etc/docker/daemon.json` inside the distro (create the file if needed), then
-   `sudo systemctl restart docker`. `50GB` is deliberate: a full build of the 12 images is ~10 GB
-   of layers today, and a cap too close to that makes every rebuild evict the cache it just
-   built — leave room for the repo to grow and for a few rebuilds' worth of layers to coexist.
+2. **Cap Docker's build cache.** Left alone it grows with every rebuild: each change to a
+   service's dependencies leaves another copy of its `uv sync` layer behind (~2 GB each for
+   llm-gateway), and one machine reached 137 GB. How to cap it depends on Docker's image store,
+   so check that first:
 
-   ```json
-   {
-     "builder": {
-       "gc": {
-         "enabled": true,
-         "defaultKeepStorage": "50GB"
+   ```bash
+   docker info --format '{{json .DriverStatus}}'
+   ```
+
+   - **`io.containerd.snapshotter.v1` (the containerd image store, newer Docker Engine
+     installs):** BuildKit's own limit does not work. It marks every cache entry as "shared"
+     and counts it as free, so `builder.gc.defaultKeepStorage` in `daemon.json` and
+     `docker builder prune --max-used-space` remove nothing; `docker system df` shows the
+     cache's real size but `0B` reclaimable. Only `docker builder prune -a` frees it. Run it
+     by hand when `docker system df` shows a large build cache, or on a timer, for example a
+     systemd user timer that drops what no build used for 3 days:
+
+     ```bash
+     mkdir -p ~/.config/systemd/user
+     printf '[Unit]\nDescription=Prune Docker build cache unused for 3 days\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/docker builder prune -a -f --filter until=72h\n' > ~/.config/systemd/user/docker-build-cache-prune.service
+     printf '[Unit]\nDescription=Prune Docker build cache daily\n\n[Timer]\nOnCalendar=daily\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n' > ~/.config/systemd/user/docker-build-cache-prune.timer
+     systemctl --user daemon-reload && systemctl --user enable --now docker-build-cache-prune.timer
+     ```
+
+     A pruned cache only costs time: the next build of each image starts from scratch.
+
+   - **`overlay2` (the classic store):** BuildKit's garbage collection works. Cap it in
+     `/etc/docker/daemon.json` inside the distro (create the file if needed), then
+     `sudo systemctl restart docker`. `50GB` is deliberate: a full build of the 12 images is
+     ~10 GB of layers today, and a cap too close to that makes every rebuild evict the cache it
+     just built. Leave room for the repo to grow and for a few rebuilds' worth of layers to
+     coexist.
+
+     ```json
+     {
+       "builder": {
+         "gc": {
+           "enabled": true,
+           "defaultKeepStorage": "50GB"
+         }
        }
      }
-   }
-   ```
+     ```
+
+   Either way, keep the distro's disk under 85% full: above that, k3s's kubelet deletes the
+   images of pods that are not running, and `*:local` images cannot be pulled back, only
+   re-imported with `make k3s-import`.
 
 3. **Unregister distros you no longer use** — each keeps its own multi-GB `.vhdx`
    (`wsl -l -v` lists them; `wsl --unregister <Distro>` deletes it, *everything inside
