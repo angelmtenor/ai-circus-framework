@@ -4,6 +4,27 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.48.0 — 2026-11-11
+
+### Added
+- **MCP door on a document scenario** (ADR 0019): a `conversational_rag` scenario with `mcp: {expose: […]}` serves read-only
+  tools at rag-agent's `/mcp/{slug}` (FastMCP, Streamable HTTP, stateless): `list_sources`, `search_documents`, `read_document`.
+  The entitlement check runs before any MCP handling and the tenant comes from the bearer token; no model runs in the door.
+  First on `ai_circus_reference`. A **Connect via MCP** tab shows the endpoint, client snippets and a live `tools/list`.
+- **The chat answers through MCP on request**: `mcp: {consume: […]}` adds a **📚 Direct · 🔌 Via MCP** switch under the chat; via
+  MCP, rag-agent loads its tools from those doors (only doors it serves, over loopback, with the caller's token, capped in steps)
+  and the reply is labelled "🔌 MCP · <server>".
+- **The chat lists and reads whole documents**: `list_sources` and `read_document` beside `retrieve_docs`, the same reads the door
+  publishes.
+- **`make k3s-mcp-portforward`** (optional): rag-agent on `localhost:8031` as a systemd user service, for MCP clients on this
+  machine, since `*.localhost` does not resolve for every client.
+
+### Fixed
+- **A chat forgot the tools it had used**: the streamed and snapshot copies of a tool result carry different ids, so the client
+  put the result after the reply and the next turn's history made the backend drop the call. The model then said it had not used
+  the tool, and earlier replies lost their sources. Every chat with backend tools was affected.
+- **A reply drawn only as a chart or table had no "Answer based on" row**; the row now goes under the end of every reply.
+
 ## v0.47.1 — 2026-11-11
 
 ### Security
