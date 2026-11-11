@@ -28,6 +28,7 @@ dependencies = [
     "clickhouse-connect>=1.11.0",
     "confluent-kafka>=2.16.1",
     "fastapi>=0.162.0",
+    "fastmcp>=4.1.8,<4.2",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "psutil>=7.0.0",

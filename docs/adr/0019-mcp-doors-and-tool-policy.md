@@ -57,7 +57,12 @@ step on `surf_retail` needs the Data Platform tiers running.
 **Later steps (each its own decision when reached).**
 1. Expose to external clients properly: OAuth 2.1 + PKCE with Keycloak, an audience per MCP server,
    `/.well-known/oauth-protected-resource` (RFC 9728).
-2. `data-api` MCP door for `surf_retail` (ADR 0007), proving role row filters and masks.
+2. ~~`data-api` MCP door for `surf_retail` (ADR 0007), proving role row filters and masks.~~ Done:
+   `/mcp/{slug}` on data-api for a `data_product` with `mcp.expose` (its data tools: `list_metrics`,
+   `query_metric`, `search_records`, `get_record`, `data_health`, `run_sql`). The door settles the
+   caller's access with the REST routes' own `access_for` (role, row filter, masks; a platform key
+   may send the X-Data-View-As headers) and the tools call the same core functions, so MCP and REST
+   cannot drift apart. `run_sql` is listed only for a role that may run SQL.
 3. A model as a tool (`prediction`, e.g. `prestaciones_sociales`) through an OpenAPI-wrapping
    server with token exchange.
 4. The rest of the chat as an MCP client: the `assistant` service (tabular scenarios), servers beyond

@@ -140,7 +140,14 @@ live `tools/list` with the session token). The chat itself has `list_sources`/`r
 "mcp"` makes `agui_endpoint` load the tools from those doors instead (`core/mcp_consumer.py`: only doors this instance
 serves, over loopback, with the caller's token, `mcp__<server>__<tool>`, `MAX_MCP_AGENT_STEPS`), and `chatProvenance.ts`
 labels the reply "🔌 MCP". MCP clients on the local cluster use `make k3s-mcp-portforward` (`localhost:8031`, the
-card's snippets): `*.localhost` does not resolve for every client. Nothing works before `make k3s-vectorize`. OAuth for external clients,
+card's snippets): `*.localhost` does not resolve for every client. Nothing works before `make k3s-vectorize`.
+
+A `data_product` opens the same kind of door on **data-api** (`mcp.expose` from `MCP_DATA_TOOLS`): `core/mcp_door.py`'s
+`McpDoor` settles product, caller and `identity.access_for` (the REST dependency's own code: role, row filter, masks,
+X-Data-View-As for platform keys) before MCP runs, and each tool is a REST route's core call (`metrics.query_metric`,
+`records.*`, `governed_sql.run`; `get_record` publishes the same "served" event). `run_sql` is listed only when the role
+may run SQL. DataProductView's "Connect via MCP" tab reuses `McpConnectView` with data-api's URL, `localhost:8032` and the
+View-as headers. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
 
 ## Knowledge graphs

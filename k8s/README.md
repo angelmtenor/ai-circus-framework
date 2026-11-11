@@ -201,11 +201,12 @@ next boot); `make k3s-portforward-uninstall` removes the service. Without user s
 `/tmp/k3s-portforward-<cluster>.pid`, which dies with the machine — re-run `make k3s-portforward`
 after a reboot there.
 
-An optional second forward, `make k3s-mcp-portforward`, does the same for rag-agent on
-`localhost:8031` (`RAG_AGENT_MCP_PORT`): MCP clients on this machine (Claude Code, MCP Inspector…)
-reach a scenario's `/mcp/{slug}` door there, since `*.localhost` resolves in browsers and curl but
-not for every client (docs/adr/0019). Its service is `ai-circus-portforward-<cluster>-rag-agent`;
-`make k3s-mcp-portforward-uninstall` removes it. It is never started automatically.
+Optional MCP forwards, `make k3s-mcp-portforward`, do the same for rag-agent on `localhost:8031`
+(`RAG_AGENT_MCP_PORT`) and, when the Data Platform is up, data-api on `localhost:8032`
+(`DATA_API_MCP_PORT`): MCP clients on this machine (Claude Code, MCP Inspector…) reach a scenario's
+`/mcp/{slug}` door there, since `*.localhost` resolves in browsers and curl but not for every client
+(docs/adr/0019). Their services are `ai-circus-portforward-<cluster>-rag-agent` and `…-data-api`;
+`make k3s-mcp-portforward-uninstall` removes them. They are never started automatically.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and
