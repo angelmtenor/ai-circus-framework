@@ -4,6 +4,17 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.49.0 — 2026-11-11
+
+### Added
+- **MCP door on a data product** (ADR 0019, step 2): a `data_product` with `mcp: {expose: […]}` serves its governed data
+  tools at data-api's `/mcp/{slug}`: `list_metrics`, `query_metric`, `search_records`, `get_record`, `data_health`,
+  `run_sql`. The door settles the caller's access with the REST routes' own code (role, row filter, masks; a platform key
+  may send the X-Data-View-As headers) and every tool is a REST route's core call, so MCP and REST cannot drift apart.
+  `run_sql` is listed only for roles that may run SQL. First on `surf_retail`: a store manager gets only their store.
+- **Connect via MCP on data products**: the tab carries the View-as role into the client snippets and the live check.
+- `make k3s-mcp-portforward` also forwards data-api to `localhost:8032` when the Data Platform is up.
+
 ## v0.48.0 — 2026-11-11
 
 ### Added
