@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from ai_circus_shared.scenario_schema import (
+    MCP_DATA_TOOLS,
     MCP_DOCUMENT_TOOLS,
     CategoricalFeatureUI,
     ChatConfig,
@@ -1781,9 +1782,36 @@ def test_the_reference_guide_opens_the_mcp_door_on_its_documents() -> None:
     assert tuple(guide.mcp.expose) == MCP_DOCUMENT_TOOLS
 
 
-def test_mcp_is_only_for_conversational_rag() -> None:
-    with pytest.raises(ValidationError, match="only available for kind='conversational_rag'"):
+def test_mcp_is_not_available_for_tabular_scenarios_yet() -> None:
+    with pytest.raises(ValidationError, match="not available for kind='tabular_ml'"):
         _with(_titanic(), mcp={"expose": ["search_documents"]})
+
+
+def _surf_retail() -> ScenarioDefinition:
+    from pathlib import Path
+
+    return ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/surf_retail/scenario.yaml")
+
+
+def test_surf_retail_opens_a_data_door() -> None:
+    surf = _surf_retail()
+    assert surf.mcp is not None
+    assert tuple(surf.mcp.expose) == MCP_DATA_TOOLS
+
+
+@pytest.mark.parametrize(
+    "mcp",
+    [{"expose": ["search_documents"]}, {"expose": ["list_metrics"], "consume": ["ai_circus_reference"]}],
+    ids=["document-tool-on-data", "data-door-consuming"],
+)
+def test_a_data_door_exposes_data_tools_only(mcp: dict) -> None:  # type: ignore[type-arg]
+    with pytest.raises(ValidationError):
+        _with(_surf_retail(), mcp=mcp)
+
+
+def test_a_document_door_rejects_data_tools() -> None:
+    with pytest.raises(ValidationError, match="not conversational_rag tools"):
+        _with(_reference_guide(), mcp={"expose": ["run_sql"]})
 
 
 def test_mcp_needs_a_vector_store() -> None:
