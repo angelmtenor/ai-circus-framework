@@ -4,6 +4,12 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.47.1 — 2026-11-11
+
+### Security
+- **`llm-gateway`: `oauthlib` 4.0.0 → 4.0.1** for GHSA-3jp2-3mrg-2vxc (a bearer token could be retrieved in the device flow by a client
+  that knows a valid client id). It comes in through `litellm`'s proxy extra (`fastapi-sso`); `make check-all` failed on it in `uv audit`.
+
 ## v0.47.0 — 2026-11-05
 
 ### Added
