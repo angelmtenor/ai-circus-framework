@@ -30,13 +30,24 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from rag_agent import get_env_config
-from rag_agent.core.agent import ModelUsageCallback, build_agui_agent, build_graph_tools, build_retrieve_tool
+from rag_agent.core.agent import (
+    ModelUsageCallback,
+    build_agui_agent,
+    build_document_tools,
+    build_graph_tools,
+    build_retrieve_tool,
+)
 from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.identity import resolve_identity
 from rag_agent.core.library import list_sources, passages_of
 from rag_agent.core.logger import get_logger
+from rag_agent.core.mcp_consumer import consumable_servers, load_mcp_tools
 
 router = APIRouter()
+
+# The chat's "via MCP" route (docs/adr/0019): an agent step is a model call or a tool call, so
+# this bounds a run to a handful of MCP tool calls.
+MAX_MCP_AGENT_STEPS = 12
 logger = get_logger(__name__)
 
 
@@ -414,13 +425,22 @@ async def agui_endpoint(
         raise HTTPException(status_code=404, detail="Conversation not found.")
     documents = definition.documents
     trace = None
+    props = input_data.forwarded_props if isinstance(input_data.forwarded_props, dict) else {}
+    mcp_servers = consumable_servers(definition, request.app.state.definitions) if props.get("route") == "mcp" else []
+    tools: list[BaseTool]
     if documents is not None and documents.knowledge_graph is not None:
         tools, _captured, trace = build_graph_tools(
             qdrant, embedder, graph_cache, documents, definition.vector_store, identity.org_id
         )
+        mcp_servers = []
+    elif mcp_servers:
+        # The same reads, but over MCP: each door on this instance, reached over loopback with
+        # the caller's own token, checks the caller again (see core/mcp_consumer.py).
+        base_url = f"http://127.0.0.1:{get_env_config().HTTP_PORT}"
+        tools = await load_mcp_tools(mcp_servers, base_url, request.headers.get("authorization"))
     else:
         tool, _captured = build_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id)
-        tools: list[BaseTool] = [tool]
+        tools = [tool, *build_document_tools(qdrant, definition.vector_store, identity.org_id)]
     # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
     # client (see _llm) without mutating it — per-request only, so concurrent
     # calls from other orgs through the same cached client never see this one's
@@ -446,9 +466,14 @@ async def agui_endpoint(
             },
         }
     )
-    graph = build_agui_agent(llm_for_request, tools, definition.chat.context, knowledge_graph=trace is not None)
+    graph = build_agui_agent(
+        llm_for_request, tools, definition.chat.context, knowledge_graph=trace is not None, via_mcp=bool(mcp_servers)
+    )
     model_usage = ModelUsageCallback()
-    agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config={"callbacks": [model_usage]})
+    run_config: dict[str, Any] = {"callbacks": [model_usage]}
+    if mcp_servers:
+        run_config["recursion_limit"] = MAX_MCP_AGENT_STEPS
+    agent = LangGraphAGUIAgent(name=scenario_slug, graph=graph, config=run_config)
 
     encoder = EventEncoder(accept=request.headers.get("accept", ""))
     assistant_text_by_message_id: dict[str, list[str]] = {}

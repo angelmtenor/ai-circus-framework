@@ -135,7 +135,11 @@ only the exposed tools. The tools are the chat's and the reading room's own read
 `passages_of`), `top_k` capped at `vector_store.top_k`, and call no model; results say passage text is data. Logs carry
 the tool name and outcome only; FastMCP's spans carry names and ids, and arguments are already in
 `DROPPED_ATTRIBUTE_PREFIXES`. RagView adds a "Connect via MCP" tab (`McpConnectView.tsx`: endpoint, client snippets, a
-live `tools/list` with the session token). Nothing works before `make k3s-vectorize`. OAuth for external clients,
+live `tools/list` with the session token). The chat itself has `list_sources`/`read_document` beside `retrieve_docs`
+(`build_document_tools`), and a scenario with `mcp.consume` gets a "📚 Direct · 🔌 Via MCP" switch: `forwardedProps.route:
+"mcp"` makes `agui_endpoint` load the tools from those doors instead (`core/mcp_consumer.py`: only doors this instance
+serves, over loopback, with the caller's token, `mcp__<server>__<tool>`, `MAX_MCP_AGENT_STEPS`), and `chatProvenance.ts`
+labels the reply "🔌 MCP". Nothing works before `make k3s-vectorize`. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
 
 ## Knowledge graphs

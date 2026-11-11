@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from ai_circus_shared.auth import Identity, TokenValidationError
-from ai_circus_shared.entitlements import EntitlementDeniedError
-from ai_circus_shared.retrieval import RetrievedChunk
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -20,7 +17,6 @@ from rag_agent.core.mcp_door import McpDoor, build_mcp_app
 from tests.test_library import COLLECTIONS, FakeQdrant
 
 VECTOR_STORE = VectorStoreConfig(backend="qdrant", collection_prefix="docs", top_k=5)
-TOKENS = {"Bearer t1": "org-1", "Bearer t2": "org-2", "Bearer t3": "org-3"}
 HEADERS = {"Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25"}
 
 
@@ -29,34 +25,12 @@ def _definition(expose: list[str] | None) -> SimpleNamespace:
     return SimpleNamespace(slug="docs", vector_store=VECTOR_STORE, mcp=mcp)
 
 
-def _fake_identity(authorization: str | None, scenario_slug: str) -> Identity:
-    if authorization == "Bearer denied":
-        raise EntitlementDeniedError(f"Not entitled to {scenario_slug}.")
-    if authorization not in TOKENS:
-        raise TokenValidationError("Missing or invalid bearer token.")
-    return Identity(subject="u", org_id=TOKENS[authorization], roles=frozenset())
-
-
-@pytest.fixture
-def retrieved(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
-    """Replace vector search; record which tenant and how many passages each call asked for."""
-    calls: list[dict[str, Any]] = []
-
-    def _retrieve(_qdrant: Any, _embedder: Any, vector_store: VectorStoreConfig, org_id: str, query: str) -> list:
-        calls.append({"org_id": org_id, "top_k": vector_store.top_k, "query": query})
-        return [RetrievedChunk(text=f"passage for {org_id}", source="a/one.md", score=0.91234)]
-
-    monkeypatch.setattr(mcp_door, "retrieve", _retrieve)
-    monkeypatch.setattr(mcp_door, "_identity", _fake_identity)
-    return calls
-
-
 @pytest.fixture
 def client(retrieved: list[dict[str, Any]]) -> Iterator[TestClient]:
     mcp_app = build_mcp_app()
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         async with mcp_app.lifespan(mcp_app):
             yield
 
@@ -73,25 +47,25 @@ def client(retrieved: list[dict[str, Any]]) -> Iterator[TestClient]:
         yield test_client
 
 
-def _rpc(client: TestClient, slug: str, method: str, params: dict | None = None, token: str = "Bearer t1") -> Any:
+def _rpc(client: TestClient, slug: str, method: str, params: dict | None = None, auth: str = "Bearer t1") -> Any:
     body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
-    return client.post(f"/mcp/{slug}", json=body, headers={**HEADERS, "Authorization": token})
+    return client.post(f"/mcp/{slug}", json=body, headers={**HEADERS, "Authorization": auth})
 
 
-def _call(client: TestClient, slug: str, tool: str, arguments: dict, token: str = "Bearer t1") -> dict[str, Any]:
-    response = _rpc(client, slug, "tools/call", {"name": tool, "arguments": arguments}, token)
+def _call(client: TestClient, slug: str, tool: str, arguments: dict, auth: str = "Bearer t1") -> dict[str, Any]:
+    response = _rpc(client, slug, "tools/call", {"name": tool, "arguments": arguments}, auth)
     assert response.status_code == 200, response.text
     return response.json()["result"]
 
 
 def test_no_token_is_401_before_any_mcp_handling(client: TestClient) -> None:
-    response = _rpc(client, "docs", "tools/list", token="")
+    response = _rpc(client, "docs", "tools/list", auth="")
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_a_tenant_not_entitled_to_the_scenario_is_403(client: TestClient) -> None:
-    assert _rpc(client, "docs", "tools/list", token="Bearer denied").status_code == 403
+    assert _rpc(client, "docs", "tools/list", auth="Bearer denied").status_code == 403
 
 
 @pytest.mark.parametrize("slug", ["no_door", "unknown"])
@@ -117,7 +91,7 @@ def test_a_tool_the_scenario_does_not_expose_cannot_be_called(client: TestClient
 
 
 def test_search_is_scoped_to_the_tokens_tenant_and_capped(client: TestClient, retrieved: list) -> None:
-    result = _call(client, "docs", "search_documents", {"query": "what", "top_k": 20}, token="Bearer t2")
+    result = _call(client, "docs", "search_documents", {"query": "what", "top_k": 20}, auth="Bearer t2")
     assert result["structuredContent"]["passages"] == [
         {"source": "a/one.md", "score": 0.9123, "text": "passage for org-2"}
     ]
@@ -133,12 +107,12 @@ def test_an_over_long_query_is_rejected(client: TestClient, retrieved: list) -> 
 def test_list_sources_reads_only_the_callers_collection(client: TestClient) -> None:
     sources = _call(client, "docs", "list_sources", {})["structuredContent"]["sources"]
     assert [s["source"] for s in sources] == ["a/one.md", "b/two.md"]
-    other = _call(client, "docs", "list_sources", {}, token="Bearer t2")["structuredContent"]["sources"]
+    other = _call(client, "docs", "list_sources", {}, auth="Bearer t2")["structuredContent"]["sources"]
     assert [s["source"] for s in other] == ["secret.md"]
 
 
 def test_list_sources_before_indexing_says_so(client: TestClient) -> None:
-    result = _call(client, "docs", "list_sources", {}, token="Bearer t3")["structuredContent"]
+    result = _call(client, "docs", "list_sources", {}, auth="Bearer t3")["structuredContent"]
     assert result["indexed"] is False
     assert result["sources"] == []
 

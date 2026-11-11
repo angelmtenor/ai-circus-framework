@@ -70,6 +70,7 @@ class McpCaller:
 
     @property
     def exposed(self) -> tuple[str, ...]:
+        """The tools this scenario's `mcp.expose` lists."""
         return tuple(self.definition.mcp.expose) if self.definition.mcp is not None else ()
 
     def collection(self) -> str | None:
@@ -94,10 +95,12 @@ class ExposedToolsOnly(Middleware):
     """A scenario lists and runs only the tools its `mcp.expose` names."""
 
     async def on_list_tools(self, context: MiddlewareContext[Any], call_next: Any) -> Any:
+        """Drop the tools this scenario does not expose."""
         exposed = _caller().exposed
         return [tool for tool in await call_next(context) if tool.name in exposed]
 
     async def on_call_tool(self, context: MiddlewareContext[Any], call_next: Any) -> Any:
+        """Refuse a tool this scenario does not expose; log each call's tool and outcome."""
         name = context.message.name
         if name not in _caller().exposed:
             raise ToolError(f"Unknown tool: {name}")
@@ -151,7 +154,9 @@ def build_mcp_server() -> FastMCP:
 
     @server.tool(annotations=_READ_ONLY)
     async def read_document(
-        source: Annotated[str, Field(min_length=1, max_length=MAX_SOURCE_CHARS, description="A source from list_sources.")],
+        source: Annotated[
+            str, Field(min_length=1, max_length=MAX_SOURCE_CHARS, description="A source from list_sources.")
+        ],
     ) -> dict[str, Any]:
         """Read one indexed document: its passages in order."""
         caller = _caller()
@@ -168,9 +173,7 @@ def build_mcp_app() -> StarletteWithLifespan:
     """The MCP endpoint at the root of its mount; run its lifespan inside the FastAPI app's."""
     # Host/Origin checks off: every request needs a bearer token (McpDoor) and browsers are
     # held to CORS_ALLOWED_ORIGINS by the app's own CORS middleware.
-    return build_mcp_server().http_app(
-        path="/", stateless_http=True, json_response=True, host_origin_protection=False
-    )
+    return build_mcp_server().http_app(path="/", stateless_http=True, json_response=True, host_origin_protection=False)
 
 
 def _identity(authorization: str | None, scenario_slug: str) -> Identity:
@@ -182,16 +185,18 @@ class McpDoor:
     """ASGI app mounted at `/mcp`: `/{scenario_slug}[/…]` → entitlement check → the MCP app."""
 
     def __init__(self, mcp_app: ASGIApp) -> None:
+        """Wrap the MCP app that serves every door."""
         self.mcp_app = mcp_app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Settle scenario and caller, then hand the request to the MCP app at the door's root."""
         if scope["type"] != "http":
             await self.mcp_app(scope, receive, send)
             return
         slug, _, rest = get_route_path(scope).lstrip("/").partition("/")
         definitions: dict[str, ScenarioDefinition] = scope["app"].state.definitions
         definition = definitions.get(slug)
-        if definition is None or definition.mcp is None:
+        if definition is None or definition.mcp is None or not definition.mcp.expose:
             await JSONResponse({"detail": "No MCP door for this scenario."}, status_code=404)(scope, receive, send)
             return
         try:
@@ -211,4 +216,3 @@ class McpDoor:
         root_path = f"{scope.get('root_path', '')}/{slug}"
         child = {**scope, "root_path": root_path, "path": f"{root_path}/{rest}"}
         await self.mcp_app(child, receive, send)
-
