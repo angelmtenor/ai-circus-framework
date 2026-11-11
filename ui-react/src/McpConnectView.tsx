@@ -1,7 +1,8 @@
-// "Connect via MCP" (docs/adr/0019): how to reach this scenario's documents from any MCP client,
-// plus a live check that runs the same tools/list an MCP client would, with the caller's token.
+// "Connect via MCP" (docs/adr/0019): how to reach a scenario's MCP door from any MCP client — a
+// document scenario's on rag-agent, a data product's on data-api — plus a live check that runs the
+// same tools/list an MCP client would, with the caller's token and headers.
 // Static DOM only: nothing animates, so the tab stays quiet when idle.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { listMcpTools, type McpTool } from "./apiClient";
 import { config } from "./config";
@@ -10,10 +11,13 @@ const TOOL_HELP: Record<string, string> = {
   list_sources: "Which documents are indexed, and how many passages each has.",
   search_documents: "The most similar passages for a question, each with its source.",
   read_document: "One document's passages, in order.",
+  list_metrics: "The governed metrics and record entities this role may query.",
+  query_metric: "A governed metric for a period, split, filtered and compared.",
+  search_records: "Records as received, by text or key prefix.",
+  get_record: "One record with its processing trail.",
+  data_health: "Freshness vs SLO, the last transform, ops health and your role.",
+  run_sql: "Read-only SQL over the curated datasets (SQL roles only).",
 };
-
-// `make k3s-mcp-portforward`'s default (RAG_AGENT_MCP_PORT).
-const LOCAL_MCP_PORT = 8031;
 
 type Check = { state: "idle" | "checking" } | { state: "ok"; tools: McpTool[] } | { state: "error"; message: string };
 
@@ -41,17 +45,47 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
   );
 }
 
-export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenarioSlug: string; exposed: string[]; accessToken: string | null }) {
+export function McpConnectView({
+  scenarioSlug,
+  exposed,
+  accessToken,
+  baseUrl = config.ragAgentUrl,
+  localPort = 8031,
+  headers = {},
+  title = "Use these documents from any MCP client",
+  lede,
+}: {
+  scenarioSlug: string;
+  exposed: string[];
+  accessToken: string | null;
+  /** The service serving the door (rag-agent by default, data-api for a data product). */
+  baseUrl?: string;
+  /** `make k3s-mcp-portforward`'s localhost port for that service (8031 rag-agent, 8032 data-api). */
+  localPort?: number;
+  /** Extra headers every request carries (a data product's X-Data-View-As). */
+  headers?: Record<string, string>;
+  title?: string;
+  lede?: ReactNode;
+}) {
   const [check, setCheck] = useState<Check>({ state: "idle" });
-  const url = `${config.ragAgentUrl}/mcp/${scenarioSlug}`;
+  const url = `${baseUrl}/mcp/${scenarioSlug}`;
   // On the local cluster `*.localhost` resolves in browsers and curl but not for every client
   // (Node or Python on WSL), so clients use `make k3s-mcp-portforward`'s localhost port.
-  const localCluster = new URL(config.ragAgentUrl).hostname.endsWith(".localhost");
-  const clientUrl = localCluster ? `http://localhost:${LOCAL_MCP_PORT}/mcp/${scenarioSlug}` : url;
+  const localCluster = new URL(baseUrl).hostname.endsWith(".localhost");
+  const clientUrl = localCluster ? `http://localhost:${localPort}/mcp/${scenarioSlug}` : url;
   const name = scenarioSlug.replace(/_/g, "-");
-  const claudeCode = `claude mcp add --transport http ${name} ${clientUrl} \\\n  --header "Authorization: Bearer $AI_CIRCUS_TOKEN"`;
+  const extra = Object.entries(headers);
+  const claudeCode = [
+    `claude mcp add --transport http ${name} ${clientUrl}`,
+    `  --header "Authorization: Bearer $AI_CIRCUS_TOKEN"`,
+    ...extra.map(([k, v]) => `  --header "${k}: ${v}"`),
+  ].join(" \\\n");
   const json = JSON.stringify(
-    { mcpServers: { [name]: { type: "http", url: clientUrl, headers: { Authorization: "Bearer ${AI_CIRCUS_TOKEN}" } } } },
+    {
+      mcpServers: {
+        [name]: { type: "http", url: clientUrl, headers: { Authorization: "Bearer ${AI_CIRCUS_TOKEN}", ...headers } },
+      },
+    },
     null,
     2,
   );
@@ -59,7 +93,7 @@ export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenari
   async function runCheck() {
     setCheck({ state: "checking" });
     try {
-      setCheck({ state: "ok", tools: await listMcpTools(config.ragAgentUrl, scenarioSlug, accessToken) });
+      setCheck({ state: "ok", tools: await listMcpTools(baseUrl, scenarioSlug, accessToken, headers) });
     } catch (e) {
       setCheck({ state: "error", message: e instanceof Error ? e.message : String(e) });
     }
@@ -67,15 +101,19 @@ export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenari
 
   return (
     <div className="mcp-connect panel-card">
-      <h3>Use these documents from any MCP client</h3>
-      <p className="mcp-lede">
-        This chat can use them too: pick <strong>🔌 Via MCP</strong> under the chat box, and its assistant loads these
-        tools from the endpoint below instead of reading the documents directly.
-      </p>
-      <p className="mcp-lede">
-        Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent can search and read this scenario's documents
-        for your organisation. Read-only, and no model runs here: your client's model does the reasoning.
-      </p>
+      <h3>{title}</h3>
+      {lede ?? (
+        <>
+          <p className="mcp-lede">
+            This chat can use them too: pick <strong>🔌 Via MCP</strong> under the chat box, and its assistant loads these
+            tools from the endpoint below instead of reading the documents directly.
+          </p>
+          <p className="mcp-lede">
+            Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent can search and read this scenario's
+            documents for your organisation. Read-only, and no model runs here: your client's model does the reasoning.
+          </p>
+        </>
+      )}
 
       <div className="mcp-grid">
         <section>
@@ -105,8 +143,8 @@ export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenari
           <h4>Add it to a client</h4>
           {localCluster && (
             <p className="mcp-note">
-              On this local cluster, run <code>make k3s-mcp-portforward</code> once: it keeps rag-agent on{" "}
-              <code>localhost:{LOCAL_MCP_PORT}</code> across reboots, which every client can reach.
+              On this local cluster, run <code>make k3s-mcp-portforward</code> once: it keeps the door on{" "}
+              <code>localhost:{localPort}</code> across reboots, which every client can reach.
             </p>
           )}
           <CopyBlock label="Claude Code" text={claudeCode} />

@@ -2061,10 +2061,20 @@ export async function fetchRecommendations(
 // rag-agent's MCP door (docs/adr/0019): one JSON-RPC `tools/list` with the caller's token, the
 // same check any MCP client's first request goes through. Stateless, so no session to open.
 export type McpTool = { name: string; description?: string };
-export async function listMcpTools(baseUrl: string, slug: string, accessToken: string | null): Promise<McpTool[]> {
+export async function listMcpTools(
+  baseUrl: string,
+  slug: string,
+  accessToken: string | null,
+  extraHeaders: Record<string, string> = {},
+): Promise<McpTool[]> {
   const response = await fetch(`${baseUrl}/mcp/${slug}`, {
     method: "POST",
-    headers: { ...headers(accessToken), Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+    headers: {
+      ...headers(accessToken),
+      Accept: "application/json, text/event-stream",
+      "MCP-Protocol-Version": "2025-11-25",
+      ...extraHeaders,
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
   });
   const body = await asJson<{ result?: { tools: McpTool[] }; error?: { message: string } }>(response);
