@@ -564,9 +564,6 @@ export function ChatPanel({
                     )}
                   </div>
                 )}
-                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && !restoredIds.has(turn.id) && (
-                  <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
-                )}
                 {turn.role === "assistant" && fallbackByMessageId[turn.id] && (
                   <div className="chat-fallback-note">
                     ⚠️ Answered by {fallbackByMessageId[turn.id].servedModel} — {fallbackByMessageId[turn.id].requestedModel} was
@@ -585,6 +582,10 @@ export function ChatPanel({
                     }
                     return <div key={call.id}>{tool.render({ args, status: "complete", name: call.function.name })}</div>;
                   })}
+                {/* Last, so a reply drawn as a chart or table says its sources under the drawing too. */}
+                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && !restoredIds.has(turn.id) && (
+                  <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
+                )}
               </div>
             </div>
           );

@@ -112,9 +112,14 @@ function sourcesIn(content: string): string[] {
   return [...content.matchAll(SOURCE_TAG)].map((m) => (m[1] ?? m[2]).trim());
 }
 
+// A frontend tool that draws the reply in the chat (useCopilotAction's render_chart/render_table).
+const DRAWING_TOOLS = new Set(["render_chart", "render_table"]);
+
 /**
  * Provenance of every reply, keyed by the id of the last assistant message with text in
- * each user-delimited turn (the bubble the chips go under).
+ * each user-delimited turn (the bubble the chips go under) — or, when the model answered
+ * only by drawing a chart or table, the message that drew it, so that reply says where
+ * its data came from too.
  */
 export function replyProvenance(messages: AguiMessage[], documentTool?: DocumentTool | null): Map<string, Provenance> {
   const results = new Map<string, string>();
@@ -123,15 +128,21 @@ export function replyProvenance(messages: AguiMessage[], documentTool?: Document
   const out = new Map<string, Provenance>();
   let calls: { name: string; id: string }[] = [];
   let lastReplyId: string | null = null;
+  let lastDrawingId: string | null = null;
   const flush = () => {
-    if (lastReplyId) out.set(lastReplyId, provenanceOf(calls, results, documentTool));
+    const anchor = lastReplyId ?? lastDrawingId;
+    if (anchor) out.set(anchor, provenanceOf(calls, results, documentTool));
     calls = [];
     lastReplyId = null;
+    lastDrawingId = null;
   };
   for (const m of messages) {
     if (m.role === "user") flush();
     else if (m.role === "assistant") {
-      for (const call of m.toolCalls ?? []) calls.push({ name: call.function.name, id: call.id });
+      for (const call of m.toolCalls ?? []) {
+        calls.push({ name: call.function.name, id: call.id });
+        if (DRAWING_TOOLS.has(call.function.name)) lastDrawingId = m.id;
+      }
       if (typeof m.content === "string" ? m.content.trim() : m.content) lastReplyId = m.id;
     }
   }
