@@ -607,8 +607,11 @@ async def test_agui_endpoint_emits_the_knowledge_graph_trace_before_run_finished
         yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id="t", run_id="r")
         yield RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="t", run_id="r")
 
-    def _fake_build_agui_agent(_llm: object, tools: list, _context: str, *, knowledge_graph: bool) -> str:
+    def _fake_build_agui_agent(
+        _llm: object, tools: list, _context: str, *, knowledge_graph: bool, via_mcp: bool = False
+    ) -> str:
         built.update(tools=tools, knowledge_graph=knowledge_graph)
+        assert via_mcp is False  # a knowledge-graph scenario answers through its graph
         return "fake-graph"
 
     monkeypatch.setattr(api_module, "build_graph_tools", lambda *_a, **_kw: (["graph-tool"], {}, trace))
@@ -664,3 +667,102 @@ def test_conversation_title_is_bounded() -> None:
     assert ConversationCreateIn(title="x" * 200).title is not None
     with pytest.raises(ValidationError):
         ConversationCreateIn(title="x" * 201)
+
+
+async def _run_chat(
+    monkeypatch: pytest.MonkeyPatch, *, mcp: object, forwarded: dict, served: dict | None = None
+) -> dict[str, object]:
+    """Drive agui_endpoint for a plain document scenario; return the tools, route and run config it built."""
+    from ag_ui.core import EventType, RunFinishedEvent, RunStartedEvent
+
+    built: dict[str, object] = {}
+
+    async def _fake_agent_run(_input: object):  # ruff: ignore[missing-return-type-private-function, unused-async]
+        yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id="t", run_id="r")
+        yield RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="t", run_id="r")
+
+    def _fake_build_agui_agent(
+        _llm: object, tools: list, _context: str, *, knowledge_graph: bool, via_mcp: bool = False
+    ) -> str:
+        built.update(tools=[t if isinstance(t, str) else t.name for t in tools], via_mcp=via_mcp)
+        return "fake-graph"
+
+    async def _fake_load_mcp_tools(  # ruff: ignore[unused-async]
+        servers: list[str], base_url: str, authorization: str | None
+    ) -> list[str]:
+        built.update(servers=servers, base_url=base_url, authorization=authorization)
+        return [f"mcp__{s}__search_documents" for s in servers]
+
+    def _fake_agent(*, name: str, graph: object, config: dict | None = None) -> SimpleNamespace:
+        built["config"] = config
+        return SimpleNamespace(run=_fake_agent_run)
+
+    monkeypatch.setattr(api_module, "build_agui_agent", _fake_build_agui_agent)
+    monkeypatch.setattr(api_module, "load_mcp_tools", _fake_load_mcp_tools)
+    monkeypatch.setattr(api_module, "LangGraphAGUIAgent", _fake_agent)
+    monkeypatch.setattr(api_module, "get_env_config", lambda: SimpleNamespace(HTTP_PORT="8000"))
+    definition = SimpleNamespace(
+        slug="docs_rag",
+        documents=None,
+        vector_store=VectorStoreConfig(backend="qdrant", collection_prefix="docs_rag", top_k=3),
+        chat=ChatConfig(context="Docs."),
+        mcp=mcp,
+    )
+    app = SimpleNamespace(state=SimpleNamespace(definitions=served if served is not None else {"docs_rag": definition}))
+    request = Request({
+        "type": "http",
+        "app": app,
+        "headers": [(b"accept", b"application/json"), (b"authorization", b"Bearer tok")],
+    })
+    response = await agui_endpoint(
+        scenario_slug="docs_rag",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps=forwarded
+        ),
+        request=request,
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:docs_rag"})),
+        definition=definition,  # type: ignore[arg-type]
+        qdrant=SimpleNamespace(),  # type: ignore[arg-type]
+        embedder=SimpleNamespace(),  # type: ignore[arg-type]
+        graph_cache=SimpleNamespace(),  # type: ignore[arg-type]
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),  # type: ignore[arg-type]
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+    "".join([chunk async for chunk in response.body_iterator])  # type: ignore[union-attr]
+    return built
+
+
+DOOR = SimpleNamespace(expose=["search_documents"], consume=["docs_rag"])
+
+
+async def test_the_chat_reads_documents_directly_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    built = await _run_chat(monkeypatch, mcp=DOOR, forwarded={})
+    assert built["tools"] == ["retrieve_docs", "list_sources", "read_document"]
+    assert built["via_mcp"] is False
+    assert "recursion_limit" not in built["config"]  # type: ignore[operator]
+
+
+async def test_the_mcp_route_loads_tools_from_the_consumed_doors_with_the_callers_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    built = await _run_chat(monkeypatch, mcp=DOOR, forwarded={"route": "mcp"})
+    assert built["tools"] == ["mcp__docs_rag__search_documents"]
+    assert built["servers"] == ["docs_rag"]
+    assert built["base_url"] == "http://127.0.0.1:8000"  # loopback: only doors on this instance
+    assert built["authorization"] == "Bearer tok"
+    assert built["via_mcp"] is True
+    assert built["config"]["recursion_limit"] == api_module.MAX_MCP_AGENT_STEPS  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("mcp", "served"),
+    [(None, None), (SimpleNamespace(expose=["search_documents"], consume=[]), None), (DOOR, {})],
+    ids=["no-mcp", "consumes-nothing", "door-not-served-here"],
+)
+async def test_the_mcp_route_falls_back_to_direct_reads_without_an_allowed_door(
+    monkeypatch: pytest.MonkeyPatch, mcp: object, served: dict | None
+) -> None:
+    built = await _run_chat(monkeypatch, mcp=mcp, forwarded={"route": "mcp"}, served=served)
+    assert built["tools"] == ["retrieve_docs", "list_sources", "read_document"]
+    assert "servers" not in built

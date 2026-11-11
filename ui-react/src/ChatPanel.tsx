@@ -13,6 +13,7 @@ import { chatModel, extractDocument, type ChatModel, type DocumentTool, type Sam
 import {
   CHAT_WORDS,
   FRONTEND_TOOL_ANSWER,
+  mcpToolParts,
   PROVENANCE_ICONS,
   replyProvenance,
   sourceName,
@@ -20,6 +21,7 @@ import {
   type ChatScope,
   type Provenance,
 } from "./chatProvenance";
+import { sameOrder, toolResultsAfterTheirCalls } from "./messageOrder";
 import { config } from "./config";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
@@ -234,6 +236,8 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
 
 function toolActivityLabel(name: string, documentTool: DocumentTool | null | undefined, locale: ChatLocale): string {
   if (documentTool && name === documentTool.name) return CHAT_WORDS[locale].searching(documentTool.label);
+  const mcp = mcpToolParts(name);
+  if (mcp) return `🔌 ${mcp.tool} on ${mcp.server} over MCP…`;
   return TOOL_ACTIVITY_LABELS[name] ?? `Calling ${name}…`;
 }
 
@@ -254,6 +258,7 @@ function ProvenanceRow({
       {provenance.keys.map((key) => (
         <span key={key} className={`chat-provenance-chip chat-provenance-chip--${key}`}>
           {PROVENANCE_ICONS[key]} {key === "documents" ? (documentTool?.label ?? t.documents) : t[key]}
+          {key === "mcp" && provenance.mcpServers.length > 0 && <em> · {provenance.mcpServers.join(", ")}</em>}
           {key === "documents" && provenance.documentsEmpty && <em> · {t.noDocuments}</em>}
         </span>
       ))}
@@ -287,6 +292,7 @@ export function ChatPanel({
   prompt,
   onReplySources,
   forwardedProps,
+  mcpServers,
 }: {
   agent: HttpAgent;
   baseUrl: string;
@@ -340,6 +346,9 @@ export function ChatPanel({
   onReplySources?: (sources: string[]) => void;
   /** Extra AG-UI forwardedProps for every run (e.g. a data product's "view as" role). */
   forwardedProps?: Record<string, unknown>;
+  /** MCP servers this chat may answer through (docs/adr/0019): adds a "Direct · Via MCP" switch,
+   *  sent as AG-UI `forwardedProps.route` — rag-agent then loads its tools from those doors. */
+  mcpServers?: string[];
 }) {
   const { copilotkit } = useCopilotKit();
   const [messages, setMessages] = useState<AguiMessage[]>(initialMessages ?? agent.messages);
@@ -369,6 +378,8 @@ export function ChatPanel({
   const [vision, setVision] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [scopeChoice, setScopeChoice] = useState<ChatScope>("all");
+  const [route, setRoute] = useState<"direct" | "mcp">("direct");
+  const canUseMcp = (mcpServers?.length ?? 0) > 0;
   const scope: ChatScope = documentTool ? (lockedScope ?? scopeChoice) : "all";
   const words = CHAT_WORDS[locale];
   // Keyed by assistant message id — set only when the backend's ModelUsageCallback
@@ -455,12 +466,19 @@ export function ChatPanel({
       agent.addMessage({ id: randomUUID(), role: "user", content });
       const tools = toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]);
       const context = contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>);
-      const props = { ...(documentTool ? { scope } : {}), ...(forwardedProps ?? {}) };
+      const props = {
+        ...(documentTool ? { scope } : {}),
+        ...(canUseMcp && route === "mcp" ? { route } : {}),
+        ...(forwardedProps ?? {}),
+      };
       await agent.runAgent({ tools, context, ...(Object.keys(props).length ? { forwardedProps: props } : {}) });
       const frontendToolNames = new Set(
         (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
       );
       answerUnansweredFrontendToolCalls(agent, frontendToolNames, onFrontendToolCall);
+      // Next turn's history must keep each tool result after its call (see messageOrder.ts).
+      const ordered = toolResultsAfterTheirCalls(agent.messages);
+      if (!sameOrder(ordered, agent.messages)) agent.setMessages(ordered);
     } catch (error) {
       agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
     } finally {
@@ -550,9 +568,6 @@ export function ChatPanel({
                     )}
                   </div>
                 )}
-                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && !restoredIds.has(turn.id) && (
-                  <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
-                )}
                 {turn.role === "assistant" && fallbackByMessageId[turn.id] && (
                   <div className="chat-fallback-note">
                     ⚠️ Answered by {fallbackByMessageId[turn.id].servedModel} — {fallbackByMessageId[turn.id].requestedModel} was
@@ -571,6 +586,10 @@ export function ChatPanel({
                     }
                     return <div key={call.id}>{tool.render({ args, status: "complete", name: call.function.name })}</div>;
                   })}
+                {/* Last, so a reply drawn as a chart or table says its sources under the drawing too. */}
+                {turn.role === "assistant" && provenance.has(turn.id) && !answering.has(turn.id) && !restoredIds.has(turn.id) && (
+                  <ProvenanceRow provenance={provenance.get(turn.id)!} documentTool={documentTool} locale={locale} />
+                )}
               </div>
             </div>
           );
@@ -592,6 +611,24 @@ export function ChatPanel({
           </div>
         )}
       </div>
+      {canUseMcp && (
+        <div className="chat-scope" role="radiogroup" aria-label="How the assistant reaches its tools">
+          {(["direct", "mcp"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={route === key}
+              className={route === key ? "active" : ""}
+              onClick={() => setRoute(key)}
+              disabled={sending}
+            >
+              {key === "direct" ? "📚 Direct" : `${PROVENANCE_ICONS.mcp} Via MCP`}
+            </button>
+          ))}
+          {route === "mcp" && <small>Tools loaded from {mcpServers!.join(", ")} over MCP, with your token.</small>}
+        </div>
+      )}
       {documentTool && !lockedScope && (
         <div className="chat-scope" role="radiogroup" aria-label={words.basedOn}>
           {(["all", "documents"] as const).map((key) => (

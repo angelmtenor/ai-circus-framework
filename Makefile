@@ -16,7 +16,7 @@ RESET := $(shell tput sgr0 2>/dev/null)
 	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
-	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall \
+	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
 	k3s-data-platform-up k3s-data-platform-down k3s-data-build k3s-data-core-up k3s-data-core-down k3s-data-seed k3s-data-seed-lite k3s-data-ml k3s-data-call k3s-data-transform k3s-data-reset k3s-ui-image k3s-data-analytics-up k3s-data-analytics-down k3s-data-bi-up k3s-data-bi-sync k3s-data-bi-down k3s-data-governance-up k3s-data-catalog-sync k3s-data-governance-down k3s-governance-opa-up k3s-governance-opa-down k3s-governance-opa-test k3s-data-showcase k3s-data-showcase-off k3s-data-demo k3s-data-demo-off \
 	dl-gpu-check dl-data dl-artifacts-export dl-artifacts-import dl-train dl-train-nlp dl-train-cv dl-train-anomaly text-embeddings k3s-text-embeddings \
 	k3s-dl-build k3s-dl-up k3s-dl-down k3s-dl-train k3s-dl-train-nlp k3s-dl-train-cv k3s-dl-train-anomaly k3s-all-dl k3s-gpu-smoke \
@@ -441,6 +441,12 @@ k3s-portforward-stop: ## Stop the platform-registry port-forward (its systemd se
 
 k3s-portforward-uninstall: ## Remove the port-forward's systemd user service — back to re-running `make k3s-portforward` after every reboot
 	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)"
+
+k3s-mcp-portforward: ## OPTIONAL: standing port-forward to rag-agent on localhost:8031, so MCP clients on this machine (Claude Code…) reach /mcp/{slug} where *.localhost does not resolve (docs/adr/0019); same systemd user service as k3s-portforward
+	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${RAG_AGENT_MCP_PORT:-8031}" rag-agent
+
+k3s-mcp-portforward-uninstall: ## Remove the rag-agent MCP port-forward and its systemd user service
+	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)" "$${RAG_AGENT_MCP_PORT:-8031}" rag-agent
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
 # `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,

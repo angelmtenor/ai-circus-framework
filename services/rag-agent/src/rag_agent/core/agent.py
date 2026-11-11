@@ -15,8 +15,8 @@ from __future__ import annotations
 from typing import Any
 
 from ai_circus_shared.embeddings import EmbeddingProvider
-from ai_circus_shared.retrieval import format_retrieved, retrieve
-from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig
+from ai_circus_shared.retrieval import format_retrieved, retrieve, wrap_untrusted
+from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig, qdrant_collection_name
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
 from langchain_core.callbacks import BaseCallbackHandler
@@ -28,6 +28,7 @@ from langgraph.graph.state import CompiledStateGraph
 from qdrant_client import QdrantClient
 
 from rag_agent.core.graph_retrieval import GraphTrace, KnowledgeGraphCache, graph_path, graph_search
+from rag_agent.core.library import list_sources, passages_of
 
 
 class ModelUsageCallback(BaseCallbackHandler):
@@ -63,7 +64,20 @@ _RETRIEVAL_INSTRUCTIONS = (
     "— not for chitchat, greetings, or clearly unrelated questions, which you should "
     "answer directly without calling any tool. When retrieve_docs returns relevant "
     "excerpts, answer using ONLY those excerpts and cite the source file for each "
-    "claim. If it returns no relevant documents, say so plainly rather than guessing.\n\n"
+    "claim. If it returns no relevant documents, say so plainly rather than guessing. "
+    "When asked which documents you have, call list_sources; when asked to read, summarise "
+    "or walk through one whole document, call read_document with a source from list_sources.\n\n"
+)
+
+# The chat's "via MCP" route (docs/adr/0019): the same reads, but as tools an MCP server
+# published, named mcp__<server>__<tool>.
+_MCP_INSTRUCTIONS = (
+    "Your tools come from MCP servers; their names start with mcp__<server>__. For questions "
+    "in this domain, call the server's search_documents tool; call its list_sources tool when "
+    "asked which documents you have, and its read_document tool to read one whole document. "
+    "Do not call any tool for chitchat, greetings, or clearly unrelated questions. Answer using "
+    "ONLY what the tools returned and cite the source file for each claim. If they return "
+    "nothing relevant, say so plainly rather than guessing.\n\n"
 )
 
 # A scenario with a knowledge graph answers through it instead (see graph_retrieval.py):
@@ -139,6 +153,45 @@ def build_retrieve_tool(
     return tool, captured
 
 
+# read_document's cap in the chat: a whole document is prompt the model pays for.
+MAX_CHAT_READ_PASSAGES = 40
+
+
+def build_document_tools(qdrant: QdrantClient, vector_store: VectorStoreConfig, org_id: str) -> list[StructuredTool]:
+    """list_sources and read_document for the chat, over the same tenant collection as
+    retrieve_docs: the reads the MCP door publishes (docs/adr/0019), called directly here.
+    """
+    collection = qdrant_collection_name(vector_store, org_id)
+
+    def _list_sources() -> str:
+        if not qdrant.collection_exists(collection):
+            return "Nothing is indexed for this organisation yet."
+        sources, truncated = list_sources(qdrant, collection)
+        lines = [f"- {s['source']} ({s['passages']} passages)" for s in sources]
+        return "Indexed documents:\n" + "\n".join(lines) + ("\n(list truncated)" if truncated else "")
+
+    def _read_document(source: str) -> str:
+        passages = passages_of(qdrant, collection, source) if qdrant.collection_exists(collection) else []
+        if not passages:
+            return "Document not found. Call list_sources for the available sources."
+        shown = passages[:MAX_CHAT_READ_PASSAGES]
+        note = f"\n(first {len(shown)} of {len(passages)} passages)" if len(shown) < len(passages) else ""
+        return wrap_untrusted("retrieved_document", "\n\n".join(shown), source) + note
+
+    return [
+        StructuredTool.from_function(
+            func=_list_sources,
+            name="list_sources",
+            description="List the indexed documents and how many passages each has.",
+        ),
+        StructuredTool.from_function(
+            func=_read_document,
+            name="read_document",
+            description="Read one indexed document in full, by its source path from list_sources.",
+        ),
+    ]
+
+
 MAX_GRAPH_SEARCHES_PER_RUN = 2
 
 
@@ -195,7 +248,12 @@ def build_graph_tools(
 
 
 def build_agui_agent(
-    llm: BaseChatModel, tools: list[BaseTool], chat_context: str, *, knowledge_graph: bool = False
+    llm: BaseChatModel,
+    tools: list[BaseTool],
+    chat_context: str,
+    *,
+    knowledge_graph: bool = False,
+    via_mcp: bool = False,
 ) -> CompiledStateGraph:
     """Build the graph backing the AG-UI endpoint (see api.py's `agui_endpoint`).
 
@@ -218,7 +276,9 @@ def build_agui_agent(
         tools=tools,
         system_prompt=SYSTEM_PROMPT_TEMPLATE.format(
             context=chat_context.strip(),
-            retrieval=_GRAPH_INSTRUCTIONS if knowledge_graph else _RETRIEVAL_INSTRUCTIONS,
+            retrieval=(
+                _MCP_INSTRUCTIONS if via_mcp else _GRAPH_INSTRUCTIONS if knowledge_graph else _RETRIEVAL_INSTRUCTIONS
+            ),
         ),
         middleware=[CopilotKitMiddleware()],
         # pyrefly: ignore [bad-argument-type]
