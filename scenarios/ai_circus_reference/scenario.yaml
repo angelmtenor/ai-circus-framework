@@ -60,10 +60,12 @@ vector_store:
 ui_extras:
   kind: source_library
 
-# The read-only MCP door (docs/adr/0019): any MCP client can search and read this tenant's
-# indexed documents at rag-agent's /mcp/ai_circus_reference, with the same bearer token as the app.
+# MCP (docs/adr/0019). expose: any MCP client can search and read this tenant's indexed documents
+# at rag-agent's /mcp/ai_circus_reference, with the same bearer token as the app. consume: the chat's
+# "via MCP" switch answers through that same door, to show an agent using tools over MCP.
 mcp:
   expose: [list_sources, search_documents, read_document]
+  consume: [ai_circus_reference]
 
 services:
   etl: etl-vectorize

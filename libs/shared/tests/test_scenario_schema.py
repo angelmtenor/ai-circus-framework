@@ -1792,8 +1792,21 @@ def test_mcp_needs_a_vector_store() -> None:
 
 
 @pytest.mark.parametrize(
-    "expose", [[], ["search_documents", "search_documents"], ["drop_collection"]], ids=["empty", "twice", "unknown"]
+    "mcp",
+    [
+        {"expose": []},
+        {"expose": ["search_documents", "search_documents"]},
+        {"expose": ["drop_collection"]},
+        {"consume": ["../other"]},
+        {"consume": ["a", "a"]},
+    ],
+    ids=["nothing", "tool-twice", "unknown-tool", "bad-slug", "slug-twice"],
 )
-def test_mcp_expose_is_a_non_empty_set_of_known_tools(expose: list[str]) -> None:
+def test_mcp_needs_known_tools_and_scenario_slugs(mcp: dict) -> None:  # type: ignore[type-arg]
     with pytest.raises(ValidationError):
-        _with(_reference_guide(), mcp={"expose": expose})
+        _with(_reference_guide(), mcp=mcp)
+
+
+def test_the_reference_guide_chat_consumes_its_own_door_for_the_demo() -> None:
+    guide = _reference_guide()
+    assert guide.mcp is not None and guide.mcp.consume == ["ai_circus_reference"]
