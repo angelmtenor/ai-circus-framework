@@ -155,6 +155,7 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.decision_policy = policy.model_dump() if policy is not None else None
         document_tool = definition.documents.tool if definition.documents is not None else None
         existing.document_tool = document_tool.model_dump() if document_tool is not None else None
+        existing.mcp = definition.mcp.model_dump() if definition.mcp is not None else None
         existing.data_product = definition.data_product.model_dump() if definition.data_product is not None else None
         existing.governance = resolve_governance(definition.slug, definition.governance)
         existing.time_series = definition.time_series.model_dump() if definition.time_series is not None else None
