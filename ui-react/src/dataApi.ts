@@ -296,13 +296,17 @@ export type LineageGraph = {
   generated_at: string | null;
 };
 
+/** The "view as" headers data-api honours for platform callers (REST and the MCP door alike). */
+export function viewAsHeaders(viewAs: ViewAs): Record<string, string> {
+  if (!viewAs) return {};
+  const h: Record<string, string> = { "X-Data-View-As": viewAs.role };
+  if (viewAs.values.length) h["X-Data-View-As-Values"] = viewAs.values.join(",");
+  return h;
+}
+
 function headers(accessToken: string | null, viewAs: ViewAs): Record<string, string> {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
+  const h: Record<string, string> = { "Content-Type": "application/json", ...viewAsHeaders(viewAs) };
   if (accessToken) h.Authorization = `Bearer ${accessToken}`;
-  if (viewAs) {
-    h["X-Data-View-As"] = viewAs.role;
-    if (viewAs.values.length) h["X-Data-View-As-Values"] = viewAs.values.join(",");
-  }
   return h;
 }
 

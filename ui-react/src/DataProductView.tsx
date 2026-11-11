@@ -4,7 +4,7 @@ import type { ChatModel, ScenarioSummary } from "./apiClient";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
 import { config } from "./config";
-import { dataClient, DataApiError, formatMetric, optionLabel, type DataClient, type Overview, type ViewAs } from "./dataApi";
+import { dataClient, DataApiError, formatMetric, optionLabel, viewAsHeaders, type DataClient, type Overview, type ViewAs } from "./dataApi";
 import { Icon, type IconName } from "./Icon";
 import { domainLabel } from "./ScenarioPicker";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
@@ -19,8 +19,9 @@ const DataExploreView = lazy(() => import("./DataExploreView").then((m) => ({ de
 const DataQualityView = lazy(() => import("./DataQualityView").then((m) => ({ default: m.DataQualityView })));
 const InsightsView = lazy(() => import("./InsightsView").then((m) => ({ default: m.InsightsView })));
 const StorefrontView = lazy(() => import("./StorefrontView").then((m) => ({ default: m.StorefrontView })));
+const McpConnectView = lazy(() => import("./McpConnectView").then((m) => ({ default: m.McpConnectView })));
 
-type Tab = "tour" | "overview" | "flow" | "dashboards" | "explore" | "quality" | "shop" | "insights";
+type Tab = "tour" | "overview" | "flow" | "dashboards" | "explore" | "quality" | "shop" | "insights" | "mcp";
 
 const TABS: { key: Tab; icon: IconName; label: string }[] = [
   { key: "tour", icon: "cap", label: "Guided tour" },
@@ -33,6 +34,7 @@ const TABS: { key: Tab; icon: IconName; label: string }[] = [
   { key: "quality", icon: "shield", label: "Quality & lineage" },
   // Only when the data product declares apps.storefront (a fictional web shop on its data).
   { key: "shop", icon: "cart", label: "Web shop" },
+  { key: "mcp", icon: "external", label: "Connect via MCP" },
 ];
 
 export type DataProductProps = {
@@ -121,7 +123,10 @@ function DataProductContent({
     <div className="workspace data-product">
       <div className="workspace-tabs">
         {TABS.filter(
-          (t) => (t.key !== "shop" || scenario.data_product?.apps?.storefront) && (t.key !== "insights" || scenario.data_product?.apps?.insights),
+          (t) =>
+            (t.key !== "shop" || scenario.data_product?.apps?.storefront) &&
+            (t.key !== "insights" || scenario.data_product?.apps?.insights) &&
+            (t.key !== "mcp" || (scenario.mcp?.expose.length ?? 0) > 0),
         ).map((t) => (
           <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>
             <Icon name={t.icon} /> {t.key === "insights" ? (scenario.data_product?.apps?.insights?.title ?? t.label) : t.label}
@@ -148,6 +153,24 @@ function DataProductContent({
         {tab === "quality" && <DataQualityView {...props} />}
         {tab === "shop" && scenario.data_product?.apps?.storefront && <StorefrontView {...props} />}
         {tab === "insights" && scenario.data_product?.apps?.insights && <InsightsView {...props} />}
+        {tab === "mcp" && scenario.mcp && (
+          <McpConnectView
+            scenarioSlug={scenario.slug}
+            exposed={scenario.mcp.expose}
+            accessToken={accessToken}
+            baseUrl={config.dataApiUrl}
+            localPort={8032}
+            headers={viewAsHeaders(viewAs)}
+            title="Use this data product from any MCP client"
+            lede={
+              <p className="mcp-lede">
+                Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent get the governed data tools, under the
+                same policy as every other door: your role decides the tools, rows and columns. Pick a role in{" "}
+                <strong>View as</strong> above and the snippets and the check below carry it, as a platform key may.
+              </p>
+            }
+          />
+        )}
       </Suspense>
 
       {chatOpen && (

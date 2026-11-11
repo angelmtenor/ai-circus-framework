@@ -1898,23 +1898,30 @@ class VectorStoreConfig(BaseModel):
     top_k: int
 
 
-# The read-only document tools rag-agent's MCP door can expose (docs/adr/0019).
+# The tools each kind's MCP door can expose (docs/adr/0019): rag-agent's read-only document tools,
+# and data-api's governed data tools (the same operations as its REST routes and the assistant's).
 MCP_DOCUMENT_TOOLS = ("list_sources", "search_documents", "read_document")
-McpDocumentTool = Literal["list_sources", "search_documents", "read_document"]
+MCP_DATA_TOOLS = ("list_metrics", "query_metric", "search_records", "get_record", "data_health", "run_sql")
+MCP_TOOLS_BY_KIND: dict[str, tuple[str, ...]] = {
+    "conversational_rag": MCP_DOCUMENT_TOOLS,
+    "data_product": MCP_DATA_TOOLS,
+}
 
 
 class McpConfig(BaseModel):
-    """Opts a `conversational_rag` scenario into MCP (docs/adr/0019), both ways:
+    """Opts a scenario into MCP (docs/adr/0019):
 
-    - `expose`: the read-only tools rag-agent's door serves at `/mcp/{scenario_slug}`, over the
-      caller's own tenant's indexed documents.
-    - `consume`: scenarios whose MCP doors this scenario's chat may use when the user picks
-      "via MCP". Only doors on the same rag-agent instance, so this list is the allow-list.
+    - `expose`: the tools its kind's door serves at `/mcp/{scenario_slug}` (`MCP_TOOLS_BY_KIND`):
+      rag-agent's read-only document tools over the caller's own tenant's indexed documents, or
+      data-api's governed data tools under the data product's access policy.
+    - `consume` (conversational_rag only): scenarios whose MCP doors this scenario's chat may use
+      when the user picks "via MCP". Only doors on the same rag-agent instance, so this list is the
+      allow-list.
 
     Absent = no MCP; the scenario behaves as before.
     """
 
-    expose: list[McpDocumentTool] = Field(default=[], max_length=len(MCP_DOCUMENT_TOOLS))
+    expose: list[str] = Field(default=[], max_length=len(MCP_DATA_TOOLS))
     consume: list[str] = Field(default=[], max_length=5)
 
     @model_validator(mode="after")
@@ -2963,13 +2970,19 @@ class ScenarioDefinition(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def _mcp_door_needs_indexed_documents(self) -> ScenarioDefinition:
-        """The MCP door only reads what a conversational_rag scenario already indexed."""
+    def _mcp_matches_kind(self) -> ScenarioDefinition:
+        """A door exposes its kind's tools; a document door reads what the scenario already indexed."""
         if self.mcp is None:
             return self
-        if self.kind != "conversational_rag":
-            raise ValueError("mcp is only available for kind='conversational_rag' scenarios (docs/adr/0019).")
-        if self.mcp.expose and self.vector_store is None:
+        allowed = MCP_TOOLS_BY_KIND.get(self.kind)
+        if allowed is None:
+            raise ValueError(f"mcp is not available for kind={self.kind!r} scenarios (docs/adr/0019).")
+        unknown = [tool for tool in self.mcp.expose if tool not in allowed]
+        if unknown:
+            raise ValueError(f"mcp.expose: {unknown} are not {self.kind} tools (one of {list(allowed)}).")
+        if self.mcp.consume and self.kind != "conversational_rag":
+            raise ValueError("mcp.consume is only available for kind='conversational_rag' scenarios.")
+        if self.kind == "conversational_rag" and self.mcp.expose and self.vector_store is None:
             raise ValueError("mcp needs a vector_store: its tools read the scenario's indexed documents.")
         return self
 
