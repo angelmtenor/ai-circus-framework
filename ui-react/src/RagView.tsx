@@ -79,7 +79,7 @@ function RagViewContent({
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
   const libraryExtras = scenario.ui_extras?.kind === "source_library" ? scenario.ui_extras : null;
-  const mcpTools = scenario.mcp?.expose ?? null;
+  const mcpTools = scenario.mcp?.expose.length ? scenario.mcp.expose : null;
   const hasTabs = Boolean(libraryExtras || mcpTools);
   const [tab, setTab] = useState<"chat" | "library" | "mcp">("chat");
   const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
@@ -141,6 +141,7 @@ function RagViewContent({
         initialMessages={conversation.initialMessages}
         conversationReady={conversation.ready}
         onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
+        mcpServers={scenario.mcp?.consume}
       />
     </div>
   );

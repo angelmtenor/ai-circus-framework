@@ -683,7 +683,8 @@ export type ScenarioSummary = {
   document_tool?: DocumentTool | null;
   // conversational_rag with an MCP door (docs/adr/0019): the read-only tools rag-agent serves
   // at /mcp/{slug} — see McpConnectView.
-  mcp?: { expose: string[] } | null;
+  // `consume`: scenarios whose MCP doors this chat may answer through ("Via MCP").
+  mcp?: { expose: string[]; consume: string[] } | null;
   // tabular_ml with task_type "forecast" only — mirrors scenario_schema.TimeSeriesConfig.
   time_series?: TimeSeriesConfig | null;
   // More models of this scenario (docs/adr/0018): each overrides the model fields above, and its

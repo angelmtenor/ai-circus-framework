@@ -62,6 +62,10 @@ export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenari
     <div className="mcp-connect panel-card">
       <h3>Use these documents from any MCP client</h3>
       <p className="mcp-lede">
+        This chat can use them too: pick <strong>🔌 Via MCP</strong> under the chat box, and its assistant loads these
+        tools from the endpoint below instead of reading the documents directly.
+      </p>
+      <p className="mcp-lede">
         Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent can search and read this scenario's documents
         for your organisation. Read-only, and no model runs here: your client's model does the reasoning.
       </p>
