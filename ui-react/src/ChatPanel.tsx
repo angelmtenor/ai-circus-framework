@@ -21,6 +21,7 @@ import {
   type ChatScope,
   type Provenance,
 } from "./chatProvenance";
+import { sameOrder, toolResultsAfterTheirCalls } from "./messageOrder";
 import { config } from "./config";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
@@ -475,6 +476,9 @@ export function ChatPanel({
         (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
       );
       answerUnansweredFrontendToolCalls(agent, frontendToolNames, onFrontendToolCall);
+      // Next turn's history must keep each tool result after its call (see messageOrder.ts).
+      const ordered = toolResultsAfterTheirCalls(agent.messages);
+      if (!sameOrder(ordered, agent.messages)) agent.setMessages(ordered);
     } catch (error) {
       agent.addMessage({ id: randomUUID(), role: "assistant", content: `⚠️ ${(error as Error).message}` });
     } finally {
