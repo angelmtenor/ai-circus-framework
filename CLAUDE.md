@@ -69,7 +69,7 @@ and log under `~/.cache`: sessions end and WSL wipes `/tmp` on restart.
 **How each feature works is in [`docs/architecture-details.md`](docs/architecture-details.md): read its section
 before touching that feature.** Sections: scenarios and renderers, paper forms, forecasts, fleet health/row
 triage/case tracker/source library, free-text features, networks and out-of-fold scores, business rules and case desk,
-document-search tools, knowledge graphs, Data Platform, observability, governance, maps and dashboard charts.
+document-search tools, the MCP door, knowledge graphs, Data Platform, observability, governance, maps and dashboard charts.
 
 Microservices behind **Traefik** (the only ingress; a few services also publish a
 loopback-only port for non-container dev — never `traefik.enable=true` for platform-registry,

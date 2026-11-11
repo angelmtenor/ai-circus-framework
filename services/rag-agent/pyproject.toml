@@ -28,6 +28,7 @@ dependencies = [
     "ai-circus-shared",
     "copilotkit>=0.1.94",
     "fastapi>=0.141.1",
+    "fastmcp>=4.1.8,<4.2",
     "langchain>=0.3",
     "langchain-openai>=0.3",
     "loguru>=0.7.3",

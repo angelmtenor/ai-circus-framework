@@ -36,8 +36,14 @@ from rag_agent import get_env_config
 from rag_agent.api import router
 from rag_agent.core.graph_retrieval import KnowledgeGraphCache
 from rag_agent.core.logger import configure_logger, get_logger
+from rag_agent.core.mcp_door import McpDoor, build_mcp_app
 
 logger = get_logger(__name__)
+
+# The MCP door (docs/adr/0019): one stateless MCP app for every scenario that declares `mcp:`,
+# reached at /mcp/{scenario_slug} through McpDoor's entitlement check. Its lifespan runs inside
+# this app's.
+mcp_app = build_mcp_app()
 
 
 @asynccontextmanager
@@ -78,7 +84,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # client built here, since which model to use can now change without a restart.
     app.state.llm_clients = {}
 
-    yield
+    async with mcp_app.lifespan(mcp_app):
+        yield
 
 
 # FastAPI/Swagger UI docs are only useful for local iteration — staging/production
@@ -93,6 +100,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 app.include_router(router)
+app.mount("/mcp", McpDoor(mcp_app))
 configure_metrics(app)
 configure_tracing(app, service="rag-agent")
 
