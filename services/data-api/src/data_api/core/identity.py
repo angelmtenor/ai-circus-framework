@@ -74,6 +74,30 @@ def data_org(warehouse: Warehouse, product: DataProduct, org_id: str) -> str:
     return org_id if cached[1] else fallback
 
 
+def access_for(
+    warehouse: Warehouse,
+    product: DataProduct,
+    identity: Identity,
+    authorization: str | None,
+    view_as: str | None,
+    view_as_values: str | None,
+) -> DataAccess:
+    """The caller's effective access to this data product, for every door (REST and MCP).
+
+    `view_as` / `view_as_values` (the X-Data-View-As headers) are honoured for platform callers
+    only (see ai_circus_shared.data_policy.resolve_access). Raises AccessDeniedError.
+    """
+    assert identity.org_id is not None
+    return resolve_access(
+        identity,
+        product.config.access,
+        data_org_id=data_org(warehouse, product, identity.org_id),
+        is_platform=is_platform_caller(authorization),
+        view_as=view_as or None,
+        view_as_values=tuple((view_as_values or "").split(",")),
+    )
+
+
 def get_access(
     request: Request,
     product: DataProduct = Depends(get_product),
@@ -83,16 +107,9 @@ def get_access(
     x_data_view_as_values: str | None = Header(default=None, max_length=400),
 ) -> DataAccess:
     """FastAPI dependency: the caller's effective access to this data product."""
-    assert identity.org_id is not None
-    warehouse: Warehouse = request.app.state.runtime.warehouse
     try:
-        return resolve_access(
-            identity,
-            product.config.access,
-            data_org_id=data_org(warehouse, product, identity.org_id),
-            is_platform=is_platform_caller(authorization),
-            view_as=x_data_view_as or None,
-            view_as_values=tuple((x_data_view_as_values or "").split(",")),
+        return access_for(
+            request.app.state.runtime.warehouse, product, identity, authorization, x_data_view_as, x_data_view_as_values
         )
     except AccessDeniedError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

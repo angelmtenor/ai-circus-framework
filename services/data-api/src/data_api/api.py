@@ -199,6 +199,14 @@ def get_record(
         raise HTTPException(status_code=422, detail="Key too long.")
     runtime = runtime_of(request)
     record = _guard(records.get_record, runtime.warehouse, product, access, entity, key)
+    publish_served(runtime, product, access, entity, key, record)
+    return record
+
+
+def publish_served(
+    runtime: Runtime, product: DataProduct, access: DataAccess, entity: str, key: str, record: dict[str, Any]
+) -> None:
+    """Report a 'served' stage event for one record, so the live flow shows it leaving the platform."""
     current = record.get("current") or {}
     filter_value = (current.get("payload") or {}).get(access.row_filter_column) if access.row_filter_column else None
     runtime.relay.publish_local(
@@ -216,7 +224,6 @@ def get_record(
             "detail": {"version": current.get("version", 1)},
         },
     )
-    return record
 
 
 @router.get("/v1/{scenario_slug}/lineage")

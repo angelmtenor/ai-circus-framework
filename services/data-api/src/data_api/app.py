@@ -30,9 +30,14 @@ from starlette.concurrency import run_in_threadpool
 from data_api import get_env_config
 from data_api.api import router
 from data_api.core.logger import configure_logger, get_logger
+from data_api.core.mcp_door import McpDoor, build_mcp_app
 from data_api.core.runtime import build_runtime
 
 logger = get_logger(__name__)
+
+# The MCP door (docs/adr/0019): one stateless MCP app for every data product that declares `mcp:`,
+# reached at /mcp/{scenario_slug} through McpDoor's entitlement and access checks.
+mcp_app = build_mcp_app()
 
 
 @asynccontextmanager
@@ -41,7 +46,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     runtime = await run_in_threadpool(build_runtime, get_env_config())
     app.state.runtime = runtime
     try:
-        yield
+        async with mcp_app.lifespan(mcp_app):
+            yield
     finally:
         runtime.relay.stop()
         runtime.simulation.stop_all()
@@ -57,6 +63,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 app.include_router(router)
+app.mount("/mcp", McpDoor(mcp_app))
 configure_metrics(app)
 configure_tracing(app, service="data-api")
 
