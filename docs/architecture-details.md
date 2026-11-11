@@ -139,7 +139,8 @@ live `tools/list` with the session token). The chat itself has `list_sources`/`r
 (`build_document_tools`), and a scenario with `mcp.consume` gets a "📚 Direct · 🔌 Via MCP" switch: `forwardedProps.route:
 "mcp"` makes `agui_endpoint` load the tools from those doors instead (`core/mcp_consumer.py`: only doors this instance
 serves, over loopback, with the caller's token, `mcp__<server>__<tool>`, `MAX_MCP_AGENT_STEPS`), and `chatProvenance.ts`
-labels the reply "🔌 MCP". Nothing works before `make k3s-vectorize`. OAuth for external clients,
+labels the reply "🔌 MCP". MCP clients on the local cluster use `make k3s-mcp-portforward` (`localhost:8031`, the
+card's snippets): `*.localhost` does not resolve for every client. Nothing works before `make k3s-vectorize`. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
 
 ## Knowledge graphs

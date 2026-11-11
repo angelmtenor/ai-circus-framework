@@ -12,6 +12,9 @@ const TOOL_HELP: Record<string, string> = {
   read_document: "One document's passages, in order.",
 };
 
+// `make k3s-mcp-portforward`'s default (RAG_AGENT_MCP_PORT).
+const LOCAL_MCP_PORT = 8031;
+
 type Check = { state: "idle" | "checking" } | { state: "ok"; tools: McpTool[] } | { state: "error"; message: string };
 
 function CopyBlock({ label, text }: { label: string; text: string }) {
@@ -41,10 +44,14 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
 export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenarioSlug: string; exposed: string[]; accessToken: string | null }) {
   const [check, setCheck] = useState<Check>({ state: "idle" });
   const url = `${config.ragAgentUrl}/mcp/${scenarioSlug}`;
+  // On the local cluster `*.localhost` resolves in browsers and curl but not for every client
+  // (Node or Python on WSL), so clients use `make k3s-mcp-portforward`'s localhost port.
+  const localCluster = new URL(config.ragAgentUrl).hostname.endsWith(".localhost");
+  const clientUrl = localCluster ? `http://localhost:${LOCAL_MCP_PORT}/mcp/${scenarioSlug}` : url;
   const name = scenarioSlug.replace(/_/g, "-");
-  const claudeCode = `claude mcp add --transport http ${name} ${url} \\\n  --header "Authorization: Bearer $AI_CIRCUS_TOKEN"`;
+  const claudeCode = `claude mcp add --transport http ${name} ${clientUrl} \\\n  --header "Authorization: Bearer $AI_CIRCUS_TOKEN"`;
   const json = JSON.stringify(
-    { mcpServers: { [name]: { type: "http", url, headers: { Authorization: "Bearer ${AI_CIRCUS_TOKEN}" } } } },
+    { mcpServers: { [name]: { type: "http", url: clientUrl, headers: { Authorization: "Bearer ${AI_CIRCUS_TOKEN}" } } } },
     null,
     2,
   );
@@ -96,6 +103,12 @@ export function McpConnectView({ scenarioSlug, exposed, accessToken }: { scenari
         </section>
         <section>
           <h4>Add it to a client</h4>
+          {localCluster && (
+            <p className="mcp-note">
+              On this local cluster, run <code>make k3s-mcp-portforward</code> once: it keeps rag-agent on{" "}
+              <code>localhost:{LOCAL_MCP_PORT}</code> across reboots, which every client can reach.
+            </p>
+          )}
           <CopyBlock label="Claude Code" text={claudeCode} />
           <CopyBlock label="mcp.json (Claude Desktop, VS Code, …)" text={json} />
           <p className="mcp-note">
