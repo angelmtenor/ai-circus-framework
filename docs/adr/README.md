@@ -24,3 +24,4 @@ pointer to its replacement.
 | [0016](0016-time-series-forecasting.md) | Forecasting is a third tabular task (`task_type: forecast` + `time_series:`), backtested by MASE under the Green Code rule, with a `forecast_board` tab |
 | [0017](0017-vllm-alongside-ollama.md) | vLLM is an optional GPU backend alongside Ollama, reached only through llm-gateway |
 | [0018](0018-several-models-per-scenario.md) | One scenario can hold several models (`extra_models:`), each addressed as `slug~id` with its own dataset and bucket; one UI tab per model |
+| [0019](0019-mcp-doors-and-tool-policy.md) | MCP is a door, not a kind: first a read-only `/mcp/{scenario_slug}` on `rag-agent` (list, search, read documents), existing identity; OAuth, `data-api`, models as tools and tool policy come later |

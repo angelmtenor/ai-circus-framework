@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from ai_circus_shared.scenario_schema import (
+    MCP_DOCUMENT_TOOLS,
     CategoricalFeatureUI,
     ChatConfig,
     CycleTimeModel,
@@ -1766,3 +1767,46 @@ def test_recommender_block_is_required_for_and_only_for_recommendation() -> None
     model = {**extra["model"], "candidates": ["association_rules", "lightgbm"]}
     with pytest.raises(ValidationError, match=r"candidates must be among"):
         _with(surf, extra_models=[*others, {**extra, "model": model}])
+
+
+def _reference_guide() -> ScenarioDefinition:
+    from pathlib import Path
+
+    return ScenarioDefinition.load(Path(__file__).parents[3] / "scenarios/ai_circus_reference/scenario.yaml")
+
+
+def test_the_reference_guide_opens_the_mcp_door_on_its_documents() -> None:
+    guide = _reference_guide()
+    assert guide.mcp is not None
+    assert tuple(guide.mcp.expose) == MCP_DOCUMENT_TOOLS
+
+
+def test_mcp_is_only_for_conversational_rag() -> None:
+    with pytest.raises(ValidationError, match="only available for kind='conversational_rag'"):
+        _with(_titanic(), mcp={"expose": ["search_documents"]})
+
+
+def test_mcp_needs_a_vector_store() -> None:
+    with pytest.raises(ValidationError, match="needs a vector_store"):
+        _with(_reference_guide(), vector_store=None)
+
+
+@pytest.mark.parametrize(
+    "mcp",
+    [
+        {"expose": []},
+        {"expose": ["search_documents", "search_documents"]},
+        {"expose": ["drop_collection"]},
+        {"consume": ["../other"]},
+        {"consume": ["a", "a"]},
+    ],
+    ids=["nothing", "tool-twice", "unknown-tool", "bad-slug", "slug-twice"],
+)
+def test_mcp_needs_known_tools_and_scenario_slugs(mcp: dict) -> None:  # type: ignore[type-arg]
+    with pytest.raises(ValidationError):
+        _with(_reference_guide(), mcp=mcp)
+
+
+def test_the_reference_guide_chat_consumes_its_own_door_for_the_demo() -> None:
+    guide = _reference_guide()
+    assert guide.mcp is not None and guide.mcp.consume == ["ai_circus_reference"]

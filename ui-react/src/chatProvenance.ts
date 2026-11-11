@@ -24,15 +24,24 @@ export type ProvenanceKey =
   | "data"
   | "chart"
   | "table"
+  | "mcp"
   | "none";
-export type Provenance = { keys: ProvenanceKey[]; sources: string[]; documentsEmpty: boolean };
+// `mcpServers`: the MCP servers whose tools the reply used (rag-agent names them mcp__<server>__<tool>).
+export type Provenance = { keys: ProvenanceKey[]; sources: string[]; documentsEmpty: boolean; mcpServers: string[] };
+
+// The chat's "via MCP" route (docs/adr/0019): a tool an MCP server published.
+const MCP_TOOL = /^mcp__(.+?)__(.+)$/;
+export function mcpToolParts(name: string): { server: string; tool: string } | null {
+  const m = MCP_TOOL.exec(name);
+  return m ? { server: m[1], tool: m[2] } : null;
+}
 
 // Delimiters a retrieval tool's result wraps each excerpt in — rag-agent's retrieve_docs
 // and graph_search and assistant's document tool write `<retrieved_document source=…>`
 // (the indirect-prompt-injection guard), form-agent's catalog `<catalog_entry source=…>`;
 // the older `[Source: file]` marker is still accepted for any agent that emits it.
 const SOURCE_TAG = /<(?:retrieved_document|catalog_entry)\s+source="([^"]+)">|\[Source:\s*([^\]]+)\]/g;
-const RETRIEVAL_TOOLS = new Set(["retrieve_docs", "graph_search", "graph_path", "retrieve_catalog"]);
+const RETRIEVAL_TOOLS = new Set(["retrieve_docs", "read_document", "graph_search", "graph_path", "retrieve_catalog"]);
 // A data product's governed tools (assistant's core/data_tools.py): metrics, health, records/SQL.
 const METRIC_TOOLS = new Set(["query_metric", "list_metrics"]);
 const RECORD_TOOLS = new Set(["get_record", "search_records", "run_sql", "get_dataset_sample"]);
@@ -51,6 +60,7 @@ export const CHAT_WORDS = {
     data: "Datos (los del dashboard)",
     chart: "Gráfico",
     table: "Tabla",
+    mcp: "MCP",
     none: "Sin herramientas: contexto del escenario",
     noDocuments: "sin resultados",
     allSources: "Todas las fuentes",
@@ -69,6 +79,7 @@ export const CHAT_WORDS = {
     data: "Data (the dashboard's)",
     chart: "Chart",
     table: "Table",
+    mcp: "MCP",
     none: "No tools: scenario context only",
     noDocuments: "nothing found",
     allSources: "All sources",
@@ -88,6 +99,7 @@ export const PROVENANCE_ICONS: Record<ProvenanceKey, string> = {
   data: "📊",
   chart: "📈",
   table: "📋",
+  mcp: "🔌",
   none: "💬",
 };
 
@@ -100,9 +112,13 @@ function sourcesIn(content: string): string[] {
   return [...content.matchAll(SOURCE_TAG)].map((m) => (m[1] ?? m[2]).trim());
 }
 
+// A frontend tool that draws the reply in the chat (useCopilotAction's render_chart/render_table).
+const DRAWING_TOOLS = new Set(["render_chart", "render_table"]);
+
 /**
- * Provenance of every reply, keyed by the id of the last assistant message with text in
- * each user-delimited turn (the bubble the chips go under).
+ * Provenance of every reply, keyed by the id of the last assistant message in each
+ * user-delimited turn that shows something — text, or a chart or table it drew — so the
+ * chips go under the end of the reply, whichever of the two came last.
  */
 export function replyProvenance(messages: AguiMessage[], documentTool?: DocumentTool | null): Map<string, Provenance> {
   const results = new Map<string, string>();
@@ -119,7 +135,10 @@ export function replyProvenance(messages: AguiMessage[], documentTool?: Document
   for (const m of messages) {
     if (m.role === "user") flush();
     else if (m.role === "assistant") {
-      for (const call of m.toolCalls ?? []) calls.push({ name: call.function.name, id: call.id });
+      for (const call of m.toolCalls ?? []) {
+        calls.push({ name: call.function.name, id: call.id });
+        if (DRAWING_TOOLS.has(call.function.name)) lastReplyId = m.id;
+      }
       if (typeof m.content === "string" ? m.content.trim() : m.content) lastReplyId = m.id;
     }
   }
@@ -134,10 +153,17 @@ function provenanceOf(
 ): Provenance {
   const keys = new Set<ProvenanceKey>();
   const sources = new Set<string>();
+  const mcpServers = new Set<string>();
   let documentCalls = 0;
   for (const { name, id } of calls) {
     const result = results.get(id) ?? "";
-    if (name === documentTool?.name || RETRIEVAL_TOOLS.has(name)) {
+    const mcp = mcpToolParts(name);
+    if (mcp) {
+      keys.add("mcp");
+      mcpServers.add(mcp.server);
+      for (const source of sourcesIn(result)) sources.add(source);
+    } else if (name === "list_sources") keys.add("documents"); // the catalogue: no passages to cite
+    else if (name === documentTool?.name || RETRIEVAL_TOOLS.has(name)) {
       keys.add("documents");
       documentCalls += 1;
       for (const source of sourcesIn(result)) sources.add(source);
@@ -153,10 +179,11 @@ function provenanceOf(
     else if (name === "render_table") keys.add("table");
   }
   if (keys.size === 0) keys.add("none");
-  const order: ProvenanceKey[] = ["documents", "rules", "model", "evaluation", "metrics", "health", "data", "chart", "table", "none"];
+  const order: ProvenanceKey[] = ["mcp", "documents", "rules", "model", "evaluation", "metrics", "health", "data", "chart", "table", "none"];
   return {
     keys: order.filter((k) => keys.has(k)),
     sources: [...sources],
     documentsEmpty: documentCalls > 0 && sources.size === 0,
+    mcpServers: [...mcpServers],
   };
 }

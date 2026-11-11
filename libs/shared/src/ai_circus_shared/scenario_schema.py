@@ -1898,6 +1898,42 @@ class VectorStoreConfig(BaseModel):
     top_k: int
 
 
+# The read-only document tools rag-agent's MCP door can expose (docs/adr/0019).
+MCP_DOCUMENT_TOOLS = ("list_sources", "search_documents", "read_document")
+McpDocumentTool = Literal["list_sources", "search_documents", "read_document"]
+
+
+class McpConfig(BaseModel):
+    """Opts a `conversational_rag` scenario into MCP (docs/adr/0019), both ways:
+
+    - `expose`: the read-only tools rag-agent's door serves at `/mcp/{scenario_slug}`, over the
+      caller's own tenant's indexed documents.
+    - `consume`: scenarios whose MCP doors this scenario's chat may use when the user picks
+      "via MCP". Only doors on the same rag-agent instance, so this list is the allow-list.
+
+    Absent = no MCP; the scenario behaves as before.
+    """
+
+    expose: list[McpDocumentTool] = Field(default=[], max_length=len(MCP_DOCUMENT_TOOLS))
+    consume: list[str] = Field(default=[], max_length=5)
+
+    @model_validator(mode="after")
+    def _a_door_or_a_consumer(self) -> McpConfig:
+        if not self.expose and not self.consume:
+            raise ValueError("mcp needs expose and/or consume.")
+        if len(set(self.expose)) != len(self.expose):
+            raise ValueError("mcp.expose lists a tool twice.")
+        if len(set(self.consume)) != len(self.consume):
+            raise ValueError("mcp.consume lists a scenario twice.")
+        for slug in self.consume:
+            if not _MCP_SLUG.match(slug):
+                raise ValueError(f"mcp.consume entry {slug!r} is not a scenario slug.")
+        return self
+
+
+_MCP_SLUG = re.compile(r"^[a-z0-9_]+\Z")
+
+
 _SAFE_ORG_ID = re.compile(r"^[A-Za-z0-9_-]+\Z")  # same alphabet as storage.py / cache.py
 
 
@@ -2220,6 +2256,8 @@ class ScenarioDefinition(BaseModel):
     tutorial: TutorialConfig | None = None
     # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
     rubric_check: RubricCheckConfig | None = None
+    # conversational_rag only — its MCP door and the doors its chat may use (see McpConfig).
+    mcp: McpConfig | None = None
     services: TabularServices | RagServices | FormServices | DeepLearningServices | DataProductServices
 
     @model_validator(mode="after")
@@ -2922,6 +2960,17 @@ class ScenarioDefinition(BaseModel):
             raise ValueError(f"documents.knowledge_graph is not available for kind={self.kind!r} scenarios.")
         if tool.name in TABULAR_ASSISTANT_TOOL_NAMES:
             raise ValueError(f"documents.tool.name {tool.name!r} clashes with a built-in assistant tool.")
+        return self
+
+    @model_validator(mode="after")
+    def _mcp_door_needs_indexed_documents(self) -> ScenarioDefinition:
+        """The MCP door only reads what a conversational_rag scenario already indexed."""
+        if self.mcp is None:
+            return self
+        if self.kind != "conversational_rag":
+            raise ValueError("mcp is only available for kind='conversational_rag' scenarios (docs/adr/0019).")
+        if self.mcp.expose and self.vector_store is None:
+            raise ValueError("mcp needs a vector_store: its tools read the scenario's indexed documents.")
         return self
 
     @classmethod

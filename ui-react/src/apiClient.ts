@@ -681,6 +681,10 @@ export type ScenarioSummary = {
   decision_policy?: DecisionPolicy | null;
   // tabular_ml whose assistant also searches reference documents (see DocumentTool).
   document_tool?: DocumentTool | null;
+  // conversational_rag with an MCP door (docs/adr/0019): the read-only tools rag-agent serves
+  // at /mcp/{slug} — see McpConnectView.
+  // `consume`: scenarios whose MCP doors this chat may answer through ("Via MCP").
+  mcp?: { expose: string[]; consume: string[] } | null;
   // tabular_ml with task_type "forecast" only — mirrors scenario_schema.TimeSeriesConfig.
   time_series?: TimeSeriesConfig | null;
   // More models of this scenario (docs/adr/0018): each overrides the model fields above, and its
@@ -2052,4 +2056,18 @@ export async function fetchRecommendations(
 ): Promise<Recommendations> {
   const query = encodeURIComponent(item);
   return asJson(await fetch(`${baseUrl}/recommend/${scenarioSlug}?item=${query}`, { headers: headers(accessToken) }));
+}
+
+// rag-agent's MCP door (docs/adr/0019): one JSON-RPC `tools/list` with the caller's token, the
+// same check any MCP client's first request goes through. Stateless, so no session to open.
+export type McpTool = { name: string; description?: string };
+export async function listMcpTools(baseUrl: string, slug: string, accessToken: string | null): Promise<McpTool[]> {
+  const response = await fetch(`${baseUrl}/mcp/${slug}`, {
+    method: "POST",
+    headers: { ...headers(accessToken), Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+  });
+  const body = await asJson<{ result?: { tools: McpTool[] }; error?: { message: string } }>(response);
+  if (!body.result) throw new Error(body.error?.message ?? "Unexpected MCP response.");
+  return body.result.tools;
 }

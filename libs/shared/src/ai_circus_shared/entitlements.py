@@ -169,6 +169,9 @@ class ScenarioSummary(BaseModel):
     # tabular_ml whose assistant searches reference documents — the tool's name, label
     # and documents-only sample questions (see scenario_schema.DocumentToolConfig).
     document_tool: dict[str, Any] | None = None
+    # conversational_rag with an MCP door — the tools it exposes at rag-agent's
+    # `/mcp/{slug}` (see scenario_schema.McpConfig, docs/adr/0019); a plain dict like `form`.
+    mcp: dict[str, Any] | None = None
     # data_product only — the scenario's `data_product` block (see
     # ai_circus_shared.data_product): sources, datasets, metrics, records, access roles,
     # simulator actions; a plain dict like `form`.
