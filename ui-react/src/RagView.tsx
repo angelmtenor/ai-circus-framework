@@ -11,6 +11,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
 
 // Canvas + d3-force: loaded only for a scenario that ships a knowledge graph.
 const KnowledgeGraphView = lazy(() => import("./KnowledgeGraphView"));
+const McpConnectView = lazy(() => import("./McpConnectView").then((m) => ({ default: m.McpConnectView })));
 const SourceLibraryView = lazy(() => import("./SourceLibraryView").then((m) => ({ default: m.SourceLibraryView })));
 
 // The chat | graph split: the chat's share of the width, dragged on the divider and
@@ -78,7 +79,9 @@ function RagViewContent({
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
   const libraryExtras = scenario.ui_extras?.kind === "source_library" ? scenario.ui_extras : null;
-  const [tab, setTab] = useState<"chat" | "library">("chat");
+  const mcpTools = scenario.mcp?.expose ?? null;
+  const hasTabs = Boolean(libraryExtras || mcpTools);
+  const [tab, setTab] = useState<"chat" | "library" | "mcp">("chat");
   const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
   const [chatPct, setChatPct] = useState(storedSplit);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -171,23 +174,35 @@ function RagViewContent({
             <p title={graphExtras ? scenario.description : undefined}>{scenario.description}</p>
           </div>
         </div>
-        {libraryExtras && (
+        {hasTabs && (
           <div className="workspace-tabs">
             <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>
-              <Icon name="chat" /> {libraryExtras.chat_tab_label}
+              <Icon name="chat" /> {libraryExtras?.chat_tab_label ?? "Chat"}
             </button>
-            <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>
-              <Icon name="book" /> {libraryExtras.tab_label}
-            </button>
+            {libraryExtras && (
+              <button className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>
+                <Icon name="book" /> {libraryExtras.tab_label}
+              </button>
+            )}
+            {mcpTools && (
+              <button className={tab === "mcp" ? "active" : ""} onClick={() => setTab("mcp")}>
+                <Icon name="external" /> Connect via MCP
+              </button>
+            )}
           </div>
+        )}
+        {mcpTools && tab === "mcp" && (
+          <Suspense fallback={<div className="app-loading">Loading…</div>}>
+            <McpConnectView scenarioSlug={scenario.slug} exposed={mcpTools} accessToken={accessToken} />
+          </Suspense>
         )}
         {libraryExtras && tab === "library" && (
           <Suspense fallback={<div className="app-loading">Loading…</div>}>
             <SourceLibraryView scenarioSlug={scenario.slug} extras={libraryExtras} accessToken={accessToken} />
           </Suspense>
         )}
-        {libraryExtras ? (
-          // Kept mounted: the conversation survives a look at the sources.
+        {hasTabs && !graphExtras ? (
+          // Kept mounted: the conversation survives a look at another tab.
           <div className="rag-chat-tab" hidden={tab !== "chat"}>
             {chat}
           </div>
