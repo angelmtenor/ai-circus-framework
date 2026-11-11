@@ -1902,7 +1902,10 @@ class VectorStoreConfig(BaseModel):
 # and data-api's governed data tools (the same operations as its REST routes and the assistant's).
 MCP_DOCUMENT_TOOLS = ("list_sources", "search_documents", "read_document")
 MCP_DATA_TOOLS = ("list_metrics", "query_metric", "search_records", "get_record", "data_health", "run_sql")
-MCP_TOOLS_BY_KIND: dict[str, tuple[str, ...]] = {"conversational_rag": MCP_DOCUMENT_TOOLS, "data_product": MCP_DATA_TOOLS}
+MCP_TOOLS_BY_KIND: dict[str, tuple[str, ...]] = {
+    "conversational_rag": MCP_DOCUMENT_TOOLS,
+    "data_product": MCP_DATA_TOOLS,
+}
 
 
 class McpConfig(BaseModel):
