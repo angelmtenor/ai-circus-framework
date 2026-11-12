@@ -38,8 +38,21 @@ TOOL_CALL_SECONDS = Histogram(
 )
 ACCESS_REFUSED = Counter(
     "mcp_kit_access_refused_total",
-    "Requests refused before any MCP handling: unauthenticated (401) or forbidden (403).",
+    "Requests refused before any MCP handling: unauthenticated or inactive (401), forbidden (403), "
+    "introspection_unavailable (503).",
     ["server", "reason"],
+)
+INTROSPECTIONS = Counter(
+    "mcp_kit_introspections_total",
+    "Live checks of the user's token at the identity provider (Level 3) by outcome: active, inactive, "
+    "unavailable, cached.",
+    ["server", "outcome"],
+)
+INTROSPECTION_SECONDS = Histogram(
+    "mcp_kit_introspection_duration_seconds",
+    "Round trip of a token introspection at the identity provider (cache hits excluded).",
+    ["server"],
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1),
 )
 TOKEN_EXCHANGES = Counter(
     "mcp_kit_token_exchanges_total",

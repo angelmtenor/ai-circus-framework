@@ -8,17 +8,23 @@ server stays hidden), and records who is calling; the middleware lists and runs 
 writes one audit line per call. Tool code gets `tool_context()`: the caller's identity, read-only,
 and an API client that already holds the per-API token. Tools take no identity arguments (R8).
 
+Level 3 (docs/adr/0025, `level: 3` in the policy) adds, and refuses to start without: a live check of the
+user's token at the identity provider on every request, a per-API token bound to this server's key with a
+fresh DPoP proof on every API call, and mutual TLS to the API.
+
 Author: Angel Martinez-Tenor
 """
 
 from __future__ import annotations
 
 import logging
+import ssl
 import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 from fastmcp import FastMCP
@@ -34,8 +40,10 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from mcp_kit.dpop import DPOP_SCHEME
 from mcp_kit.exchange import ExchangeRefusedError, TokenExchanger
 from mcp_kit.identity import Identity, TokenRejectedError, TokenVerifier
+from mcp_kit.introspection import IntrospectionUnavailableError, TokenInactiveError, TokenIntrospector
 from mcp_kit.policy import Policy
 from mcp_kit.telemetry import ACCESS_REFUSED, API_RESPONSES, TOOL_CALL_SECONDS, TOOL_CALLS, log_audit
 
@@ -72,8 +80,31 @@ def configure_audit_output(stream: Any = None) -> None:
     audit.propagate = False
 
 
+class Level3ConfigError(ValueError):
+    """`level: 3` without one of its parts: the server refuses to start rather than run below its level."""
+
+
+@dataclass(frozen=True)
+class ApiTls:
+    """Mutual TLS to the API (Level 3): the CA that signed the API's certificate, and this server's own pair."""
+
+    ca_file: str
+    cert_file: str
+    key_file: str
+
+    def context(self) -> ssl.SSLContext:
+        """A client context that trusts only that CA and presents this server's certificate."""
+        context = ssl.create_default_context(cafile=self.ca_file)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.load_cert_chain(self.cert_file, self.key_file)
+        return context
+
+
 class ApiClient:
-    """GET requests to this server's API, carrying the caller's per-API token (T2). The token stays private."""
+    """GET requests to this server's API, carrying the caller's per-API token (T2). The token stays private.
+
+    At Level 3 the token goes as `Authorization: DPoP …` with a fresh proof of this server's key for each request.
+    """
 
     def __init__(
         self,
@@ -83,6 +114,7 @@ class ApiClient:
         traceparent: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         server: str = "mcp-server",
+        tls: ssl.SSLContext | None = None,
     ) -> None:
         """Built by the kit for each request; tool code only calls `get`."""
         self._server = server
@@ -91,6 +123,7 @@ class ApiClient:
         self._subject_token = subject_token
         self._traceparent = traceparent
         self._transport = transport
+        self._tls = tls
 
     async def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET `path` on the API as the caller; the decoded JSON, or a ToolError for the model."""
@@ -98,10 +131,18 @@ class ApiClient:
             token = await self._exchanger.exchange(self._subject_token)
         except ExchangeRefusedError as exc:
             raise ToolError("The identity provider refused access to the API for this user.") from exc
-        headers = {"Authorization": f"Bearer {token}"}
+        key = self._exchanger.settings.dpop_key
+        if key is None:
+            headers = {"Authorization": f"Bearer {token}"}
+        else:
+            url = urljoin(self._base_url.rstrip("/") + "/", path.lstrip("/"))
+            headers = {"Authorization": f"{DPOP_SCHEME} {token}", "DPoP": key.proof("GET", url, token)}
         if self._traceparent:
             headers["traceparent"] = self._traceparent
-        async with httpx.AsyncClient(base_url=self._base_url, timeout=15.0, transport=self._transport) as client:
+        verify: ssl.SSLContext | bool = self._tls if self._tls is not None else True
+        async with httpx.AsyncClient(
+            base_url=self._base_url, timeout=15.0, transport=self._transport, verify=verify
+        ) as client:
             response = await client.get(path, params=params, headers=headers)
         API_RESPONSES.labels(self._server, f"{response.status_code // 100}xx").inc()
         if len(response.content) > MAX_API_RESPONSE_BYTES:
@@ -151,8 +192,14 @@ class McpKit:
         exchanger: TokenExchanger | None = None,
         api_base_url: str | None = None,
         api_transport: httpx.AsyncBaseTransport | None = None,
+        introspector: TokenIntrospector | None = None,
+        api_tls: ApiTls | None = None,
     ) -> None:
-        """`exchanger` and `api_base_url` together give tools an API client; without them, tools get none."""
+        """`exchanger` and `api_base_url` together give tools an API client; without them, tools get none.
+
+        `introspector` checks the user's token live on every request and `api_tls` sets mutual TLS to the API;
+        both are required at `level: 3`, with an exchanger that holds a DPoP key and an `https` API.
+        """
         self.name = name
         self.verifier = verifier
         self.policy = policy
@@ -161,6 +208,13 @@ class McpKit:
             exchanger.server = name
         self.api_base_url = api_base_url
         self.api_transport = api_transport
+        self.introspector = introspector
+        if introspector is not None:
+            introspector.server = name
+        self.level = policy.level
+        if self.level >= 3:
+            self._check_level3(api_tls)
+        self.api_tls = api_tls.context() if api_tls is not None else None
         self.tool_names: set[str] = set()
         self.server = FastMCP(
             name=name,
@@ -169,6 +223,17 @@ class McpKit:
             # Only a ToolError's own message reaches the client; anything unexpected is masked.
             mask_error_details=True,
         )
+
+    def _check_level3(self, api_tls: ApiTls | None) -> None:
+        missing = []
+        if self.introspector is None:
+            missing.append("a token introspector (live check of the user's token)")
+        if self.exchanger is None or self.exchanger.settings.dpop_key is None:
+            missing.append("an exchanger with a DPoP key (proof-of-possession per-API token)")
+        if not (self.api_base_url or "").startswith("https://") or api_tls is None:
+            missing.append("an https API with mutual TLS (api_tls)")
+        if missing:
+            raise Level3ConfigError(f"{self.name} is level 3 but lacks: {'; '.join(missing)}.")
 
     def tool(self, name: str | None = None, *, annotations: ToolAnnotations = READ_ONLY) -> Callable[[Any], Any]:
         """Register a tool (read-only by default). Its arguments must never name a user or tenant."""
@@ -192,6 +257,7 @@ class McpKit:
                 caller.traceparent,
                 self.api_transport,
                 server=self.name,
+                tls=self.api_tls,
             )
         return ToolContext(identity=caller.identity, api=api)
 
@@ -234,6 +300,13 @@ class _Guard:
             response = JSONResponse({"detail": str(exc)}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
             await response(scope, receive, send)
             return
+        assert authorization is not None  # verify() rejects a missing header
+        subject_token = authorization.removeprefix("Bearer ").strip()
+        if self.kit.introspector is not None:
+            refusal = await self._live_check(subject_token, identity)
+            if refusal is not None:
+                await refusal(scope, receive, send)
+                return
         allowed = self.kit.policy.allowed_tools(identity, self.kit.tool_names)
         if not allowed:
             ACCESS_REFUSED.labels(self.kit.name, "forbidden").inc()
@@ -249,15 +322,36 @@ class _Guard:
                 scope, receive, send
             )
             return
-        assert authorization is not None  # verify() rejects a missing header
         caller = _Caller(
             identity=identity,
             allowed=allowed,
-            subject_token=authorization.removeprefix("Bearer ").strip(),
+            subject_token=subject_token,
             traceparent=headers.get("traceparent"),
         )
         scope.setdefault("state", {})[_STATE_KEY] = caller
         await self.mcp_app(scope, receive, send)
+
+    async def _live_check(self, token: str, identity: Identity) -> JSONResponse | None:
+        """Level 3: the identity provider must still call the token active (401), and must answer (503)."""
+        assert self.kit.introspector is not None
+        try:
+            await self.kit.introspector.check(token, subject=identity.subject)
+        except TokenInactiveError as exc:
+            ACCESS_REFUSED.labels(self.kit.name, "inactive").inc()
+            _audit(
+                "mcp.access",
+                server=self.kit.name,
+                level="WARNING",
+                outcome="inactive",
+                subject=identity.subject,
+                org=identity.org_id,
+            )
+            return JSONResponse({"detail": str(exc)}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        except IntrospectionUnavailableError:
+            ACCESS_REFUSED.labels(self.kit.name, "introspection_unavailable").inc()
+            _audit("mcp.access", server=self.kit.name, level="WARNING", outcome="introspection_unavailable")
+            return JSONResponse({"detail": "The token cannot be checked right now."}, status_code=503)
+        return None
 
 
 class _PolicyMiddleware(Middleware):
