@@ -160,7 +160,10 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: keycloak.localhost
+      # Public URL for the issuer and login pages; backchannel URLs follow the request, so the
+      # optional chat UI (profile "chat-ui") reaches http://keycloak:8080 server-side (see k8s/base/keycloak.yaml).
+      KC_HOSTNAME: http://keycloak.localhost
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_PROXY_HEADERS: xforwarded
       # Traefik terminates plain HTTP locally (no TLS) — without this, Keycloak's
       # default hostname-strict/HTTPS-required posture refuses to serve behind a

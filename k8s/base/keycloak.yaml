@@ -50,7 +50,12 @@ spec:
             # embedded in KC_DB_URL itself.
             - {name: KC_DB_USERNAME, value: "$(POSTGRES_USER)"}
             - {name: KC_DB_PASSWORD, value: "$(POSTGRES_PASSWORD)"}
-            - {name: KC_HOSTNAME, value: "keycloak.localhost"}
+            # The browser-facing URL: the issuer of every token and the login pages. Backchannel
+            # URLs (token, JWKS, userinfo) follow the request instead, so a server-side OIDC client
+            # inside the cluster (the optional chat UI, k8s/chat-ui) reaches http://keycloak:8080
+            # while the issuer stays the public one the services validate (KEYCLOAK_ISSUER).
+            - {name: KC_HOSTNAME, value: "http://keycloak.localhost"}
+            - {name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC, value: "true"}
             - {name: KC_PROXY_HEADERS, value: "xforwarded"}
             # Traefik terminates plain HTTP on the `web` entrypoint (see traefik's own
             # command in docker-compose.yml/k8s — no TLS locally) — without this,
