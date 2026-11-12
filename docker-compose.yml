@@ -5,7 +5,7 @@
 # backend services (services/*), then the UI. Traefik is the single entrypoint; a few
 # stateful/internal services publish a loopback-only port for non-container local dev.
 # Optional profiles: `pipeline` (one-shot ETL/training jobs), `deep-learning`,
-# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM).
+# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM), `chat-ui` (Open WebUI).
 
 name: ai-circus-framework
 
@@ -74,6 +74,8 @@ volumes:
   ollama-data:
   # vLLM's model weights (3.1 GB for the default model), kept across restarts.
   vllm-model-cache:
+  # The optional chat UI's SQLite database and uploads (profile "chat-ui").
+  open-webui-data:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
   # (Renamed from `voice-model-cache` when agui-voice stopped running as root: the old
@@ -160,7 +162,10 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ${POSTGRES_USER}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_HOSTNAME: keycloak.localhost
+      # Public URL for the issuer and login pages; backchannel URLs follow the request, so the
+      # optional chat UI (profile "chat-ui") reaches http://keycloak:8080 server-side (see k8s/base/keycloak.yaml).
+      KC_HOSTNAME: http://keycloak.localhost
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_PROXY_HEADERS: xforwarded
       # Traefik terminates plain HTTP locally (no TLS) — without this, Keycloak's
       # default hostname-strict/HTTPS-required posture refuses to serve behind a
@@ -1179,3 +1184,67 @@ services:
       - "traefik.http.routers.ui-react.rule=Host(`aiopen.localhost`)"
       - "traefik.http.routers.ui-react.entrypoints=web"
       - "traefik.http.services.ui-react.loadbalancer.server.port=8080"
+
+  # Chat UI — OPTIONAL (profile "chat-ui", docs/adr/0021): Open WebUI with Keycloak sign-in, reaching the
+  # scenarios' MCP doors through llm-gateway's MCP gateway with each user's own token. Same settings as
+  # k8s/chat-ui/open-webui.yaml; run scripts/chat_ui_identity.py first (realm sync, demo tenant, .env keys).
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.12.5
+    profiles: ["chat-ui"]
+    user: "1000:1000"
+    environment:
+      ENABLE_PERSISTENT_CONFIG: "false"
+      WEBUI_URL: http://chat.localhost
+      WEBUI_SECRET_KEY: ${CHAT_UI_SECRET_KEY:-}
+      DATA_DIR: /app/backend/data
+      STATIC_DIR: /app/backend/data/static
+      HOME: /app/backend/data/home
+      ENABLE_LOGIN_FORM: "false"
+      ENABLE_PASSWORD_AUTH: "false"
+      ENABLE_SIGNUP: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      DEFAULT_USER_ROLE: user
+      OAUTH_PROVIDER_NAME: Keycloak
+      OAUTH_CLIENT_ID: open-webui
+      OAUTH_CLIENT_SECRET: ${CHAT_UI_OIDC_CLIENT_SECRET:-}
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/ai-circus/.well-known/openid-configuration
+      OPENID_REDIRECT_URI: http://chat.localhost/oauth/oidc/callback
+      OAUTH_SCOPES: openid email profile organization
+      OAUTH_CODE_CHALLENGE_METHOD: S256
+      ENABLE_OLLAMA_API: "false"
+      BYPASS_MODEL_ACCESS_CONTROL: "true"
+      OPENAI_API_BASE_URLS: http://llm-gateway:4000/v1
+      OPENAI_API_KEYS: ${LITELLM_MASTER_KEY}
+      RAG_EMBEDDING_ENGINE: openai
+      RAG_EMBEDDING_MODEL: local-embed
+      RAG_OPENAI_API_BASE_URL: http://llm-gateway:4000/v1
+      RAG_OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      HF_HUB_OFFLINE: "1"
+      ENABLE_VERSION_UPDATE_CHECK: "false"
+      DO_NOT_TRACK: "true"
+      SCARF_NO_ANALYTICS: "true"
+      ANONYMIZED_TELEMETRY: "false"
+      TOOL_SERVER_CONNECTIONS: >-
+        [{"type": "mcp", "url": "http://llm-gateway:4000/mcp/ai_circus_reference", "auth_type": "system_oauth",
+          "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+          "info": {"id": "ai_circus_reference", "name": "AI Circus reference notes",
+                   "description": "Search and read the reference notes (read-only)"}},
+         {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth",
+          "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+          "info": {"id": "surf_retail", "name": "Angel's Surf Co. data",
+                   "description": "Governed sales metrics and records, filtered by your role (read-only)"}}]
+    volumes:
+      - open-webui-data:/app/backend/data
+    depends_on:
+      keycloak:
+        condition: service_started
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1536m
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.open-webui.rule=Host(`chat.localhost`)"
+      - "traefik.http.routers.open-webui.entrypoints=web"
+      - "traefik.http.services.open-webui.loadbalancer.server.port=8080"

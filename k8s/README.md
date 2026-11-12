@@ -32,6 +32,8 @@ k8s/
                     # plus dl-training-job.yaml (per-scenario template) and gpu-smoke-pod.yaml
   deep-learning/    # optional overlay: dl-inference (make k3s-dl-up), never part of k3s-up
   llm-serving/      # optional overlay: vLLM on the GPU, behind llm-gateway (make k3s-vllm-up), never part of k3s-up
+  chat-ui/          # optional overlay: Open WebUI at chat.localhost, Keycloak sign-in, MCP doors through the
+                    # gateway with each user's token (make k3s-chat-ui-up, docs/adr/0021), never part of k3s-up
   data-platform/    # optional data tiers — core (Kafka, data-ingest, data-api, data-transform), analytics,
                     # bi, governance — one overlay each (make k3s-data-core-up … k3s-data-showcase)
 infra/k3s-gpu/      # k3s node image with the NVIDIA runtime + device plugin (GPU clusters)
@@ -209,6 +211,15 @@ Optional MCP forwards, `make k3s-mcp-portforward`, do the same for rag-agent on 
 `/mcp/{slug},{slug}`, on `localhost:8033` (`MCP_GATEWAY_PORT`, docs/adr/0020). Their services are
 `ai-circus-portforward-<cluster>-rag-agent`, `…-data-api` and `…-llm-gateway`;
 `make k3s-mcp-portforward-uninstall` removes them. They are never started automatically.
+
+The optional chat UI, `make k3s-chat-ui-up` (docs/adr/0021), serves Open WebUI at `http://chat.localhost`.
+It first runs `scripts/chat_ui_identity.py`, which brings the live Keycloak realm up to
+`infra/keycloak/realm-export.json` (`--import-realm` only applies that file on a realm's first boot),
+creates the `lite-demo` tenant with `analyst@lite-demo.local` and `manager@lite-demo.local` (the
+password is `CHAT_UI_DEMO_PASSWORD` in `.env`, generated with the other `CHAT_UI_*` keys) and grants it
+the scenarios the chat reaches. Keycloak's login asks for the username first, then the password
+(organizations are on). In a chat, switch a door on from the Integrations menu (Tools). `make
+k3s-chat-ui-down` removes the pod and keeps its volume and the demo tenant.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and

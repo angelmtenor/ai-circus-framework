@@ -243,6 +243,7 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "prediction",
         "dl-inference",
         "vllm",
+        "open-webui",
         "assistant",
         "rag-agent",
         "form-agent",
@@ -275,10 +276,12 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "kafka",
         "dl-inference",
         "vllm",
+        "open-webui",
         "opa",
     } | data_tiers | obs_bundle
     assert {t.name for t in platform_status.TARGETS if t.console_url} == {
         "keycloak",
+        "open-webui",
         "seaweedfs",
         "langfuse",
         "mlflow",
