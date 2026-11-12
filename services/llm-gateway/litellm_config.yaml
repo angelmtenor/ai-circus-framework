@@ -266,6 +266,11 @@ model_list:
 # of another auth type, falls back to the master key.
 # The entry name is the path segment and the tool prefix (`surf_retail-query_metric`); it must
 # not contain "-". Doors of tiers that are not deployed simply fail their own calls.
+# The entries come from mcp/catalog.yaml (docs/adr/0024): a scenario's door (`/mcp/{slug}` on the service
+# of its kind), or an MCP server in front of an API built with libs/mcp-kit (`/mcp/` on that service,
+# docs/adr/0022), which exchanges the user's token for one valid only at its API. `extra_headers` lets a
+# platform key "view as" a role at a data door, exactly as at the door itself (ADR 0019 step 2).
+# BEGIN generated from mcp/catalog.yaml (scripts/generate_mcp_catalog.py): edit the catalog, not this block
 mcp_servers:
   ai_circus_reference:
     url: http://rag-agent:8000/mcp/ai_circus_reference
@@ -276,17 +281,14 @@ mcp_servers:
     url: http://data-api:8000/mcp/surf_retail
     transport: http
     auth_type: true_passthrough
-    # A platform key may "view as" a role, exactly as at the door itself (ADR 0019 step 2).
     extra_headers: [X-Data-View-As, X-Data-View-As-Values]
-    description: "Governed metrics and records of Angel's Surf Co. (read-only, row-filtered by role)"
-  # An MCP server in front of an existing API, built with libs/mcp-kit (docs/adr/0022): it validates
-  # the user's token, applies its policy, exchanges the token for one valid only at crm-api, and calls
-  # it as that user. Optional (make k3s-mcp-examples-up); absent, its calls simply fail.
+    description: "Governed sales metrics and records of Angel's Surf Co., filtered by your role (read-only)"
   crm:
     url: http://crm-mcp:8000/mcp/
     transport: http
     auth_type: true_passthrough
-    description: "Customers of the organisation's shops, as the signed-in user may see them (read-only)"
+    description: "Customers of the organisation's shops you may see, with masked contact details (read-only)"
+# END generated from mcp/catalog.yaml
 
 litellm_settings:
   # Reasoning models (GPT-5.x) reject parameters such as `temperature: 0`, which

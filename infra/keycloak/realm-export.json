@@ -251,7 +251,7 @@
     },
     {
       "name": "mcp-servers",
-      "description": "Puts every MCP server client in the user token's audience (T1, docs/adr/0022): a server can only exchange a token it is an audience of. One audience mapper per MCP server.",
+      "description": "Puts every MCP server client in the user token's audience (T1, docs/adr/0022): a server can only exchange a token it is an audience of. One audience mapper per kit server. Generated from mcp/catalog.yaml.",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "false",
@@ -274,7 +274,7 @@
     },
     {
       "name": "crm-api-audience",
-      "description": "The only audience crm-mcp may obtain in a token exchange (T2 for crm-api, docs/adr/0022).",
+      "description": "The only audience crm-mcp may obtain in a token exchange (T2 for crm-api, docs/adr/0022). Generated from mcp/catalog.yaml.",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "false",
@@ -372,8 +372,8 @@
     },
     {
       "clientId": "crm-mcp",
-      "name": "crm-mcp (example MCP server)",
-      "description": "Example MCP server built with mcp-kit (docs/adr/0022). Confidential; exchanges a user's token for one valid only at crm-api. Its secret is CRM_MCP_CLIENT_SECRET in .env, never in this file.",
+      "name": "crm-mcp: MCP server for Customers (CRM)",
+      "description": "MCP server built with libs/mcp-kit (docs/adr/0022). Confidential; exchanges a user's token for one valid only at crm-api. Its secret is CRM_MCP_CLIENT_SECRET in .env, never in this file. Generated from mcp/catalog.yaml.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
@@ -396,8 +396,8 @@
     },
     {
       "clientId": "crm-api",
-      "name": "crm-api (example customer API)",
-      "description": "Audience of the T2 tokens crm-mcp obtains (docs/adr/0022). Signs no one in and has no secret in use.",
+      "name": "crm-api: the API behind crm-mcp",
+      "description": "Audience of the T2 tokens crm-mcp obtains (docs/adr/0022). Signs no one in and has no secret in use. Generated from mcp/catalog.yaml.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
