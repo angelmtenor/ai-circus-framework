@@ -4,6 +4,18 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.53.0 — 2026-11-12
+
+### Added
+- **Observability of the MCP path** (ADR 0023), on the existing ADR 0015 stack: every MCP server built with `libs/mcp-kit`
+  reports tool calls, refusals, per-API token exchanges and its API's answers as metrics (labelled by server, tool, outcome
+  and reason only), and writes trace-linked audit lines in the platform's log shape. One trace runs from the MCP server
+  through its Keycloak exchange to the API.
+- **"AI Circus · MCP servers" dashboard** (calls, refusals, per-API tokens, latency, the API behind each server, audit lines
+  from Loki) and the `ai-circus.mcp` alerts: refused-request spikes, refused token exchanges, tool error rate.
+- `make k3s-obs-up` also traces the optional chat UI. The hop from the chat UI and the MCP gateway into an MCP server is
+  correlated through the audit lines, not traced, until their MCP clients send `traceparent`.
+
 ## v0.52.0 — 2026-11-12
 
 ### Added
