@@ -81,6 +81,14 @@ jobs:
           uv run ruff check src tests
           uv run ruff format --check src tests
           uv run pytest -q
+      # The MCP server kit (docs/adr/0022), in the same job so the required checks stay the same.
+      - name: Lint + test mcp-kit
+        working-directory: libs/mcp-kit
+        run: |
+          uv sync --locked
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+          uv run pytest -q
 
   ui-react:
     runs-on: ubuntu-latest

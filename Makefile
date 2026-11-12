@@ -782,9 +782,11 @@ sync-shared: ## Rebuild+reinstall libs/shared in every service (run after editin
 
 # ── QA across services ────────────────────────────────────────────────────────
 
-check-all: ## Lint+test libs/shared, then run `make check` inside every generated service
+check-all: ## Lint+test libs/shared and libs/mcp-kit, then run `make check` inside every generated service
 	@echo "── libs/shared ──"
 	@cd libs/shared && uv run ruff check -q src tests && uv run ruff format -q --check src tests && uv run pytest -q
+	@echo "── libs/mcp-kit ──"
+	@cd libs/mcp-kit && uv run ruff check -q src tests && uv run ruff format -q --check src tests && uv run pytest -q
 	@for dir in services/*/; do \
 		if [ -f "$$dir/Makefile" ]; then \
 			echo "── $$dir ──"; \
