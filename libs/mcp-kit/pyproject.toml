@@ -16,6 +16,8 @@ dependencies = [
     "httpx>=0.28.1",
     "PyJWT[crypto]>=2.9.0",
     "PyYAML>=6.0.2",
+    # Metrics on the default registry, served by the service's own /metrics (docs/adr/0023).
+    "prometheus-client>=0.21.0",
 ]
 
 [build-system]
@@ -26,7 +28,11 @@ build-backend = "hatchling.build"
 packages = ["src/mcp_kit"]
 
 [dependency-groups]
-dev = ["pytest>=8.3.5", "ruff>=0.11.8"]
+dev = [
+    "opentelemetry-sdk>=1.40.0",
+    "pytest>=8.3.5",
+    "ruff>=0.11.8",
+]
 
 [tool.ruff]
 target-version = "py312"
