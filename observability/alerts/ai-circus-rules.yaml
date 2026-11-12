@@ -105,4 +105,18 @@ groups:
         annotations:
           summary: "{{ $labels.server }}: more than 20% of tool calls fail"
           description: "Usually the API behind the server is down or refusing (see the API panel of the MCP dashboard)."
+      # Level 3 (docs/adr/0025): every request's token is checked live at the identity provider.
+      - alert: MCPRevokedTokenReused
+        expr: sum by (server) (increase(mcp_kit_access_refused_total{reason="inactive"}[15m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.server }}: a token of a signed-out or revoked session was used again"
+          description: "Its signature and expiry were still valid, so only the live check stopped it. A client that keeps an old token, or a copied token in use: check the audit lines (outcome inactive) in Loki."
+      - alert: MCPTokenCheckUnavailable
+        expr: sum by (server) (increase(mcp_kit_access_refused_total{reason="introspection_unavailable"}[10m])) > 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.server }}: cannot check tokens at the identity provider; level 3 refuses every request"
+          description: "Level 3 fails closed: check Keycloak and the server's client secret (introspection answers only to a client in the token's audience)."
 
