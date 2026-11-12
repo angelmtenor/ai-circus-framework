@@ -205,7 +205,9 @@ Optional MCP forwards, `make k3s-mcp-portforward`, do the same for rag-agent on 
 (`RAG_AGENT_MCP_PORT`) and, when the Data Platform is up, data-api on `localhost:8032`
 (`DATA_API_MCP_PORT`): MCP clients on this machine (Claude Code, MCP Inspector…) reach a scenario's
 `/mcp/{slug}` door there, since `*.localhost` resolves in browsers and curl but not for every client
-(docs/adr/0019). Their services are `ai-circus-portforward-<cluster>-rag-agent` and `…-data-api`;
+(docs/adr/0019). The same target forwards the MCP gateway in front of both doors, llm-gateway's
+`/mcp/{slug},{slug}`, on `localhost:8033` (`MCP_GATEWAY_PORT`, docs/adr/0020). Their services are
+`ai-circus-portforward-<cluster>-rag-agent`, `…-data-api` and `…-llm-gateway`;
 `make k3s-mcp-portforward-uninstall` removes them. They are never started automatically.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
