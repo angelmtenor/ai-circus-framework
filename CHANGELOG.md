@@ -4,6 +4,24 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.54.0 — 2026-11-12
+
+### Added
+- **One catalog for the MCP path** (ADR 0024): `mcp/catalog.yaml` lists the gateway, every MCP server (a scenario's door, or
+  a server in front of an API built with `libs/mcp-kit`) and every group (a realm role and the tools it may run on each kit
+  server). `make mcp-catalog` generates the MCP gateway's routes, the chat UI's connections, each kit server's
+  `policy.yaml` and the Keycloak clients that let a server exchange a user's token for its own API only. Scenario doors are
+  routed but never granted there: their entitlements and roles stay in `scenario.yaml`.
+- **Drift and mistakes fail CI**: a generated file that no longer matches the catalog, a tool the server's code does not
+  register, a grant on a scenario door, a group that is not a realm role, a forwarded credential header.
+- `make k3s-mcp-catalog-apply` puts a catalog change on the running cluster (Keycloak, MCP gateway, kit servers, chat UI).
+- **Optional local portal**, `make mcp-catalog-portal` (http://127.0.0.1:8040): tick the tools each group may run, add or
+  remove a server, review every generated change as a diff, publish. It never deploys or commits.
+
+### Changed
+- The chat UI's and the gateway's server descriptions now come from the catalog, and a kit server's Keycloak secret is
+  always `<CLIENT_ID>_CLIENT_SECRET` in `.env` (the example's `CRM_MCP_CLIENT_SECRET` is unchanged).
+
 ## v0.53.0 — 2026-11-12
 
 ### Added
