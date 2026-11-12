@@ -83,23 +83,22 @@ spec:
             - {name: DO_NOT_TRACK, value: "true"}
             - {name: SCARF_NO_ANALYTICS, value: "true"}
             - {name: ANONYMIZED_TELEMETRY, value: "false"}
-            # The scenarios' MCP doors, one connection per door (a single Authorization header can only
-            # go to one door, docs/adr/0020), each with the signed-in user's own Keycloak token.
-            # Visible to every user: the doors decide tenant, role and tools.
+            # One connection per server of mcp/catalog.yaml (a single Authorization header can only go to
+            # one server, docs/adr/0020), each with the signed-in user's own Keycloak token. Visible to every
+            # user: each door or server decides tenant, role and tools (docs/adr/0024).
+            # BEGIN generated from mcp/catalog.yaml (scripts/generate_mcp_catalog.py): edit the catalog, not this block
             - name: TOOL_SERVER_CONNECTIONS
               value: >-
-                [{"type": "mcp", "url": "http://llm-gateway:4000/mcp/ai_circus_reference", "auth_type": "system_oauth",
-                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
-                  "info": {"id": "ai_circus_reference", "name": "AI Circus reference notes",
-                           "description": "Search and read the reference notes (read-only)"}},
-                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth",
-                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
-                  "info": {"id": "surf_retail", "name": "Angel's Surf Co. data",
-                           "description": "Governed sales metrics and records, filtered by your role (read-only)"}},
-                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/crm", "auth_type": "system_oauth",
-                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
-                  "info": {"id": "crm", "name": "Customers (CRM)",
-                           "description": "Customers of the shops you may see, masked (read-only; make k3s-mcp-examples-up)"}}]
+                [{"type": "mcp", "url": "http://llm-gateway:4000/mcp/ai_circus_reference", "auth_type": "system_oauth", "key": "",
+                  "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "ai_circus_reference", "name": "AI Circus reference notes", "description": "Search and read the AI Circus reference notes (read-only)"}},
+                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth", "key": "",
+                  "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "surf_retail", "name": "Angel's Surf Co. data", "description": "Governed sales metrics and records of Angel's Surf Co., filtered by your role (read-only)"}},
+                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/crm", "auth_type": "system_oauth", "key": "",
+                  "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "crm", "name": "Customers (CRM)", "description": "Customers of the organisation's shops you may see, with masked contact details (read-only)"}}]
+            # END generated from mcp/catalog.yaml
           volumeMounts:
             - {name: data, mountPath: /app/backend/data}
           # Idle ~660Mi measured after real sign-ins and chats (embeddings and models run in llm-gateway).

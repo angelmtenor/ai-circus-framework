@@ -1,0 +1,46 @@
+# The MCP catalog (docs/adr/0024): the single source of truth for the MCP path. It decides what the MCP
+# gateway routes, what the chat UI connects to, which tools each group may run on each kit server, and the
+# Keycloak clients that let a kit server exchange a user's token for its own API only.
+#
+# Edit it here or in the portal (make mcp-catalog-portal), then regenerate and commit both:
+#     make mcp-catalog          # writes every generated file (this one too, in its canonical layout)
+#     make mcp-catalog-check    # what CI runs: fails when a generated file drifted from the catalog
+#
+# gateway                  the MCP gateway's in-cluster address, as the chat UI reaches it
+# servers.<name>           the gateway path (/mcp/<name>) and tool prefix: lowercase, digits, "_" (never "-")
+#   kind: scenario_door    a scenario's own door (ADR 0019): url, title, description, optional forward_headers.
+#                          The tenant's entitlement and the scenario's own role rules decide its tools, so no
+#                          group lists it.
+#   kind: kit_server       an MCP server in front of an API, built with libs/mcp-kit (ADR 0022): service
+#                          (services/<service>, also its Keycloak client), api (the only audience it may
+#                          obtain), title, description, optional tenants (organization aliases), tools.
+# groups.<realm role>      tools per kit server, or "*" for all of them. A role that is not listed gets none.
+
+gateway: http://llm-gateway:4000
+
+servers:
+  ai_circus_reference:
+    kind: scenario_door
+    url: http://rag-agent:8000/mcp/ai_circus_reference
+    title: "AI Circus reference notes"
+    description: "Search and read the AI Circus reference notes (read-only)"
+  surf_retail:
+    kind: scenario_door
+    url: http://data-api:8000/mcp/surf_retail
+    title: "Angel's Surf Co. data"
+    description: "Governed sales metrics and records of Angel's Surf Co., filtered by your role (read-only)"
+    forward_headers: [X-Data-View-As, X-Data-View-As-Values]
+  crm:
+    kind: kit_server
+    service: crm-mcp
+    api: crm-api
+    title: "Customers (CRM)"
+    description: "Customers of the organisation's shops you may see, with masked contact details (read-only)"
+    tenants: [lite-demo]
+    tools: [search_customers, get_customer, top_customers]
+
+groups:
+  retail_analyst:
+    crm: [search_customers, get_customer, top_customers]
+  retail_store_manager:
+    crm: [search_customers, get_customer]

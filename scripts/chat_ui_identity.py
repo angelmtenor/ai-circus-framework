@@ -11,15 +11,17 @@ cluster created before a realm change never sees it. This script makes the live 
 that file, which stays the single source of truth:
 
 - every client scope, realm role and client it declares (missing ones are created, missing
-  default client scopes are attached); confidential clients' secrets (the chat UI, the example
-  MCP server crm-mcp of docs/adr/0022) come from .env;
+  default client scopes are attached); confidential clients' secrets come from .env: the chat
+  UI's, and each MCP server's from mcp/catalog.yaml as <CLIENT_ID>_CLIENT_SECRET (crm-mcp ->
+  CRM_MCP_CLIENT_SECRET, docs/adr/0022, 0024);
 - the admin-only `stores` user attribute that the `data-access` scope maps into tokens;
 - a demo tenant (Keycloak Organization `lite-demo`) with two users: an analyst and the
   S012 store manager of surf_retail, sharing one generated password;
 - the tenant's entitlements to the scenarios the chat UI reaches, through platform-registry.
 
-Secrets (CHAT_UI_OIDC_CLIENT_SECRET, CHAT_UI_SECRET_KEY, CHAT_UI_DEMO_PASSWORD, CRM_MCP_CLIENT_SECRET) are generated
-into .env when missing and are never printed; they reach Keycloak over stdin, never as arguments.
+Secrets (CHAT_UI_OIDC_CLIENT_SECRET, CHAT_UI_SECRET_KEY, CHAT_UI_DEMO_PASSWORD, each MCP server's
+<CLIENT_ID>_CLIENT_SECRET) are generated into .env when missing and are never printed; they reach
+Keycloak over stdin, never as arguments.
 Needs the platform-registry port-forward (make k3s-portforward) for the entitlements step.
 
 Usage: python3 scripts/chat_ui_identity.py [--cluster ai-circus] [--env-file .env]
@@ -45,14 +47,24 @@ REALM = "ai-circus"
 NAMESPACE = "ai-circus"
 KCADM = "/opt/keycloak/bin/kcadm.sh"
 KCADM_CONFIG = "/tmp/kcadm-chat-ui.config"
-# Each confidential client's secret, from .env: the chat UI and the example MCP server (docs/adr/0022).
-CLIENT_SECRETS = {"open-webui": "CHAT_UI_OIDC_CLIENT_SECRET", "crm-mcp": "CRM_MCP_CLIENT_SECRET"}
-GENERATED_SECRETS = (
-    "CHAT_UI_OIDC_CLIENT_SECRET",
-    "CHAT_UI_SECRET_KEY",
-    "CHAT_UI_DEMO_PASSWORD",
-    "CRM_MCP_CLIENT_SECRET",
-)
+CHAT_UI_SECRETS = {"open-webui": "CHAT_UI_OIDC_CLIENT_SECRET"}
+CHAT_UI_GENERATED = ("CHAT_UI_OIDC_CLIENT_SECRET", "CHAT_UI_SECRET_KEY", "CHAT_UI_DEMO_PASSWORD")
+
+
+def client_secret_env(client_id: str) -> str:
+    """The .env key of an MCP server's client secret: crm-mcp -> CRM_MCP_CLIENT_SECRET (docs/adr/0024)."""
+    return client_id.upper().replace("-", "_") + "_CLIENT_SECRET"
+
+
+def client_secrets(export: dict[str, Any]) -> dict[str, str]:
+    """Each confidential client's .env key: the chat UI's, and every MCP server's that exchanges tokens
+    (generated from mcp/catalog.yaml, docs/adr/0022), so a new server in the catalog needs no edit here."""
+    exchangers = {
+        c["clientId"]: client_secret_env(c["clientId"])
+        for c in export.get("clients", [])
+        if c.get("attributes", {}).get("standard.token.exchange.enabled") == "true"
+    }
+    return {**CHAT_UI_SECRETS, **exchangers}
 
 ORG = {
     "name": "Lite Demo",
@@ -97,10 +109,11 @@ def read_env(env_file: Path) -> dict[str, str]:
     return values
 
 
-def ensure_generated_secrets(env_file: Path) -> dict[str, str]:
-    """Append any missing chat UI secret to .env (random, 48 hex chars) and return the whole file's values."""
+def ensure_generated_secrets(env_file: Path, export: dict[str, Any]) -> dict[str, str]:
+    """Append any missing chat UI or MCP server secret to .env (random, 48 hex chars); return the file's values."""
     env = read_env(env_file)
-    missing = [key for key in GENERATED_SECRETS if not env.get(key)]
+    wanted = dict.fromkeys([*CHAT_UI_GENERATED, *client_secrets(export).values()])
+    missing = [key for key in wanted if not env.get(key)]
     if missing:
         with env_file.open("a") as handle:
             handle.write(
@@ -174,6 +187,7 @@ def sync_mappers(kc: Kcadm, scope_id: str, scope: dict) -> None:
 
 def sync_realm(kc: Kcadm, export: dict, env: dict[str, str]) -> None:
     """Create what realm-export.json declares and the live realm lacks."""
+    secret_keys = client_secrets(export)
     live_scopes = {
         s["name"]: s["id"] for s in kc("get", "client-scopes", "--fields", "id,name")
     }
@@ -207,8 +221,8 @@ def sync_realm(kc: Kcadm, export: dict, env: dict[str, str]) -> None:
         )
         if not found:
             body = dict(client)
-            if client["clientId"] in CLIENT_SECRETS:
-                body["secret"] = env[CLIENT_SECRETS[client["clientId"]]]
+            if client["clientId"] in secret_keys:
+                body["secret"] = env[secret_keys[client["clientId"]]]
             kc("create", "clients", body=body)
             print(f"✓ client {client['clientId']} created")
             found = kc(
@@ -222,8 +236,8 @@ def sync_realm(kc: Kcadm, export: dict, env: dict[str, str]) -> None:
         client_uuid = found[0]["id"]
         # Attributes (token lifespan, PKCE…) follow the file; the chat UI's secret follows .env.
         update: dict[str, Any] = {"attributes": client.get("attributes", {})}
-        if client["clientId"] in CLIENT_SECRETS:
-            update["secret"] = env[CLIENT_SECRETS[client["clientId"]]]
+        if client["clientId"] in secret_keys:
+            update["secret"] = env[secret_keys[client["clientId"]]]
         kc("update", f"clients/{client_uuid}", body=update)
         attached = {
             s["name"] for s in kc("get", f"clients/{client_uuid}/default-client-scopes")
@@ -324,11 +338,12 @@ def main() -> None:
     parser.add_argument("--registry", default="http://localhost:8010")
     args = parser.parse_args()
 
-    env = ensure_generated_secrets(args.env_file)
+    export = json.loads(REALM_EXPORT.read_text())
+    env = ensure_generated_secrets(args.env_file, export)
     if not env.get("ADMIN_API_KEY"):
         sys.exit("❌ ADMIN_API_KEY is not set in .env")
     kc = Kcadm(args.cluster)
-    sync_realm(kc, json.loads(REALM_EXPORT.read_text()), env)
+    sync_realm(kc, export, env)
     org_id = sync_demo_tenant(kc, env["CHAT_UI_DEMO_PASSWORD"])
     grant_entitlements(org_id, env["ADMIN_API_KEY"], args.registry)
     print(
