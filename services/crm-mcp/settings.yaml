@@ -1,0 +1,99 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: Angel Martinez-Tenor
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+
+# crm-mcp: an example MCP server built with mcp-kit (docs/adr/0022), in front of crm-api. It accepts a
+# user's token issued for it (T1, audience crm-mcp), lets the policy decide the tools, exchanges T1 at
+# Keycloak for a token valid only at crm-api (T2), and calls crm-api as that user. Reached through the
+# MCP gateway (llm-gateway's /mcp/crm), never through Traefik.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the MCP server listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_ISSUER
+    description: "Keycloak realm issuer every accepted token must carry"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_JWKS_URL
+    description: "Keycloak realm JWKS endpoint (in-cluster URL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_TOKEN_URL
+    description: "Keycloak realm token endpoint for the token exchange (in-cluster URL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MCP_CLIENT_ID
+    description: "This server's Keycloak client: the audience a user token (T1) must name, and who exchanges it"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: MCP_CLIENT_SECRET
+    description: "This server's Keycloak client secret (CRM_MCP_CLIENT_SECRET in .env)"
+    type: string
+    mandatory: true
+    secret: true
+
+  - name: API_AUDIENCE
+    description: "The API's Keycloak client: the only audience a per-API token (T2) may have"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: API_BASE_URL
+    description: "Base URL of the API this server calls (in-cluster)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: POLICY_FILE
+    description: "Access policy: which tools each tenant and role may use (docs/adr/0022)"
+    type: string
+    mandatory: true
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/ai-circus/protocol/openid-connect/token"
+    MCP_CLIENT_ID: "crm-mcp"
+    API_AUDIENCE: "crm-api"
+    API_BASE_URL: "http://crm-api:8000"
+    POLICY_FILE: "policy.yaml"
+
+  local: {}
+    # Local development overrides
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

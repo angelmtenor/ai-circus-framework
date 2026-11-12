@@ -1,0 +1,7 @@
+# crm-mcp's access policy (docs/adr/0022): which tools each tenant and realm role may list and run.
+# The token decides tenant and roles; crm-api still applies its own row rules on every call.
+# Generated from the catalog in a later step; edited by hand for now.
+tenants: [lite-demo]
+roles:
+  retail_analyst: [search_customers, get_customer, top_customers]
+  retail_store_manager: [search_customers, get_customer]
