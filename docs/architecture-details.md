@@ -150,6 +150,16 @@ may run SQL. DataProductView's "Connect via MCP" tab reuses `McpConnectView` wit
 View-as headers. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
 
+**One address for every door** (docs/adr/0020): llm-gateway's LiteLLM is also the MCP gateway. `litellm_config.yaml`'s
+`mcp_servers` lists each door under its scenario slug, all `auth_type: true_passthrough`, so `/mcp/{slug},{slug}` reaches
+several doors with the caller's own token, the tools come back prefixed (`surf_retail-query_metric`), and each door still
+decides tenant, role and tools; `extra_headers` forwards data-api's View-as pair. With several doors in the URL, LiteLLM
+withholds a request-wide `Authorization` (one token is never replayed to several upstreams) and the client sends one
+`x-mcp-{slug}-authorization` per door; a door that refuses just contributes no tools. `/mcp` without a server falls back
+to LiteLLM's own key check. `tests/test_mcp_gateway.py` pins the contract (passthrough only, no credential, in-cluster
+doors of scenarios with `mcp.expose`, LiteLLM's own gating and no fan-out). The gateway has no Traefik router; `make
+k3s-mcp-portforward` adds `localhost:8033`.
+
 ## Knowledge graphs
 
 A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same

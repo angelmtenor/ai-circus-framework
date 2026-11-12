@@ -256,6 +256,30 @@ model_list:
       model: voyage/voyage-3.5-lite
       api_key: os.environ/VOYAGE_API_KEY
 
+# MCP gateway (docs/adr/0020): one address, /mcp/{server}[,{server}…], in front of the scenarios'
+# MCP doors (ADR 0019). Every entry is `true_passthrough`: the gateway skips its own key check
+# for these paths and forwards the caller's own Authorization header unchanged, so each door
+# still validates the token and decides tenant, entitlement, role and tools itself. The gateway
+# holds no credential for a door and never decides access (a test pins both). With several servers
+# in one URL the client sends one `x-mcp-{name}-authorization` header per server instead: LiteLLM
+# never replays one token to several upstreams. A path that names no server, or mixes in a server
+# of another auth type, falls back to the master key.
+# The entry name is the path segment and the tool prefix (`surf_retail-query_metric`); it must
+# not contain "-". Doors of tiers that are not deployed simply fail their own calls.
+mcp_servers:
+  ai_circus_reference:
+    url: http://rag-agent:8000/mcp/ai_circus_reference
+    transport: http
+    auth_type: true_passthrough
+    description: "Search and read the AI Circus reference notes (read-only)"
+  surf_retail:
+    url: http://data-api:8000/mcp/surf_retail
+    transport: http
+    auth_type: true_passthrough
+    # A platform key may "view as" a role, exactly as at the door itself (ADR 0019 step 2).
+    extra_headers: [X-Data-View-As, X-Data-View-As-Values]
+    description: "Governed metrics and records of Angel's Surf Co. (read-only, row-filtered by role)"
+
 litellm_settings:
   # Reasoning models (GPT-5.x) reject parameters such as `temperature: 0`, which
   # assistant sends for its repeatable rubric/extraction calls — drop a parameter the
