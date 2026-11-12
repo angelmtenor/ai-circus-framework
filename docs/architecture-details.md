@@ -169,6 +169,15 @@ manager does not and sees only S012). `scripts/chat_ui_identity.py` brings the l
 creates the `lite-demo` tenant. The client's tokens live 15 minutes because Open WebUI refreshes within 5 and the gateway
 binds an MCP session to its token.
 
+**An MCP server in front of an existing API** (docs/adr/0022) is built with `libs/mcp-kit` (`mcp_kit`): it validates the
+user's token (T1, audience = the server's Keycloak client), applies `policy.yaml` (tools per realm role, optionally per
+tenant: `tools/list` filtered, other calls refused, 403 when nothing is granted), exchanges T1 at Keycloak for a token whose
+only audience is its API (T2, RFC 8693, cached per T1), and gives tools `kit.context()`: the identity, read-only, and an API
+client that already holds T2. Tools take no identity arguments; every call writes one JSON audit line (call
+`configure_audit_output()` at start-up). In Keycloak each server is a confidential client with standard token exchange and
+one audience scope, and the `mcp-servers` scope puts it in the user token's audience. The example pair, `crm-mcp` in front of
+`crm-api` (`k8s/mcp-examples/`, `make k3s-mcp-examples-up`), is the gateway's `crm` door and a chat UI connection.
+
 ## Knowledge graphs
 
 A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same
