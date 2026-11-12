@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -541,6 +541,26 @@ k3s-chat-ui-up: ## OPTIONAL chat UI (k8s/chat-ui/, ADR 0021): Open WebUI at http
 
 k3s-chat-ui-down: ## Remove the optional chat UI. Keeps its data volume (`kubectl -n ai-circus delete pvc open-webui-data` to reclaim it) and the Keycloak demo tenant
 	@kubectl -n ai-circus delete deployment,service,ingressroute open-webui --ignore-not-found
+
+K3S_MCP_EXAMPLE_IMAGES = crm-api crm-mcp
+
+k3s-mcp-examples-up: ## OPTIONAL example of an MCP server in front of an existing API (k8s/mcp-examples/, ADR 0022): crm-api (a customer API) and crm-mcp (built with libs/mcp-kit), reached through the MCP gateway at /mcp/crm. Builds + imports both images, syncs the Keycloak realm (clients, token exchange), applies. Never part of k3s-all
+	@for svc in $(K3S_MCP_EXAMPLE_IMAGES); do \
+		echo "── ai-circus/$$svc:local ──"; \
+		docker build -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
+	done
+	@k3d image import $(foreach svc,$(K3S_MCP_EXAMPLE_IMAGES),ai-circus/$(svc):local) -c "$(K3S_CLUSTER)"
+	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
+	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
+	@./scripts/k3s_generate_secrets.sh >/dev/null
+	@kubectl apply -k k8s/mcp-examples
+	@kubectl -n ai-circus rollout restart deployment/crm-api deployment/crm-mcp >/dev/null
+	@kubectl -n ai-circus rollout status deployment/crm-api --timeout=300s
+	@kubectl -n ai-circus rollout status deployment/crm-mcp --timeout=300s
+	@echo "✓ MCP examples up — crm-mcp behind the MCP gateway at /mcp/crm (and in the chat UI's Integrations menu)"
+
+k3s-mcp-examples-down: ## Remove the example MCP server and API (the Keycloak clients stay)
+	@kubectl -n ai-circus delete deployment,service crm-api crm-mcp --ignore-not-found
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }

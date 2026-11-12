@@ -1,0 +1,127 @@
+# Example of the MCP Lite Stack's last mile (docs/adr/0022): crm-api, a customer API that knows nothing
+# about MCP, and crm-mcp, the MCP server built with mcp-kit in front of it. A user's token (T1) reaches
+# crm-mcp through the MCP gateway (llm-gateway's /mcp/crm); crm-mcp exchanges it at Keycloak for a
+# token valid only at crm-api (T2) and calls crm-api as that user. Neither has a Traefik route.
+# Never part of k3s-all: `make k3s-mcp-examples-up` / `make k3s-mcp-examples-down`. Mirrors
+# docker-compose.yml's profile "mcp-examples".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crm-api
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: crm-api}
+  template:
+    metadata:
+      labels: {app: crm-api}
+      # Platform observability contract (ADR 0015): scrape /metrics.
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: /metrics}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: crm-api
+          image: ai-circus/crm-api:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: crm-api-secrets}
+          resources:
+            requests: {cpu: 10m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crm-api
+  namespace: ai-circus
+spec:
+  selector: {app: crm-api}
+  ports:
+    - {port: 8000, targetPort: 8000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crm-mcp
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: crm-mcp}
+  template:
+    metadata:
+      labels: {app: crm-mcp}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: /metrics}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: crm-mcp
+          image: ai-circus/crm-mcp:local
+          imagePullPolicy: Never
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8000}
+          envFrom:
+            - configMapRef: {name: shared-config}
+            - secretRef: {name: crm-mcp-secrets}
+          env:
+            # Renamed from .env's CRM_MCP_CLIENT_SECRET: crm-mcp's own Keycloak client secret (token exchange).
+            - {name: MCP_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: crm-mcp-secrets, key: CRM_MCP_CLIENT_SECRET}}}
+          resources:
+            requests: {cpu: 10m, memory: 128Mi}
+            limits: {memory: 320Mi}
+          startupProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 90
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8000}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: crm-mcp
+  namespace: ai-circus
+spec:
+  selector: {app: crm-mcp}
+  ports:
+    - {port: 8000, targetPort: 8000}
