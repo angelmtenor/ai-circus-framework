@@ -69,6 +69,9 @@ step on `surf_retail` needs the Data Platform tiers running.
    this instance with an admin-only allow-list, and `allowed_tools` / `max_steps` as policy
    obligations per role. In-app data reads stay direct by default (ADR 0007).
 
+One address in front of every door, llm-gateway's `/mcp/{slug},{slug}` with the caller's token passed
+through, is ADR 0020.
+
 **Consequences.** One new dependency in `rag-agent`. A "Connect via MCP" card on a scenario that
 declares `mcp:` shows its endpoint and tools (read-only). External clients outside the local
 cluster wait for step 1.

@@ -442,13 +442,15 @@ k3s-portforward-stop: ## Stop the platform-registry port-forward (its systemd se
 k3s-portforward-uninstall: ## Remove the port-forward's systemd user service — back to re-running `make k3s-portforward` after every reboot
 	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)"
 
-k3s-mcp-portforward: ## OPTIONAL: standing port-forwards to the MCP doors — rag-agent on localhost:8031, and data-api on localhost:8032 when the Data Platform is up — so MCP clients on this machine (Claude Code…) reach /mcp/{slug} where *.localhost does not resolve (docs/adr/0019); same systemd user service as k3s-portforward
+k3s-mcp-portforward: ## OPTIONAL: standing port-forwards to the MCP doors — rag-agent on localhost:8031, data-api on localhost:8032 when the Data Platform is up — and to the MCP gateway in front of them (llm-gateway's /mcp/{slug},{slug}) on localhost:8033, so MCP clients on this machine (Claude Code…) reach them where *.localhost does not resolve (docs/adr/0019, 0020); same systemd user service as k3s-portforward
 	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${RAG_AGENT_MCP_PORT:-8031}" rag-agent
 	@if kubectl -n ai-circus get deployment/data-api >/dev/null 2>&1; then ./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${DATA_API_MCP_PORT:-8032}" data-api; fi
+	@./scripts/k3s_portforward.sh start "$(K3S_CLUSTER)" "$${MCP_GATEWAY_PORT:-8033}" llm-gateway
 
 k3s-mcp-portforward-uninstall: ## Remove the MCP port-forwards and their systemd user services
 	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)" "$${RAG_AGENT_MCP_PORT:-8031}" rag-agent
 	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)" "$${DATA_API_MCP_PORT:-8032}" data-api
+	@./scripts/k3s_portforward.sh uninstall "$(K3S_CLUSTER)" "$${MCP_GATEWAY_PORT:-8033}" llm-gateway
 
 # ── Deep learning scenarios (optional — NEVER part of `make all`/`k3s-all`) ─────
 # `kind: deep_learning` scenarios (scenarios/symptom_triage, scenarios/chest_xray_pneumonia,

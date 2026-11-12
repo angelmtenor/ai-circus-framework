@@ -25,3 +25,4 @@ pointer to its replacement.
 | [0017](0017-vllm-alongside-ollama.md) | vLLM is an optional GPU backend alongside Ollama, reached only through llm-gateway |
 | [0018](0018-several-models-per-scenario.md) | One scenario can hold several models (`extra_models:`), each addressed as `slug~id` with its own dataset and bucket; one UI tab per model |
 | [0019](0019-mcp-doors-and-tool-policy.md) | MCP is a door, not a kind: first a read-only `/mcp/{scenario_slug}` on `rag-agent` (list, search, read documents), existing identity; OAuth, `data-api`, models as tools and tool policy come later |
+| [0020](0020-mcp-gateway-without-enterprise.md) | llm-gateway is also the MCP gateway: `/mcp/{slug},{slug}` in front of the doors, every entry `true_passthrough` (the caller's token goes through, the doors decide), open-source LiteLLM features only |
