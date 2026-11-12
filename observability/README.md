@@ -7,8 +7,8 @@ Tempo, Grafana — shared by everything on the cluster). This framework ships on
 | Folder | What | Use it in your platform |
 |---|---|---|
 | [`collector/`](collector/otel-collector.yaml) | OpenTelemetry Collector (contrib) config: OTLP in, pod JSON logs tailed, redaction as defence in depth | merge into your collector; set `METRICS_REMOTE_WRITE_URL`, `TRACES_OTLP_ENDPOINT`, `LOGS_OTLP_ENDPOINT` |
-| [`dashboards/`](dashboards/) | Grafana: **LLM gateway** (calls, tokens, cost, latency, time to first token), **GPU**, **Model drift** | import; each picks its datasource through a `datasource` variable |
-| [`alerts/`](alerts/ai-circus-rules.yaml) | Prometheus rule groups: slow/expensive/silent LLM calls, 5xx rate, service down, model drift, GPU heat/memory | `rule_files`, vmalert `-rule=`, or a PrometheusRule's `spec` |
+| [`dashboards/`](dashboards/) | Grafana: **LLM gateway** (calls, tokens, cost, latency, time to first token), **GPU**, **Model drift**, **MCP servers** (calls, refusals, per-API tokens, audit lines) | import; each picks its datasource through a `datasource` variable |
+| [`alerts/`](alerts/ai-circus-rules.yaml) | Prometheus rule groups: slow/expensive/silent LLM calls, 5xx rate, service down, model drift, GPU heat/memory, MCP refusals and refused token exchanges | `rule_files`, vmalert `-rule=`, or a PrometheusRule's `spec` |
 
 Then point the framework at your collector — one key in `k8s/base/configmap.yaml` (`shared-config`):
 
@@ -28,6 +28,7 @@ and roll the deployments. `LOG_FORMAT: json` is already set there.
 | Model drift | `prediction`'s `/metrics` | `ai_circus_model_feature_psi{scenario,model_version,feature}`, `ai_circus_model_score_psi`, `ai_circus_model_drift_window_rows`, `ai_circus_scored_rows_total{scenario,model_variant}` |
 | GPU | NVIDIA's DCGM exporter where it runs; otherwise `data-platform-manager`'s `/metrics` (NVML) under the **same** names, `source="nvml"` | `DCGM_FI_DEV_GPU_UTIL`, `_FB_USED`, `_FB_FREE`, `_GPU_TEMP`, `_POWER_USAGE`; `ai_circus_gpu_telemetry_available` |
 | Logs | every pod's stdout, one JSON object per line | `ts`, `level`, `service`, `logger`, `msg`, `trace_id`, `span_id`, `exception` |
+| MCP servers (mcp-kit) | each server's `/metrics` and stdout ([ADR 0023](../docs/adr/0023-observability-of-the-mcp-path.md)) | `mcp_kit_tool_calls_total{server,tool,outcome}`, `mcp_kit_access_refused_total{server,reason}`, `mcp_kit_token_exchanges_total{server,outcome}`, `mcp_kit_api_responses_total{server,status_class}`, two latency histograms; audit lines (`logger` = `mcp_kit.audit`) with `trace_id` |
 
 The dashboards and rules group by `service` = the pod's `app` label — relabel your scrape the same way
 ([`bundle/config/scrape.yaml`](bundle/config/scrape.yaml) shows how).

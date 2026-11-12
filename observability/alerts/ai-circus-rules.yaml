@@ -78,3 +78,31 @@ groups:
         annotations:
           summary: "GPU {{ $labels.gpu }} memory above 95%"
           description: "A training Job may fail with out-of-memory; inference shares the same card."
+
+  # MCP servers built with mcp-kit (docs/adr/0022, 0023). Labels name servers, tools and reasons only.
+  - name: ai-circus.mcp
+    rules:
+      - alert: MCPAccessRefusalsSpike
+        expr: sum by (server, reason) (rate(mcp_kit_access_refused_total[10m])) * 60 > 5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.server }}: more than 5 refused requests a minute ({{ $labels.reason }})"
+          description: "Missing, forged or foreign tokens (unauthenticated) or callers with no granted tool (forbidden). A misconfigured client or someone probing: check the audit lines in Loki."
+      - alert: MCPTokenExchangeRefused
+        expr: sum by (server) (increase(mcp_kit_token_exchanges_total{outcome="refused"}[15m])) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.server }}: the identity provider refuses its per-API tokens"
+          description: "Check the server's Keycloak client: standard token exchange enabled, its API as its only audience scope, and its secret."
+      - alert: MCPToolErrorRate
+        expr: |
+          sum by (server) (rate(mcp_kit_tool_calls_total{outcome="error"}[10m]))
+            / sum by (server) (rate(mcp_kit_tool_calls_total[10m])) > 0.2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.server }}: more than 20% of tool calls fail"
+          description: "Usually the API behind the server is down or refusing (see the API panel of the MCP dashboard)."
+
