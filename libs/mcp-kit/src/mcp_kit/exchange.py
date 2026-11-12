@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from mcp_kit.telemetry import TOKEN_EXCHANGE_SECONDS, TOKEN_EXCHANGES
+
 TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
 ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 # Never reuse a T2 this close to its expiry.
@@ -49,6 +51,8 @@ class TokenExchanger:
         """`transport` is for tests; production uses the default HTTP transport."""
         self.settings = settings
         self._transport = transport
+        # The metrics label; McpKit sets it to the server's name.
+        self.server = "mcp-server"
         self._cache: OrderedDict[str, tuple[str, float]] = OrderedDict()
 
     @staticmethod
@@ -62,6 +66,7 @@ class TokenExchanger:
         now = time.time()
         if cached is not None and cached[1] - EXPIRY_MARGIN_SECONDS > now:
             self._cache.move_to_end(key)
+            TOKEN_EXCHANGES.labels(self.server, "cached").inc()
             return cached[0]
         data = {
             "grant_type": TOKEN_EXCHANGE_GRANT,
@@ -72,18 +77,23 @@ class TokenExchanger:
         }
         if self.settings.scope:
             data["scope"] = self.settings.scope
+        started = time.perf_counter()
         async with httpx.AsyncClient(timeout=self.settings.timeout_seconds, transport=self._transport) as client:
             response = await client.post(
                 self.settings.token_url, data=data, auth=(self.settings.client_id, self.settings.client_secret)
             )
+        TOKEN_EXCHANGE_SECONDS.labels(self.server).observe(time.perf_counter() - started)
         if response.status_code != 200:
+            TOKEN_EXCHANGES.labels(self.server, "refused").inc()
             # The provider's error code only (e.g. invalid_request, access_denied): never the token.
             code = response.json().get("error", "error") if "json" in response.headers.get("content-type", "") else ""
             raise ExchangeRefusedError(f"Token exchange refused ({response.status_code} {code}).")
         body = response.json()
         token = body.get("access_token")
         if not isinstance(token, str) or not token:
+            TOKEN_EXCHANGES.labels(self.server, "refused").inc()
             raise ExchangeRefusedError("Token exchange returned no access token.")
+        TOKEN_EXCHANGES.labels(self.server, "issued").inc()
         expires_at = now + float(body.get("expires_in") or 60)
         self._cache[key] = (token, expires_at)
         while len(self._cache) > MAX_CACHED_TOKENS:

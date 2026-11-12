@@ -30,6 +30,7 @@ configMapGenerator:
       - llm-gateway.json=dashboards/llm-gateway.json
       - gpu.json=dashboards/gpu.json
       - model-drift.json=dashboards/model-drift.json
+      - mcp.json=dashboards/mcp.json
   - name: vm-scrape-config
     namespace: observability
     files: [scrape.yaml=bundle/config/scrape.yaml]

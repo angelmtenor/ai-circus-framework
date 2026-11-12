@@ -285,3 +285,66 @@ def test_audit_output_is_json_lines_on_the_given_stream(rpc: Rpc, factory: Token
         audit.handlers[:], audit.level, audit.propagate = saved[0], saved[1], saved[2]
     (line,) = stream.getvalue().splitlines()
     assert json.loads(line)["outcome"] == "forbidden"
+
+
+# ── Telemetry (docs/adr/0023): metrics without tenants or users, audit lines in the platform's log shape ──
+
+
+def sample(name: str, **labels: str) -> float:
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value(name, labels) or 0.0
+
+
+def test_metrics_count_calls_refusals_exchanges_and_api_answers(rpc: Rpc, factory: TokenFactory) -> None:
+    before = {
+        "ok": sample("mcp_kit_tool_calls_total", server=SERVER, tool="lookup", outcome="ok"),
+        "denied": sample("mcp_kit_tool_calls_total", server=SERVER, tool="export_all", outcome="denied"),
+        "401": sample("mcp_kit_access_refused_total", server=SERVER, reason="unauthenticated"),
+        "issued": sample("mcp_kit_token_exchanges_total", server=SERVER, outcome="issued"),
+        "cached": sample("mcp_kit_token_exchanges_total", server=SERVER, outcome="cached"),
+        "2xx": sample("mcp_kit_api_responses_total", server=SERVER, status_class="2xx"),
+    }
+    token = factory.issue(audience=SERVER, roles=["store_manager"])
+    rpc(token, "tools/call", {"name": "lookup", "arguments": {"query": "a"}})
+    rpc(token, "tools/call", {"name": "lookup", "arguments": {"query": "b"}})
+    rpc(token, "tools/call", {"name": "export_all", "arguments": {}})
+    rpc(None, "tools/list")
+    assert sample("mcp_kit_tool_calls_total", server=SERVER, tool="lookup", outcome="ok") - before["ok"] == 2
+    assert (
+        sample("mcp_kit_tool_calls_total", server=SERVER, tool="export_all", outcome="denied") - before["denied"] == 1
+    )
+    assert sample("mcp_kit_access_refused_total", server=SERVER, reason="unauthenticated") - before["401"] == 1
+    assert sample("mcp_kit_token_exchanges_total", server=SERVER, outcome="issued") - before["issued"] == 1
+    assert sample("mcp_kit_token_exchanges_total", server=SERVER, outcome="cached") - before["cached"] == 1
+    assert sample("mcp_kit_api_responses_total", server=SERVER, status_class="2xx") - before["2xx"] == 2
+
+
+def test_metric_labels_never_carry_a_tenant_or_user() -> None:
+    from mcp_kit import telemetry
+
+    for metric in (
+        telemetry.TOOL_CALLS,
+        telemetry.TOOL_CALL_SECONDS,
+        telemetry.ACCESS_REFUSED,
+        telemetry.TOKEN_EXCHANGES,
+        telemetry.TOKEN_EXCHANGE_SECONDS,
+        telemetry.API_RESPONSES,
+    ):
+        assert set(metric._labelnames) <= {"server", "tool", "outcome", "reason", "status_class"}
+
+
+def test_audit_lines_follow_the_platform_log_shape_and_carry_the_trace() -> None:
+    from mcp_kit.telemetry import audit_record
+
+    line = json.loads(audit_record("mcp.tool_call", server=SERVER, tool="lookup", outcome="ok"))
+    assert {"ts", "level", "service", "logger", "msg"} <= set(line)
+    assert (line["service"], line["msg"], line["level"]) == (SERVER, "mcp.tool_call", "INFO")
+    sdk = pytest.importorskip("opentelemetry.sdk.trace")
+    from opentelemetry import trace
+
+    tracer = sdk.TracerProvider().get_tracer("test")
+    with tracer.start_as_current_span("call") as span:
+        traced = json.loads(audit_record("mcp.tool_call", server=SERVER))
+    assert traced["trace_id"] == f"{span.get_span_context().trace_id:032x}"
+    assert trace.get_current_span().get_span_context().is_valid is False

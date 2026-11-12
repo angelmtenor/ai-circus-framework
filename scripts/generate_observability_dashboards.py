@@ -310,9 +310,71 @@ DRIFT = dashboard(
     [query_var("scenario", "Scenario", "label_values(ai_circus_model_drift_window_rows, scenario)")],
 )
 
+# MCP servers built with mcp-kit (docs/adr/0022, 0023): their own /metrics (mcp_kit_*), the API behind them, and the
+# kit's audit lines in Loki (each linked to its trace). Labels are servers, tools, outcomes and reasons only.
+MCP = 'server=~"$server"'
+LOG_QUERY = '{service_name=~"$server"} | logger="mcp_kit.audit"'
+LOGS = {"type": "loki", "uid": "${logs}"}
+MCP_BOARD = dashboard(
+    "ai-circus-mcp",
+    "AI Circus · MCP servers — calls, refusals, per-API tokens",
+    "MCP servers built with mcp-kit (docs/adr/0022, 0023): tool calls, policy refusals, per-API token exchanges, "
+    "the API behind each server, and the audit lines.",
+    [
+        panel(1, "Tool calls in range", "stat", (0, 0, 6, 4),
+              [target(f"sum(increase(mcp_kit_tool_calls_total{{{MCP}}}[$__range]))")], decimals=0, no_value="0"),
+        panel(2, "Calls outside the grant", "stat", (6, 0, 6, 4),
+              [target(f'sum(increase(mcp_kit_tool_calls_total{{{MCP},outcome="denied"}}[$__range]))')],
+              decimals=0, no_value="0", thresholds=[("green", None), ("orange", 1)],
+              description="Tools a caller asked for but the policy does not give it."),
+        panel(3, "Refused before MCP (401 + 403)", "stat", (12, 0, 6, 4),
+              [target(f"sum(increase(mcp_kit_access_refused_total{{{MCP}}}[$__range]))")],
+              decimals=0, no_value="0", thresholds=[("green", None), ("orange", 1)],
+              description="Missing, forged, expired or foreign tokens (401) and callers with no granted tool (403)."),
+        panel(4, "Per-API tokens refused", "stat", (18, 0, 6, 4),
+              [target(f'sum(increase(mcp_kit_token_exchanges_total{{{MCP},outcome="refused"}}[$__range]))')],
+              decimals=0, no_value="0", thresholds=[("green", None), ("red", 1)],
+              description="The identity provider refused a per-API token: misconfiguration, or a server asking beyond its API."),
+        panel(5, "Tool calls per second by tool and outcome", "timeseries", (0, 4, 12, 8),
+              [target(f"sum by (server, tool, outcome) (rate(mcp_kit_tool_calls_total{{{MCP}}}[5m]))",
+                      "{{server}} {{tool}} {{outcome}}")], unit="reqps"),
+        panel(6, "Refused before MCP, by reason", "timeseries", (12, 4, 12, 8),
+              [target(f"sum by (server, reason) (rate(mcp_kit_access_refused_total{{{MCP}}}[5m]))", "{{server}} {{reason}}")],
+              unit="reqps", description="A sudden rise means a misconfigured client or someone probing."),
+        panel(7, "Tool call latency (p50 / p95), API call included", "timeseries", (0, 12, 12, 8),
+              [target(f"histogram_quantile(0.50, sum by (le, tool) (rate(mcp_kit_tool_call_duration_seconds_bucket{{{MCP}}}[5m])))", "p50 {{tool}}"),
+               target(f"histogram_quantile(0.95, sum by (le, tool) (rate(mcp_kit_tool_call_duration_seconds_bucket{{{MCP}}}[5m])))", "p95 {{tool}}", "B")],
+              unit="s"),
+        panel(8, "Per-API tokens: issued, cached, refused", "timeseries", (12, 12, 12, 8),
+              [target(f"sum by (outcome) (rate(mcp_kit_token_exchanges_total{{{MCP}}}[5m]))", "{{outcome}}")],
+              unit="reqps", description="Cached: the server reused the per-API token it already held for that user token."),
+        panel(9, "The API behind each server, by status class", "timeseries", (0, 20, 12, 8),
+              [target(f"sum by (server, status_class) (rate(mcp_kit_api_responses_total{{{MCP}}}[5m]))", "{{server}} {{status_class}}")],
+              unit="reqps", description="4xx is the API's own refusals: another store, another user named in the request."),
+        panel(10, "Token exchange round trip (p95)", "timeseries", (12, 20, 12, 8),
+              [target(f"histogram_quantile(0.95, sum by (le, server) (rate(mcp_kit_token_exchange_duration_seconds_bucket{{{MCP}}}[5m])))", "{{server}}")],
+              unit="s"),
+        {
+            "id": 11,
+            "type": "logs",
+            "title": "Audit lines: who, which tool, which outcome (never arguments, results or tokens)",
+            "description": "One line per decision of the kit. Open a line to jump to its trace.",
+            "datasource": LOGS,
+            "gridPos": {"x": 0, "y": 28, "w": 24, "h": 10},
+            "options": {"showTime": True, "wrapLogMessage": True, "enableLogDetails": True, "sortOrder": "Descending"},
+            "targets": [{"datasource": LOGS, "expr": LOG_QUERY, "refId": "A", "queryType": "range"}],
+        },
+    ],
+    [
+        # ".+" for All: Loki refuses a selector that can match an empty value.
+        {**query_var("server", "MCP server", "label_values(mcp_kit_tool_calls_total, server)"), "allValue": ".+"},
+        {"name": "logs", "label": "Logs", "type": "datasource", "query": "loki", "current": {}, "hide": 0},
+    ],
+)
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, board in (("llm-gateway", GATEWAY), ("gpu", GPU), ("model-drift", DRIFT)):
+    for name, board in (("llm-gateway", GATEWAY), ("gpu", GPU), ("model-drift", DRIFT), ("mcp", MCP_BOARD)):
         path = OUT / f"{name}.json"
         path.write_text(json.dumps(board, indent=2, ensure_ascii=False) + "\n")
         print(f"wrote {path}")
