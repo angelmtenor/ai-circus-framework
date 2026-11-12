@@ -48,3 +48,7 @@ reads. `libs/shared/tests/test_keycloak_realm.py` pins all of it: verified live 
 `KC_HOSTNAME` is the full public URL with `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`: a client inside
 the cluster gets in-cluster token and JWKS URLs, while the issuer and login pages stay public.
 
+MCP servers in front of an API (docs/adr/0022): each is a confidential client with standard token exchange
+(`standard.token.exchange.enabled`) and exactly one audience scope, its API (`crm-mcp` → `crm-api-audience`). The
+`mcp-servers` scope puts every such client in the user token's audience, which Keycloak requires before a client
+may exchange a token; impersonation is never granted. `libs/shared/tests/test_keycloak_realm.py` pins both.

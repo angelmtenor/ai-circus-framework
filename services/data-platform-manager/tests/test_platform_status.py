@@ -244,6 +244,8 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "dl-inference",
         "vllm",
         "open-webui",
+        "crm-mcp",
+        "crm-api",
         "assistant",
         "rag-agent",
         "form-agent",
@@ -277,6 +279,8 @@ def test_targets_cover_every_compose_and_k8s_service() -> None:
         "dl-inference",
         "vllm",
         "open-webui",
+        "crm-mcp",
+        "crm-api",
         "opa",
     } | data_tiers | obs_bundle
     assert {t.name for t in platform_status.TARGETS if t.console_url} == {

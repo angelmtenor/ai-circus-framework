@@ -4,6 +4,21 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.52.0 — 2026-11-12
+
+### Added
+- **MCP server kit, `libs/mcp-kit`** (ADR 0022): an MCP server in front of an existing API inherits its security, so its own
+  code is its tools only. The kit validates the user's token (401 otherwise), applies a `policy.yaml` of tools per role and
+  tenant (403 when nothing is granted), exchanges the token at Keycloak for one valid only at its API, hands tools a
+  read-only identity and an API client that already holds that token, and writes one audit line per call with ids and
+  outcomes only. `mcp_kit.testing` replays the failure cases.
+- **Per-API tokens with Keycloak's standard token exchange**: each MCP server may exchange a user's token only for its own
+  API, never impersonate, and never get the platform audience.
+- **Example pair, optional**: `make k3s-mcp-examples-up` deploys `crm-api` (a customer API that accepts only tokens issued for
+  it and refuses requests naming someone else) and `crm-mcp` (built with the kit). The MCP gateway serves it as `/mcp/crm`
+  and the chat UI lists "Customers (CRM)": the analyst gets every shop and `top_customers`, the S012 store manager only S012.
+  A user's token replayed straight at the API is refused.
+
 ## v0.51.0 — 2026-11-12
 
 ### Added

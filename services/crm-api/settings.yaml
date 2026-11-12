@@ -1,0 +1,65 @@
+# settings.yaml
+# Configuration file for environment variables required by the application
+# Author: Angel Martinez-Tenor
+# Defines variable names, descriptions, types, constraints, and validation rules.
+# Run 'make generate-data-model' after any change to sync data_model.py and .env.example.
+
+# crm-api: an example customer API behind an MCP server (docs/adr/0022). It knows nothing about MCP
+# or models: it validates a token issued for it (audience crm-api), takes the user and tenant from that
+# token only, and returns what the caller's role may see, with personal fields masked. Never exposed
+# through Traefik: only crm-mcp calls it.
+
+env_variables:
+  - name: LOG_LEVEL
+    description: "Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: HTTP_PORT
+    description: "Port the API listens on"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_ISSUER
+    description: "Keycloak realm issuer every accepted token must carry"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: KEYCLOAK_JWKS_URL
+    description: "Keycloak realm JWKS endpoint (in-cluster URL)"
+    type: string
+    mandatory: true
+    secret: false
+
+  - name: API_AUDIENCE
+    description: "The audience a token must name to be accepted here: this API's Keycloak client id"
+    type: string
+    mandatory: true
+    secret: false
+
+# Optional global settings
+global_settings:
+  env_file: ".env"          # Default location for environment variable file
+  fail_on_missing: true     # Stop execution if mandatory variables are missing
+  case_sensitive: true      # Enforce case sensitivity for variable names
+
+# Per-environment non-secret overrides.
+# Secrets MUST never appear here — use .env (local) or CI/CD secret injection (cloud).
+# APP_ENVIRONMENT selects the active profile (default: local).
+environments:
+  base:
+    LOG_LEVEL: "INFO"
+    HTTP_PORT: "8000"
+    API_AUDIENCE: "crm-api"
+
+  local: {}
+    # Local development overrides
+
+  staging: {}
+    # Staging environment profile — overrides go here
+
+  production: {}
+    # Production environment profile — overrides go here

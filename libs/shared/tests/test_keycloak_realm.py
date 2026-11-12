@@ -55,8 +55,11 @@ def test_organization_claim_is_keyed_by_alias_with_the_id() -> None:
     assert organization["config"]["access.token.claim"] == "true"
 
 
-@pytest.mark.parametrize("client", REALM["clients"], ids=lambda c: c["clientId"])
-def test_every_client_issues_the_claims_the_services_need(client: dict[str, Any]) -> None:
+SIGN_IN_CLIENTS = [c for c in REALM["clients"] if c.get("standardFlowEnabled")]
+
+
+@pytest.mark.parametrize("client", SIGN_IN_CLIENTS, ids=lambda c: c["clientId"])
+def test_every_sign_in_client_issues_the_claims_the_services_need(client: dict[str, Any]) -> None:
     missing = REQUIRED_DEFAULT_SCOPES - set(client["defaultClientScopes"])
     assert not missing, f"{client['clientId']} lacks default scopes {missing}"
     assert set(client["defaultClientScopes"]) <= set(SCOPES) | {"web-origins", "acr"}, "a default scope is undeclared"
@@ -77,3 +80,33 @@ def test_chat_ui_client_is_confidential_and_outlives_its_refresh_buffer() -> Non
     assert "secret" not in chat, "the chat UI's secret lives in .env, never in this file"
     assert not chat["directAccessGrantsEnabled"]
     assert int(chat["attributes"]["access.token.lifespan"]) > 2 * CHAT_UI_REFRESH_BUFFER_SECONDS
+
+
+def audiences(scope: str) -> set[str]:
+    """The client ids one scope's audience mappers add."""
+    return {m["config"]["included.client.audience"] for m in mappers(scope, "oidc-audience-mapper")}
+
+
+def test_mcp_servers_are_in_the_user_token_audience() -> None:
+    # Keycloak only lets a client exchange a token it is an audience of (docs/adr/0022).
+    (chat,) = [c for c in REALM["clients"] if c["clientId"] == "open-webui"]
+    assert "mcp-servers" in chat["defaultClientScopes"]
+    exchangers = {
+        c["clientId"] for c in REALM["clients"] if c["attributes"].get("standard.token.exchange.enabled") == "true"
+    }
+    assert exchangers and exchangers <= audiences("mcp-servers")
+
+
+@pytest.mark.parametrize(
+    "client",
+    [c for c in REALM["clients"] if c["attributes"].get("standard.token.exchange.enabled") == "true"],
+    ids=lambda c: c["clientId"],
+)
+def test_an_mcp_server_may_exchange_for_its_own_api_only(client: dict[str, Any]) -> None:
+    assert client["publicClient"] is False and "secret" not in client
+    assert not client["standardFlowEnabled"] and not client["directAccessGrantsEnabled"]
+    reachable = set().union(
+        *(audiences(name) for name in client["defaultClientScopes"] + client["optionalClientScopes"])
+    )
+    assert len(reachable) == 1, f"{client['clientId']} could obtain tokens for {reachable}"
+    assert "platform-backend" not in client["defaultClientScopes"], "a T2 must not be valid at the platform's services"

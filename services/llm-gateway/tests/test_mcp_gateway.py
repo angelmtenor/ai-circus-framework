@@ -29,6 +29,7 @@ from tests.conftest import LITELLM_LOOP
 
 SERVICE_DIR = Path(__file__).resolve().parents[1]
 SCENARIOS_DIR = SERVICE_DIR.parents[1] / "scenarios"
+SERVICES_DIR = SERVICE_DIR.parent
 # What an entry may carry: routing and description only. Any credential field (a token, a client
 # secret, static headers) would make the gateway hold a door's credential.
 ALLOWED_KEYS = {"url", "transport", "auth_type", "description", "extra_headers"}
@@ -51,16 +52,30 @@ def test_every_door_is_passthrough_and_carries_no_credential() -> None:
         assert not forwarded & CREDENTIAL_HEADERS, f"{name} forwards a credential header by name"
 
 
-def test_every_door_is_an_in_cluster_scenario_door() -> None:
+def is_kit_server(service: str) -> bool:
+    """Whether `services/<service>` is an MCP server built with mcp-kit (docs/adr/0022)."""
+    pyproject = SERVICES_DIR / service / "pyproject.toml"
+    return pyproject.is_file() and '"mcp-kit"' in pyproject.read_text()
+
+
+def test_every_door_is_an_in_cluster_scenario_door_or_kit_server() -> None:
     for name, entry in mcp_servers().items():
         url = urlparse(entry["url"])
         assert url.scheme == "http" and url.hostname and "." not in url.hostname, (
             f"{name} must be an in-cluster service"
         )
-        assert url.path == f"/mcp/{name}", f"{name}: the entry name must be the door's scenario slug"
         assert "-" not in name, f"{name}: LiteLLM uses '-' as the tool prefix separator"
-        scenario = yaml.safe_load((SCENARIOS_DIR / name / "scenario.yaml").read_text())
-        assert scenario.get("mcp", {}).get("expose"), f"scenario {name} declares no MCP door"
+        if (SCENARIOS_DIR / name / "scenario.yaml").is_file():
+            # A scenario's door (ADR 0019): /mcp/{slug} on the service of its kind.
+            assert url.path == f"/mcp/{name}", f"{name}: the entry name must be the door's scenario slug"
+            scenario = yaml.safe_load((SCENARIOS_DIR / name / "scenario.yaml").read_text())
+            assert scenario.get("mcp", {}).get("expose"), f"scenario {name} declares no MCP door"
+        else:
+            # An MCP server in front of an API (ADR 0022): the kit serves it at /mcp/.
+            assert is_kit_server(url.hostname or ""), (
+                f"{name}: {url.hostname} is neither a scenario door nor a kit server"
+            )
+            assert url.path == "/mcp/", f"{name}: a kit server's endpoint is /mcp/"
 
 
 @pytest.fixture
