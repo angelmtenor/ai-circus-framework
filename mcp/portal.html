@@ -273,6 +273,7 @@ function renderAccess() {
     const tenants = s.tenants ? s.tenants.map((t) => h("span", { class: "chip", text: t })) : [h("span", { class: "meta", text: "any tenant" })];
     return h("div", { class: "card" },
       h("div", { class: "card-head" }, h("h3", { text: s.title }), h("span", { class: "badge kit", text: "kit server" }),
+        s.level === 3 ? h("span", { class: "badge", text: "level 3" }) : null,
         h("span", { class: "meta mono", text: `/mcp/${name} → ${s.service} → ${s.api}` })),
       h("div", { class: "meta", style: "margin-bottom:8px" }, "Tenants: ", ...tenants),
       groups.length
@@ -295,6 +296,14 @@ function renderAccess() {
     : "";
 }
 
+// ── security level (docs/adr/0025) ──
+const LEVELS = [["2", "2 · per-API exchange"], ["3", "3 · regulated (DPoP, mTLS)"]];
+function levelSelect(value, onChange) {
+  return h("label", { class: "field" }, "Security level",
+    h("select", { onchange: (ev) => onChange(Number(ev.target.value)) },
+      LEVELS.map(([v, label]) => h("option", { value: v, text: label, selected: String(value || 2) === v }))));
+}
+
 // ── servers ────────────────────────────────────────────────────────────────────────────────────────
 function textField(label, value, onInput, attrs) {
   return h("label", { class: "field" }, label, h("input", { type: "text", value: value || "", maxlength: 160, ...(attrs || {}), oninput: (ev) => onInput(ev.target.value) }));
@@ -314,6 +323,7 @@ function renderServers() {
         const t = listOf(v); if (t.length) s.tenants = t; else delete s.tenants; edited(); renderAccess();
       }));
       fields.push(textField("Tools (comma-separated)", s.tools.join(", "), (v) => { s.tools = listOf(v); edited(); renderAccess(); }));
+      fields.push(levelSelect(s.level, (v) => { if (v === 3) s.level = 3; else delete s.level; edited(); renderAccess(); }));
     }
     const sameTools = JSON.stringify([...code].sort()) === JSON.stringify([...(s.tools || [])].sort());
     return h("div", { class: "card" },
@@ -353,7 +363,7 @@ function renderAddForm() {
       name: svc.replace(/-mcp$/, "").replace(/-/g, "_"), api: svc.replace(/-mcp$/, "") + "-api",
       tools: (S.kit_services.find((k) => k.service === svc) || { tools: [] }).tools.join(", "),
     });
-    Object.assign(f, defaults(f.service), { title: "", description: "", tenants: "" });
+    Object.assign(f, defaults(f.service), { title: "", description: "", tenants: "", level: 2 });
     const inputs = {};
     const field = (key, label, attrs) => {
       const input = h("input", { type: "text", value: f[key], maxlength: 160, ...(attrs || {}), oninput: (ev) => { f[key] = ev.target.value; } });
@@ -372,13 +382,15 @@ function renderAddForm() {
         field("title", "Title", { placeholder: "e.g. Invoices" }),
         field("description", "Description", { placeholder: "What a person may do with it (read-only?)" }),
         field("tenants", "Tenants (comma-separated; empty = any)"),
-        field("tools", "Tools (found in its code)")),
+        field("tools", "Tools (found in its code)"),
+        levelSelect(f.level, (v) => { f.level = v; })),
       h("div", { class: "row", style: "margin-top:12px" }, h("button", { type: "button", class: "primary", text: "Add server", onclick: () => {
         if (!NAME.test(f.name)) return alert("The name is lowercase letters, digits and _ (no -).");
         if (C.servers[f.name]) return alert(`${f.name} is already in the catalog.`);
         if (!f.title.trim() || !f.description.trim()) return alert("A title and a description are needed.");
         const entry = { kind: "kit_server", service: f.service, api: f.api.trim(), title: f.title.trim(), description: f.description.trim() };
         if (listOf(f.tenants).length) entry.tenants = listOf(f.tenants);
+        if (f.level === 3) entry.level = 3;
         entry.tools = listOf(f.tools);
         C.servers[f.name] = entry;
         $("add-server").open = false; edited(); render();
