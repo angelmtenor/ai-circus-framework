@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check k3s-mcp-catalog-apply all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -573,6 +573,9 @@ mcp-catalog: ## Regenerate every file mcp/catalog.yaml decides (ADR 0024), then 
 
 mcp-catalog-check: ## Fail if a file generated from mcp/catalog.yaml drifted (CI runs the same check in libs/shared's tests)
 	@$(MCP_CATALOG) --check
+
+mcp-catalog-portal: ## OPTIONAL local portal over mcp/catalog.yaml (ADR 0024) at http://127.0.0.1:8040 (MCP_PORTAL_PORT): tick tools per group, add a server, review the diffs, publish (= make mcp-catalog). Never deploys or commits
+	@$(MCP_CATALOG:generate_mcp_catalog.py=mcp_catalog_portal.py) --port "$${MCP_PORTAL_PORT:-8040}"
 
 k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), rebuild + import + restart llm-gateway and every deployed kit server, re-apply the chat UI's connections if it is deployed
 	@$(MCP_CATALOG) --check

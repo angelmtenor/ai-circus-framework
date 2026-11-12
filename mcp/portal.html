@@ -1,0 +1,485 @@
+<!doctype html>
+<!-- The MCP catalog portal (docs/adr/0024), served only by scripts/mcp_catalog_portal.py: `make mcp-catalog-portal`.
+     The server fills in the per-run token and the script nonce; the page renders every value as text, never as HTML. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Catalog</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #ffffff; --ink: #1a1e24; --muted: #5d6673; --line: #e1e4e9; --soft: #f0f2f5;
+    --accent: #3451c9; --accent-soft: #e9edfb; --accent-ink: #ffffff;
+    --ok: #237a39; --ok-soft: #e5f4e9; --warn: #9a5b00; --warn-soft: #fdf1df; --err: #b42323; --err-soft: #fbe8e8;
+    --add: #e3f3e7; --add-ink: #1d6b31; --del: #fbe9e9; --del-ink: #9d2222;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Menlo, Consolas, monospace;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --ink: #e6e9ed; --muted: #98a2ae; --line: #282e37; --soft: #1e232a;
+      --accent: #8aa2ff; --accent-soft: #1f2741; --accent-ink: #0c1124;
+      --ok: #6fd38a; --ok-soft: #15291c; --warn: #f2b45e; --warn-soft: #2e2313; --err: #ff8a8a; --err-soft: #331a1c;
+      --add: #14291a; --add-ink: #8be0a1; --del: #321a1c; --del-ink: #ff9f9f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  code, pre, .mono { font-family: var(--mono); font-size: 13px; }
+  header.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1120px; margin: 0 auto; padding: 14px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .brand { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+  .brand b { font-size: 17px; letter-spacing: -0.01em; }
+  .brand span { color: var(--muted); font-size: 13px; }
+  main { max-width: 1120px; margin: 0 auto; padding: 8px 16px 64px; }
+  section { margin-top: 28px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 4px; }
+  p.intro { margin: 0 0 14px; color: var(--muted); max-width: 820px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+  .card-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+  .card-head h3 { margin: 0; font-size: 16px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.err { background: var(--err-soft); color: var(--err); }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 6px; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  .badge.kit { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .chip { display: inline-block; font-family: var(--mono); font-size: 12px; padding: 1px 7px; border-radius: 6px; background: var(--soft); margin: 0 4px 4px 0; }
+  button { font: inherit; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 7px 14px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+  button.link { border: none; background: none; color: var(--muted); padding: 4px 6px; font-size: 13px; }
+  button.link:hover { color: var(--err); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type=text], select { font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; width: 100%; min-width: 0; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+  input[type=checkbox]:disabled { cursor: default; }
+  label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.access { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 480px; }
+  table.access th, table.access td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: center; }
+  table.access th { font-weight: 500; font-size: 12px; color: var(--muted); vertical-align: bottom; white-space: nowrap; }
+  table.access th.tool { font-family: var(--mono); font-size: 12px; }
+  table.access th:first-child, table.access td:first-child { text-align: left; }
+  table.access td.all { border-left: 1px dashed var(--line); }
+  table.access tr:last-child td { border-bottom: none; }
+  table.access tbody tr:hover td { background: var(--soft); }
+  td.role b { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  td.role small { display: block; color: var(--muted); font-size: 12px; max-width: 280px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .row > select { width: auto; min-width: 220px; }
+  .note { border-left: 3px solid var(--line); padding: 4px 0 4px 12px; color: var(--muted); font-size: 14px; }
+  .msg { border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+  .msg.err { background: var(--err-soft); color: var(--err); }
+  .msg.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg.ok { background: var(--ok-soft); color: var(--ok); }
+  details.file { border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; background: var(--panel); }
+  details.file summary { padding: 8px 12px; cursor: pointer; font-family: var(--mono); font-size: 13px; }
+  pre.diff { margin: 0; padding: 8px 0; overflow-x: auto; border-top: 1px solid var(--line); line-height: 1.45; }
+  pre.diff span { display: block; padding: 0 12px; white-space: pre; }
+  pre.diff .a { background: var(--add); color: var(--add-ink); }
+  pre.diff .d { background: var(--del); color: var(--del-ink); }
+  pre.diff .h { color: var(--muted); }
+  pre.block { background: var(--soft); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+  details.add > summary { cursor: pointer; font-weight: 600; list-style: none; display: inline-flex; gap: 8px; align-items: center; }
+  details.add > summary::before { content: "+"; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  details.add[open] > summary { margin-bottom: 12px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .seg button { border: none; border-radius: 0; }
+  .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .empty { color: var(--muted); font-style: italic; }
+  @media (max-width: 640px) { .bar { padding: 10px 16px; } .brand span { display: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="bar">
+    <div class="brand"><b>MCP catalog</b><span>mcp/catalog.yaml: one file decides the gateway, the chat UI, each server's policy and Keycloak</span></div>
+    <span id="status" class="pill warn">Loading…</span>
+    <button id="discard" type="button" disabled>Discard edits</button>
+    <button id="review-btn" type="button">Review changes</button>
+    <button id="publish" type="button" class="primary" disabled>Publish</button>
+  </div>
+</header>
+<main>
+  <div id="load-error"></div>
+
+  <section id="access">
+    <h2>Who may run what</h2>
+    <p class="intro">Each group is a realm role in the user's token. Tick the tools a group may list and run on each MCP server
+      built with the kit; a group that is not ticked sees the server refuse it. This is the security control: the server
+      enforces it on every call, whatever the chat UI shows.</p>
+    <div id="access-cards"></div>
+    <div class="card">
+      <div class="row">
+        <select id="new-group" aria-label="Realm role to add as a group"></select>
+        <button id="add-group" type="button">Add group</button>
+        <span class="meta">Only realm roles of infra/keycloak/realm-export.json can be groups.</span>
+      </div>
+    </div>
+    <p id="doors-note" class="note"></p>
+  </section>
+
+  <section id="servers">
+    <h2>Servers</h2>
+    <p class="intro">Every server is one route on the MCP gateway (<code>/mcp/&lt;name&gt;</code>) and one connection in the chat UI.
+      The title and description are what people and models see.</p>
+    <div id="server-list"></div>
+    <details class="card add" id="add-server">
+      <summary>Add a server</summary>
+      <div class="seg" role="group" aria-label="Kind of server">
+        <button type="button" id="kind-kit" aria-pressed="true">An API's MCP server</button>
+        <button type="button" id="kind-door" aria-pressed="false">A scenario's door</button>
+      </div>
+      <div id="add-form"></div>
+    </details>
+  </section>
+
+  <section id="review" hidden>
+    <h2>Review</h2>
+    <div id="review-body"></div>
+  </section>
+</main>
+
+<script nonce="__NONCE__">
+"use strict";
+const TOKEN = "__PORTAL_TOKEN__";
+const NAME = /^[a-z][a-z0-9_]{0,39}$/;
+let S = null;        // the server's state: catalog as on disk, realm roles, kit services, scenario doors
+let C = null;        // the catalog being edited
+let reviewedAs = null; // JSON of the catalog the last successful review saw
+let reviewChanged = 0;
+let addKind = "kit";
+
+const $ = (id) => document.getElementById(id);
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "checked" || k === "disabled" || k === "selected") el[k] = Boolean(v);
+    else if (k === "value") el.value = v;
+    else el.setAttribute(k, v === true ? "" : String(v));
+  }
+  for (const kid of kids.flat()) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const servers = () => Object.entries(C.servers || {});
+const kitServers = () => servers().filter(([, s]) => s.kind === "kit_server");
+const doors = () => servers().filter(([, s]) => s.kind === "scenario_door");
+const dirty = () => JSON.stringify(C) !== JSON.stringify(S.catalog);
+const listOf = (text) => text.split(",").map((t) => t.trim()).filter(Boolean);
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "X-Portal-Token": TOKEN, "Content-Type": "application/json" } : { "X-Portal-Token": TOKEN },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
+  return data;
+}
+
+async function load() {
+  try {
+    S = await api("/api/state");
+    C = clone(S.catalog);
+    C.groups = C.groups || {};
+    $("load-error").replaceChildren();
+    render();
+  } catch (e) {
+    $("load-error").replaceChildren(h("div", { class: "msg err", text: `Could not load the catalog: ${e.message}` }));
+  }
+}
+
+function edited() {
+  reviewedAs = null;
+  renderStatus();
+  const body = $("review-body");
+  if (!$("review").hidden && !body.querySelector(".stale")) {
+    body.prepend(h("div", { class: "msg warn stale", text: "The catalog changed since this review: review again before publishing." }));
+  }
+}
+
+function renderStatus() {
+  const pill = $("status");
+  if (S.error && !dirty()) { pill.className = "pill err"; pill.textContent = "Catalog invalid"; pill.title = S.error; }
+  else if (dirty()) { pill.className = "pill warn"; pill.textContent = "Unpublished edits"; pill.title = ""; }
+  else if (!S.in_sync) { pill.className = "pill warn"; pill.textContent = "Generated files drifted"; pill.title = "Review, then publish to regenerate them"; }
+  else { pill.className = "pill ok"; pill.textContent = "In sync"; pill.title = ""; }
+  $("discard").disabled = !dirty();
+  $("publish").disabled = !(reviewedAs !== null && reviewedAs === JSON.stringify(C) && reviewChanged > 0);
+}
+
+function render() {
+  renderAccess();
+  renderServers();
+  renderAddForm();
+  renderStatus();
+}
+
+// ── access: groups × tools per kit server ─────────────────────────────────────────────────────────
+function grantOf(group, name) { return (C.groups[group] || {})[name]; }
+function setGrant(group, name, grant) {
+  C.groups[group] = C.groups[group] || {};
+  if (grant === "*" || (Array.isArray(grant) && grant.length)) C.groups[group][name] = grant;
+  else delete C.groups[group][name];
+  edited();
+  renderAccess();
+}
+function roleDescription(role) { return (S.realm_roles.find((r) => r.name === role) || {}).description || ""; }
+
+function renderAccess() {
+  const groups = Object.keys(C.groups);
+  const cards = kitServers().map(([name, s]) => {
+    const head = h("tr", {}, h("th", { scope: "col", text: "Group" }),
+      s.tools.map((t) => h("th", { scope: "col", class: "tool", text: t })),
+      h("th", { scope: "col", text: "All tools (*)", title: "Every tool of this server, including ones added later" }));
+    const rows = groups.map((group) => {
+      const grant = grantOf(group, name);
+      const all = grant === "*";
+      return h("tr", {},
+        h("td", { class: "role" }, h("b", { text: group }), roleDescription(group) && h("small", { text: roleDescription(group) })),
+        s.tools.map((t) => h("td", {}, h("input", {
+          type: "checkbox", "aria-label": `${group} may run ${t} on ${name}`, checked: all || (Array.isArray(grant) && grant.includes(t)), disabled: all,
+          onchange: (ev) => {
+            const now = new Set(Array.isArray(grant) ? grant : []);
+            ev.target.checked ? now.add(t) : now.delete(t);
+            setGrant(group, name, s.tools.filter((x) => now.has(x)));
+          },
+        }))),
+        h("td", { class: "all" }, h("input", {
+          type: "checkbox", "aria-label": `${group} may run every tool of ${name}`, checked: all,
+          onchange: (ev) => setGrant(group, name, ev.target.checked ? "*" : [...s.tools]),
+        })));
+    });
+    const tenants = s.tenants ? s.tenants.map((t) => h("span", { class: "chip", text: t })) : [h("span", { class: "meta", text: "any tenant" })];
+    return h("div", { class: "card" },
+      h("div", { class: "card-head" }, h("h3", { text: s.title }), h("span", { class: "badge kit", text: "kit server" }),
+        h("span", { class: "meta mono", text: `/mcp/${name} → ${s.service} → ${s.api}` })),
+      h("div", { class: "meta", style: "margin-bottom:8px" }, "Tenants: ", ...tenants),
+      groups.length
+        ? h("div", { class: "scroll" }, h("table", { class: "access" }, h("thead", {}, head), h("tbody", {}, rows)))
+        : h("p", { class: "empty", text: "No group yet: add one below." }));
+  });
+  const groupRows = groups.length ? h("div", { class: "card" },
+    h("div", { class: "card-head" }, h("h3", { text: "Groups" }), h("span", { class: "meta", text: "Removing a group removes every grant it has." })),
+    h("div", { class: "row" }, groups.map((g) => h("span", { class: "chip" }, g,
+      h("button", { type: "button", class: "link", "aria-label": `Remove group ${g}`, text: "✕", onclick: () => { delete C.groups[g]; edited(); render(); } }))))) : null;
+  $("access-cards").replaceChildren(...(cards.length ? cards : [h("div", { class: "card empty", text: "No MCP server built with the kit is in the catalog yet." })]), ...(groupRows ? [groupRows] : []));
+
+  const free = S.realm_roles.filter((r) => !(r.name in C.groups));
+  $("new-group").replaceChildren(...(free.length ? free.map((r) => h("option", { value: r.name, text: r.name })) : [h("option", { value: "", text: "Every realm role is already a group" })]));
+  $("add-group").disabled = !free.length;
+
+  const doorNames = doors().map(([n]) => n);
+  $("doors-note").textContent = doorNames.length
+    ? `Scenario doors (${doorNames.join(", ")}) are not listed here: each tenant's entitlement and the scenario's own roles decide their tools.`
+    : "";
+}
+
+// ── servers ────────────────────────────────────────────────────────────────────────────────────────
+function textField(label, value, onInput, attrs) {
+  return h("label", { class: "field" }, label, h("input", { type: "text", value: value || "", maxlength: 160, ...(attrs || {}), oninput: (ev) => onInput(ev.target.value) }));
+}
+
+function renderServers() {
+  const list = servers().map(([name, s]) => {
+    const update = (key) => (value) => { s[key] = value; edited(); };
+    const isKit = s.kind === "kit_server";
+    const code = isKit ? (S.kit_services.find((k) => k.service === s.service) || { tools: [] }).tools : [];
+    const fields = [
+      textField("Title", s.title, (v) => { s.title = v; edited(); renderAccess(); }),
+      textField("Description", s.description, update("description")),
+    ];
+    if (isKit) {
+      fields.push(textField("Tenants (organization aliases, comma-separated; empty = any)", (s.tenants || []).join(", "), (v) => {
+        const t = listOf(v); if (t.length) s.tenants = t; else delete s.tenants; edited(); renderAccess();
+      }));
+      fields.push(textField("Tools (comma-separated)", s.tools.join(", "), (v) => { s.tools = listOf(v); edited(); renderAccess(); }));
+    }
+    const sameTools = JSON.stringify([...code].sort()) === JSON.stringify([...(s.tools || [])].sort());
+    return h("div", { class: "card" },
+      h("div", { class: "card-head" }, h("h3", { class: "mono", text: name }),
+        h("span", { class: isKit ? "badge kit" : "badge", text: isKit ? "kit server" : "scenario door" }),
+        h("span", { class: "meta mono", text: isKit ? `${s.service} → ${s.api}` : s.url }),
+        h("span", { style: "margin-left:auto" }),
+        h("button", { type: "button", class: "link", text: "Remove", onclick: () => {
+          if (!confirm(`Remove ${name}? Its gateway route, chat connection${isKit ? ", Keycloak clients and grants" : ""} go too.`)) return;
+          delete C.servers[name];
+          for (const g of Object.values(C.groups)) delete g[name];
+          edited(); render();
+        } })),
+      h("div", { class: "grid" }, fields),
+      isKit && code.length && !sameTools ? h("div", { class: "msg warn" }, `${s.service}'s code registers: ${code.join(", ")}. `,
+        h("button", { type: "button", text: "Use these", onclick: () => { s.tools = [...code]; edited(); render(); } })) : null,
+      s.forward_headers ? h("p", { class: "meta" }, "Forwards: ", s.forward_headers.map((x) => h("span", { class: "chip", text: x }))) : null);
+  });
+  $("server-list").replaceChildren(...list);
+}
+
+// ── add a server ───────────────────────────────────────────────────────────────────────────────────
+function renderAddForm() {
+  $("kind-kit").setAttribute("aria-pressed", String(addKind === "kit"));
+  $("kind-door").setAttribute("aria-pressed", String(addKind === "door"));
+  const used = new Set(kitServers().map(([, s]) => s.service));
+  const box = $("add-form");
+  if (addKind === "kit") {
+    const free = S.kit_services.filter((k) => !used.has(k.service));
+    if (!free.length) {
+      box.replaceChildren(h("p", { class: "note" }, "Every service built with libs/mcp-kit is already in the catalog. Scaffold one first: ",
+        h("code", { text: "make new-service NAME=<api>-mcp" }), ", then add the kit and its tools (docs/adr/0022)."));
+      return;
+    }
+    const f = { service: free[0].service };
+    const defaults = (svc) => ({
+      name: svc.replace(/-mcp$/, "").replace(/-/g, "_"), api: svc.replace(/-mcp$/, "") + "-api",
+      tools: (S.kit_services.find((k) => k.service === svc) || { tools: [] }).tools.join(", "),
+    });
+    Object.assign(f, defaults(f.service), { title: "", description: "", tenants: "" });
+    const inputs = {};
+    const field = (key, label, attrs) => {
+      const input = h("input", { type: "text", value: f[key], maxlength: 160, ...(attrs || {}), oninput: (ev) => { f[key] = ev.target.value; } });
+      inputs[key] = input;
+      return h("label", { class: "field" }, label, input);
+    };
+    const select = h("select", { onchange: (ev) => {
+      f.service = ev.target.value; Object.assign(f, defaults(f.service));
+      for (const k of ["name", "api", "tools"]) inputs[k].value = f[k];
+    } }, free.map((k) => h("option", { value: k.service, text: k.service })));
+    box.replaceChildren(
+      h("div", { class: "grid" },
+        h("label", { class: "field" }, "Service (built with libs/mcp-kit)", select),
+        field("name", "Name (gateway path /mcp/<name>; lowercase, digits, _)"),
+        field("api", "API (the only audience it may obtain)"),
+        field("title", "Title", { placeholder: "e.g. Invoices" }),
+        field("description", "Description", { placeholder: "What a person may do with it (read-only?)" }),
+        field("tenants", "Tenants (comma-separated; empty = any)"),
+        field("tools", "Tools (found in its code)")),
+      h("div", { class: "row", style: "margin-top:12px" }, h("button", { type: "button", class: "primary", text: "Add server", onclick: () => {
+        if (!NAME.test(f.name)) return alert("The name is lowercase letters, digits and _ (no -).");
+        if (C.servers[f.name]) return alert(`${f.name} is already in the catalog.`);
+        if (!f.title.trim() || !f.description.trim()) return alert("A title and a description are needed.");
+        const entry = { kind: "kit_server", service: f.service, api: f.api.trim(), title: f.title.trim(), description: f.description.trim() };
+        if (listOf(f.tenants).length) entry.tenants = listOf(f.tenants);
+        entry.tools = listOf(f.tools);
+        C.servers[f.name] = entry;
+        $("add-server").open = false; edited(); render();
+      } }), h("span", { class: "meta", text: "Its Keycloak clients and policy.yaml are generated on publish." })));
+  } else {
+    const inCatalog = new Set(Object.keys(C.servers));
+    const free = S.scenario_doors.filter((d) => !inCatalog.has(d.name));
+    if (!free.length) {
+      box.replaceChildren(h("p", { class: "note", text: "Every scenario that opens an MCP door (mcp.expose in its scenario.yaml) is already in the catalog." }));
+      return;
+    }
+    let pick = free[0];
+    const title = h("input", { type: "text", value: pick.title, maxlength: 160 });
+    const description = h("input", { type: "text", value: "", maxlength: 160, placeholder: "What a person may do with it (read-only?)" });
+    const url = h("p", { class: "meta mono", text: pick.url });
+    const tools = h("p", { class: "meta" });
+    const showTools = () => tools.replaceChildren("Tools: ", ...pick.tools.map((t) => h("span", { class: "chip", text: t })), "(the scenario's roles decide who may run them)");
+    showTools();
+    const select = h("select", { onchange: (ev) => { pick = free.find((d) => d.name === ev.target.value); title.value = pick.title; url.textContent = pick.url; showTools(); } },
+      free.map((d) => h("option", { value: d.name, text: `${d.name} (${d.kind})` })));
+    box.replaceChildren(
+      h("div", { class: "grid" },
+        h("label", { class: "field" }, "Scenario", select),
+        h("label", { class: "field" }, "Title", title),
+        h("label", { class: "field" }, "Description", description)),
+      url, tools,
+      h("div", { class: "row" }, h("button", { type: "button", class: "primary", text: "Add door", onclick: () => {
+        if (!title.value.trim() || !description.value.trim()) return alert("A title and a description are needed.");
+        C.servers[pick.name] = { kind: "scenario_door", url: pick.url, title: title.value.trim(), description: description.value.trim() };
+        $("add-server").open = false; edited(); render();
+      } })));
+  }
+}
+
+// ── review and publish ─────────────────────────────────────────────────────────────────────────────
+function diffView(lines) {
+  return h("pre", { class: "diff" }, lines.map((l) => h("span", {
+    class: l.startsWith("+++") || l.startsWith("---") || l.startsWith("@@") ? "h" : l.startsWith("+") ? "a" : l.startsWith("-") ? "d" : "",
+    text: l || " ",
+  })));
+}
+
+function showReview(nodes) {
+  $("review").hidden = false;
+  $("review-body").replaceChildren(...nodes);
+  $("review").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function review() {
+  $("review-btn").disabled = true;
+  try {
+    const r = await api("/api/review", { catalog: C });
+    reviewedAs = JSON.stringify(C);
+    reviewChanged = r.changed.length;
+    showReview([
+      r.changed.length
+        ? h("div", { class: "msg ok", text: `Valid. Publishing writes ${r.changed.length} file${r.changed.length > 1 ? "s" : ""}:` })
+        : h("div", { class: "msg ok", text: "Valid, and every generated file already matches: nothing to publish." }),
+      ...r.warnings.map((w) => h("div", { class: "msg warn", text: w })),
+      ...r.changed.map((path, i) => h("details", { class: "file", open: i === 0 }, h("summary", { text: path }), diffView(r.diffs[path]))),
+      h("h3", { text: "Who may run what" }), h("pre", { class: "block", text: r.matrix }),
+    ]);
+  } catch (e) {
+    reviewedAs = null;
+    showReview([h("div", { class: "msg err", text: e.message })]);
+  } finally {
+    $("review-btn").disabled = false;
+    renderStatus();
+  }
+}
+
+async function publish() {
+  if (!confirm("Write mcp/catalog.yaml and the files generated from it? Nothing is deployed or committed.")) return;
+  $("publish").disabled = true;
+  try {
+    const r = await api("/api/publish", { catalog: C, base: S.base });
+    S = await api("/api/state");
+    C = clone(S.catalog); C.groups = C.groups || {};
+    reviewedAs = null; reviewChanged = 0;
+    render();
+    showReview([
+      h("div", { class: "msg ok", text: `Published: ${r.written.length} file${r.written.length === 1 ? "" : "s"} written.` }),
+      h("ul", {}, r.written.map((p) => h("li", {}, h("code", { text: p })))),
+      h("p", { text: "Next, in a terminal: review and commit the change, then put it on the cluster." }),
+      h("pre", { class: "block", text: "git diff\nmake k3s-mcp-catalog-apply" }),
+    ]);
+  } catch (e) {
+    showReview([h("div", { class: "msg err", text: e.message }),
+      e.status === 409 ? h("button", { type: "button", text: "Reload the catalog (drops these edits)", onclick: load }) : null]);
+    renderStatus();
+  }
+}
+
+$("review-btn").addEventListener("click", review);
+$("publish").addEventListener("click", publish);
+$("discard").addEventListener("click", () => { C = clone(S.catalog); C.groups = C.groups || {}; reviewedAs = null; $("review").hidden = true; render(); });
+$("add-group").addEventListener("click", () => { const g = $("new-group").value; if (g) { C.groups[g] = {}; edited(); render(); } });
+$("kind-kit").addEventListener("click", () => { addKind = "kit"; renderAddForm(); });
+$("kind-door").addEventListener("click", () => { addKind = "door"; renderAddForm(); });
+window.addEventListener("beforeunload", (ev) => { if (C && dirty()) { ev.preventDefault(); ev.returnValue = ""; } });
+load();
+</script>
+</body>
+</html>
