@@ -182,6 +182,20 @@ platform's log shape with `trace_id`, and one trace from the server inwards (its
 "AI Circus · MCP servers" dashboard and the `ai-circus.mcp` alert group read them. The hop into the server is correlated,
 not traced, while the chat UI's and LiteLLM's MCP clients send no `traceparent`.
 
+**One catalog for the whole path** (docs/adr/0024): `mcp/catalog.yaml` lists the gateway's address, every server
+(`scenario_door`: a scenario's own door, whose tools its entitlements and `scenario.yaml` roles decide, so no group lists
+it; `kit_server`: service, API, tenants, tools) and every group (a realm role → tools per kit server, or `"*"`).
+`scripts/generate_mcp_catalog.py` writes the gateway's `mcp_servers`, the chat UI's connections (k8s and compose), each kit
+server's `policy.yaml` and the Keycloak entries (exchange client, API client, `<api>-audience` scope, `mcp-servers` mapper,
+all marked "Generated from mcp/catalog.yaml."); hand-written files keep their comments around `BEGIN`/`END` markers. It
+refuses a catalog that would route, grant or exchange by mistake (names with `-`, undeclared doors, credential headers,
+tools other than the server's `@kit.tool()` functions, grants on doors, groups that are not realm roles, `$` in a text).
+`make mcp-catalog` writes, `make mcp-catalog-check` and `libs/shared/tests/test_mcp_catalog.py` fail on drift, `make
+k3s-mcp-catalog-apply` syncs Keycloak and rebuilds llm-gateway and the kit servers. A kit server's secret is
+`<CLIENT_ID>_CLIENT_SECRET` in `.env` (`chat_ui_identity.py` derives it). `make mcp-catalog-portal` serves a local page
+(127.0.0.1, per-run token, nonce CSP) to tick tools per group, add a server, review the diffs and publish (= the generator;
+never deploys or commits). Chat UI visibility per group is not generated: Open WebUI grants by internal group ids.
+
 ## Knowledge graphs
 
 A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same

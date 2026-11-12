@@ -50,4 +50,4 @@ gemini-flash sometimes misnames them; the doors are unaffected.
 
 **Consequences.** A new API needs a generated server, its tools, a `policy.yaml`, two Keycloak clients and
 one gateway entry; the security is inherited. Level 3 (DPoP, mutual TLS, JWE claims) and generating the
-policy, gateway entries and Keycloak clients from one catalog are later steps.
+policy, gateway entries and Keycloak clients from one catalog are later steps (the catalog: ADR 0024).
