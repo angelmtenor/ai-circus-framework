@@ -5,6 +5,8 @@
 !.env.*.example
 infra/traefik/*.htpasswd
 infra/seaweedfs/s3.json
+# Level 3 mutual-TLS keys and certificates (scripts/mcp_tls_certs.py, docs/adr/0025)
+infra/mcp-tls/
 
 # Python
 __pycache__/

@@ -19,21 +19,35 @@ security, so its own code is its tools only.
 Author: Angel Martinez-Tenor
 """
 
+from mcp_kit.dpop import DpopKey
 from mcp_kit.exchange import ExchangeRefusedError, ExchangeSettings, TokenExchanger
 from mcp_kit.identity import Identity, TokenRejectedError, TokenVerifier
+from mcp_kit.introspection import (
+    IntrospectionSettings,
+    IntrospectionUnavailableError,
+    TokenInactiveError,
+    TokenIntrospector,
+)
 from mcp_kit.policy import Policy, PolicyError
-from mcp_kit.server import READ_ONLY, ApiClient, McpKit, ToolContext, configure_audit_output
+from mcp_kit.server import READ_ONLY, ApiClient, ApiTls, Level3ConfigError, McpKit, ToolContext, configure_audit_output
 
 __all__ = [
     "READ_ONLY",
     "ApiClient",
+    "ApiTls",
+    "DpopKey",
     "ExchangeRefusedError",
     "ExchangeSettings",
     "Identity",
+    "IntrospectionSettings",
+    "IntrospectionUnavailableError",
+    "Level3ConfigError",
     "McpKit",
     "Policy",
     "PolicyError",
     "TokenExchanger",
+    "TokenInactiveError",
+    "TokenIntrospector",
     "TokenRejectedError",
     "TokenVerifier",
     "ToolContext",

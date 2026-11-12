@@ -6,6 +6,9 @@ The per-API token (T2): the caller's token (T1) exchanged at the identity provid
 token whose only audience is this server's API, for the same user (rules R4, R5). The identity
 provider decides which audience this server's client may ask for; asking for another fails.
 
+At Level 3 (docs/adr/0025) the exchange carries a DPoP proof of the server's own key, and a T2 that the
+identity provider did not bind to that key is refused: it would be a plain bearer token again.
+
 Author: Angel Martinez-Tenor
 """
 
@@ -18,6 +21,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from mcp_kit.dpop import DpopKey, bound_thumbprint
 from mcp_kit.telemetry import TOKEN_EXCHANGE_SECONDS, TOKEN_EXCHANGES
 
 TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
@@ -42,6 +46,8 @@ class ExchangeSettings:
     # Scopes the T2 must carry, e.g. "organization" so the API sees the tenant.
     scope: str = "organization"
     timeout_seconds: float = 10.0
+    # Level 3: the key the T2 must be bound to (proof of possession). None = a bearer T2 (Level 2).
+    dpop_key: DpopKey | None = None
 
 
 class TokenExchanger:
@@ -61,11 +67,11 @@ class TokenExchanger:
 
     async def exchange(self, subject_token: str) -> str:
         """A T2 for this API, for the user T1 names. Raises ExchangeRefusedError."""
-        key = self._key(subject_token)
-        cached = self._cache.get(key)
+        cache_key = self._key(subject_token)
+        cached = self._cache.get(cache_key)
         now = time.time()
         if cached is not None and cached[1] - EXPIRY_MARGIN_SECONDS > now:
-            self._cache.move_to_end(key)
+            self._cache.move_to_end(cache_key)
             TOKEN_EXCHANGES.labels(self.server, "cached").inc()
             return cached[0]
         data = {
@@ -77,10 +83,15 @@ class TokenExchanger:
         }
         if self.settings.scope:
             data["scope"] = self.settings.scope
+        key = self.settings.dpop_key
+        headers = {"DPoP": key.proof("POST", self.settings.token_url)} if key is not None else {}
         started = time.perf_counter()
         async with httpx.AsyncClient(timeout=self.settings.timeout_seconds, transport=self._transport) as client:
             response = await client.post(
-                self.settings.token_url, data=data, auth=(self.settings.client_id, self.settings.client_secret)
+                self.settings.token_url,
+                data=data,
+                headers=headers,
+                auth=(self.settings.client_id, self.settings.client_secret),
             )
         TOKEN_EXCHANGE_SECONDS.labels(self.server).observe(time.perf_counter() - started)
         if response.status_code != 200:
@@ -93,9 +104,14 @@ class TokenExchanger:
         if not isinstance(token, str) or not token:
             TOKEN_EXCHANGES.labels(self.server, "refused").inc()
             raise ExchangeRefusedError("Token exchange returned no access token.")
+        if key is not None and (
+            str(body.get("token_type", "")).lower() != "dpop" or bound_thumbprint(token) != key.thumbprint
+        ):
+            TOKEN_EXCHANGES.labels(self.server, "refused").inc()
+            raise ExchangeRefusedError("Token exchange returned a token not bound to this server's key.")
         TOKEN_EXCHANGES.labels(self.server, "issued").inc()
         expires_at = now + float(body.get("expires_in") or 60)
-        self._cache[key] = (token, expires_at)
+        self._cache[cache_key] = (token, expires_at)
         while len(self._cache) > MAX_CACHED_TOKENS:
             self._cache.popitem(last=False)
         return token

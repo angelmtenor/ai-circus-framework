@@ -27,7 +27,8 @@
             "addOrganizationId": "true",
             "jsonType.label": "JSON",
             "multivalued": "true",
-            "introspection.token.claim": "true"
+            "introspection.token.claim": "true",
+            "lightweight.claim": "true"
           }
         }
       ]
@@ -267,7 +268,8 @@
             "included.client.audience": "crm-mcp",
             "access.token.claim": "true",
             "id.token.claim": "false",
-            "introspection.token.claim": "true"
+            "introspection.token.claim": "true",
+            "lightweight.claim": "false"
           }
         }
       ]
@@ -290,7 +292,8 @@
             "included.client.audience": "crm-api",
             "access.token.claim": "true",
             "id.token.claim": "false",
-            "introspection.token.claim": "true"
+            "introspection.token.claim": "true",
+            "lightweight.claim": "true"
           }
         }
       ]
@@ -383,7 +386,9 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "attributes": {
-        "standard.token.exchange.enabled": "true"
+        "standard.token.exchange.enabled": "true",
+        "dpop.bound.access.tokens": "true",
+        "client.use.lightweight.access.token.enabled": "true"
       },
       "defaultClientScopes": [
         "basic",
@@ -397,7 +402,7 @@
     {
       "clientId": "crm-api",
       "name": "crm-api: the API behind crm-mcp",
-      "description": "Audience of the T2 tokens crm-mcp obtains (docs/adr/0022). Signs no one in and has no secret in use. Generated from mcp/catalog.yaml.",
+      "description": "Audience of the T2 tokens crm-mcp obtains (docs/adr/0022). Signs no one in; its secret (CRM_API_CLIENT_SECRET in .env) only introspects its own tokens at level 3. Generated from mcp/catalog.yaml.",
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",

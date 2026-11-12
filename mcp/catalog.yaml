@@ -13,7 +13,8 @@
 #                          group lists it.
 #   kind: kit_server       an MCP server in front of an API, built with libs/mcp-kit (ADR 0022): service
 #                          (services/<service>, also its Keycloak client), api (the only audience it may
-#                          obtain), title, description, optional tenants (organization aliases), tools.
+#                          obtain), title, description, optional tenants (organization aliases), optional
+#                          level (2, the default: per-API exchange; 3: regulated, ADR 0025), tools.
 # groups.<realm role>      tools per kit server, or "*" for all of them. A role that is not listed gets none.
 
 gateway: http://llm-gateway:4000
@@ -37,6 +38,7 @@ servers:
     title: "Customers (CRM)"
     description: "Customers of the organisation's shops you may see, with masked contact details (read-only)"
     tenants: [lite-demo]
+    level: 3
     tools: [search_customers, get_customer, top_customers]
 
 groups:

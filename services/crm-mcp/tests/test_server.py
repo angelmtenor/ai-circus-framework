@@ -20,8 +20,24 @@ import jwt
 import pytest
 import yaml
 from fastapi import FastAPI
-from mcp_kit import ExchangeSettings, McpKit, Policy, TokenExchanger
-from mcp_kit.testing import FakeIdentityProvider, TokenFactory
+from mcp_kit import (
+    ApiTls,
+    DpopKey,
+    ExchangeSettings,
+    IntrospectionSettings,
+    McpKit,
+    Policy,
+    TokenExchanger,
+    TokenIntrospector,
+)
+from mcp_kit.testing import (
+    DpopError,
+    FakeIdentityProvider,
+    TokenFactory,
+    dpop_bound_token,
+    verify_dpop,
+    write_test_pki,
+)
 
 from crm_mcp.app import create_app
 from crm_mcp.server import INSTRUCTIONS, register_tools
@@ -42,32 +58,57 @@ def api_calls() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-def app(factory: TokenFactory, api_calls: list[dict[str, Any]]) -> FastAPI:
+def idp(factory: TokenFactory) -> FakeIdentityProvider:
+    # Keycloak as the generated realm configures crm-mcp at level 3: an exchange must carry a DPoP proof.
+    return FakeIdentityProvider(
+        factory, client_id="crm-mcp", client_secret=SECRET, allowed_audience="crm-api", require_dpop=True
+    )
+
+
+@pytest.fixture
+def app(factory: TokenFactory, idp: FakeIdentityProvider, api_calls: list[dict[str, Any]], tmp_path: Path) -> FastAPI:
     def crm_api(request: httpx.Request) -> httpx.Response:
-        token = request.headers.get("authorization", "").removeprefix("Bearer ")
+        # A stand-in crm-api at level 3: a DPoP-bound token for it, with a fresh proof of the key it is bound to.
         try:
+            token = dpop_bound_token(request)
             claims = jwt.decode(
                 token, factory.verifier("crm-api").key_for(""), algorithms=["RS256"], audience="crm-api"
             )
-        except jwt.PyJWTError:
+            jkt = verify_dpop(request.headers.get("dpop"), method="GET", url=str(request.url), access_token=token)
+            if jkt != (claims.get("cnf") or {}).get("jkt"):
+                raise DpopError("proof of another key")
+        except DpopError, jwt.PyJWTError:
             return httpx.Response(401, json={"detail": "not for this API"})
         api_calls.append({"path": request.url.path, "params": dict(request.url.params), "sub": claims["sub"]})
         if request.url.path == "/customers/C999":
             return httpx.Response(404, json={"detail": "Customer not found."})
         return httpx.Response(200, json={"customers": [], "count": 0, "visible_stores": "all"})
 
-    idp = FakeIdentityProvider(factory, client_id="crm-mcp", client_secret=SECRET, allowed_audience="crm-api")
+    policy = Policy.from_file(POLICY)
+    assert policy.level == 3, "the generated policy runs the example at level 3 (mcp/catalog.yaml)"
+    tls = write_test_pki(tmp_path)
     kit = McpKit(
         name="crm-mcp",
         instructions=INSTRUCTIONS,
         verifier=factory.verifier("crm-mcp"),
-        policy=Policy.from_file(POLICY),
+        policy=policy,
         exchanger=TokenExchanger(
-            ExchangeSettings(token_url=TOKEN_URL, client_id="crm-mcp", client_secret=SECRET, api_audience="crm-api"),
+            ExchangeSettings(
+                token_url=TOKEN_URL,
+                client_id="crm-mcp",
+                client_secret=SECRET,
+                api_audience="crm-api",
+                dpop_key=DpopKey(),
+            ),
             transport=idp.transport(),
         ),
-        api_base_url="http://crm-api.test",
+        api_base_url="https://crm-api.test",
         api_transport=httpx.MockTransport(crm_api),
+        introspector=TokenIntrospector(
+            IntrospectionSettings(url=f"{TOKEN_URL}/introspect", client_id="crm-mcp", client_secret=SECRET),
+            transport=idp.transport(),
+        ),
+        api_tls=ApiTls(ca_file=str(tls["ca"]), cert_file=str(tls["client_cert"]), key_file=str(tls["client_key"])),
     )
     register_tools(kit)
     return create_app(kit)
@@ -154,9 +195,19 @@ def test_the_catalog_lists_exactly_the_tools_this_server_registers(factory: Toke
     # a tool missing there could never be granted, and a stale name would grant nothing.
     catalog = yaml.safe_load((POLICY.parents[2] / "mcp" / "catalog.yaml").read_text())
     (entry,) = [s for s in catalog["servers"].values() if s.get("service") == "crm-mcp"]
+    # Only the tool names matter here: a level-2 policy needs no exchanger, introspector or TLS.
     kit = McpKit(
-        name="crm-mcp", instructions=INSTRUCTIONS, verifier=factory.verifier("crm-mcp"), policy=Policy.from_file(POLICY)
+        name="crm-mcp", instructions=INSTRUCTIONS, verifier=factory.verifier("crm-mcp"), policy=Policy.from_mapping({})
     )
     register_tools(kit)
     assert set(entry["tools"]) == kit.tool_names
     assert entry["api"] == "crm-api"
+
+
+def test_a_signed_out_user_is_refused_on_the_next_call(
+    app: FastAPI, factory: TokenFactory, idp: FakeIdentityProvider
+) -> None:
+    token = factory.issue(audience="crm-mcp", subject="u-1", org_alias="lite-demo", roles=["retail_analyst"])
+    assert call(app, token, "tools/list")[0] == 200
+    idp.revoke("u-1")
+    assert call(app, token, "tools/list")[0] == 401

@@ -1256,6 +1256,7 @@ services:
   # docs/adr/0022). Same settings as k8s/mcp-examples/crm.yaml: crm-api is a customer API that only
   # accepts a token issued for it; crm-mcp (built with libs/mcp-kit) exchanges the user's token at
   # Keycloak for one and calls crm-api as that user. No Traefik route: only the MCP gateway calls crm-mcp.
+  # Level 3 (docs/adr/0025), as k8s/mcp-examples/crm.yaml: run `make mcp-tls` first (infra/mcp-tls/crm/).
   crm-api:
     build:
       context: .
@@ -1263,6 +1264,17 @@ services:
     profiles: ["mcp-examples"]
     environment:
       <<: *service-auth-env
+      SECURITY_LEVEL: "3"
+      KEYCLOAK_INTROSPECTION_URL: http://keycloak:8080/realms/ai-circus/protocol/openid-connect/token/introspect
+      API_CLIENT_SECRET: ${CRM_API_CLIENT_SECRET:-}
+      TLS_PORT: "8443"
+      TLS_CERT_FILE: /etc/mcp-tls/tls.crt
+      TLS_KEY_FILE: /etc/mcp-tls/tls.key
+      TLS_CLIENT_CA_FILE: /etc/mcp-tls/ca.crt
+    volumes:
+      - ./infra/mcp-tls/crm/server.crt:/etc/mcp-tls/tls.crt:ro
+      - ./infra/mcp-tls/crm/server.key:/etc/mcp-tls/tls.key:ro
+      - ./infra/mcp-tls/crm/ca.crt:/etc/mcp-tls/ca.crt:ro
     depends_on:
       keycloak:
         condition: service_started
@@ -1278,6 +1290,13 @@ services:
     environment:
       <<: *service-auth-env
       MCP_CLIENT_SECRET: ${CRM_MCP_CLIENT_SECRET:-}
+      API_TLS_CA_FILE: /etc/mcp-tls/ca.crt
+      API_TLS_CERT_FILE: /etc/mcp-tls/tls.crt
+      API_TLS_KEY_FILE: /etc/mcp-tls/tls.key
+    volumes:
+      - ./infra/mcp-tls/crm/client.crt:/etc/mcp-tls/tls.crt:ro
+      - ./infra/mcp-tls/crm/client.key:/etc/mcp-tls/tls.key:ro
+      - ./infra/mcp-tls/crm/ca.crt:/etc/mcp-tls/ca.crt:ro
     depends_on:
       keycloak:
         condition: service_started
