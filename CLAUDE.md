@@ -146,6 +146,8 @@ SeaweedFS credentials, ClickHouse low-memory config, MLflow image, k3s GPU node)
   `configure_tracing(app, …)` on every FastAPI app. A new content-carrying attribute goes into `DROPPED_ATTRIBUTE_PREFIXES`.
 - Log messages never carry prompts or personal data, and metric labels never carry tenants or values. A new FastAPI
   deployment gets the `prometheus.io/*` pod annotations.
+- An MCP server built with `libs/mcp-kit` calls `configure_audit_output()` at start-up: its audit lines are the record of
+  every tool call and refusal (ADR 0023).
 
 **Governance rules (`docs/governance/`, ADR 0011).** The framework is governable by an external tool through open contracts
 only: never a product name in code, config or docs, and it *supports* an AI management system ("supports"/"provides evidence
