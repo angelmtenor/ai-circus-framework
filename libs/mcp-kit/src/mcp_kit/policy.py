@@ -3,7 +3,7 @@ policy.py
 ---------
 
 Which tools a caller may list and run, decided from the token's tenant and roles only. A file by
-default (`policy.yaml` next to the server, generated from the catalog later); the same decision
+default (`policy.yaml` next to the server, generated from mcp/catalog.yaml, ADR 0024); the same decision
 could come from OPA or an external governance tool behind the same `allowed_tools` call.
 
     tenants: [lite-demo]          # optional: organization aliases allowed; omitted = any tenant

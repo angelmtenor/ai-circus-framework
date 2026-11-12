@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 import jwt
 import pytest
+import yaml
 from fastapi import FastAPI
 from mcp_kit import ExchangeSettings, McpKit, Policy, TokenExchanger
 from mcp_kit.testing import FakeIdentityProvider, TokenFactory
@@ -146,3 +147,16 @@ def test_healthz(app: FastAPI) -> None:
             return (await c.get("/healthz")).status_code
 
     assert asyncio.run(go()) == 200
+
+
+def test_the_catalog_lists_exactly_the_tools_this_server_registers(factory: TokenFactory) -> None:
+    # mcp/catalog.yaml (docs/adr/0024) grants these tools to groups and generates policy.yaml from them:
+    # a tool missing there could never be granted, and a stale name would grant nothing.
+    catalog = yaml.safe_load((POLICY.parents[2] / "mcp" / "catalog.yaml").read_text())
+    (entry,) = [s for s in catalog["servers"].values() if s.get("service") == "crm-mcp"]
+    kit = McpKit(
+        name="crm-mcp", instructions=INSTRUCTIONS, verifier=factory.verifier("crm-mcp"), policy=Policy.from_file(POLICY)
+    )
+    register_tools(kit)
+    assert set(entry["tools"]) == kit.tool_names
+    assert entry["api"] == "crm-api"

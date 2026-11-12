@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check k3s-mcp-catalog-apply all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -561,6 +561,39 @@ k3s-mcp-examples-up: ## OPTIONAL example of an MCP server in front of an existin
 
 k3s-mcp-examples-down: ## Remove the example MCP server and API (the Keycloak clients stay)
 	@kubectl -n ai-circus delete deployment,service crm-api crm-mcp --ignore-not-found
+
+# The MCP catalog (mcp/catalog.yaml, ADR 0024) generates the gateway's routes, the chat UI's connections, each kit
+# server's policy.yaml and the Keycloak exchange clients. PyYAML comes from libs/shared's environment.
+MCP_CATALOG = uv run --project libs/shared --quiet python scripts/generate_mcp_catalog.py
+
+mcp-catalog: ## Regenerate every file mcp/catalog.yaml decides (ADR 0024), then print who may run what. Commit both; `make k3s-mcp-catalog-apply` puts it on the cluster
+	@$(MCP_CATALOG)
+	@echo
+	@$(MCP_CATALOG) --matrix
+
+mcp-catalog-check: ## Fail if a file generated from mcp/catalog.yaml drifted (CI runs the same check in libs/shared's tests)
+	@$(MCP_CATALOG) --check
+
+k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), rebuild + import + restart llm-gateway and every deployed kit server, re-apply the chat UI's connections if it is deployed
+	@$(MCP_CATALOG) --check
+	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
+	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
+	@kits="$$($(MCP_CATALOG) --kit-services)"; \
+	for svc in llm-gateway $$kits; do \
+		echo "── ai-circus/$$svc:local ──"; \
+		docker build -q -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
+	done; \
+	k3d image import $$(for svc in llm-gateway $$kits; do printf 'ai-circus/%s:local ' "$$svc"; done) -c "$(K3S_CLUSTER)" || exit 1; \
+	for svc in llm-gateway $$kits; do \
+		if kubectl -n ai-circus get deployment "$$svc" >/dev/null 2>&1; then \
+			kubectl -n ai-circus rollout restart "deployment/$$svc" >/dev/null && \
+			kubectl -n ai-circus rollout status "deployment/$$svc" --timeout=600s || exit 1; \
+		fi; \
+	done
+	@if kubectl -n ai-circus get deployment open-webui >/dev/null 2>&1; then \
+		kubectl apply -k k8s/chat-ui && kubectl -n ai-circus rollout status deployment/open-webui --timeout=900s; \
+	fi
+	@echo "✓ catalog applied — gateway, kit servers, Keycloak and chat UI follow mcp/catalog.yaml (a localhost:8033 forward needs a restart: make k3s-mcp-portforward)"
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }
