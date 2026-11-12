@@ -318,8 +318,8 @@ LOGS = {"type": "loki", "uid": "${logs}"}
 MCP_BOARD = dashboard(
     "ai-circus-mcp",
     "AI Circus · MCP servers — calls, refusals, per-API tokens",
-    "MCP servers built with mcp-kit (docs/adr/0022, 0023): tool calls, policy refusals, per-API token exchanges, "
-    "the API behind each server, and the audit lines.",
+    "MCP servers built with mcp-kit (docs/adr/0022, 0023, 0025): tool calls, policy refusals, per-API token "
+    "exchanges, the API behind each server, live token checks (level 3) and the audit lines.",
     [
         panel(1, "Tool calls in range", "stat", (0, 0, 6, 4),
               [target(f"sum(increase(mcp_kit_tool_calls_total{{{MCP}}}[$__range]))")], decimals=0, no_value="0"),
@@ -354,13 +354,20 @@ MCP_BOARD = dashboard(
         panel(10, "Token exchange round trip (p95)", "timeseries", (12, 20, 12, 8),
               [target(f"histogram_quantile(0.95, sum by (le, server) (rate(mcp_kit_token_exchange_duration_seconds_bucket{{{MCP}}}[5m])))", "{{server}}")],
               unit="s"),
+        panel(12, "Live token checks (level 3): active, inactive, unavailable", "timeseries", (0, 28, 12, 8),
+              [target(f"sum by (server, outcome) (rate(mcp_kit_introspections_total{{{MCP}}}[5m]))", "{{server}} {{outcome}}")],
+              unit="reqps", description="docs/adr/0025: every request's user token asked at the identity provider. "
+              "Inactive = a signed-out or revoked session's token used again; unavailable = refused, never waved through."),
+        panel(13, "Live token check round trip (p95)", "timeseries", (12, 28, 12, 8),
+              [target(f"histogram_quantile(0.95, sum by (le, server) (rate(mcp_kit_introspection_duration_seconds_bucket{{{MCP}}}[5m])))", "{{server}}")],
+              unit="s", description="What level 3 adds to each request."),
         {
             "id": 11,
             "type": "logs",
             "title": "Audit lines: who, which tool, which outcome (never arguments, results or tokens)",
             "description": "One line per decision of the kit. Open a line to jump to its trace.",
             "datasource": LOGS,
-            "gridPos": {"x": 0, "y": 28, "w": 24, "h": 10},
+            "gridPos": {"x": 0, "y": 36, "w": 24, "h": 10},
             "options": {"showTime": True, "wrapLogMessage": True, "enableLogDetails": True, "sortOrder": "Descending"},
             "targets": [{"datasource": LOGS, "expr": LOG_QUERY, "refId": "A", "queryType": "range"}],
         },

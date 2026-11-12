@@ -196,6 +196,18 @@ k3s-mcp-catalog-apply` syncs Keycloak and rebuilds llm-gateway and the kit serve
 (127.0.0.1, per-run token, nonce CSP) to tick tools per group, add a server, review the diffs and publish (= the generator;
 never deploys or commits). Chat UI visibility per group is not generated: Open WebUI grants by internal group ids.
 
+**Level 3, for regulated deployments** (docs/adr/0025): `level: 3` on a kit server of the catalog. The per-API token
+is DPoP-bound to a key the MCP server holds in memory only (`mcp_kit.DpopKey`): proof on the exchange, a fresh proof on
+every API call; the API checks method, URL, freshness, the token hash, a never-seen `jti` and the bound key, so a copied
+token is useless. The user's token stays a bearer token (Keycloak refuses to exchange a sender-constrained token for
+another client) and is introspected on every request; the API introspects its own token too, so signing a user out
+stops both at once, and an unreachable Keycloak is a refusal (503), never a pass. The per-API token is lightweight
+(ids only) and the API reads roles and the store claim from introspection. One CA per server/API pair
+(`scripts/mcp_tls_certs.py`, `make k3s-mcp-tls`, `infra/mcp-tls/` gitignored) gives mutual TLS on the API port; a
+plain port serves only `/healthz` and `/metrics`. The catalog writes the Keycloak flags explicitly both ways (Keycloak
+merges attribute updates). Not covered: gateway → MCP server mutual TLS (LiteLLM's open-source MCP client cannot present
+a client certificate) and a DPoP-bound user token. The `crm` example runs at level 3.
+
 ## Knowledge graphs
 
 A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same

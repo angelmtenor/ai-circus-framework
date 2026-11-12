@@ -56,15 +56,20 @@ def client_secret_env(client_id: str) -> str:
     return client_id.upper().replace("-", "_") + "_CLIENT_SECRET"
 
 
+CATALOG_MARK = "Generated from mcp/catalog.yaml."
+
+
 def client_secrets(export: dict[str, Any]) -> dict[str, str]:
-    """Each confidential client's .env key: the chat UI's, and every MCP server's that exchanges tokens
-    (generated from mcp/catalog.yaml, docs/adr/0022), so a new server in the catalog needs no edit here."""
-    exchangers = {
+    """Each confidential client's .env key: the chat UI's, every MCP server's that exchanges tokens, and every
+    client generated from mcp/catalog.yaml (an API introspects its own tokens at level 3, docs/adr/0022, 0025),
+    so a new server in the catalog needs no edit here."""
+    generated = {
         c["clientId"]: client_secret_env(c["clientId"])
         for c in export.get("clients", [])
         if c.get("attributes", {}).get("standard.token.exchange.enabled") == "true"
+        or CATALOG_MARK in c.get("description", "")
     }
-    return {**CHAT_UI_SECRETS, **exchangers}
+    return {**CHAT_UI_SECRETS, **generated}
 
 ORG = {
     "name": "Lite Demo",

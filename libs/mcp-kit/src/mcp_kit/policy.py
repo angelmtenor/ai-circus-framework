@@ -7,6 +7,7 @@ default (`policy.yaml` next to the server, generated from mcp/catalog.yaml, ADR 
 could come from OPA or an external governance tool behind the same `allowed_tools` call.
 
     tenants: [lite-demo]          # optional: organization aliases allowed; omitted = any tenant
+    level: 3                      # optional: 2 (default) or 3, the security level (docs/adr/0025)
     roles:
       retail_analyst: [search_customers, get_customer]
       retail_store_manager: [search_customers]
@@ -38,6 +39,9 @@ class Policy:
 
     roles: Mapping[str, frozenset[str] | str] = field(default_factory=dict)
     tenants: frozenset[str] | None = None
+    # The security level (docs/adr/0025): 2 = per-API exchange (default); 3 = also DPoP-bound per-API tokens,
+    # mutual TLS to the API and a live token check on every call. McpKit refuses to start at 3 without them.
+    level: int = 2
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> Policy:
@@ -58,7 +62,10 @@ class Policy:
             isinstance(tenants_raw, list) and all(isinstance(t, str) for t in tenants_raw)
         ):
             raise PolicyError("`tenants` must be a list of organization aliases.")
-        return cls(roles=roles, tenants=frozenset(tenants_raw) if tenants_raw is not None else None)
+        level = data.get("level", 2)
+        if level not in (2, 3) or isinstance(level, bool):
+            raise PolicyError("`level` must be 2 (per-API exchange) or 3 (regulated).")
+        return cls(roles=roles, tenants=frozenset(tenants_raw) if tenants_raw is not None else None, level=int(level))
 
     @classmethod
     def from_file(cls, path: Path) -> Policy:

@@ -40,6 +40,52 @@ env_variables:
     mandatory: true
     secret: false
 
+  # Level 3 (docs/adr/0025). No profile values below on purpose: a profile value beats the environment,
+  # so these come only from the deployment (k8s/mcp-examples/crm.yaml, docker-compose.yml) or their defaults.
+  - name: SECURITY_LEVEL
+    description: "2: bearer token for this API; 3: DPoP-bound token, checked live, over mutual TLS (ADR 0025)"
+    type: string
+    mandatory: false
+    default: "2"
+    secret: false
+
+  - name: KEYCLOAK_INTROSPECTION_URL
+    description: "Keycloak introspection endpoint (in-cluster URL), asked about every token at level 3"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: API_CLIENT_SECRET
+    description: "This API's Keycloak client secret (CRM_API_CLIENT_SECRET), to introspect its tokens at level 3"
+    type: string
+    mandatory: false
+    secret: true
+
+  - name: TLS_PORT
+    description: "Mutual-TLS port of the API at level 3 (HTTP_PORT then serves only /healthz and /metrics)"
+    type: string
+    mandatory: false
+    default: "8443"
+    secret: false
+
+  - name: TLS_CERT_FILE
+    description: "This API's server certificate (PEM) for the mutual-TLS listener"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: TLS_KEY_FILE
+    description: "Private key of the server certificate (PEM)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: TLS_CLIENT_CA_FILE
+    description: "The only CA whose client certificates may connect: the one shared with its MCP server"
+    type: string
+    mandatory: false
+    secret: false
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file

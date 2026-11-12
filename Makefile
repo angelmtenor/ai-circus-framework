@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -553,6 +553,7 @@ k3s-mcp-examples-up: ## OPTIONAL example of an MCP server in front of an existin
 	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
 	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
 	@./scripts/k3s_generate_secrets.sh >/dev/null
+	@$(MCP_TLS) --k8s
 	@kubectl apply -k k8s/mcp-examples
 	@kubectl -n ai-circus rollout restart deployment/crm-api deployment/crm-mcp >/dev/null
 	@kubectl -n ai-circus rollout status deployment/crm-api --timeout=300s
@@ -574,20 +575,31 @@ mcp-catalog: ## Regenerate every file mcp/catalog.yaml decides (ADR 0024), then 
 mcp-catalog-check: ## Fail if a file generated from mcp/catalog.yaml drifted (CI runs the same check in libs/shared's tests)
 	@$(MCP_CATALOG) --check
 
+# Level 3 (ADR 0025): one certificate authority per level-3 kit server and its API, files in infra/mcp-tls/ (gitignored).
+MCP_TLS = uv run --project libs/mcp-kit --quiet python scripts/mcp_tls_certs.py
+
+mcp-tls: ## Issue or renew the mutual-TLS certificates of every level-3 kit server and its API (infra/mcp-tls/, for docker compose)
+	@$(MCP_TLS)
+
+k3s-mcp-tls: ## Same, and apply them as one Secret per workload (<api>-tls, <service>-tls: only its own key). Restart the pair to load renewed certificates
+	@$(MCP_TLS) --k8s
+
 mcp-catalog-portal: ## OPTIONAL local portal over mcp/catalog.yaml (ADR 0024) at http://127.0.0.1:8040 (MCP_PORTAL_PORT): tick tools per group, add a server, review the diffs, publish (= make mcp-catalog). Never deploys or commits
 	@$(MCP_CATALOG:generate_mcp_catalog.py=mcp_catalog_portal.py) --port "$${MCP_PORTAL_PORT:-8040}"
 
-k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), rebuild + import + restart llm-gateway and every deployed kit server, re-apply the chat UI's connections if it is deployed
+k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), Level 3 certificates, rebuild + import + restart llm-gateway and every deployed kit server (and restart its API), re-apply the chat UI's connections if it is deployed
 	@$(MCP_CATALOG) --check
 	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
 	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
+	@./scripts/k3s_generate_secrets.sh >/dev/null
+	@$(MCP_TLS) --k8s
 	@kits="$$($(MCP_CATALOG) --kit-services)"; \
 	for svc in llm-gateway $$kits; do \
 		echo "── ai-circus/$$svc:local ──"; \
 		docker build -q -f "services/$$svc/Dockerfile" -t "ai-circus/$$svc:local" . || exit 1; \
 	done; \
 	k3d image import $$(for svc in llm-gateway $$kits; do printf 'ai-circus/%s:local ' "$$svc"; done) -c "$(K3S_CLUSTER)" || exit 1; \
-	for svc in llm-gateway $$kits; do \
+	for svc in llm-gateway $$kits $$($(MCP_CATALOG) --kit-apis); do \
 		if kubectl -n ai-circus get deployment "$$svc" >/dev/null 2>&1; then \
 			kubectl -n ai-circus rollout restart "deployment/$$svc" >/dev/null && \
 			kubectl -n ai-circus rollout status "deployment/$$svc" --timeout=600s || exit 1; \

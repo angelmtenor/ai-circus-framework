@@ -80,7 +80,8 @@ HEADER_COMMENT = """\
 #                          group lists it.
 #   kind: kit_server       an MCP server in front of an API, built with libs/mcp-kit (ADR 0022): service
 #                          (services/<service>, also its Keycloak client), api (the only audience it may
-#                          obtain), title, description, optional tenants (organization aliases), tools.
+#                          obtain), title, description, optional tenants (organization aliases), optional
+#                          level (2, the default: per-API exchange; 3: regulated, ADR 0025), tools.
 # groups.<realm role>      tools per kit server, or "*" for all of them. A role that is not listed gets none.
 """
 
@@ -101,6 +102,7 @@ class Server:
     api: str = ""
     tenants: tuple[str, ...] | None = None
     tools: tuple[str, ...] = ()
+    level: int = 2
 
     @property
     def upstream(self) -> str:
@@ -214,7 +216,7 @@ def _server(name: str, entry: object, repo: Path) -> Server:
             forward_headers=headers,
         )
     if kind == KIT_SERVER:
-        _only(where, entry, common | {"service", "api", "tools"}, {"tenants"})
+        _only(where, entry, common | {"service", "api", "tools"}, {"tenants", "level"})
         service, api = entry["service"], entry["api"]
         for key, value in (("service", service), ("api", api)):
             if not isinstance(value, str) or not SLUG.match(value):
@@ -233,6 +235,9 @@ def _server(name: str, entry: object, repo: Path) -> Server:
         if in_code and set(in_code) != set(tools):
             raise CatalogError(f"{where}.tools: services/{service} registers {in_code}, not {list(tools)}")
         tenants = entry.get("tenants")
+        level = entry.get("level", 2)
+        if level not in (2, 3) or isinstance(level, bool):
+            raise CatalogError(f"{where}.level: 2 (per-API exchange, the default) or 3 (regulated, ADR 0025)")
         return Server(
             name=name,
             kind=kind,
@@ -242,6 +247,7 @@ def _server(name: str, entry: object, repo: Path) -> Server:
             api=api,
             tenants=None if tenants is None else _names(f"{where}.tenants", tenants, TENANT),
             tools=tools,
+            level=int(level),
         )
     raise CatalogError(f"{where}.kind: expected {SCENARIO_DOOR} or {KIT_SERVER}")
 
@@ -335,6 +341,8 @@ def render_catalog(catalog: Catalog) -> str:
             lines.append(f"    forward_headers: {_flow(s.forward_headers)}")
         if s.tenants is not None:
             lines.append(f"    tenants: {_flow(s.tenants)}")
+        if s.level != 2:
+            lines.append(f"    level: {s.level}")
         if s.tools:
             lines.append(f"    tools: {_flow(s.tools)}")
     lines += ["", "groups:" if catalog.groups else "groups: {}"]
@@ -421,6 +429,8 @@ def policy_file(catalog: Catalog, server: Server) -> str:
     ]
     if server.tenants is not None:
         lines.append(f"tenants: {_flow(server.tenants)}")
+    if server.level != 2:
+        lines.append(f"level: {server.level}  # DPoP-bound per-API token, mutual TLS, live token check (ADR 0025)")
     grants = catalog.grants(server)
     lines.append("roles:" if grants else "roles: {}")
     lines += [f"  {group}: {_grant(grant)}" for group, grant in grants.items()]
@@ -432,7 +442,12 @@ def client_secret_env(client_id: str) -> str:
     return client_id.upper().replace("-", "_") + "_CLIENT_SECRET"
 
 
-def _audience_mapper(name: str, client_id: str) -> dict[str, Any]:
+def _flag(on: bool) -> str:
+    """Keycloak merges attribute updates: a flag is always written, "true" or "false", never left out."""
+    return "true" if on else "false"
+
+
+def _audience_mapper(name: str, client_id: str, *, lightweight: bool = False) -> dict[str, Any]:
     return {
         "name": name,
         "protocol": "openid-connect",
@@ -443,6 +458,8 @@ def _audience_mapper(name: str, client_id: str) -> dict[str, Any]:
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true",
+            # A lightweight per-API token (level 3) keeps only claims flagged for it: its audience must be one.
+            "lightweight.claim": _flag(lightweight),
         },
     }
 
@@ -457,7 +474,9 @@ def _scope(name: str, description: str, mappers: list[dict[str, Any]]) -> dict[s
     }
 
 
-def _client(client_id: str, name: str, description: str, *, exchanges_for: str | None) -> dict[str, Any]:
+def _client(
+    client_id: str, name: str, description: str, *, exchanges_for: str | None, level: int = 2
+) -> dict[str, Any]:
     return {
         "clientId": client_id,
         "name": name,
@@ -470,7 +489,15 @@ def _client(client_id: str, name: str, description: str, *, exchanges_for: str |
         "implicitFlowEnabled": False,
         "directAccessGrantsEnabled": False,
         "serviceAccountsEnabled": False,
-        "attributes": {"standard.token.exchange.enabled": "true"} if exchanges_for else {},
+        # Level 3 (ADR 0025): the per-API token must be bound to the server's key (DPoP) and carry ids only;
+        # the API reads roles and row filters from introspection.
+        "attributes": {
+            "standard.token.exchange.enabled": "true",
+            "dpop.bound.access.tokens": _flag(level >= 3),
+            "client.use.lightweight.access.token.enabled": _flag(level >= 3),
+        }
+        if exchanges_for
+        else {},
         # The token's subject, tenant, roles and row-filter claims, and exactly one audience: its API's.
         "defaultClientScopes": ["basic", "organization", "roles", "data-access", f"{exchanges_for}-audience"]
         if exchanges_for
@@ -498,7 +525,7 @@ def realm_file(catalog: Catalog, current: str) -> str:
             f"{s.api}-audience",
             f"The only audience {s.service} may obtain in a token exchange (T2 for {s.api}, docs/adr/0022). "
             + REALM_MARK,
-            [_audience_mapper(f"{s.api} audience", s.api)],
+            [_audience_mapper(f"{s.api} audience", s.api, lightweight=s.level >= 3)],
         )
         for s in kits
     ]
@@ -512,14 +539,15 @@ def realm_file(catalog: Catalog, current: str) -> str:
                 f"valid only at {s.api}. Its secret is {client_secret_env(s.service)} in .env, never in this file. "
                 f"{REALM_MARK}",
                 exchanges_for=s.api,
+                level=s.level,
             )
         )
         clients.append(
             _client(
                 s.api,
                 f"{s.api}: the API behind {s.service}",
-                f"Audience of the T2 tokens {s.service} obtains (docs/adr/0022). Signs no one in and has no secret "
-                f"in use. {REALM_MARK}",
+                f"Audience of the T2 tokens {s.service} obtains (docs/adr/0022). Signs no one in; its secret "
+                f"({client_secret_env(s.api)} in .env) only introspects its own tokens at level 3. {REALM_MARK}",
                 exchanges_for=None,
             )
         )
@@ -582,7 +610,7 @@ def matrix(catalog: Catalog) -> str:
             out.append(f"{s.name:<22} scenario door → {s.url}  (tools: tenant entitlement + the scenario's roles)")
         else:
             tenants = ", ".join(s.tenants) if s.tenants is not None else "any tenant"
-            out.append(f"{s.name:<22} kit server {s.service} → API {s.api}  ({tenants})")
+            out.append(f"{s.name:<22} kit server {s.service} → API {s.api}  ({tenants}, level {s.level})")
             grants = catalog.grants(s)
             for group, grant in grants.items():
                 tools = ", ".join(s.tools) if grant == EVERY_TOOL else ", ".join(grant)  # type: ignore[arg-type]
@@ -598,6 +626,7 @@ def main() -> int:
     mode.add_argument("--check", action="store_true", help="exit 1 if a generated file drifted (CI)")
     mode.add_argument("--matrix", action="store_true", help="print which group may run which tools")
     mode.add_argument("--kit-services", action="store_true", help="print the kit servers' service names")
+    mode.add_argument("--kit-apis", action="store_true", help="print the APIs behind the kit servers")
     args = parser.parse_args()
     try:
         catalog = load()
@@ -610,6 +639,9 @@ def main() -> int:
         return 0
     if args.kit_services:
         print(" ".join(s.service for s in catalog.kit_servers()))
+        return 0
+    if args.kit_apis:
+        print(" ".join(s.api for s in catalog.kit_servers()))
         return 0
     changed = stale(files)
     if args.check:

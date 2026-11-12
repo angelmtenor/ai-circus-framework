@@ -179,3 +179,48 @@ def test_every_tool_grant_renders_as_a_wildcard_policy() -> None:
     catalog = generator.build(data)
     (server,) = catalog.kit_servers()
     assert yaml.safe_load(generator.policy_file(catalog, server))["roles"][group] == "*"
+
+
+def _realm_after(data: dict[str, Any]) -> dict[str, Any]:
+    current = (REPO / "infra" / "keycloak" / "realm-export.json").read_text()
+    return json.loads(generator.realm_file(generator.build(data), current))
+
+
+@pytest.mark.parametrize("level", [2, 3])
+def test_the_level_reaches_keycloak_as_explicit_flags(level: int) -> None:
+    # Keycloak merges attribute updates: a flag left out would stay on in a live realm (docs/adr/0025).
+    data = raw()
+    _kit(data)["level"] = level
+    realm = _realm_after(data)
+    kit = _kit(data)
+    (client,) = [c for c in realm["clients"] if c["clientId"] == kit["service"]]
+    expected = "true" if level == 3 else "false"
+    assert client["attributes"]["dpop.bound.access.tokens"] == expected
+    assert client["attributes"]["client.use.lightweight.access.token.enabled"] == expected
+    (scope,) = [s for s in realm["clientScopes"] if s["name"] == f"{kit['api']}-audience"]
+    assert scope["protocolMappers"][0]["config"]["lightweight.claim"] == expected
+    policy = yaml.safe_load(generator.policy_file(generator.build(data), generator.build(data).kit_servers()[0]))
+    assert policy.get("level", 2) == level
+
+
+def test_a_level_other_than_2_or_3_is_refused() -> None:
+    for bad in (1, 4, "3", True):
+        data = raw()
+        _kit(data)["level"] = bad
+        with pytest.raises(generator.CatalogError):
+            generator.build(data)
+
+
+def test_a_lightweight_per_api_token_keeps_its_tenant() -> None:
+    # Level 3 per-API tokens carry ids only; the tenant is one of them (the API reads roles from introspection).
+    realm = json.loads((REPO / "infra" / "keycloak" / "realm-export.json").read_text())
+    (scope,) = [s for s in realm["clientScopes"] if s["name"] == "organization"]
+    assert all(m["config"].get("lightweight.claim") == "true" for m in scope["protocolMappers"])
+
+
+def test_every_catalog_client_gets_a_secret_name() -> None:
+    identity = _script("chat_ui_identity")
+    realm = json.loads((REPO / "infra" / "keycloak" / "realm-export.json").read_text())
+    secrets = identity.client_secrets(realm)
+    for server in generator.load().kit_servers():
+        assert secrets[server.api] == generator.client_secret_env(server.api)  # the API introspects at level 3

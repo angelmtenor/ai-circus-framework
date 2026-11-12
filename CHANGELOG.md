@@ -4,6 +4,25 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.55.0 — 2026-11-12
+
+### Added
+- **Level 3 for regulated MCP servers** (ADR 0025), per kit server with `level: 3` in `mcp/catalog.yaml`; the
+  `crm-mcp` + `crm-api` example runs at it. A server at level 3 refuses to start without every part:
+  - the per-API token is bound to a key the MCP server holds only in memory (DPoP): a copied token is refused as a
+    bearer token, with another key's proof, with a reused proof or with a proof for another request;
+  - every user token is checked live at Keycloak on every request, and the API checks its own token the same way:
+    signing a user out stops them on their next call, not when the token expires; an unreachable Keycloak is a refusal;
+  - mutual TLS between the MCP server and its API, with one certificate authority per pair (`make k3s-mcp-tls`,
+    files in `infra/mcp-tls/`, one Secret per workload holding only its own key);
+  - the per-API token carries ids only; the API reads roles and row filters from Keycloak.
+- Alerts for a revoked session's token used again and for unreachable token checks; dashboard panels for live checks.
+- The catalog portal can set a server's security level.
+
+### Changed
+- The example `crm-api` serves its API on 8443 (mutual TLS) and only `/healthz` and `/metrics` on 8000, and has its own
+  client secret (`CRM_API_CLIENT_SECRET`, generated into `.env` by `make k3s-mcp-examples-up`).
+
 ## v0.54.0 — 2026-11-12
 
 ### Added

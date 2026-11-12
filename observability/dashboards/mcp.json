@@ -1,7 +1,7 @@
 {
   "uid": "ai-circus-mcp",
   "title": "AI Circus · MCP servers — calls, refusals, per-API tokens",
-  "description": "MCP servers built with mcp-kit (docs/adr/0022, 0023): tool calls, policy refusals, per-API token exchanges, the API behind each server, and the audit lines.",
+  "description": "MCP servers built with mcp-kit (docs/adr/0022, 0023, 0025): tool calls, policy refusals, per-API token exchanges, the API behind each server, live token checks (level 3) and the audit lines.",
   "tags": [
     "ai-circus"
   ],
@@ -645,6 +645,118 @@
       ]
     },
     {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Live token checks (level 3): active, inactive, unavailable",
+      "description": "docs/adr/0025: every request's user token asked at the identity provider. Inactive = a signed-out or revoked session's token used again; unavailable = refused, never waved through.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (server, outcome) (rate(mcp_kit_introspections_total{server=~\"$server\"}[5m]))",
+          "legendFormat": "{{server}} {{outcome}}",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Live token check round trip (p95)",
+      "description": "What level 3 adds to each request.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le, server) (rate(mcp_kit_introspection_duration_seconds_bucket{server=~\"$server\"}[5m])))",
+          "legendFormat": "{{server}}",
+          "refId": "A",
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 11,
       "type": "logs",
       "title": "Audit lines: who, which tool, which outcome (never arguments, results or tokens)",
@@ -655,7 +767,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 36,
         "w": 24,
         "h": 10
       },

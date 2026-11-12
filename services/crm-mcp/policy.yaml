@@ -2,6 +2,7 @@
 # The token decides tenant and roles; crm-api still applies its own rules on every call.
 # Generated from mcp/catalog.yaml by scripts/generate_mcp_catalog.py: edit the catalog, not this file.
 tenants: [lite-demo]
+level: 3  # DPoP-bound per-API token, mutual TLS, live token check (ADR 0025)
 roles:
   retail_analyst: [search_customers, get_customer, top_customers]
   retail_store_manager: [search_customers, get_customer]
