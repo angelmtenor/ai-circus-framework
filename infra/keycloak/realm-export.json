@@ -248,6 +248,52 @@
           }
         }
       ]
+    },
+    {
+      "name": "mcp-servers",
+      "description": "Puts every MCP server client in the user token's audience (T1, docs/adr/0022): a server can only exchange a token it is an audience of. One audience mapper per MCP server.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "crm-mcp audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "crm-mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "crm-api-audience",
+      "description": "The only audience crm-mcp may obtain in a token exchange (T2 for crm-api, docs/adr/0022).",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "crm-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "crm-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clients": [
@@ -317,11 +363,52 @@
         "profile",
         "email",
         "roles",
-        "data-access"
+        "data-access",
+        "mcp-servers"
       ],
       "optionalClientScopes": [
         "offline_access"
       ]
+    },
+    {
+      "clientId": "crm-mcp",
+      "name": "crm-mcp (example MCP server)",
+      "description": "Example MCP server built with mcp-kit (docs/adr/0022). Confidential; exchanges a user's token for one valid only at crm-api. Its secret is CRM_MCP_CLIENT_SECRET in .env, never in this file.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "organization",
+        "roles",
+        "data-access",
+        "crm-api-audience"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "crm-api",
+      "name": "crm-api (example customer API)",
+      "description": "Audience of the T2 tokens crm-mcp obtains (docs/adr/0022). Signs no one in and has no secret in use.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {},
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
     }
   ],
   "roles": {
