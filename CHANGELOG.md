@@ -4,6 +4,18 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.50.0 — 2026-11-12
+
+### Added
+- **One MCP gateway in front of the doors** (ADR 0020): llm-gateway's LiteLLM also serves `/mcp/{slug},{slug}`, one URL for
+  rag-agent's and data-api's MCP doors, with tools prefixed by scenario (`surf_retail-query_metric`). Every door is
+  `true_passthrough`: the caller's own token reaches the door, which still decides tenant, role and tools, and the gateway
+  holds no credential. Open-source LiteLLM features only. With several doors in one URL the client sends one
+  `x-mcp-{slug}-authorization` header per door, because LiteLLM never replays one token to several upstreams; a door that
+  refuses simply contributes no tools. Contract tests load the config into LiteLLM's own MCP manager, so an upgrade that
+  changes this behaviour fails the build.
+- `make k3s-mcp-portforward` also forwards the gateway to `localhost:8033`.
+
 ## v0.49.0 — 2026-11-11
 
 ### Added
