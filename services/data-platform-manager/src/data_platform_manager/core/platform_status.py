@@ -115,6 +115,22 @@ TARGETS: tuple[Target, ...] = (
         optional=True,
     ),
     Target(
+        "crm-mcp",
+        "services",
+        "http://crm-mcp:8000/healthz",
+        "Example MCP server built with mcp-kit, behind the MCP gateway — optional (make k3s-mcp-examples-up)",
+        app_label="crm-mcp",
+        optional=True,
+    ),
+    Target(
+        "crm-api",
+        "services",
+        "http://crm-api:8000/healthz",
+        "Example customer API behind crm-mcp (per-API tokens only) — optional (make k3s-mcp-examples-up)",
+        app_label="crm-api",
+        optional=True,
+    ),
+    Target(
         "assistant", "services", "http://assistant:8000/healthz", "tabular_ml chat agent (AG-UI)", app_label="assistant"
     ),
     Target(

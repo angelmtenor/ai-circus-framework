@@ -11,13 +11,14 @@ cluster created before a realm change never sees it. This script makes the live 
 that file, which stays the single source of truth:
 
 - every client scope, realm role and client it declares (missing ones are created, missing
-  default client scopes are attached); the chat UI client's secret comes from .env;
+  default client scopes are attached); confidential clients' secrets (the chat UI, the example
+  MCP server crm-mcp of docs/adr/0022) come from .env;
 - the admin-only `stores` user attribute that the `data-access` scope maps into tokens;
 - a demo tenant (Keycloak Organization `lite-demo`) with two users: an analyst and the
   S012 store manager of surf_retail, sharing one generated password;
 - the tenant's entitlements to the scenarios the chat UI reaches, through platform-registry.
 
-Secrets (CHAT_UI_OIDC_CLIENT_SECRET, CHAT_UI_SECRET_KEY, CHAT_UI_DEMO_PASSWORD) are generated
+Secrets (CHAT_UI_OIDC_CLIENT_SECRET, CHAT_UI_SECRET_KEY, CHAT_UI_DEMO_PASSWORD, CRM_MCP_CLIENT_SECRET) are generated
 into .env when missing and are never printed; they reach Keycloak over stdin, never as arguments.
 Needs the platform-registry port-forward (make k3s-portforward) for the entitlements step.
 
@@ -44,11 +45,13 @@ REALM = "ai-circus"
 NAMESPACE = "ai-circus"
 KCADM = "/opt/keycloak/bin/kcadm.sh"
 KCADM_CONFIG = "/tmp/kcadm-chat-ui.config"
-CHAT_CLIENT_ID = "open-webui"
+# Each confidential client's secret, from .env: the chat UI and the example MCP server (docs/adr/0022).
+CLIENT_SECRETS = {"open-webui": "CHAT_UI_OIDC_CLIENT_SECRET", "crm-mcp": "CRM_MCP_CLIENT_SECRET"}
 GENERATED_SECRETS = (
     "CHAT_UI_OIDC_CLIENT_SECRET",
     "CHAT_UI_SECRET_KEY",
     "CHAT_UI_DEMO_PASSWORD",
+    "CRM_MCP_CLIENT_SECRET",
 )
 
 ORG = {
@@ -204,8 +207,8 @@ def sync_realm(kc: Kcadm, export: dict, env: dict[str, str]) -> None:
         )
         if not found:
             body = dict(client)
-            if client["clientId"] == CHAT_CLIENT_ID:
-                body["secret"] = env["CHAT_UI_OIDC_CLIENT_SECRET"]
+            if client["clientId"] in CLIENT_SECRETS:
+                body["secret"] = env[CLIENT_SECRETS[client["clientId"]]]
             kc("create", "clients", body=body)
             print(f"✓ client {client['clientId']} created")
             found = kc(
@@ -219,8 +222,8 @@ def sync_realm(kc: Kcadm, export: dict, env: dict[str, str]) -> None:
         client_uuid = found[0]["id"]
         # Attributes (token lifespan, PKCE…) follow the file; the chat UI's secret follows .env.
         update: dict[str, Any] = {"attributes": client.get("attributes", {})}
-        if client["clientId"] == CHAT_CLIENT_ID:
-            update["secret"] = env["CHAT_UI_OIDC_CLIENT_SECRET"]
+        if client["clientId"] in CLIENT_SECRETS:
+            update["secret"] = env[CLIENT_SECRETS[client["clientId"]]]
         kc("update", f"clients/{client_uuid}", body=update)
         attached = {
             s["name"] for s in kc("get", f"clients/{client_uuid}/default-client-scopes")

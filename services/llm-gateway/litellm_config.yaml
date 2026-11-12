@@ -279,6 +279,14 @@ mcp_servers:
     # A platform key may "view as" a role, exactly as at the door itself (ADR 0019 step 2).
     extra_headers: [X-Data-View-As, X-Data-View-As-Values]
     description: "Governed metrics and records of Angel's Surf Co. (read-only, row-filtered by role)"
+  # An MCP server in front of an existing API, built with libs/mcp-kit (docs/adr/0022): it validates
+  # the user's token, applies its policy, exchanges the token for one valid only at crm-api, and calls
+  # it as that user. Optional (make k3s-mcp-examples-up); absent, its calls simply fail.
+  crm:
+    url: http://crm-mcp:8000/mcp/
+    transport: http
+    auth_type: true_passthrough
+    description: "Customers of the organisation's shops, as the signed-in user may see them (read-only)"
 
 litellm_settings:
   # Reasoning models (GPT-5.x) reject parameters such as `temperature: 0`, which

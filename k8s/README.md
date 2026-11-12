@@ -34,6 +34,8 @@ k8s/
   llm-serving/      # optional overlay: vLLM on the GPU, behind llm-gateway (make k3s-vllm-up), never part of k3s-up
   chat-ui/          # optional overlay: Open WebUI at chat.localhost, Keycloak sign-in, MCP doors through the
                     # gateway with each user's token (make k3s-chat-ui-up, docs/adr/0021), never part of k3s-up
+  mcp-examples/     # optional overlay: crm-mcp (built with libs/mcp-kit) in front of crm-api, per-API tokens
+                    # (make k3s-mcp-examples-up, docs/adr/0022), never part of k3s-up
   data-platform/    # optional data tiers — core (Kafka, data-ingest, data-api, data-transform), analytics,
                     # bi, governance — one overlay each (make k3s-data-core-up … k3s-data-showcase)
 infra/k3s-gpu/      # k3s node image with the NVIDIA runtime + device plugin (GPU clusters)
@@ -220,6 +222,11 @@ password is `CHAT_UI_DEMO_PASSWORD` in `.env`, generated with the other `CHAT_UI
 the scenarios the chat reaches. Keycloak's login asks for the username first, then the password
 (organizations are on). In a chat, switch a door on from the Integrations menu (Tools). `make
 k3s-chat-ui-down` removes the pod and keeps its volume and the demo tenant.
+
+`make k3s-mcp-examples-up` (docs/adr/0022) builds and deploys `crm-api` and `crm-mcp`, an MCP server built with
+`libs/mcp-kit` in front of an API that only accepts tokens issued for it. It runs the same realm sync (the `crm-mcp`
+and `crm-api` clients, Keycloak's token exchange, `CRM_MCP_CLIENT_SECRET` in `.env`). The MCP gateway serves it as
+`/mcp/crm` and the chat UI lists it as "Customers (CRM)". `make k3s-mcp-examples-down` removes both.
 
 If login still fails client-side with a generic `Failed to fetch` (the `/llm-settings/
 active-model` call gets `ERR_CONNECTION_REFUSED`), check the browser devtools Network tab and

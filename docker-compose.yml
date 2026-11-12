@@ -5,7 +5,7 @@
 # backend services (services/*), then the UI. Traefik is the single entrypoint; a few
 # stateful/internal services publish a loopback-only port for non-container local dev.
 # Optional profiles: `pipeline` (one-shot ETL/training jobs), `deep-learning`,
-# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM), `chat-ui` (Open WebUI).
+# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM), `chat-ui` (Open WebUI), `mcp-examples` (crm-mcp + crm-api).
 
 name: ai-circus-framework
 
@@ -1232,7 +1232,11 @@ services:
          {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth",
           "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
           "info": {"id": "surf_retail", "name": "Angel's Surf Co. data",
-                   "description": "Governed sales metrics and records, filtered by your role (read-only)"}}]
+                   "description": "Governed sales metrics and records, filtered by your role (read-only)"}},
+         {"type": "mcp", "url": "http://llm-gateway:4000/mcp/crm", "auth_type": "system_oauth",
+          "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+          "info": {"id": "crm", "name": "Customers (CRM)",
+                   "description": "Customers of the shops you may see, masked (read-only; profile mcp-examples)"}}]
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
@@ -1248,3 +1252,38 @@ services:
       - "traefik.http.routers.open-webui.rule=Host(`chat.localhost`)"
       - "traefik.http.routers.open-webui.entrypoints=web"
       - "traefik.http.services.open-webui.loadbalancer.server.port=8080"
+
+  # Example of an MCP server in front of an existing API — OPTIONAL (profile "mcp-examples",
+  # docs/adr/0022). Same settings as k8s/mcp-examples/crm.yaml: crm-api is a customer API that only
+  # accepts a token issued for it; crm-mcp (built with libs/mcp-kit) exchanges the user's token at
+  # Keycloak for one and calls crm-api as that user. No Traefik route: only the MCP gateway calls crm-mcp.
+  crm-api:
+    build:
+      context: .
+      dockerfile: services/crm-api/Dockerfile
+    profiles: ["mcp-examples"]
+    environment:
+      <<: *service-auth-env
+    depends_on:
+      keycloak:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 256m
+
+  crm-mcp:
+    build:
+      context: .
+      dockerfile: services/crm-mcp/Dockerfile
+    profiles: ["mcp-examples"]
+    environment:
+      <<: *service-auth-env
+      MCP_CLIENT_SECRET: ${CRM_MCP_CLIENT_SECRET:-}
+    depends_on:
+      keycloak:
+        condition: service_started
+      crm-api:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 320m

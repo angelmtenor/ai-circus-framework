@@ -95,7 +95,11 @@ spec:
                  {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth",
                   "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
                   "info": {"id": "surf_retail", "name": "Angel's Surf Co. data",
-                           "description": "Governed sales metrics and records, filtered by your role (read-only)"}}]
+                           "description": "Governed sales metrics and records, filtered by your role (read-only)"}},
+                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/crm", "auth_type": "system_oauth",
+                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "crm", "name": "Customers (CRM)",
+                           "description": "Customers of the shops you may see, masked (read-only; make k3s-mcp-examples-up)"}}]
           volumeMounts:
             - {name: data, mountPath: /app/backend/data}
           # Idle ~660Mi measured after real sign-ins and chats (embeddings and models run in llm-gateway).

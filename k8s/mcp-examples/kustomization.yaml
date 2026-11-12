@@ -1,0 +1,7 @@
+# Example MCP server built with mcp-kit in front of an example customer API (docs/adr/0022).
+# Deliberately NOT part of k8s/base: `make k3s-mcp-examples-up` / `make k3s-mcp-examples-down`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - crm.yaml
