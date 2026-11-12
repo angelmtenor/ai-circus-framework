@@ -44,6 +44,7 @@ make k3s-mcp-examples-up / -down       # OPTIONAL crm-mcp (libs/mcp-kit) in fron
 make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
 make mcp-catalog / mcp-catalog-check   # mcp/catalog.yaml (ADR 0024) -> gateway routes, chat UI connections, kit policy.yaml, Keycloak exchange clients; CI fails on drift
 make mcp-catalog-portal                # OPTIONAL local page over the catalog (127.0.0.1:8040): tick tools per group, review diffs, publish; then make k3s-mcp-catalog-apply
+make k3s-mcp-tls                       # Level 3 (ADR 0025): mutual-TLS certificates per level-3 kit server/API pair (infra/mcp-tls/, gitignored) + per-workload Secrets; renew every 90 days
 make k3s-obs-up / k3s-obs-down         # OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics, Loki, Tempo, Grafana at grafana.localhost
 # after a code change: rebuild + reimport + restart what changed (a same-tag import never restarts pods)
 make k3s-build k3s-import && kubectl -n ai-circus rollout restart deployment/<svc>
@@ -127,6 +128,8 @@ re-implementing:
 validation, the access policy, the per-API token exchange and audit lines from it, and its own code is its tools only.
 `mcp/catalog.yaml` (ADR 0024) decides every MCP server's gateway route, chat UI connection, `policy.yaml` and Keycloak
 clients: edit the catalog and run `make mcp-catalog`, never the generated `BEGIN`/`END` blocks or those files by hand.
+`level: 3` there (ADR 0025) makes the kit refuse to start without live token checks, a DPoP-bound per-API token and
+mutual TLS to the API; a Keycloak client flag is always written "true" or "false" (Keycloak merges attribute updates).
 
 **LLM routing.** `llm-gateway` runs the real LiteLLM proxy; `assistant`/`rag-agent`/`form-agent`/
 `ui-react` call it by `model_name` (routing table: `services/llm-gateway/litellm_config.yaml`),
