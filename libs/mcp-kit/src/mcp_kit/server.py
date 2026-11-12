@@ -13,9 +13,9 @@ Author: Angel Martinez-Tenor
 
 from __future__ import annotations
 
-import json
 import logging
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -37,6 +37,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from mcp_kit.exchange import ExchangeRefusedError, TokenExchanger
 from mcp_kit.identity import Identity, TokenRejectedError, TokenVerifier
 from mcp_kit.policy import Policy
+from mcp_kit.telemetry import ACCESS_REFUSED, API_RESPONSES, TOOL_CALL_SECONDS, TOOL_CALLS, log_audit
 
 audit = logging.getLogger("mcp_kit.audit")
 # FastMCP's own handler prints rich text lines; the kit's audit line is the record of each call.
@@ -50,9 +51,9 @@ MAX_API_RESPONSE_BYTES = 1_000_000
 _STATE_KEY = "mcp_kit_caller"
 
 
-def _audit(event: str, **fields: Any) -> None:
+def _audit(event: str, *, server: str, **fields: Any) -> None:
     """One JSON line per decision: ids, names and outcomes only — never arguments, results or tokens."""
-    audit.info(json.dumps({"event": event, **fields}, sort_keys=True))
+    log_audit(audit, event, server=server, **fields)
 
 
 def configure_audit_output(stream: Any = None) -> None:
@@ -81,8 +82,10 @@ class ApiClient:
         subject_token: str,
         traceparent: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        server: str = "mcp-server",
     ) -> None:
         """Built by the kit for each request; tool code only calls `get`."""
+        self._server = server
         self._base_url = base_url
         self._exchanger = exchanger
         self._subject_token = subject_token
@@ -100,6 +103,7 @@ class ApiClient:
             headers["traceparent"] = self._traceparent
         async with httpx.AsyncClient(base_url=self._base_url, timeout=15.0, transport=self._transport) as client:
             response = await client.get(path, params=params, headers=headers)
+        API_RESPONSES.labels(self._server, f"{response.status_code // 100}xx").inc()
         if len(response.content) > MAX_API_RESPONSE_BYTES:
             raise ToolError("The API answered with more data than a tool may return.")
         if response.status_code in (401, 403):
@@ -153,6 +157,8 @@ class McpKit:
         self.verifier = verifier
         self.policy = policy
         self.exchanger = exchanger
+        if exchanger is not None:
+            exchanger.server = name
         self.api_base_url = api_base_url
         self.api_transport = api_transport
         self.tool_names: set[str] = set()
@@ -180,7 +186,12 @@ class McpKit:
         api = None
         if self.exchanger is not None and self.api_base_url:
             api = ApiClient(
-                self.api_base_url, self.exchanger, caller.subject_token, caller.traceparent, self.api_transport
+                self.api_base_url,
+                self.exchanger,
+                caller.subject_token,
+                caller.traceparent,
+                self.api_transport,
+                server=self.name,
             )
         return ToolContext(identity=caller.identity, api=api)
 
@@ -218,14 +229,21 @@ class _Guard:
         try:
             identity = await run_in_threadpool(self.kit.verifier.verify, authorization)
         except TokenRejectedError as exc:
-            _audit("mcp.access", server=self.kit.name, outcome="unauthenticated", reason=str(exc))
+            ACCESS_REFUSED.labels(self.kit.name, "unauthenticated").inc()
+            _audit("mcp.access", server=self.kit.name, level="WARNING", outcome="unauthenticated", reason=str(exc))
             response = JSONResponse({"detail": str(exc)}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
             await response(scope, receive, send)
             return
         allowed = self.kit.policy.allowed_tools(identity, self.kit.tool_names)
         if not allowed:
+            ACCESS_REFUSED.labels(self.kit.name, "forbidden").inc()
             _audit(
-                "mcp.access", server=self.kit.name, outcome="forbidden", subject=identity.subject, org=identity.org_id
+                "mcp.access",
+                server=self.kit.name,
+                level="WARNING",
+                outcome="forbidden",
+                subject=identity.subject,
+                org=identity.org_id,
             )
             await JSONResponse({"detail": "No tool of this server is open to you."}, status_code=403)(
                 scope, receive, send
@@ -257,14 +275,21 @@ class _PolicyMiddleware(Middleware):
         """Refuse a tool outside the grant; audit each call's tool and outcome."""
         caller = _caller()
         name = context.message.name
-        who = {"server": self.kit.name, "tool": name, "subject": caller.identity.subject, "org": caller.identity.org_id}
+        server = self.kit.name
+        who = {"tool": name, "subject": caller.identity.subject, "org": caller.identity.org_id}
         if name not in caller.allowed:
-            _audit("mcp.tool_call", outcome="denied", **who)
+            TOOL_CALLS.labels(server, name, "denied").inc()
+            _audit("mcp.tool_call", server=server, level="WARNING", outcome="denied", **who)
             raise ToolError(f"Unknown tool: {name}")
+        started = time.perf_counter()
         try:
             result = await call_next(context)
         except Exception as exc:
-            _audit("mcp.tool_call", outcome="error", error=type(exc).__name__, **who)
+            TOOL_CALLS.labels(server, name, "error").inc()
+            _audit("mcp.tool_call", server=server, outcome="error", error=type(exc).__name__, **who)
             raise
-        _audit("mcp.tool_call", outcome="ok", **who)
+        finally:
+            TOOL_CALL_SECONDS.labels(server, name).observe(time.perf_counter() - started)
+        TOOL_CALLS.labels(server, name, "ok").inc()
+        _audit("mcp.tool_call", server=server, outcome="ok", **who)
         return result

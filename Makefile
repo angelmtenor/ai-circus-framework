@@ -700,7 +700,9 @@ k3s-governance-opa-test: ## Run the reference Rego policy's unit tests (needs on
 # Up: deploy it, then point every service at its collector (one shared-config key, added by patch so a
 # later `kubectl apply -k k8s/base` keeps it) and restart them. Down: the reverse, then delete it.
 OBS_ENDPOINT ?= http://otel-collector.observability:4318
-OBS_SERVICES ?= prediction assistant rag-agent form-agent platform-registry data-platform-manager llm-gateway agui-voice dl-inference data-api data-ingest
+OBS_SERVICES ?= prediction assistant rag-agent form-agent platform-registry data-platform-manager llm-gateway agui-voice dl-inference data-api data-ingest crm-api crm-mcp
+# The optional chat UI (ADR 0021) reads its own variables, not shared-config: switched on and off here (gRPC, port 4317).
+OBS_CHAT_UI_ENV = ENABLE_OTEL=true ENABLE_OTEL_TRACES=true OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.observability:4317 OTEL_EXPORTER_OTLP_INSECURE=true
 OBS_WORKLOADS = daemonset/otel-collector deployment/victoriametrics deployment/vmalert deployment/loki deployment/tempo deployment/grafana
 
 k3s-obs-up: ## OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics+vmalert, Loki, Tempo, Grafana at http://grafana.localhost; every service starts exporting to it
@@ -714,6 +716,9 @@ k3s-obs-up: ## OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMe
 	@kubectl -n ai-circus patch configmap shared-config --type merge \
 		-p '{"data":{"OTEL_EXPORTER_OTLP_ENDPOINT":"$(OBS_ENDPOINT)"}}' >/dev/null
 	@$(MAKE) --no-print-directory k3s-obs-restart
+	@if kubectl -n ai-circus get deployment/open-webui >/dev/null 2>&1; then \
+		kubectl -n ai-circus set env deployment/open-webui $(OBS_CHAT_UI_ENV) >/dev/null && \
+		kubectl -n ai-circus rollout status deployment/open-webui --timeout=600s >/dev/null && echo "✓ open-webui traces too"; fi
 	@echo "✓ services export to $(OBS_ENDPOINT) — Grafana: http://grafana.localhost (anonymous = Viewer; admin password:"
 	@echo "  kubectl -n observability get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d)"
 
@@ -721,6 +726,8 @@ k3s-obs-down: ## Undo k3s-obs-up: services stop exporting, then the bundle and i
 	@kubectl -n ai-circus patch configmap shared-config --type json \
 		-p '[{"op":"remove","path":"/data/OTEL_EXPORTER_OTLP_ENDPOINT"}]' >/dev/null 2>&1 || true
 	@$(MAKE) --no-print-directory k3s-obs-restart
+	@if kubectl -n ai-circus get deployment/open-webui >/dev/null 2>&1; then \
+		kubectl -n ai-circus set env deployment/open-webui ENABLE_OTEL- ENABLE_OTEL_TRACES- OTEL_EXPORTER_OTLP_ENDPOINT- OTEL_EXPORTER_OTLP_INSECURE- >/dev/null; fi
 	@kubectl delete -k observability --ignore-not-found >/dev/null && echo "✓ observability bundle removed"
 
 k3s-obs-restart: ## (internal) Restart each running OBS_SERVICES Deployment in turn so it rereads shared-config

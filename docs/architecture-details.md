@@ -176,7 +176,11 @@ only audience is its API (T2, RFC 8693, cached per T1), and gives tools `kit.con
 client that already holds T2. Tools take no identity arguments; every call writes one JSON audit line (call
 `configure_audit_output()` at start-up). In Keycloak each server is a confidential client with standard token exchange and
 one audience scope, and the `mcp-servers` scope puts it in the user token's audience. The example pair, `crm-mcp` in front of
-`crm-api` (`k8s/mcp-examples/`, `make k3s-mcp-examples-up`), is the gateway's `crm` door and a chat UI connection.
+`crm-api` (`k8s/mcp-examples/`, `make k3s-mcp-examples-up`), is the gateway's `crm` door and a chat UI connection. The kit reports for every server (docs/adr/0023):
+`mcp_kit_*` metrics on the service's own `/metrics` (labels: server, tool, outcome, reason only), audit lines in the
+platform's log shape with `trace_id`, and one trace from the server inwards (its Keycloak exchange and API call); the
+"AI Circus · MCP servers" dashboard and the `ai-circus.mcp` alert group read them. The hop into the server is correlated,
+not traced, while the chat UI's and LiteLLM's MCP clients send no `traceparent`.
 
 ## Knowledge graphs
 
