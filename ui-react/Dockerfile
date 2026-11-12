@@ -27,7 +27,7 @@ RUN npm run build \
 
 # Unprivileged variant: runs as UID 101 on :8080, so k8s can enforce runAsNonRoot with
 # every capability dropped (stock nginx starts as root to bind :80).
-FROM nginxinc/nginx-unprivileged:1.30-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 COPY ui-react/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
