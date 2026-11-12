@@ -160,6 +160,15 @@ to LiteLLM's own key check. `tests/test_mcp_gateway.py` pins the contract (passt
 doors of scenarios with `mcp.expose`, LiteLLM's own gating and no fan-out). The gateway has no Traefik router; `make
 k3s-mcp-portforward` adds `localhost:8033`.
 
+**An optional chat UI with real sign-in** (docs/adr/0021): `make k3s-chat-ui-up` serves Open WebUI at `chat.localhost`
+(`k8s/chat-ui/`, compose profile `chat-ui`), Keycloak-only sign-in through the confidential `open-webui` client, models
+and embeddings through llm-gateway, and one MCP connection per door to the gateway with `auth_type: system_oauth`, so
+each door sees the signed-in user's own token and applies its tenant and roles (an analyst gets `run_sql`, the S012 store
+manager does not and sees only S012). `scripts/chat_ui_identity.py` brings the live realm up to `realm-export.json`
+(which now issues `sub`, realm roles, the `{alias: {id}}` organization claim and row-filter claims such as `stores`) and
+creates the `lite-demo` tenant. The client's tokens live 15 minutes because Open WebUI refreshes within 5 and the gateway
+binds an MCP session to its token.
+
 ## Knowledge graphs
 
 A `conversational_rag` scenario may ship a **knowledge graph** (`documents.knowledge_graph`, same

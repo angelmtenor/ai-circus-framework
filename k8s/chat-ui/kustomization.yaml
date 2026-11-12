@@ -1,0 +1,8 @@
+# Optional chat UI (docs/adr/0021): Open WebUI signing users in with Keycloak and reaching the MCP doors
+# through llm-gateway's MCP gateway with each user's own token. Deliberately NOT part of k8s/base:
+# `make k3s-chat-ui-up` (identity provisioning + this) / `make k3s-chat-ui-down`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - open-webui.yaml

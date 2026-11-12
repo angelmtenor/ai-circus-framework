@@ -106,6 +106,15 @@ TARGETS: tuple[Target, ...] = (
         optional=True,
     ),
     Target(
+        "open-webui",
+        "services",
+        "http://open-webui:8080/health",
+        "Chat UI with Keycloak sign-in, MCP doors through the gateway — optional (make k3s-chat-ui-up)",
+        app_label="open-webui",
+        console_url="http://chat.localhost",
+        optional=True,
+    ),
+    Target(
         "assistant", "services", "http://assistant:8000/healthz", "tabular_ml chat agent (AG-UI)", app_label="assistant"
     ),
     Target(

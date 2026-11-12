@@ -4,6 +4,22 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.51.0 — 2026-11-12
+
+### Added
+- **Optional chat UI with real Keycloak sign-in** (ADR 0021): `make k3s-chat-ui-up` serves Open WebUI at
+  `http://chat.localhost` (compose profile `chat-ui`). Users sign in with Keycloak only; models and embeddings go through
+  llm-gateway; each scenario's MCP door is one connection to the MCP gateway carrying the signed-in user's own token, so
+  the door applies that user's tenant and role. It brings the live realm up to `realm-export.json` and creates a `lite-demo`
+  tenant: in the chat, the analyst gets `run_sql` and every store, the S012 store manager neither. LibreChat (MIT) follows
+  as a second, strictly open-source chat UI.
+
+### Fixed
+- **Real Keycloak sign-ins could not reach any service**: the imported realm declared its own client scopes, so Keycloak
+  added none of its built-in ones and tokens had no `sub`, no realm roles and a list-shaped `organization` claim. The realm
+  now declares them, adds the organization id and the row-filter claims (`stores`), and a test pins each claim.
+- Keycloak hands in-cluster clients in-cluster token and key URLs, while the issuer and login page stay public.
+
 ## v0.50.0 — 2026-11-12
 
 ### Added

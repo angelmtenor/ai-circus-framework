@@ -65,6 +65,9 @@ SECRET_SPECS=(
   # own password; MLflow only the Postgres + SeaweedFS credentials.
   "langfuse-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY,LANGFUSE_INIT_USER_EMAIL,LANGFUSE_INIT_USER_PASSWORD,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,LANGFUSE_NEXTAUTH_SECRET,LANGFUSE_SALT,LANGFUSE_ENCRYPTION_KEY,CLICKHOUSE_PASSWORD"
   "clickhouse-secrets|CLICKHOUSE_PASSWORD"
+  # Optional chat UI (k8s/chat-ui/, docs/adr/0021) — generated unconditionally, harmless when off;
+  # its CHAT_UI_* keys are generated into .env by scripts/chat_ui_identity.py.
+  "open-webui-secrets|CHAT_UI_SECRET_KEY,CHAT_UI_OIDC_CLIENT_SECRET,LITELLM_MASTER_KEY"
   "mlflow-secrets|POSTGRES_USER,POSTGRES_PASSWORD,OBJECT_STORE_ACCESS_KEY,OBJECT_STORE_SECRET_KEY"
 )
 

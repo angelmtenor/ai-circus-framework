@@ -30,3 +30,21 @@ realm-export at all; they must be assigned once, after realm import, using the
 container's own `KEYCLOAK_ADMIN_USERNAME`/`KEYCLOAK_ADMIN_PASSWORD` bootstrap admin
 credentials (see the naming contract) — a mechanism that also has not been exercised
 live.
+
+## Keeping a live realm in step (docs/adr/0021)
+
+`--import-realm` applies this file only on a realm's first boot, so a cluster created earlier never
+sees a change to it. `scripts/chat_ui_identity.py` (run by `make k3s-chat-ui-up`, safe to re-run)
+brings the live realm up to the file through `kcadm.sh` and the pod's own bootstrap admin: missing
+client scopes, protocol mappers and their config, realm roles, clients and default client scopes,
+plus the chat UI client's secret from `.env` and the `lite-demo` demo tenant.
+
+An imported realm gets none of Keycloak's built-in scopes, so this file declares the ones a token
+needs: `basic` (`sub`), `profile`, `email`, `roles` (`realm_access.roles`) and `data-access` (row-filter
+claims such as `stores`, from an admin-only user attribute declared in the user profile). The
+organization mapper adds the organization id, giving the `{alias: {id}}` claim `ai_circus_shared.auth`
+reads. `libs/shared/tests/test_keycloak_realm.py` pins all of it: verified live with real sign-ins.
+
+`KC_HOSTNAME` is the full public URL with `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`: a client inside
+the cluster gets in-cluster token and JWKS URLs, while the issuer and login pages stay public.
+
