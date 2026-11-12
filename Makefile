@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -530,6 +530,17 @@ k3s-vllm-up: ## Deploy the optional vLLM overlay (k8s/llm-serving/, needs a GPU,
 
 k3s-vllm-down: ## Remove the vLLM overlay and free the GPU. Keeps the weights' volume: `kubectl -n ai-circus delete pvc vllm-model-cache` to reclaim it
 	@kubectl -n ai-circus delete deployment,service vllm --ignore-not-found
+
+k3s-chat-ui-up: ## OPTIONAL chat UI (k8s/chat-ui/, ADR 0021): Open WebUI at http://chat.localhost, Keycloak sign-in, MCP doors through the gateway with each user's token. Brings the live Keycloak realm up to infra/keycloak/realm-export.json, creates the lite-demo tenant (analyst@ / manager@lite-demo.local, password CHAT_UI_DEMO_PASSWORD in .env) and its entitlements. Never part of k3s-all
+	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
+	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
+	@./scripts/k3s_generate_secrets.sh >/dev/null
+	@kubectl apply -k k8s/chat-ui
+	@kubectl -n ai-circus rollout status deployment/open-webui --timeout=900s
+	@echo "✓ chat UI up — http://chat.localhost (sign in with Keycloak; the first user to sign in becomes its admin)"
+
+k3s-chat-ui-down: ## Remove the optional chat UI. Keeps its data volume (`kubectl -n ai-circus delete pvc open-webui-data` to reclaim it) and the Keycloak demo tenant
+	@kubectl -n ai-circus delete deployment,service,ingressroute open-webui --ignore-not-found
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }

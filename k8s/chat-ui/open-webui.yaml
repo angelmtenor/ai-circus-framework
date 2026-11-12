@@ -1,0 +1,145 @@
+# Optional chat UI (docs/adr/0021): Open WebUI at http://chat.localhost, signing users in with Keycloak
+# and reaching the scenarios' MCP doors through llm-gateway's MCP gateway (docs/adr/0020) with each
+# user's own Keycloak token (`auth_type: system_oauth`). Models come from llm-gateway's /v1.
+# Never part of k3s-all: `make k3s-chat-ui-up` / `make k3s-chat-ui-down`. Mirrors docker-compose.yml's
+# `open-webui` service (profile "chat-ui").
+#
+# License: the official image, unmodified. Open WebUI's license (BSD-3 plus a branding clause) forbids
+# changing its branding above 50 users in 30 days without an enterprise licence; nothing here changes it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: ai-circus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}  # one RWO volume (SQLite)
+  selector:
+    matchLabels: {app: open-webui}
+  template:
+    metadata:
+      labels: {app: open-webui}
+      # No prometheus.io annotations: Open WebUI serves no /metrics (its OTel export is phase 4).
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000  # the data volume is the only place it writes
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:v0.12.5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 8080}
+          env:
+            # Everything below wins on every boot: no settings drift into the database.
+            - {name: ENABLE_PERSISTENT_CONFIG, value: "false"}
+            - {name: WEBUI_URL, value: "http://chat.localhost"}
+            - {name: WEBUI_SECRET_KEY, valueFrom: {secretKeyRef: {name: open-webui-secrets, key: CHAT_UI_SECRET_KEY}}}
+            - {name: DATA_DIR, value: /app/backend/data}
+            - {name: STATIC_DIR, value: /app/backend/data/static}  # the image's own static dir is root-owned
+            - {name: HOME, value: /app/backend/data/home}
+            # Sign-in: Keycloak only (no local passwords). Discovery goes in-cluster; Keycloak answers
+            # with its public issuer and login page, and in-cluster token/JWKS URLs (KC_HOSTNAME_BACKCHANNEL_DYNAMIC).
+            - {name: ENABLE_LOGIN_FORM, value: "false"}
+            - {name: ENABLE_PASSWORD_AUTH, value: "false"}
+            - {name: ENABLE_SIGNUP, value: "false"}
+            - {name: ENABLE_OAUTH_SIGNUP, value: "true"}
+            - {name: DEFAULT_USER_ROLE, value: "user"}
+            - {name: OAUTH_PROVIDER_NAME, value: "Keycloak"}
+            - {name: OAUTH_CLIENT_ID, value: "open-webui"}
+            - {name: OAUTH_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: open-webui-secrets, key: CHAT_UI_OIDC_CLIENT_SECRET}}}
+            - {name: OPENID_PROVIDER_URL, value: "http://keycloak:8080/realms/ai-circus/.well-known/openid-configuration"}
+            - {name: OPENID_REDIRECT_URI, value: "http://chat.localhost/oauth/oidc/callback"}
+            # `organization` must be requested by name for Keycloak to put the tenant in the token.
+            - {name: OAUTH_SCOPES, value: "openid email profile organization"}
+            - {name: OAUTH_CODE_CHALLENGE_METHOD, value: "S256"}
+            # Models: llm-gateway only (no Ollama, no provider key here), visible to every user.
+            - {name: ENABLE_OLLAMA_API, value: "false"}
+            - {name: BYPASS_MODEL_ACCESS_CONTROL, value: "true"}
+            - {name: OPENAI_API_BASE_URLS, value: "http://llm-gateway:4000/v1"}
+            - {name: OPENAI_API_KEYS, valueFrom: {secretKeyRef: {name: open-webui-secrets, key: LITELLM_MASTER_KEY}}}
+            # Embeddings through the gateway too: no local model loads at start-up.
+            - {name: RAG_EMBEDDING_ENGINE, value: "openai"}
+            - {name: RAG_EMBEDDING_MODEL, value: "local-embed"}
+            - {name: RAG_OPENAI_API_BASE_URL, value: "http://llm-gateway:4000/v1"}
+            - {name: RAG_OPENAI_API_KEY, valueFrom: {secretKeyRef: {name: open-webui-secrets, key: LITELLM_MASTER_KEY}}}
+            - {name: HF_HUB_OFFLINE, value: "1"}
+            - {name: ENABLE_VERSION_UPDATE_CHECK, value: "false"}
+            - {name: DO_NOT_TRACK, value: "true"}
+            - {name: SCARF_NO_ANALYTICS, value: "true"}
+            - {name: ANONYMIZED_TELEMETRY, value: "false"}
+            # The scenarios' MCP doors, one connection per door (a single Authorization header can only
+            # go to one door, docs/adr/0020), each with the signed-in user's own Keycloak token.
+            # Visible to every user: the doors decide tenant, role and tools.
+            - name: TOOL_SERVER_CONNECTIONS
+              value: >-
+                [{"type": "mcp", "url": "http://llm-gateway:4000/mcp/ai_circus_reference", "auth_type": "system_oauth",
+                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "ai_circus_reference", "name": "AI Circus reference notes",
+                           "description": "Search and read the reference notes (read-only)"}},
+                 {"type": "mcp", "url": "http://llm-gateway:4000/mcp/surf_retail", "auth_type": "system_oauth",
+                  "key": "", "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "surf_retail", "name": "Angel's Surf Co. data",
+                           "description": "Governed sales metrics and records, filtered by your role (read-only)"}}]
+          volumeMounts:
+            - {name: data, mountPath: /app/backend/data}
+          # Idle ~660Mi measured after real sign-ins and chats (embeddings and models run in llm-gateway).
+          resources:
+            requests: {cpu: 50m, memory: 512Mi}
+            limits: {memory: 1536Mi}
+          # First boot runs the database migrations: give it five minutes before liveness counts.
+          startupProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: open-webui-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui
+  namespace: ai-circus
+spec:
+  selector: {app: open-webui}
+  ports:
+    - {port: 8080, targetPort: 8080}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: open-webui
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`chat.localhost`)
+      kind: Rule
+      services:
+        - {name: open-webui, port: 8080}

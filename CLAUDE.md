@@ -40,6 +40,7 @@ make k3s-pause / k3s-resume-lite
 make k3s-demo / k3s-demo-off  # live demo on a 16 GB laptop: scale observability + admin Platform to 0 (~2.5 GB); verify with VERIFY_SKIP="langfuse mlflow"
 make k3s-data-demo / k3s-data-demo-off  # multi-scenario demo incl. data core+analytics+bi; governance, MLflow, voice off (~8.8 of 11.7 GiB)
 make k3s-mcp-portforward              # OPTIONAL: MCP doors on localhost for clients on this machine: rag-agent :8031, data-api :8032, the MCP gateway in front of both :8033 (ADR 0019, 0020)
+make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
 make k3s-obs-up / k3s-obs-down         # OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics, Loki, Tempo, Grafana at grafana.localhost
 # after a code change: rebuild + reimport + restart what changed (a same-tag import never restarts pods)
 make k3s-build k3s-import && kubectl -n ai-circus rollout restart deployment/<svc>
