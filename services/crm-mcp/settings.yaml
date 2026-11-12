@@ -70,6 +70,32 @@ env_variables:
     mandatory: true
     secret: false
 
+  # Level 3 (docs/adr/0025, `level: 3` in the generated policy.yaml). No profile values below on purpose: a
+  # profile value beats the environment, so these come only from the deployment.
+  - name: KEYCLOAK_INTROSPECTION_URL
+    description: "Keycloak introspection endpoint; default: KEYCLOAK_TOKEN_URL + /introspect"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: API_TLS_CA_FILE
+    description: "The CA shared with the API: the only one its server certificate may come from"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: API_TLS_CERT_FILE
+    description: "This server's client certificate for mutual TLS to the API (PEM)"
+    type: string
+    mandatory: false
+    secret: false
+
+  - name: API_TLS_KEY_FILE
+    description: "Private key of the client certificate (PEM)"
+    type: string
+    mandatory: false
+    secret: false
+
 # Optional global settings
 global_settings:
   env_file: ".env"          # Default location for environment variable file
@@ -86,7 +112,8 @@ environments:
     KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/ai-circus/protocol/openid-connect/token"
     MCP_CLIENT_ID: "crm-mcp"
     API_AUDIENCE: "crm-api"
-    API_BASE_URL: "http://crm-api:8000"
+    # Level 3: crm-api's mutual-TLS listener (its HTTP port serves only /healthz and /metrics).
+    API_BASE_URL: "https://crm-api:8443"
     POLICY_FILE: "policy.yaml"
 
   local: {}

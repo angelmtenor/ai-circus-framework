@@ -9,6 +9,10 @@ The example customer API's routes, following the API checklist of the MCP Lite S
   user or tenant gets 403 and an audit line (rule R7);
 - return only what the caller's role may see, with personal fields masked.
 
+At Level 3 (docs/adr/0025) it also requires `Authorization: DPoP` with a fresh proof of the key the token is bound
+to, asks Keycloak on every request whether the token is still active, and takes roles and the store claim from
+Keycloak's answer: the per-API token is lightweight and carries ids only.
+
 Author: Angel Martinez-Tenor
 """
 
@@ -22,6 +26,8 @@ import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
 
 from crm_api.core import customers
+from crm_api.core.dpop import DpopRejectedError, DpopVerifier
+from crm_api.core.introspection import IntrospectionUnavailableError, Introspector, TokenInactiveError
 from crm_api.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,17 +56,35 @@ KeyResolver = Callable[[str], Any]
 
 @dataclass(frozen=True)
 class TokenSettings:
-    """What a token must say to be accepted here, and how to find the key that signed it."""
+    """What a token must say to be accepted here, and how to find the key that signed it.
+
+    `level` 3 also needs `introspector` (Keycloak, as this API) and `dpop` (proof checks with replay memory).
+    """
 
     issuer: str
     audience: str
     key_for: KeyResolver
+    level: int = 2
+    introspector: Introspector | None = None
+    dpop: DpopVerifier | None = None
+
+    def __post_init__(self) -> None:
+        if self.level >= 3 and (self.introspector is None or self.dpop is None):
+            raise ValueError("Level 3 needs an introspector and a DPoP verifier: refusing to run below it.")
 
 
-def _caller_from(authorization: str | None, settings: TokenSettings) -> Caller:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Missing bearer token.", headers={"WWW-Authenticate": "Bearer"})
-    token = authorization.removeprefix("Bearer ").strip()
+def _refuse(reason: str, status: int = 401, *, scheme: str = "Bearer") -> HTTPException:
+    logger.info("crm-api access refused: {}", reason)
+    message = {401: "This API only accepts a valid token issued for it.", 503: "The token cannot be checked now."}
+    headers = {"WWW-Authenticate": f'{scheme} algs="ES256 PS256 RS256"' if scheme == "DPoP" else scheme}
+    return HTTPException(status, message.get(status, "Refused."), headers=headers if status == 401 else None)
+
+
+def _caller_from(request: Request, authorization: str | None, settings: TokenSettings) -> Caller:
+    scheme = "DPoP" if settings.level >= 3 else "Bearer"
+    if not authorization or not authorization.startswith(f"{scheme} "):
+        raise _refuse(f"missing {scheme} token", scheme=scheme)
+    token = authorization.removeprefix(f"{scheme} ").strip()
     try:
         claims = jwt.decode(
             token,
@@ -72,8 +96,9 @@ def _caller_from(authorization: str | None, settings: TokenSettings) -> Caller:
             options={"require": ["exp", "iat", "sub", "aud", "iss"]},
         )
     except jwt.PyJWTError as exc:
-        logger.info("crm-api access refused: {}", type(exc).__name__)
-        raise HTTPException(401, "This API only accepts a valid token issued for it.") from exc
+        raise _refuse(type(exc).__name__, scheme=scheme) from exc
+    if settings.level >= 3:
+        claims = _level3_claims(request, token, claims, settings)
     organizations = claims.get("organization")
     if not isinstance(organizations, dict) or len(organizations) != 1:
         raise HTTPException(401, "The token must belong to exactly one organization.")
@@ -88,9 +113,34 @@ def _caller_from(authorization: str | None, settings: TokenSettings) -> Caller:
     )
 
 
+def _level3_claims(request: Request, token: str, claims: dict[str, Any], settings: TokenSettings) -> dict[str, Any]:
+    """A fresh proof of the bound key, and Keycloak's live view of the token, whose claims then win."""
+    assert settings.introspector is not None and settings.dpop is not None  # TokenSettings enforces it
+    bound = (claims.get("cnf") or {}).get("jkt")
+    try:
+        settings.dpop.verify(
+            request.headers.get("dpop"),
+            method=request.method,
+            url=str(request.url),
+            access_token=token,
+            bound_jkt=bound if isinstance(bound, str) else None,
+        )
+    except DpopRejectedError as exc:
+        raise _refuse(f"dpop: {exc}", scheme="DPoP") from exc
+    try:
+        live = settings.introspector.check(token, subject=claims["sub"])
+    except TokenInactiveError as exc:
+        raise _refuse("token inactive", scheme="DPoP") from exc
+    except IntrospectionUnavailableError as exc:
+        raise _refuse(f"introspection unavailable ({exc})", 503) from exc
+    if (live.get("cnf") or {}).get("jkt", bound) != bound:
+        raise _refuse("introspection names another key", scheme="DPoP")
+    return {**claims, **{k: live[k] for k in ("organization", "realm_access", "stores") if k in live}}
+
+
 def caller(request: Request, authorization: Annotated[str | None, Header()] = None) -> Caller:
     """The validated caller; also refuses a request that names another user or tenant (403, audited)."""
-    who = _caller_from(authorization, request.app.state.token_settings)
+    who = _caller_from(request, authorization, request.app.state.token_settings)
     own = {"user": who.subject, "user_id": who.subject, "subject": who.subject}
     own |= {"org": who.tenant, "tenant": who.tenant, "org_id": who.tenant_id}
     for name in IDENTITY_PARAMS:

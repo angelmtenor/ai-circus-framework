@@ -2,6 +2,10 @@
 # about MCP, and crm-mcp, the MCP server built with mcp-kit in front of it. A user's token (T1) reaches
 # crm-mcp through the MCP gateway (llm-gateway's /mcp/crm); crm-mcp exchanges it at Keycloak for a
 # token valid only at crm-api (T2) and calls crm-api as that user. Neither has a Traefik route.
+# The pair runs at Level 3 (docs/adr/0025, `level: 3` in mcp/catalog.yaml): crm-mcp checks every user token
+# live at Keycloak and binds T2 to an in-memory key (DPoP); crm-api accepts only that key's fresh proof, checks
+# T2 live, and serves its API over mutual TLS on 8443 with the pair's own authority (Secrets crm-api-tls and
+# crm-mcp-tls from `make k3s-mcp-tls`); 8000 serves only /healthz and /metrics, for probes and the scraper.
 # Never part of k3s-all: `make k3s-mcp-examples-up` / `make k3s-mcp-examples-down`. Mirrors
 # docker-compose.yml's profile "mcp-examples".
 apiVersion: apps/v1
@@ -16,13 +20,14 @@ spec:
   template:
     metadata:
       labels: {app: crm-api}
-      # Platform observability contract (ADR 0015): scrape /metrics.
+      # Platform observability contract (ADR 0015): scrape /metrics (the plain port, no client certificate).
       annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: /metrics}
     spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        fsGroup: 1000  # the TLS Secret's files are group-readable only
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: crm-api
@@ -32,10 +37,22 @@ spec:
             allowPrivilegeEscalation: false
             capabilities: {drop: ["ALL"]}
           ports:
-            - {containerPort: 8000}
+            - {name: api-mtls, containerPort: 8443}
+            - {name: health, containerPort: 8000}
           envFrom:
             - configMapRef: {name: shared-config}
             - secretRef: {name: crm-api-secrets}
+          env:
+            - {name: SECURITY_LEVEL, value: "3"}
+            - {name: KEYCLOAK_INTROSPECTION_URL, value: "http://keycloak:8080/realms/ai-circus/protocol/openid-connect/token/introspect"}
+            # Renamed from .env's CRM_API_CLIENT_SECRET: crm-api introspects its own tokens as itself.
+            - {name: API_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: crm-api-secrets, key: CRM_API_CLIENT_SECRET}}}
+            - {name: TLS_PORT, value: "8443"}
+            - {name: TLS_CERT_FILE, value: /etc/mcp-tls/tls.crt}
+            - {name: TLS_KEY_FILE, value: /etc/mcp-tls/tls.key}
+            - {name: TLS_CLIENT_CA_FILE, value: /etc/mcp-tls/ca.crt}
+          volumeMounts:
+            - {name: tls, mountPath: /etc/mcp-tls, readOnly: true}
           resources:
             requests: {cpu: 10m, memory: 96Mi}
             limits: {memory: 256Mi}
@@ -53,6 +70,9 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: tls
+          secret: {secretName: crm-api-tls, defaultMode: 0440}
 ---
 apiVersion: v1
 kind: Service
@@ -61,8 +81,9 @@ metadata:
   namespace: ai-circus
 spec:
   selector: {app: crm-api}
+  # Only the mutual-TLS API: the plain port (health, metrics) is reached on the pod by probes and the scraper.
   ports:
-    - {port: 8000, targetPort: 8000}
+    - {name: api-mtls, port: 8443, targetPort: 8443}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -82,6 +103,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        fsGroup: 1000  # the TLS Secret's files are group-readable only
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: crm-mcp
@@ -98,6 +120,12 @@ spec:
           env:
             # Renamed from .env's CRM_MCP_CLIENT_SECRET: crm-mcp's own Keycloak client secret (token exchange).
             - {name: MCP_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: crm-mcp-secrets, key: CRM_MCP_CLIENT_SECRET}}}
+            # Level 3: mutual TLS to crm-api (its API_BASE_URL is https://crm-api:8443, settings.yaml).
+            - {name: API_TLS_CA_FILE, value: /etc/mcp-tls/ca.crt}
+            - {name: API_TLS_CERT_FILE, value: /etc/mcp-tls/tls.crt}
+            - {name: API_TLS_KEY_FILE, value: /etc/mcp-tls/tls.key}
+          volumeMounts:
+            - {name: tls, mountPath: /etc/mcp-tls, readOnly: true}
           resources:
             requests: {cpu: 10m, memory: 128Mi}
             limits: {memory: 320Mi}
@@ -115,6 +143,9 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: tls
+          secret: {secretName: crm-mcp-tls, defaultMode: 0440}
 ---
 apiVersion: v1
 kind: Service

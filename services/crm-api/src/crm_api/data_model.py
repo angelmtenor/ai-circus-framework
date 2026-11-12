@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,9 +35,32 @@ class EnvConfig(BaseSettings):
     API_AUDIENCE: str = Field(
         description="The audience a token must name to be accepted here: this API's Keycloak client id"
     )
+    SECURITY_LEVEL: str | None = Field(
+        description="2: bearer token for this API; 3: DPoP-bound token, checked live, over mutual TLS (ADR 0025)",
+        default="2",
+    )
+    KEYCLOAK_INTROSPECTION_URL: str | None = Field(
+        description="Keycloak introspection endpoint (in-cluster URL), asked about every token at level 3", default=None
+    )
+    API_CLIENT_SECRET: SecretStr | None = Field(
+        description="This API's Keycloak client secret (CRM_API_CLIENT_SECRET), to introspect its tokens at level 3",
+        default=None,
+    )
+    TLS_PORT: str | None = Field(
+        description="Mutual-TLS port of the API at level 3 (HTTP_PORT then serves only /healthz and /metrics)",
+        default="8443",
+    )
+    TLS_CERT_FILE: str | None = Field(
+        description="This API's server certificate (PEM) for the mutual-TLS listener", default=None
+    )
+    TLS_KEY_FILE: str | None = Field(description="Private key of the server certificate (PEM)", default=None)
+    TLS_CLIENT_CA_FILE: str | None = Field(
+        description="The only CA whose client certificates may connect: the one shared with its MCP server",
+        default=None,
+    )
 
 
-_SOURCE_YAML_HASH = "07fdf6c54752553ad61155879b3603f1bb29ee866f69e89d28f413497aa4e1ab"
+_SOURCE_YAML_HASH = "de6cc53995c71a6c0f6973dfb9df99f237691ede11c02b810f992428ed8b343d"
 
 
 EnvConfig.model_rebuild()

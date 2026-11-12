@@ -42,9 +42,19 @@ class EnvConfig(BaseSettings):
     API_AUDIENCE: str = Field(description="The API's Keycloak client: the only audience a per-API token (T2) may have")
     API_BASE_URL: str = Field(description="Base URL of the API this server calls (in-cluster)")
     POLICY_FILE: str = Field(description="Access policy: which tools each tenant and role may use (docs/adr/0022)")
+    KEYCLOAK_INTROSPECTION_URL: str | None = Field(
+        description="Keycloak introspection endpoint; default: KEYCLOAK_TOKEN_URL + /introspect", default=None
+    )
+    API_TLS_CA_FILE: str | None = Field(
+        description="The CA shared with the API: the only one its server certificate may come from", default=None
+    )
+    API_TLS_CERT_FILE: str | None = Field(
+        description="This server's client certificate for mutual TLS to the API (PEM)", default=None
+    )
+    API_TLS_KEY_FILE: str | None = Field(description="Private key of the client certificate (PEM)", default=None)
 
 
-_SOURCE_YAML_HASH = "a02b71c6dbfc89e8989b8d56b90c02e460e2ad0da6e03d553045621eb6041475"
+_SOURCE_YAML_HASH = "068dc8eabd11be05bc0c2daea971c65f138cdbd213dd189a902192efe88046ea"
 
 
 EnvConfig.model_rebuild()
