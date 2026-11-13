@@ -4,6 +4,17 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.58.0 — 2026-11-13
+
+### Added
+- **Observability in the MCP lite profile** (ADR 0027): `make k3s-mcp-lite OBS=1` adds the observability bundle
+  (OpenTelemetry Collector, VictoriaMetrics with alerts, Loki, Tempo, Grafana with the MCP dashboard) to the lite
+  cluster, about 0.43 GB more. It always targets the lite cluster, never the framework's.
+- `make k3s-mcp-lite-verify` then also checks that its calls reached the bundle: tool-call metrics with both outcomes
+  (ok and denied), each kit server's audit lines and traces, and that no log line carries a token.
+- LibreChat sends traces when the observability bundle is on (`make k3s-obs-up`, in both profiles): its chat requests
+  and the AI gateway form one trace. The hop from the gateway into an MCP server is still matched through audit lines.
+
 ## v0.57.0 — 2026-11-13
 
 ### Added
