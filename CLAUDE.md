@@ -46,6 +46,7 @@ make k3s-librechat-up / k3s-librechat-down # OPTIONAL second chat UI: LibreChat 
 make k3s-mcp-lite / -verify / -down    # OPTIONAL MCP lite profile (ADR 0027): the MCP Lite Stack alone on its own k3d cluster `mcp-lite` (~3 GB; CHAT_UI=librechat; OBS=1 adds observability); pause the framework cluster first (port 80)
 make mcp-catalog / mcp-catalog-check   # mcp/catalog.yaml (ADR 0024) -> gateway routes, chat UI connections, kit policy.yaml, Keycloak exchange clients; CI fails on drift
 make mcp-catalog-portal                # OPTIONAL local page over the catalog (127.0.0.1:8040): tick tools per group, review diffs, publish; then make k3s-mcp-catalog-apply
+make k3s-mcp-pseudonym WHO=<user> | FIND=<pseudonym>  # audit lookup (ADR 0029): the pseudonym each API sees for a user, or who one is
 make k3s-mcp-tls                       # Level 3 (ADR 0025): mutual-TLS certificates per level-3 kit server/API pair (infra/mcp-tls/, gitignored) + per-workload Secrets; renew every 90 days
 make k3s-obs-up / k3s-obs-down         # OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics, Loki, Tempo, Grafana at grafana.localhost
 # after a code change: rebuild + reimport + restart what changed (a same-tag import never restarts pods)
