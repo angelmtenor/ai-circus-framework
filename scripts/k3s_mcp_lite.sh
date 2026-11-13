@@ -8,12 +8,14 @@
 # (Traefik), as the framework cluster does: only one of them runs at a time.
 #
 # Usage: scripts/k3s_mcp_lite.sh up|verify|down
-#   MCP_LITE_CLUSTER (default mcp-lite), CHAT_UI (open-webui | librechat), K3S_VERSION (the Makefile's)
+#   MCP_LITE_CLUSTER (default mcp-lite), CHAT_UI (open-webui | librechat), OBS (1 = add the observability bundle,
+#   make k3s-obs-up, run against this cluster), K3S_VERSION (the Makefile's)
 set -euo pipefail
 
 ACTION="${1:-}"
 CLUSTER="${MCP_LITE_CLUSTER:-mcp-lite}"
 CHAT_UI="${CHAT_UI:-open-webui}"
+OBS="${OBS:-}"
 K3S_VERSION="${K3S_VERSION:-v1.35.5-k3s1}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NS=ai-circus
@@ -115,33 +117,59 @@ up() {
         kubectl -n "$NS" rollout status "deployment/$deployment" --timeout=900s
     done
 
+    if [ "$OBS" = 1 ]; then
+        echo "── observability ──"
+        # The framework's own bundle target, aimed at this cluster by the exported KUBECONFIG: collector,
+        # VictoriaMetrics + vmalert, Loki, Tempo, Grafana; then every deployed service exports to it.
+        make --no-print-directory k3s-obs-up
+    fi
+
     local url=http://chat.localhost
     [ "$CHAT_UI" = librechat ] && url=http://librechat.localhost
     echo
     echo "✓ MCP lite stack up on k3d cluster '$CLUSTER' — $url"
     echo "  sign in as analyst@lite-demo.local or manager@lite-demo.local (password: CHAT_UI_DEMO_PASSWORD in .env)"
+    [ "$OBS" = 1 ] && echo "  Grafana:   http://grafana.localhost (dashboard \"AI Circus · MCP servers\")"
     echo "  check it:  make k3s-mcp-lite-verify      kubectl:  export KUBECONFIG=\$(k3d kubeconfig write $CLUSTER)"
+}
+
+# Forward a Service to a free local port; prints the port. Every forward is stopped when the script exits.
+FORWARDS=()
+stop_forwards() {
+    local pid
+    for pid in "${FORWARDS[@]}"; do kill "$pid" 2>/dev/null || true; done
+    rm -f "${FORWARD_LOGS[@]}" 2>/dev/null || true
+}
+FORWARD_LOGS=()
+forward() {  # forward <namespace> <service> <remote port> -> sets FORWARDED_PORT
+    local log port=""
+    log="$(mktemp)"
+    FORWARD_LOGS+=("$log")
+    kubectl -n "$1" port-forward "svc/$2" ":$3" >"$log" 2>&1 &
+    FORWARDS+=("$!")
+    for _ in $(seq 1 50); do
+        port=$(sed -n 's/^Forwarding from 127\.0\.0\.1:\([0-9]*\) .*/\1/p' "$log" | head -1)
+        [ -n "$port" ] && break
+        sleep 0.2
+    done
+    [ -n "$port" ] || { echo "❌ could not forward $2: $(cat "$log")" >&2; exit 1; }
+    FORWARDED_PORT="$port"
 }
 
 verify() {
     cluster_exists || { echo "❌ no k3d cluster '$CLUSTER': make k3s-mcp-lite" >&2; exit 1; }
     use_cluster_kubeconfig
-    # A free local port (":4000"), read back from kubectl. Script-level variables, not local: the EXIT trap runs
-    # after this function has returned.
-    PF_LOG="$(mktemp)"
-    kubectl -n "$NS" port-forward svc/llm-gateway ":4000" >"$PF_LOG" 2>&1 &
-    PF_PID=$!
-    trap 'kill "$PF_PID" 2>/dev/null || true; rm -f "$PF_LOG"' EXIT
-    local port=""
-    for _ in $(seq 1 50); do
-        port=$(sed -n 's/^Forwarding from 127\.0\.0\.1:\([0-9]*\) .*/\1/p' "$PF_LOG" | head -1)
-        [ -n "$port" ] && break
-        sleep 0.2
-    done
-    [ -n "$port" ] || { echo "❌ could not forward llm-gateway: $(cat "$PF_LOG")" >&2; exit 1; }
-    local client=open-webui
-    kubectl -n "$NS" get deployment librechat >/dev/null 2>&1 && client=librechat
-    uv run --project libs/mcp-kit --quiet python scripts/mcp_lite_check.py --gateway "http://127.0.0.1:$port" --client "$client"
+    trap stop_forwards EXIT
+    forward "$NS" llm-gateway 4000
+    local args=(--gateway "http://127.0.0.1:$FORWARDED_PORT")
+    if kubectl -n "$NS" get deployment librechat >/dev/null 2>&1; then args+=(--client librechat); fi
+    # With the observability bundle deployed, the calls the check makes must reach its three stores.
+    if kubectl get namespace observability >/dev/null 2>&1; then
+        forward observability victoriametrics 8428 && args+=(--metrics "http://127.0.0.1:$FORWARDED_PORT")
+        forward observability loki 3100 && args+=(--logs "http://127.0.0.1:$FORWARDED_PORT")
+        forward observability tempo 3200 && args+=(--traces "http://127.0.0.1:$FORWARDED_PORT")
+    fi
+    uv run --project libs/mcp-kit --quiet python scripts/mcp_lite_check.py "${args[@]}"
 }
 
 down() {
