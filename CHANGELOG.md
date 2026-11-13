@@ -4,6 +4,21 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.60.0 — 2026-11-13
+
+### Added
+- **Each API sees a pseudonym of the user** (ADR 0029), never the user's Keycloak id: a stable pseudonym per user and
+  per API, so two APIs cannot join their logs. Generated from `mcp/catalog.yaml` for every MCP server built with the kit.
+  The chat UIs, the gateway and the MCP servers' audit lines keep the real id, so no chat account changes.
+- `make k3s-mcp-pseudonym WHO=<user>` shows the pseudonym each API sees for a user; `FIND=<pseudonym>` says who one is.
+  It needs Keycloak's admin access.
+
+### Changed
+- Open WebUI starts new chats on `gemini-flash`, as LibreChat does.
+
+### Fixed
+- A fresh cluster no longer leaves the pseudonyms' secret salt empty: the identity step has Keycloak generate it.
+
 ## v0.59.0 — 2026-11-13
 
 ### Added
