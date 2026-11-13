@@ -34,6 +34,8 @@ k8s/
   llm-serving/      # optional overlay: vLLM on the GPU, behind llm-gateway (make k3s-vllm-up), never part of k3s-up
   chat-ui/          # optional overlay: Open WebUI at chat.localhost, Keycloak sign-in, MCP doors through the
                     # gateway with each user's token (make k3s-chat-ui-up, docs/adr/0021), never part of k3s-up
+  chat-ui-librechat/ # optional overlay: LibreChat + its MongoDB at librechat.localhost, same sign-in and MCP path
+                    # (make k3s-librechat-up, docs/adr/0026), never part of k3s-up; one chat UI at a time
   mcp-examples/     # optional overlay: crm-mcp (built with libs/mcp-kit) in front of crm-api, per-API tokens
                     # (make k3s-mcp-examples-up, docs/adr/0022), never part of k3s-up
   data-platform/    # optional data tiers — core (Kafka, data-ingest, data-api, data-transform), analytics,
@@ -222,6 +224,12 @@ password is `CHAT_UI_DEMO_PASSWORD` in `.env`, generated with the other `CHAT_UI
 the scenarios the chat reaches. Keycloak's login asks for the username first, then the password
 (organizations are on). In a chat, switch a door on from the Integrations menu (Tools). `make
 k3s-chat-ui-down` removes the pod and keeps its volume and the demo tenant.
+
+The second chat UI, `make k3s-librechat-up` (docs/adr/0026), serves LibreChat at `http://librechat.localhost`
+with its own MongoDB. It runs the same identity step (the `librechat` client, its `LIBRECHAT_*` keys in `.env`)
+and signs in the same demo users. Pick a server from the composer's **MCP Servers** menu; the servers come
+from `mcp/catalog.yaml` (`k8s/chat-ui-librechat/librechat-config.yaml`). On a 16 GB laptop run one chat UI
+at a time. `make k3s-librechat-down` removes both pods and keeps the database volume and the demo tenant.
 
 `make k3s-mcp-examples-up` (docs/adr/0022) builds and deploys `crm-api` and `crm-mcp`, an MCP server built with
 `libs/mcp-kit` in front of an API that only accepts tokens issued for it. It runs the same realm sync (the `crm-mcp`
