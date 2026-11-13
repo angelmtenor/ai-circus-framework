@@ -374,6 +374,43 @@
       ]
     },
     {
+      "clientId": "librechat",
+      "name": "Chat UI (LibreChat)",
+      "description": "The optional second chat UI (k8s/chat-ui-librechat, docs/adr/0026). Confidential: its secret is LIBRECHAT_OIDC_CLIENT_SECRET, set by scripts/chat_ui_identity.py, never in this file.",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://librechat.localhost/*",
+        "access.token.lifespan": "900"
+      },
+      "redirectUris": [
+        "http://librechat.localhost/oauth/openid/callback"
+      ],
+      "webOrigins": [
+        "http://librechat.localhost"
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "organization",
+        "platform-backend",
+        "profile",
+        "email",
+        "roles",
+        "data-access",
+        "mcp-servers"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    },
+    {
       "clientId": "crm-mcp",
       "name": "crm-mcp: MCP server for Customers (CRM)",
       "description": "MCP server built with libs/mcp-kit (docs/adr/0022). Confidential; exchanges a user's token for one valid only at crm-api. Its secret is CRM_MCP_CLIENT_SECRET in .env, never in this file. Generated from mcp/catalog.yaml.",
