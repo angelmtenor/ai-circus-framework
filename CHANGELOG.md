@@ -4,6 +4,22 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.57.0 — 2026-11-13
+
+### Added
+- **The MCP lite profile** (ADR 0027): `make k3s-mcp-lite` runs the MCP Lite Stack alone on its own k3d cluster
+  (`mcp-lite`, about 2.9 GB): Keycloak, the AI gateway (models and the MCP gateway) with Valkey, the CRM example kit
+  server and its API at Level 3, and one chat UI (`CHAT_UI=open-webui`, the default, or `librechat`). It reuses the
+  framework's own manifests, never touches the default kube context, and refuses to start while another k3d cluster
+  holds port 80 (`make k3s-pause` first, `make k3s-resume` after `make k3s-mcp-lite-down`).
+- `make k3s-mcp-lite-verify` checks it without a model: each demo user signs in through Keycloak's login pages, then
+  every kit server's tools, a granted call and a refused one are checked against `mcp/catalog.yaml`.
+- `make mcp-catalog` also writes the lite profile's chat UI connections, with the kit servers only.
+
+### Fixed
+- llm-gateway no longer fails every model call that carries a user id when Valkey is unreachable: the monthly budget
+  check is skipped with a warning, as the policy check already was.
+
 ## v0.56.0 — 2026-11-13
 
 ### Added
