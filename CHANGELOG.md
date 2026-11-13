@@ -4,6 +4,14 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.60.1 — 2026-11-14
+
+### Documentation
+- **A guide to the MCP Lite Stack**, [docs/mcp](docs/mcp/README.md): architecture, the steps of a request, the pieces
+  and their decisions (ADR 0019 to 0029), security levels, who sees which identity, how to run it in the framework or
+  alone, how to add an API, operations and known limits. The README has a section on it under Architecture.
+- A test keeps the guide's links and screenshots valid and checks it cites every MCP decision.
+
 ## v0.60.0 — 2026-11-13
 
 ### Added
