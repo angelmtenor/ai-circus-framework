@@ -16,6 +16,7 @@ import copy
 import importlib.util
 import json
 import sys
+import uuid
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -130,6 +131,35 @@ def test_every_gateway_route_forwards_the_callers_trace_context_and_nothing_spoo
         forwarded = [h.lower() for h in entry["extra_headers"]]
         assert {"traceparent", "tracestate"} <= set(forwarded), name
         assert "baggage" not in forwarded, name
+
+
+def test_each_api_sees_a_pseudonym_never_the_users_keycloak_id() -> None:
+    """docs/adr/0029: the token a kit server exchanges for its API carries Keycloak's pairwise subject (a stable
+    pseudonym per user and server). The salt is Keycloak's and never in the file; the sector is an inert redirect URI's
+    host on a client that signs no one in. Chat UIs keep real ids (their accounts are bound to them)."""
+    realm = json.loads((REPO / "infra" / "keycloak" / "realm-export.json").read_text())
+    clients = {c["clientId"]: c for c in realm["clients"]}
+    for server in generator.load().kit_servers():
+        client = clients[server.service]
+        (mapper,) = [m for m in client["protocolMappers"] if m["protocolMapper"] == "oidc-sha256-pairwise-sub-mapper"]
+        assert mapper["config"]["pairwiseSubAlgorithmSalt"] == "", "the salt is Keycloak's secret, never committed"
+        assert mapper["config"]["sectorIdentifierUri"] == ""
+        assert client["redirectUris"] == [f"http://{server.service}/"]
+        assert not client["standardFlowEnabled"] and not client["implicitFlowEnabled"], "the redirect URI stays inert"
+        assert not clients[server.api].get("protocolMappers"), "the API's own client issues no user tokens"
+    for chat_ui in ("open-webui", "librechat"):
+        kinds = {m["protocolMapper"] for m in clients[chat_ui].get("protocolMappers", [])}
+        assert "oidc-sha256-pairwise-sub-mapper" not in kinds, f"{chat_ui} accounts are bound to the real id"
+
+
+def test_the_audit_lookup_reproduces_keycloaks_pseudonym_format() -> None:
+    lookup = _script("mcp_pseudonym")
+    value = lookup.pseudonym("crm-mcp", "4477c0b6-e33b-4411-806c-ce8f592d79af", "salt")
+    parsed = uuid.UUID(value)
+    assert parsed.version == 3 and parsed.variant == uuid.RFC_4122, "Java's UUID.nameUUIDFromBytes"
+    assert value == lookup.pseudonym("crm-mcp", "4477c0b6-e33b-4411-806c-ce8f592d79af", "salt"), "stable"
+    assert value != lookup.pseudonym("crm-api", "4477c0b6-e33b-4411-806c-ce8f592d79af", "salt"), "per sector"
+    assert value != lookup.pseudonym("crm-mcp", "4477c0b6-e33b-4411-806c-ce8f592d79af", "other"), "per salt"
 
 
 def test_a_kit_server_policy_holds_exactly_its_groups_grants() -> None:

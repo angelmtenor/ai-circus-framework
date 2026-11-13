@@ -434,7 +434,22 @@
         "data-access",
         "crm-api-audience"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "redirectUris": [
+        "http://crm-mcp/"
+      ],
+      "protocolMappers": [
+        {
+          "name": "pseudonymous subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sha256-pairwise-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "sectorIdentifierUri": "",
+            "pairwiseSubAlgorithmSalt": ""
+          }
+        }
+      ]
     },
     {
       "clientId": "crm-api",
