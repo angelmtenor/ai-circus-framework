@@ -364,8 +364,15 @@ def render_catalog(catalog: Catalog) -> str:
     return "\n".join(lines) + "\n"
 
 
+# The W3C trace context a chat UI sends with each MCP request (docs/adr/0028). LiteLLM injects no trace context into its
+# MCP calls, so forwarding the caller's lets an MCP server continue the chat UI's trace: one trace from the chat UI
+# through the server to its API. Never `baggage`: it is caller-controlled and would let a client spoof attribution.
+TRACE_HEADERS = ("traceparent", "tracestate")
+
+
 def gateway_block(catalog: Catalog, indent: str) -> list[str]:
-    """llm-gateway's `mcp_servers`: one passthrough route per server, no credential (docs/adr/0020)."""
+    """llm-gateway's `mcp_servers`: one passthrough route per server, no credential (docs/adr/0020), forwarding the
+    server's declared headers and the caller's trace context."""
     lines = ["mcp_servers:" if catalog.servers else "mcp_servers: {}"]
     for s in catalog.servers:
         lines += [
@@ -373,9 +380,8 @@ def gateway_block(catalog: Catalog, indent: str) -> list[str]:
             f"    url: {s.upstream}",
             "    transport: http",
             "    auth_type: true_passthrough",
+            f"    extra_headers: {_flow((*s.forward_headers, *TRACE_HEADERS))}",
         ]
-        if s.forward_headers:
-            lines.append(f"    extra_headers: {_flow(s.forward_headers)}")
         lines.append(f"    description: {_q(s.description)}")
     return [indent + line for line in lines]
 

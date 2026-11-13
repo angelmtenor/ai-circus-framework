@@ -276,17 +276,19 @@ mcp_servers:
     url: http://rag-agent:8000/mcp/ai_circus_reference
     transport: http
     auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
     description: "Search and read the AI Circus reference notes (read-only)"
   surf_retail:
     url: http://data-api:8000/mcp/surf_retail
     transport: http
     auth_type: true_passthrough
-    extra_headers: [X-Data-View-As, X-Data-View-As-Values]
+    extra_headers: [X-Data-View-As, X-Data-View-As-Values, traceparent, tracestate]
     description: "Governed sales metrics and records of Angel's Surf Co., filtered by your role (read-only)"
   crm:
     url: http://crm-mcp:8000/mcp/
     transport: http
     auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
     description: "Customers of the organisation's shops you may see, with masked contact details (read-only)"
 # END generated from mcp/catalog.yaml
 

@@ -154,7 +154,8 @@ SeaweedFS credentials, ClickHouse low-memory config, MLflow image, k3s GPU node)
 - `RedactingSpanExporter` must stay the only exporter: never add an OpenTelemetry distro or auto-instrumentation, and keep
   `configure_tracing(app, …)` on every FastAPI app. A new content-carrying attribute goes into `DROPPED_ATTRIBUTE_PREFIXES`.
 - Log messages never carry prompts or personal data, and metric labels never carry tenants or values. A new FastAPI
-  deployment gets the `prometheus.io/*` pod annotations.
+  deployment gets the `prometheus.io/*` pod annotations. The collector also masks tokens and emails in every stored log
+  line (third-party ones included, ADR 0028): keep that step in its logs pipeline.
 - An MCP server built with `libs/mcp-kit` calls `configure_audit_output()` at start-up: its audit lines are the record of
   every tool call and refusal (ADR 0023).
 

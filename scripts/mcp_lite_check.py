@@ -15,7 +15,8 @@ server of mcp/catalog.yaml:
 
 With the observability bundle deployed (--metrics/--logs/--traces, make k3s-mcp-lite OBS=1), it then checks that those
 calls reached it: the kit's tool-call metrics with both outcomes (ok and denied), each kit server's audit lines in the
-logs and its traces, and that no log line of the cluster carries a token (a JWT).
+logs and its traces, that the trace context the check sent through the gateway was continued by the kit server (one
+trace, docs/adr/0028), and that no stored log line of the cluster carries a token (a JWT) or an email address.
 
 Each server exchanges the token for its own API (Level 3: DPoP, live checks, mutual TLS), so a passing call covers
 that path too. Tokens and passwords are never printed. Needs Traefik on 127.0.0.1:80 (the lite cluster) and the
@@ -165,11 +166,13 @@ def sign_in(username: str, password: str, client_id: str, client_secret: str, re
 class McpSession:
     """A minimal streamable-HTTP MCP client: initialize, then JSON-RPC calls on the session it opened."""
 
-    def __init__(self, http: httpx.Client, url: str, token: str | None) -> None:
+    def __init__(self, http: httpx.Client, url: str, token: str | None, traceparent: str | None = None) -> None:
         self.http, self.url, self.next_id = http, url, 0
         self.headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
         if token:
             self.headers["Authorization"] = f"Bearer {token}"
+        if traceparent:  # W3C trace context, as an instrumented chat UI sends it
+            self.headers["traceparent"] = traceparent
         reply = self._post({"method": "initialize", "params": self._init_params()}, expect_reply=True)
         if session := reply.get("_session"):
             self.headers["mcp-session-id"] = session
@@ -222,9 +225,22 @@ def refused(reply: dict[str, Any]) -> bool:
     return "error" in reply or bool(result.get("isError")) or "_status" in reply
 
 
+def new_traceparent() -> tuple[str, str]:
+    """A sampled W3C traceparent and its trace id."""
+    trace_id = secrets.token_hex(16)
+    return f"00-{trace_id}-{secrets.token_hex(8)}-01", trace_id
+
+
 def check_user(
-    http: httpx.Client, gateway: str, catalog: Any, user: dict[str, Any], tenant: str, token: str
+    http: httpx.Client,
+    gateway: str,
+    catalog: Any,
+    user: dict[str, Any],
+    tenant: str,
+    token: str,
+    sent_traces: dict[str, str] | None = None,
 ) -> list[str]:
+    """`sent_traces` collects, per kit server, the trace id this check sent through the gateway."""
     lines = []
     for server in catalog.kit_servers():
         url = f"{gateway}/mcp/{server.name}"
@@ -233,7 +249,10 @@ def check_user(
             for role in user["roles"]:
                 grant = catalog.grants(server).get(role)
                 wanted |= set(server.tools) if grant == "*" else set(grant or ())
-        session = McpSession(http, url, token)
+        traceparent, trace_id = new_traceparent()
+        session = McpSession(http, url, token, traceparent)
+        if sent_traces is not None:
+            sent_traces.setdefault(server.service, trace_id)
         try:
             tools, prefix = listed_tools(session.call("tools/list", {}), server.name)
             if set(tools) != wanted:
@@ -261,8 +280,20 @@ def check_user(
 # Signals arrive on the scrape interval (metrics) and in batches (logs, traces): poll before calling one missing.
 SIGNAL_WAIT_SECONDS = 120
 SIGNAL_WINDOW_SECONDS = 15 * 60
-# A JWT is three base64url parts; its first two always start with `eyJ` ('{"' encoded). Never in a log line.
+# A JWT is three base64url parts; its first two always start with `eyJ` ('{"' encoded). Never in a log line, and
+# neither is an email address: the collector masks both (<token>, <email>) before anything is stored.
 JWT_IN_LOGS = r"eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}"
+EMAIL_IN_LOGS = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"
+
+
+def trace_services(reply: dict[str, Any]) -> set[str]:
+    """The service names in a Tempo trace (OTLP JSON; `batches` in older Tempo versions)."""
+    names = set()
+    for batch in reply.get("batches") or reply.get("resourceSpans") or []:
+        for attribute in (batch.get("resource") or {}).get("attributes") or []:
+            if attribute.get("key") == "service.name":
+                names.add((attribute.get("value") or {}).get("stringValue", ""))
+    return names
 
 
 def eventually(what: str, probe: Callable[[], str | None]) -> str:
@@ -277,8 +308,11 @@ def eventually(what: str, probe: Callable[[], str | None]) -> str:
         time.sleep(5)
 
 
-def check_signals(http: httpx.Client, catalog: Any, metrics: str, logs: str, traces: str) -> list[str]:
-    """The calls just made reached the observability bundle, and no log line carries a token."""
+def check_signals(
+    http: httpx.Client, catalog: Any, metrics: str, logs: str, traces: str, sent_traces: dict[str, str]
+) -> list[str]:
+    """The calls just made reached the observability bundle, the kit servers continued the trace context sent through
+    the gateway, and no stored log line carries a token or an email address."""
     lines = []
 
     def outcomes() -> str | None:
@@ -307,14 +341,32 @@ def check_signals(http: httpx.Client, catalog: Any, metrics: str, logs: str, tra
 
         lines.append(f"✓ logs: {server.service} audit lines: {eventually(f'{server.service} audit lines', audit)}")
         lines.append(f"✓ traces: {server.service}: {eventually(f'{server.service} traces', spans)}")
-    leak = http.get(
-        f"{logs}/loki/api/v1/query_range",
-        params={"query": f'{{service_name=~".+"}} |~ `{JWT_IN_LOGS}`', "limit": 5, **window},
+        if server.service in sent_traces:
+
+            def continued(service: str = server.service, trace_id: str = sent_traces[server.service]) -> str | None:
+                reply = http.get(f"{traces}/api/traces/{trace_id}")
+                found = trace_services(reply.json()) if reply.status_code == 200 else set()
+                return ", ".join(sorted(found)) if service in found else None
+
+            found = eventually(f"{server.service} continuing the trace sent through the gateway", continued)
+            lines.append(f"✓ traces: the trace sent through the gateway continues in {found}")
+    for what, pattern in (("a token (JWT)", JWT_IN_LOGS), ("an email address", EMAIL_IN_LOGS)):
+        leak = http.get(
+            f"{logs}/loki/api/v1/query_range",
+            params={"query": f'{{service_name=~".+"}} |~ `{pattern}`', "limit": 5, **window},
+        )
+        leaked = [s["stream"].get("service_name", "?") for s in leak.json()["data"]["result"]]
+        if leaked:
+            raise CheckError(f"{what} appears in the stored logs of {sorted(set(leaked))}")
+    masked = http.get(
+        f"{logs}/loki/api/v1/query",
+        params={
+            "query": f'sum(count_over_time({{service_name=~".+"}} |~ `<email>|<token>` [{SIGNAL_WINDOW_SECONDS}s]))'
+        },
     )
-    leaked = [s["stream"].get("service_name", "?") for s in leak.json()["data"]["result"]]
-    if leaked:
-        raise CheckError(f"a token (JWT) appears in the logs of {sorted(set(leaked))}")
-    lines.append("✓ logs: no line of the last 15 minutes carries a token")
+    counts = masked.json()["data"]["result"]
+    count = int(float(counts[0]["value"][1])) if counts else 0
+    lines.append(f"✓ logs: no stored line carries a token or an email address ({count} masked by the collector)")
     return lines
 
 
@@ -339,6 +391,7 @@ def main() -> int:
     if not catalog.kit_servers():
         print("❌ mcp/catalog.yaml has no kit server to check", file=sys.stderr)
         return 1
+    sent_traces: dict[str, str] = {}
     try:
         with httpx.Client(timeout=60) as http:
             for server in catalog.kit_servers():
@@ -353,10 +406,10 @@ def main() -> int:
                 password = env["CHAT_UI_DEMO_PASSWORD"]
                 token = sign_in(user["username"], password, args.client, env[secret_key], redirect_uri)
                 print(f"✓ {user['username']} signed in through Keycloak ({args.client} client)")
-                for line in check_user(http, args.gateway, catalog, user, identity.ORG["alias"], token):
+                for line in check_user(http, args.gateway, catalog, user, identity.ORG["alias"], token, sent_traces):
                     print(line)
             if all(signals):
-                for line in check_signals(http, catalog, args.metrics, args.logs, args.traces):
+                for line in check_signals(http, catalog, args.metrics, args.logs, args.traces, sent_traces):
                     print(line)
     except (CheckError, httpx.HTTPError, KeyError, ValueError) as exc:
         print(f"❌ {exc}", file=sys.stderr)

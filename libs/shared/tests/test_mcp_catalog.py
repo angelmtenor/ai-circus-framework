@@ -122,6 +122,16 @@ def test_librechat_titles_keep_the_words_and_drop_what_it_refuses(title: str, sh
     assert _librechat_accepts(shown) or shown == "fallback_name"
 
 
+def test_every_gateway_route_forwards_the_callers_trace_context_and_nothing_spoofable() -> None:
+    """docs/adr/0028: LiteLLM injects no trace context into MCP calls, so each route forwards the caller's W3C trace
+    headers (one trace from the chat UI through the server). Never baggage, which a client could use to spoof."""
+    config = yaml.safe_load((REPO / "services" / "llm-gateway" / "litellm_config.yaml").read_text())
+    for name, entry in config["mcp_servers"].items():
+        forwarded = [h.lower() for h in entry["extra_headers"]]
+        assert {"traceparent", "tracestate"} <= set(forwarded), name
+        assert "baggage" not in forwarded, name
+
+
 def test_a_kit_server_policy_holds_exactly_its_groups_grants() -> None:
     catalog = generator.load()
     for server in catalog.kit_servers():
