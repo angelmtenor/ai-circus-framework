@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-librechat-up k3s-librechat-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -542,6 +542,22 @@ k3s-chat-ui-up: ## OPTIONAL chat UI (k8s/chat-ui/, ADR 0021): Open WebUI at http
 k3s-chat-ui-down: ## Remove the optional chat UI. Keeps its data volume (`kubectl -n ai-circus delete pvc open-webui-data` to reclaim it) and the Keycloak demo tenant
 	@kubectl -n ai-circus delete deployment,service,ingressroute open-webui --ignore-not-found
 
+k3s-librechat-up: ## OPTIONAL second chat UI (k8s/chat-ui-librechat/, ADR 0026): LibreChat (MIT) + its MongoDB at http://librechat.localhost, Keycloak sign-in, every mcp/catalog.yaml server through the gateway with each user's token. Same identity step and demo users as k3s-chat-ui-up. On a 16 GB laptop run one chat UI at a time. Never part of k3s-all
+	@if kubectl -n ai-circus get deployment open-webui >/dev/null 2>&1; then \
+		echo "ℹ Open WebUI is deployed too: on a 16 GB laptop run one chat UI at a time (make k3s-chat-ui-down)"; fi
+	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
+	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
+	@./scripts/k3s_generate_secrets.sh >/dev/null
+	@kubectl apply -k k8s/chat-ui-librechat
+	@kubectl -n ai-circus rollout status deployment/librechat-mongodb --timeout=600s
+	@kubectl -n ai-circus rollout status deployment/librechat --timeout=900s
+	@echo "✓ LibreChat up — http://librechat.localhost (sign in with Keycloak; the first user to sign in becomes its admin)"
+
+k3s-librechat-down: ## Remove the optional LibreChat UI and its MongoDB. Keeps the database volume (`kubectl -n ai-circus delete pvc librechat-mongodb-data` to reclaim it) and the Keycloak demo tenant
+	@kubectl -n ai-circus delete deployment,service librechat librechat-mongodb --ignore-not-found
+	@kubectl -n ai-circus delete ingressroute librechat --ignore-not-found
+	@kubectl -n ai-circus delete configmap -l app.kubernetes.io/part-of=librechat --ignore-not-found >/dev/null
+
 K3S_MCP_EXAMPLE_IMAGES = crm-api crm-mcp
 
 k3s-mcp-examples-up: ## OPTIONAL example of an MCP server in front of an existing API (k8s/mcp-examples/, ADR 0022): crm-api (a customer API) and crm-mcp (built with libs/mcp-kit), reached through the MCP gateway at /mcp/crm. Builds + imports both images, syncs the Keycloak realm (clients, token exchange), applies. Never part of k3s-all
@@ -587,7 +603,7 @@ k3s-mcp-tls: ## Same, and apply them as one Secret per workload (<api>-tls, <ser
 mcp-catalog-portal: ## OPTIONAL local portal over mcp/catalog.yaml (ADR 0024) at http://127.0.0.1:8040 (MCP_PORTAL_PORT): tick tools per group, add a server, review the diffs, publish (= make mcp-catalog). Never deploys or commits
 	@$(MCP_CATALOG:generate_mcp_catalog.py=mcp_catalog_portal.py) --port "$${MCP_PORTAL_PORT:-8040}"
 
-k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), Level 3 certificates, rebuild + import + restart llm-gateway and every deployed kit server (and restart its API), re-apply the chat UI's connections if it is deployed
+k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), Level 3 certificates, rebuild + import + restart llm-gateway and every deployed kit server (and restart its API), re-apply each deployed chat UI (Open WebUI, LibreChat)
 	@$(MCP_CATALOG) --check
 	@./scripts/k3s_portforward.sh status "$(K3S_CLUSTER)" >/dev/null 2>&1 || $(MAKE) --no-print-directory k3s-portforward
 	@python3 scripts/chat_ui_identity.py --cluster "$(K3S_CLUSTER)"
@@ -608,7 +624,10 @@ k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keyc
 	@if kubectl -n ai-circus get deployment open-webui >/dev/null 2>&1; then \
 		kubectl apply -k k8s/chat-ui && kubectl -n ai-circus rollout status deployment/open-webui --timeout=900s; \
 	fi
-	@echo "✓ catalog applied — gateway, kit servers, Keycloak and chat UI follow mcp/catalog.yaml (a localhost:8033 forward needs a restart: make k3s-mcp-portforward)"
+	@if kubectl -n ai-circus get deployment librechat >/dev/null 2>&1; then \
+		kubectl apply -k k8s/chat-ui-librechat && kubectl -n ai-circus rollout status deployment/librechat --timeout=900s; \
+	fi
+	@echo "✓ catalog applied — gateway, kit servers, Keycloak and chat UIs follow mcp/catalog.yaml (a localhost:8033 forward needs a restart: make k3s-mcp-portforward)"
 
 k3s-dl-train: ## Train ONE deep_learning scenario as an in-cluster Job (CPU budget unless the cluster exposes a GPU) — usage: make k3s-dl-train SCENARIO=<slug>
 	@[ -n "$(SCENARIO)" ] || { echo "❌ usage: make k3s-dl-train SCENARIO=<deep_learning slug>"; exit 1; }

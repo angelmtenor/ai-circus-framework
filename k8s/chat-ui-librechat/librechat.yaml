@@ -1,0 +1,205 @@
+# Optional second chat UI (docs/adr/0026): LibreChat at http://librechat.localhost, signing users in with Keycloak
+# and reaching every server of mcp/catalog.yaml through llm-gateway's MCP gateway (docs/adr/0020) with each user's
+# own Keycloak token (`{{LIBRECHAT_OPENID_ACCESS_TOKEN}}`, OPENID_REUSE_TOKENS). Models come from llm-gateway's /v1.
+# Its state (users, chats, MCP connection records) lives in its own MongoDB below. Never part of k3s-all:
+# `make k3s-librechat-up` / `make k3s-librechat-down`. Mirrors docker-compose.yml's `librechat` and
+# `librechat-mongodb` services (profile "chat-ui-librechat"); both mount librechat-config.yaml.
+#
+# License: LibreChat is MIT, MongoDB Community is SSPL (used unmodified as an internal database). Official images.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: librechat-mongodb-data
+  namespace: ai-circus
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librechat-mongodb
+  namespace: ai-circus
+spec:
+  replicas: 1
+  strategy: {type: Recreate}  # one RWO volume
+  selector:
+    matchLabels: {app: librechat-mongodb}
+  template:
+    metadata:
+      labels: {app: librechat-mongodb}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999  # the image's mongodb user
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: mongodb
+          image: mongo:8.0.20
+          # A small WiredTiger cache: a chat UI's users and chats, not an analytics store.
+          args: ["--wiredTigerCacheSizeGB", "0.25", "--bind_ip_all"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 27017}
+          env:
+            # Authentication on (upstream's example runs --noauth): only LibreChat holds the password.
+            - {name: MONGO_INITDB_ROOT_USERNAME, value: "librechat"}
+            - {name: MONGO_INITDB_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_MONGO_PASSWORD}}}
+          volumeMounts:
+            - {name: data, mountPath: /data/db}
+          resources:
+            requests: {cpu: 20m, memory: 160Mi}
+            limits: {memory: 512Mi}
+          # TCP probes: an exec probe would start mongosh (a Node.js process) every few seconds.
+          startupProbe:
+            tcpSocket: {port: 27017}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: {port: 27017}
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: 27017}
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: librechat-mongodb-data}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: librechat-mongodb
+  namespace: ai-circus
+spec:
+  selector: {app: librechat-mongodb}
+  ports:
+    - {port: 27017, targetPort: 27017}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librechat
+  namespace: ai-circus
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: librechat}
+  template:
+    metadata:
+      labels: {app: librechat}
+      # No prometheus.io annotations: LibreChat's metrics need a separate exporter setup, not enabled here.
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000  # the image's node user
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: librechat
+          image: ghcr.io/librechat-ai/librechat:v0.8.8
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          ports:
+            - {containerPort: 3080}
+          env:
+            - {name: HOST, value: "0.0.0.0"}
+            - {name: PORT, value: "3080"}
+            - {name: DOMAIN_CLIENT, value: "http://librechat.localhost"}
+            - {name: DOMAIN_SERVER, value: "http://librechat.localhost"}
+            - {name: CONFIG_PATH, value: /config/librechat.yaml}
+            # The lab's Keycloak is http only; LibreChat's OpenID client wants https (see oidc-allow-http.mjs).
+            - {name: NODE_OPTIONS, value: "--import=/config/oidc-allow-http.mjs --max-old-space-size=768"}
+            - {name: LIBRECHAT_MONGO_PASSWORD, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_MONGO_PASSWORD}}}
+            - {name: MONGO_URI, value: "mongodb://librechat:$(LIBRECHAT_MONGO_PASSWORD)@librechat-mongodb:27017/LibreChat?authSource=admin"}
+            - {name: CREDS_KEY, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_CREDS_KEY}}}
+            - {name: CREDS_IV, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_CREDS_IV}}}
+            - {name: JWT_SECRET, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_JWT_SECRET}}}
+            - {name: JWT_REFRESH_SECRET, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_JWT_REFRESH_SECRET}}}
+            - {name: LITELLM_MASTER_KEY, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LITELLM_MASTER_KEY}}}
+            # Sign-in: Keycloak only (no local accounts). Discovery goes in-cluster; Keycloak answers with its public
+            # issuer and login page, and in-cluster token/JWKS URLs (KC_HOSTNAME_BACKCHANNEL_DYNAMIC).
+            - {name: ALLOW_EMAIL_LOGIN, value: "false"}
+            - {name: ALLOW_REGISTRATION, value: "false"}
+            - {name: ALLOW_PASSWORD_RESET, value: "false"}
+            - {name: ALLOW_SOCIAL_LOGIN, value: "true"}
+            - {name: ALLOW_SOCIAL_REGISTRATION, value: "true"}
+            - {name: OPENID_CLIENT_ID, value: "librechat"}
+            - {name: OPENID_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_OIDC_CLIENT_SECRET}}}
+            - {name: OPENID_SESSION_SECRET, valueFrom: {secretKeyRef: {name: librechat-secrets, key: LIBRECHAT_OPENID_SESSION_SECRET}}}
+            - {name: OPENID_ISSUER, value: "http://keycloak:8080/realms/ai-circus/.well-known/openid-configuration"}
+            - {name: OPENID_CALLBACK_URL, value: "/oauth/openid/callback"}
+            # `organization` must be requested by name for Keycloak to put the tenant in the token.
+            - {name: OPENID_SCOPE, value: "openid profile email organization"}
+            - {name: OPENID_USE_PKCE, value: "true"}
+            - {name: OPENID_BUTTON_LABEL, value: "Keycloak"}
+            - {name: OPENID_AUTO_REDIRECT, value: "true"}
+            - {name: OPENID_USE_END_SESSION_ENDPOINT, value: "true"}
+            # Keep the user's own Keycloak tokens (not LibreChat's) and refresh them from the session: the MCP
+            # headers' {{LIBRECHAT_OPENID_ACCESS_TOKEN}} is that access token.
+            - {name: OPENID_REUSE_TOKENS, value: "true"}
+            # The MCP gateway binds a session to the token that opened it (403 "owner mismatch" on another one), and
+            # LibreChat keeps a user's connection open across a token refresh: after a refresh its next call is
+            # refused once, the connection reopens and the model is told to retry. Closing idle connections after 5
+            # minutes (default 15) means a user coming back after a pause starts on a fresh session (docs/adr/0026).
+            - {name: MCP_USER_CONNECTION_IDLE_TIMEOUT, value: "300000"}
+            - {name: SESSION_COOKIE_SECURE, value: "false"}  # http://librechat.localhost (lab)
+            # The gateway's models and the agents endpoint, which carries the MCP tools; no provider endpoints.
+            - {name: ENDPOINTS, value: "custom,agents"}
+            - {name: SEARCH, value: "false"}  # no Meilisearch
+            - {name: NO_INDEX, value: "true"}
+            - {name: SCARF_ANALYTICS, value: "false"}
+            - {name: CONSOLE_JSON, value: "true"}  # one JSON object per log line, as the platform's own services
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+          # Idle footprint measured after real sign-ins and chats: see docs/adr/0026.
+          resources:
+            requests: {cpu: 50m, memory: 384Mi}
+            limits: {memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /health, port: 3080}
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /health, port: 3080}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: 3080}
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap: {name: librechat-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: librechat
+  namespace: ai-circus
+spec:
+  selector: {app: librechat}
+  ports:
+    - {port: 3080, targetPort: 3080}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: librechat
+  namespace: ai-circus
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`librechat.localhost`)
+      kind: Rule
+      services:
+        - {name: librechat, port: 3080}

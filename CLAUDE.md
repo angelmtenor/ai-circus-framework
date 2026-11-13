@@ -42,6 +42,7 @@ make k3s-data-demo / k3s-data-demo-off  # multi-scenario demo incl. data core+an
 make k3s-mcp-portforward              # OPTIONAL: MCP doors on localhost for clients on this machine: rag-agent :8031, data-api :8032, the MCP gateway in front of both :8033 (ADR 0019, 0020)
 make k3s-mcp-examples-up / -down       # OPTIONAL crm-mcp (libs/mcp-kit) in front of crm-api: per-API token exchange, gateway door /mcp/crm (ADR 0022)
 make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
+make k3s-librechat-up / k3s-librechat-down # OPTIONAL second chat UI: LibreChat (MIT) + MongoDB at librechat.localhost, same sign-in and MCP path (ADR 0026); one chat UI at a time
 make mcp-catalog / mcp-catalog-check   # mcp/catalog.yaml (ADR 0024) -> gateway routes, chat UI connections, kit policy.yaml, Keycloak exchange clients; CI fails on drift
 make mcp-catalog-portal                # OPTIONAL local page over the catalog (127.0.0.1:8040): tick tools per group, review diffs, publish; then make k3s-mcp-catalog-apply
 make k3s-mcp-tls                       # Level 3 (ADR 0025): mutual-TLS certificates per level-3 kit server/API pair (infra/mcp-tls/, gitignored) + per-workload Secrets; renew every 90 days
@@ -126,7 +127,7 @@ re-implementing:
 
 `libs/mcp-kit` (`mcp_kit`, ADR 0022) is separate on purpose: an MCP server in front of an existing API gets token
 validation, the access policy, the per-API token exchange and audit lines from it, and its own code is its tools only.
-`mcp/catalog.yaml` (ADR 0024) decides every MCP server's gateway route, chat UI connection, `policy.yaml` and Keycloak
+`mcp/catalog.yaml` (ADR 0024) decides every MCP server's gateway route, both chat UIs' connections, `policy.yaml` and Keycloak
 clients: edit the catalog and run `make mcp-catalog`, never the generated `BEGIN`/`END` blocks or those files by hand.
 `level: 3` there (ADR 0025) makes the kit refuse to start without live token checks, a DPoP-bound per-API token and
 mutual TLS to the API; a Keycloak client flag is always written "true" or "false" (Keycloak merges attribute updates).
