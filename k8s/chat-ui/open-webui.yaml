@@ -71,6 +71,9 @@ spec:
             # Models: llm-gateway only (no Ollama, no provider key here), visible to every user.
             - {name: ENABLE_OLLAMA_API, value: "false"}
             - {name: BYPASS_MODEL_ACCESS_CONTROL, value: "true"}
+            # A new chat starts on the model the demos use (as LibreChat's modelSpecs default); every other gateway
+            # model stays selectable. Without it Open WebUI picks the gateway's first model.
+            - {name: DEFAULT_MODELS, value: "gemini-flash"}
             - {name: OPENAI_API_BASE_URLS, value: "http://llm-gateway:4000/v1"}
             - {name: OPENAI_API_KEYS, valueFrom: {secretKeyRef: {name: open-webui-secrets, key: LITELLM_MASTER_KEY}}}
             # Embeddings through the gateway too: no local model loads at start-up.
