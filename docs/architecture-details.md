@@ -187,6 +187,9 @@ add one chat UI with the kit servers only (generated from the catalog; scenario 
 with `kubectl kustomize --load-restrictor LoadRestrictionsNone`, since it lists the framework's own files. `make
 k3s-mcp-lite-verify` (`scripts/mcp_lite_check.py`) signs the demo users in through Keycloak's login pages with the chat
 UI's client and checks each kit server's tools, a granted call and a refused one, against the catalog, without a model.
+`OBS=1` adds the observability bundle on the lite cluster (never run `make k3s-obs-up` bare while it is up: it acts on
+the current context); the check then also finds the calls' metrics, audit lines and traces, and no token in any log.
+LibreChat traces through its own OpenTelemetry switch (`OBS_LIBRECHAT_ENV`), wired by `k3s-obs-up` in both profiles.
 
 **An MCP server in front of an existing API** (docs/adr/0022) is built with `libs/mcp-kit` (`mcp_kit`): it validates the
 user's token (T1, audience = the server's Keycloak client), applies `policy.yaml` (tools per realm role, optionally per

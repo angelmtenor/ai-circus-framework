@@ -239,6 +239,8 @@ The MCP lite profile, `make k3s-mcp-lite` (docs/adr/0027), runs the MCP Lite Sta
 KUBECONFIG=$(k3d kubeconfig write mcp-lite)` to use kubectl on it) and holds port 80, so pause the framework cluster
 first (`make k3s-pause`; `make k3s-resume` afterwards). `make k3s-mcp-lite-verify` signs the demo users in and checks
 every kit server's tools against the catalog through the gateway; `make k3s-mcp-lite-down` deletes the cluster.
+`OBS=1` adds the observability bundle (`make k3s-obs-up` against the lite cluster, ~1 GiB, Grafana at
+`http://grafana.localhost`), and the verify step then also checks metrics, audit lines and traces of those calls.
 
 `make k3s-mcp-examples-up` (docs/adr/0022) builds and deploys `crm-api` and `crm-mcp`, an MCP server built with
 `libs/mcp-kit` in front of an API that only accepts tokens issued for it. It runs the same realm sync (the `crm-mcp`
