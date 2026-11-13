@@ -1,0 +1,19 @@
+# Optional second chat UI (docs/adr/0026): LibreChat (MIT) signing users in with Keycloak and reaching the MCP
+# servers through llm-gateway's MCP gateway with each user's own token. Deliberately NOT part of k8s/base:
+# `make k3s-librechat-up` (identity provisioning + this) / `make k3s-librechat-down`. On a 16 GB laptop run one
+# chat UI at a time (this or k8s/chat-ui).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - librechat.yaml
+
+# A changed config file gets a new ConfigMap name, so the Deployment rolls on `kubectl apply -k`.
+configMapGenerator:
+  - name: librechat-config
+    namespace: ai-circus
+    options:
+      labels: {app.kubernetes.io/part-of: librechat}  # `make k3s-librechat-down` removes old generations too
+    files:
+      - librechat.yaml=librechat-config.yaml
+      - oidc-allow-http.mjs

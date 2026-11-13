@@ -31,6 +31,9 @@ REQUIRED_DEFAULT_SCOPES = {"basic", "organization", "platform-backend", "roles"}
 # Open WebUI refreshes a token that expires within 5 minutes; a shorter life would refresh it on
 # every request, and the MCP gateway binds a session to the token it was opened with.
 CHAT_UI_REFRESH_BUFFER_SECONDS = 300
+# The chat UIs (docs/adr/0021, 0026): each signs users in with its own confidential client and sends the user's own
+# token to the MCP gateway.
+CHAT_UI_CLIENTS = ("open-webui", "librechat")
 
 
 def mappers(scope: str, kind: str) -> list[dict[str, Any]]:
@@ -74,9 +77,11 @@ def test_every_data_product_row_filter_claim_is_mapped() -> None:
             assert claim in mapped, f"{path.parent.name}: row filter claim {claim!r} is not in the data-access scope"
 
 
-def test_chat_ui_client_is_confidential_and_outlives_its_refresh_buffer() -> None:
-    (chat,) = [c for c in REALM["clients"] if c["clientId"] == "open-webui"]
+@pytest.mark.parametrize("client_id", CHAT_UI_CLIENTS)
+def test_chat_ui_client_is_confidential_and_outlives_its_refresh_buffer(client_id: str) -> None:
+    (chat,) = [c for c in REALM["clients"] if c["clientId"] == client_id]
     assert chat["publicClient"] is False
+    assert chat["attributes"]["pkce.code.challenge.method"] == "S256"
     assert "secret" not in chat, "the chat UI's secret lives in .env, never in this file"
     assert not chat["directAccessGrantsEnabled"]
     assert int(chat["attributes"]["access.token.lifespan"]) > 2 * CHAT_UI_REFRESH_BUFFER_SECONDS
@@ -87,9 +92,10 @@ def audiences(scope: str) -> set[str]:
     return {m["config"]["included.client.audience"] for m in mappers(scope, "oidc-audience-mapper")}
 
 
-def test_mcp_servers_are_in_the_user_token_audience() -> None:
+@pytest.mark.parametrize("client_id", CHAT_UI_CLIENTS)
+def test_mcp_servers_are_in_the_user_token_audience(client_id: str) -> None:
     # Keycloak only lets a client exchange a token it is an audience of (docs/adr/0022).
-    (chat,) = [c for c in REALM["clients"] if c["clientId"] == "open-webui"]
+    (chat,) = [c for c in REALM["clients"] if c["clientId"] == client_id]
     assert "mcp-servers" in chat["defaultClientScopes"]
     exchangers = {
         c["clientId"] for c in REALM["clients"] if c["attributes"].get("standard.token.exchange.enabled") == "true"

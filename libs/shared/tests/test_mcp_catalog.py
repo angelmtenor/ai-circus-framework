@@ -63,6 +63,43 @@ def test_the_gateway_routes_every_server_and_nothing_else() -> None:
         assert config["mcp_servers"][server.name]["url"] == server.upstream
 
 
+def test_librechat_reaches_every_server_through_the_gateway_with_the_users_own_token() -> None:
+    """docs/adr/0026: one LibreChat MCP server per catalog server, each through the gateway with the signed-in user's
+    own Keycloak token in its own Authorization header, and the gateway as the only private address it may reach."""
+    catalog = generator.load()
+    config = yaml.safe_load((REPO / generator.LIBRECHAT_CONFIG).read_text())
+    assert list(config["mcpServers"]) == [s.name for s in catalog.servers]
+    for server in catalog.servers:
+        entry = config["mcpServers"][server.name]
+        assert entry["type"] == "streamable-http"
+        assert entry["url"] == f"{catalog.gateway}/mcp/{server.name}"
+        assert entry["headers"] == {"Authorization": "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"}
+        assert entry["requiresOAuth"] is False
+        assert "obo" not in entry and "apiKey" not in entry  # no LibreChat-side exchange or shared key
+    assert config["mcpSettings"] == {"allowedAddresses": [catalog.gateway.removeprefix("http://")]}
+
+
+def _librechat_accepts(title: str) -> bool:
+    """LibreChat's MCP_SERVER_TITLE_PATTERN: a letter or digit first, then letters, digits, marks, apostrophes
+    (straight or typographic), spaces and hyphens."""
+    return bool(title) and title[0].isalnum() and all(c.isalnum() or c in "'\u2019 -" for c in title)
+
+
+@pytest.mark.parametrize(
+    ("title", "shown"),
+    [
+        ("Customers (CRM)", "Customers CRM"),
+        ("Angel's Surf Co.", "Angel's Surf Co"),
+        ("AI Circus reference notes", "AI Circus reference notes"),
+        ("(beta) Ledger: v2", "beta Ledger v2"),
+        ("...", "fallback_name"),
+    ],
+)
+def test_librechat_titles_keep_the_words_and_drop_what_it_refuses(title: str, shown: str) -> None:
+    assert generator.librechat_title(title, "fallback_name") == shown
+    assert _librechat_accepts(shown) or shown == "fallback_name"
+
+
 def test_a_kit_server_policy_holds_exactly_its_groups_grants() -> None:
     catalog = generator.load()
     for server in catalog.kit_servers():
@@ -80,6 +117,24 @@ def test_the_identity_script_finds_each_kit_servers_secret_by_the_same_name() ->
     for server in generator.load().kit_servers():
         assert secrets[server.service] == generator.client_secret_env(server.service)
     assert generator.client_secret_env("crm-mcp") == "CRM_MCP_CLIENT_SECRET"  # the existing .env key
+
+
+def test_the_identity_script_generates_librechats_keys_at_the_lengths_it_needs(tmp_path: Path) -> None:
+    """LibreChat refuses to start on a credential key that is not 32 bytes or an IV that is not 16 (docs/adr/0026)."""
+    identity = _script("chat_ui_identity")
+    realm = json.loads((REPO / "infra" / "keycloak" / "realm-export.json").read_text())
+    env_file = tmp_path / ".env"
+    env_file.write_text("LIBRECHAT_CREDS_IV=\nOTHER=kept\n")
+    env = identity.ensure_generated_secrets(env_file, realm)
+    assert identity.client_secrets(realm)["librechat"] == "LIBRECHAT_OIDC_CLIENT_SECRET"
+    assert len(bytes.fromhex(env["LIBRECHAT_CREDS_KEY"])) == 32
+    assert len(bytes.fromhex(env["LIBRECHAT_CREDS_IV"])) == 16  # an empty value is filled too
+    assert len(bytes.fromhex(env["LIBRECHAT_JWT_SECRET"])) >= 32
+    assert len(bytes.fromhex(env["LIBRECHAT_JWT_REFRESH_SECRET"])) >= 32
+    assert env["OTHER"] == "kept"
+    keys = [line.partition("=")[0] for line in env_file.read_text().splitlines() if "=" in line]
+    assert len(keys) == len(set(keys)), "a key twice makes kubectl refuse the whole Secret"
+    assert identity.ensure_generated_secrets(env_file, realm) == env  # idempotent
 
 
 def test_removing_a_kit_server_removes_its_keycloak_entries_only() -> None:
@@ -123,6 +178,8 @@ def _break(data: dict[str, Any], how: str) -> None:
         _kit(data)["token"] = "x"
     elif how == "dollar_in_text":
         _kit(data)["description"] = "Costs $(HOME)"
+    elif how == "placeholder_in_text":
+        _kit(data)["title"] = "Hello {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
     elif how == "door_without_scenario":
         name, entry = _door(data)
         data["servers"]["no_such_scenario"] = {**entry, "url": entry["url"].replace(name, "no_such_scenario")}
@@ -153,6 +210,7 @@ def _break(data: dict[str, Any], how: str) -> None:
         "dash_in_name",
         "unknown_key",
         "dollar_in_text",
+        "placeholder_in_text",
         "door_without_scenario",
         "door_url_not_its_slug",
         "credential_header",

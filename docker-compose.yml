@@ -5,7 +5,7 @@
 # backend services (services/*), then the UI. Traefik is the single entrypoint; a few
 # stateful/internal services publish a loopback-only port for non-container local dev.
 # Optional profiles: `pipeline` (one-shot ETL/training jobs), `deep-learning`,
-# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM), `chat-ui` (Open WebUI), `mcp-examples` (crm-mcp + crm-api).
+# `data-platform` (Kafka), `ollama` (free local LLM), `vllm` (local GPU LLM), `chat-ui` (Open WebUI), `chat-ui-librechat` (LibreChat + its MongoDB), `mcp-examples` (crm-mcp + crm-api).
 
 name: ai-circus-framework
 
@@ -76,6 +76,8 @@ volumes:
   vllm-model-cache:
   # The optional chat UI's SQLite database and uploads (profile "chat-ui").
   open-webui-data:
+  # The optional second chat UI's MongoDB (profile "chat-ui-librechat").
+  librechat-mongodb-data:
   # faster-whisper/Piper model weights, downloaded to this cache on first use — kept
   # across container restarts so agui-voice doesn't re-download them every `make up`.
   # (Renamed from `voice-model-cache` when agui-voice stopped running as root: the old
@@ -1251,6 +1253,84 @@ services:
       - "traefik.http.routers.open-webui.rule=Host(`chat.localhost`)"
       - "traefik.http.routers.open-webui.entrypoints=web"
       - "traefik.http.services.open-webui.loadbalancer.server.port=8080"
+
+  # Second chat UI — OPTIONAL (profile "chat-ui-librechat", docs/adr/0026): LibreChat (MIT) with Keycloak sign-in,
+  # reaching every server of mcp/catalog.yaml through the MCP gateway with each user's own token. Same settings as
+  # k8s/chat-ui-librechat/librechat.yaml, and the same two files: librechat-config.yaml (its MCP servers are generated
+  # from the catalog) and oidc-allow-http.mjs (lab only: LibreChat's OpenID client wants an https Keycloak). Run
+  # scripts/chat_ui_identity.py first (realm sync, demo tenant, .env keys). Run one chat UI at a time on 16 GB.
+  librechat-mongodb:
+    image: mongo:8.0.20
+    profiles: ["chat-ui-librechat"]
+    user: "999:999"
+    command: ["--wiredTigerCacheSizeGB", "0.25", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: librechat
+      MONGO_INITDB_ROOT_PASSWORD: ${LIBRECHAT_MONGO_PASSWORD:-}
+    volumes:
+      - librechat-mongodb-data:/data/db
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 512m
+
+  librechat:
+    image: ghcr.io/librechat-ai/librechat:v0.8.8
+    profiles: ["chat-ui-librechat"]
+    user: "1000:1000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3080"
+      DOMAIN_CLIENT: http://librechat.localhost
+      DOMAIN_SERVER: http://librechat.localhost
+      CONFIG_PATH: /config/librechat.yaml
+      NODE_OPTIONS: --import=/config/oidc-allow-http.mjs --max-old-space-size=768
+      MONGO_URI: mongodb://librechat:${LIBRECHAT_MONGO_PASSWORD:-}@librechat-mongodb:27017/LibreChat?authSource=admin
+      CREDS_KEY: ${LIBRECHAT_CREDS_KEY:-}
+      CREDS_IV: ${LIBRECHAT_CREDS_IV:-}
+      JWT_SECRET: ${LIBRECHAT_JWT_SECRET:-}
+      JWT_REFRESH_SECRET: ${LIBRECHAT_JWT_REFRESH_SECRET:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      ALLOW_EMAIL_LOGIN: "false"
+      ALLOW_REGISTRATION: "false"
+      ALLOW_PASSWORD_RESET: "false"
+      ALLOW_SOCIAL_LOGIN: "true"
+      ALLOW_SOCIAL_REGISTRATION: "true"
+      OPENID_CLIENT_ID: librechat
+      OPENID_CLIENT_SECRET: ${LIBRECHAT_OIDC_CLIENT_SECRET:-}
+      OPENID_SESSION_SECRET: ${LIBRECHAT_OPENID_SESSION_SECRET:-}
+      OPENID_ISSUER: http://keycloak:8080/realms/ai-circus/.well-known/openid-configuration
+      OPENID_CALLBACK_URL: /oauth/openid/callback
+      OPENID_SCOPE: openid profile email organization
+      OPENID_USE_PKCE: "true"
+      OPENID_BUTTON_LABEL: Keycloak
+      OPENID_AUTO_REDIRECT: "true"
+      OPENID_USE_END_SESSION_ENDPOINT: "true"
+      OPENID_REUSE_TOKENS: "true"
+      MCP_USER_CONNECTION_IDLE_TIMEOUT: "300000"
+      SESSION_COOKIE_SECURE: "false"
+      ENDPOINTS: custom,agents
+      SEARCH: "false"
+      NO_INDEX: "true"
+      SCARF_ANALYTICS: "false"
+      CONSOLE_JSON: "true"
+    volumes:
+      - ./k8s/chat-ui-librechat/librechat-config.yaml:/config/librechat.yaml:ro
+      - ./k8s/chat-ui-librechat/oidc-allow-http.mjs:/config/oidc-allow-http.mjs:ro
+    depends_on:
+      librechat-mongodb:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      llm-gateway:
+        condition: service_started
+    networks: [ai-circus]
+    restart: unless-stopped
+    mem_limit: 1g
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.librechat.rule=Host(`librechat.localhost`)"
+      - "traefik.http.routers.librechat.entrypoints=web"
+      - "traefik.http.services.librechat.loadbalancer.server.port=3080"
 
   # Example of an MCP server in front of an existing API — OPTIONAL (profile "mcp-examples",
   # docs/adr/0022). Same settings as k8s/mcp-examples/crm.yaml: crm-api is a customer API that only

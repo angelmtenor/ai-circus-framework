@@ -4,8 +4,10 @@
 One catalog entry per MCP server, one entry per group (a realm role in the user's token). The generator writes:
 
 - llm-gateway's `mcp_servers` block (services/llm-gateway/litellm_config.yaml): one passthrough route per server;
-- the chat UI's `TOOL_SERVER_CONNECTIONS` (k8s/chat-ui/open-webui.yaml and docker-compose.yml): one connection per
-  server, each with the signed-in user's own token;
+- the chat UIs' connections, one per server, each with the signed-in user's own token: Open WebUI's
+  `TOOL_SERVER_CONNECTIONS` (k8s/chat-ui/open-webui.yaml and docker-compose.yml, docs/adr/0021) and LibreChat's
+  `mcpServers` with the gateway as its only private address (k8s/chat-ui-librechat/librechat-config.yaml, which
+  docker compose mounts too, docs/adr/0026);
 - each kit server's `policy.yaml` (services/<service>/policy.yaml): tools per group, optionally per tenant;
 - the Keycloak entries that let a kit server exchange a user's token for its own API only
   (infra/keycloak/realm-export.json): the server's confidential client, its API's client and audience scope, and
@@ -41,6 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 CATALOG = Path("mcp/catalog.yaml")
 GATEWAY_CONFIG = Path("services/llm-gateway/litellm_config.yaml")
 CHAT_UI_MANIFEST = Path("k8s/chat-ui/open-webui.yaml")
+LIBRECHAT_CONFIG = Path("k8s/chat-ui-librechat/librechat-config.yaml")
 COMPOSE = Path("docker-compose.yml")
 REALM = Path("infra/keycloak/realm-export.json")
 
@@ -66,14 +69,14 @@ MAX_TEXT = 160
 
 HEADER_COMMENT = """\
 # The MCP catalog (docs/adr/0024): the single source of truth for the MCP path. It decides what the MCP
-# gateway routes, what the chat UI connects to, which tools each group may run on each kit server, and the
+# gateway routes, what the chat UIs connect to, which tools each group may run on each kit server, and the
 # Keycloak clients that let a kit server exchange a user's token for its own API only.
 #
 # Edit it here or in the portal (make mcp-catalog-portal), then regenerate and commit both:
 #     make mcp-catalog          # writes every generated file (this one too, in its canonical layout)
 #     make mcp-catalog-check    # what CI runs: fails when a generated file drifted from the catalog
 #
-# gateway                  the MCP gateway's in-cluster address, as the chat UI reaches it
+# gateway                  the MCP gateway's in-cluster address, as the chat UIs reach it
 # servers.<name>           the gateway path (/mcp/<name>) and tool prefix: lowercase, digits, "_" (never "-")
 #   kind: scenario_door    a scenario's own door (ADR 0019): url, title, description, optional forward_headers.
 #                          The tenant's entitlement and the scenario's own role rules decide its tools, so no
@@ -137,9 +140,9 @@ class Catalog:
 def _text(where: str, value: object) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > MAX_TEXT:
         raise CatalogError(f"{where}: expected a one-line text of at most {MAX_TEXT} characters")
-    # `$` would be expanded by docker compose and kubelet in the chat UI's environment.
-    if "\n" in value or "$" in value or value != value.strip():
-        raise CatalogError(f"{where}: no line breaks, no '$' and no surrounding spaces")
+    # `$` would be expanded by docker compose and kubelet in the chat UI's environment, `{{` by LibreChat.
+    if "\n" in value or "$" in value or "{{" in value or value != value.strip():
+        raise CatalogError(f"{where}: no line breaks, no '$', no '{{{{' and no surrounding spaces")
     return value
 
 
@@ -420,6 +423,47 @@ def compose_connections_block(catalog: Catalog, indent: str) -> list[str]:
     return [f"{indent}TOOL_SERVER_CONNECTIONS: >-", *_connections_json(catalog, indent + "  ")]
 
 
+# LibreChat replaces this placeholder with the signed-in user's own Keycloak access token on every connection
+# (OPENID_REUSE_TOKENS=true), refreshing it from the user's session.
+LIBRECHAT_USER_TOKEN = "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+
+
+def librechat_title(title: str, fallback: str) -> str:
+    """A title LibreChat accepts (letters, digits, spaces, hyphens, apostrophes; a letter or digit first): any other
+    character becomes a space, so "Customers (CRM)" reads "Customers CRM"."""
+    kept = "".join(c if c.isalnum() or c in "'\u2019 -" else " " for c in title)
+    words = " ".join(kept.split()).lstrip("'\u2019 -")
+    return words or fallback
+
+
+def librechat_block(catalog: Catalog, indent: str) -> list[str]:
+    """LibreChat's `mcpSettings` and `mcpServers` (docs/adr/0026): one streamable HTTP server per catalog server, each
+    with the signed-in user's own token in its own Authorization header (one door per header, docs/adr/0020).
+
+    LibreChat refuses private addresses (SSRF protection); the gateway is the one exemption, by host and port, so a
+    server can only be reached through it. A placeholder in a header makes each connection per user, opened when
+    that user first needs it. Every user sees every server; the door or the server's policy decides.
+    """
+    gateway = catalog.gateway.removeprefix("http://")
+    lines = [
+        "mcpSettings:",
+        f"  allowedAddresses: [{_q(gateway)}]",
+        "mcpServers:" if catalog.servers else "mcpServers: {}",
+    ]
+    for s in catalog.servers:
+        lines += [
+            f"  {s.name}:",
+            "    type: streamable-http",
+            f"    url: {catalog.gateway}/mcp/{s.name}",
+            f"    title: {_q(librechat_title(s.title, s.name))}",
+            f"    description: {_q(s.description)}",
+            "    headers:",
+            f"      Authorization: {_q(LIBRECHAT_USER_TOKEN)}",
+            "    requiresOAuth: false",
+        ]
+    return [indent + line if line else line for line in lines]
+
+
 def policy_file(catalog: Catalog, server: Server) -> str:
     """A kit server's policy.yaml (libs/mcp-kit's Policy): tools per realm role, optionally per tenant."""
     lines = [
@@ -590,6 +634,9 @@ def outputs(catalog: Catalog, repo: Path = REPO) -> dict[Path, str]:
             (repo / CHAT_UI_MANIFEST).read_text(), CHAT_UI_MANIFEST, lambda i: k8s_connections_block(catalog, i)
         ),
         COMPOSE: splice((repo / COMPOSE).read_text(), COMPOSE, lambda i: compose_connections_block(catalog, i)),
+        LIBRECHAT_CONFIG: splice(
+            (repo / LIBRECHAT_CONFIG).read_text(), LIBRECHAT_CONFIG, lambda i: librechat_block(catalog, i)
+        ),
         REALM: realm_file(catalog, (repo / REALM).read_text()),
     }
     for server in catalog.kit_servers():

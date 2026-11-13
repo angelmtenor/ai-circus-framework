@@ -169,6 +169,17 @@ manager does not and sees only S012). `scripts/chat_ui_identity.py` brings the l
 creates the `lite-demo` tenant. The client's tokens live 15 minutes because Open WebUI refreshes within 5 and the gateway
 binds an MCP session to its token.
 
+**A second chat UI, LibreChat** (docs/adr/0026, MIT): `make k3s-librechat-up` serves it at `librechat.localhost`
+(`k8s/chat-ui-librechat/` with its own MongoDB, compose profile `chat-ui-librechat`; one chat UI at a time on 16 GB).
+Keycloak-only sign-in through the confidential `librechat` client with `OPENID_REUSE_TOKENS`, so each MCP server's
+`Authorization: Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}` is the user's own Keycloak token; models from llm-gateway
+(`gemini-flash` by default). Its `librechat-config.yaml` holds the catalog-generated `mcpServers` and the gateway as the
+only exemption from its private-address block (`mcpSettings.allowedAddresses`). Lab only: LibreChat's OpenID client
+accepts only https providers, so `oidc-allow-http.mjs` (a Node load hook, `NODE_OPTIONS=--import`) turns on the library's
+`allowInsecureRequests`; delete it with an https identity provider. LibreChat keeps an MCP connection across a token
+refresh, so the first call after one gets the gateway's 403 owner mismatch, the connection reopens and the model retries;
+idle connections close after 5 minutes to keep that rare.
+
 **An MCP server in front of an existing API** (docs/adr/0022) is built with `libs/mcp-kit` (`mcp_kit`): it validates the
 user's token (T1, audience = the server's Keycloak client), applies `policy.yaml` (tools per realm role, optionally per
 tenant: `tools/list` filtered, other calls refused, 403 when nothing is granted), exchanges T1 at Keycloak for a token whose
@@ -185,16 +196,18 @@ not traced, while the chat UI's and LiteLLM's MCP clients send no `traceparent`.
 **One catalog for the whole path** (docs/adr/0024): `mcp/catalog.yaml` lists the gateway's address, every server
 (`scenario_door`: a scenario's own door, whose tools its entitlements and `scenario.yaml` roles decide, so no group lists
 it; `kit_server`: service, API, tenants, tools) and every group (a realm role → tools per kit server, or `"*"`).
-`scripts/generate_mcp_catalog.py` writes the gateway's `mcp_servers`, the chat UI's connections (k8s and compose), each kit
+`scripts/generate_mcp_catalog.py` writes the gateway's `mcp_servers`, both chat UIs' connections (Open WebUI's in k8s and
+compose, LibreChat's `mcpServers` in `k8s/chat-ui-librechat/librechat-config.yaml`), each kit
 server's `policy.yaml` and the Keycloak entries (exchange client, API client, `<api>-audience` scope, `mcp-servers` mapper,
 all marked "Generated from mcp/catalog.yaml."); hand-written files keep their comments around `BEGIN`/`END` markers. It
 refuses a catalog that would route, grant or exchange by mistake (names with `-`, undeclared doors, credential headers,
-tools other than the server's `@kit.tool()` functions, grants on doors, groups that are not realm roles, `$` in a text).
+tools other than the server's `@kit.tool()` functions, grants on doors, groups that are not realm roles, `$` or `{{` in a text).
 `make mcp-catalog` writes, `make mcp-catalog-check` and `libs/shared/tests/test_mcp_catalog.py` fail on drift, `make
 k3s-mcp-catalog-apply` syncs Keycloak and rebuilds llm-gateway and the kit servers. A kit server's secret is
 `<CLIENT_ID>_CLIENT_SECRET` in `.env` (`chat_ui_identity.py` derives it). `make mcp-catalog-portal` serves a local page
 (127.0.0.1, per-run token, nonce CSP) to tick tools per group, add a server, review the diffs and publish (= the generator;
-never deploys or commits). Chat UI visibility per group is not generated: Open WebUI grants by internal group ids.
+never deploys or commits). Chat UI visibility per group is not generated: Open WebUI grants by internal group ids, and
+LibreChat shows every server to every user.
 
 **Level 3, for regulated deployments** (docs/adr/0025): `level: 3` on a kit server of the catalog. The per-API token
 is DPoP-bound to a key the MCP server holds in memory only (`mcp_kit.DpopKey`): proof on the exchange, a fresh proof on

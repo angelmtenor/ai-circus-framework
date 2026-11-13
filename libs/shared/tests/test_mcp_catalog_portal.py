@@ -47,7 +47,7 @@ gen = portal.gen
 def repo(tmp_path: Path) -> Path:
     """A copy of every file the catalog reads or writes."""
     catalog = yaml.safe_load((REPO / gen.CATALOG).read_text())
-    paths = [gen.CATALOG, gen.GATEWAY_CONFIG, gen.CHAT_UI_MANIFEST, gen.COMPOSE, gen.REALM]
+    paths = [gen.CATALOG, gen.GATEWAY_CONFIG, gen.CHAT_UI_MANIFEST, gen.LIBRECHAT_CONFIG, gen.COMPOSE, gen.REALM]
     for name, server in catalog["servers"].items():
         if server["kind"] == "scenario_door":
             paths.append(Path("scenarios") / name / "scenario.yaml")

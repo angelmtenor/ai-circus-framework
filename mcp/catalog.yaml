@@ -1,12 +1,12 @@
 # The MCP catalog (docs/adr/0024): the single source of truth for the MCP path. It decides what the MCP
-# gateway routes, what the chat UI connects to, which tools each group may run on each kit server, and the
+# gateway routes, what the chat UIs connect to, which tools each group may run on each kit server, and the
 # Keycloak clients that let a kit server exchange a user's token for its own API only.
 #
 # Edit it here or in the portal (make mcp-catalog-portal), then regenerate and commit both:
 #     make mcp-catalog          # writes every generated file (this one too, in its canonical layout)
 #     make mcp-catalog-check    # what CI runs: fails when a generated file drifted from the catalog
 #
-# gateway                  the MCP gateway's in-cluster address, as the chat UI reaches it
+# gateway                  the MCP gateway's in-cluster address, as the chat UIs reach it
 # servers.<name>           the gateway path (/mcp/<name>) and tool prefix: lowercase, digits, "_" (never "-")
 #   kind: scenario_door    a scenario's own door (ADR 0019): url, title, description, optional forward_headers.
 #                          The tenant's entitlement and the scenario's own role rules decide its tools, so no

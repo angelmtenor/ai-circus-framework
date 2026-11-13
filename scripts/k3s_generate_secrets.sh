@@ -68,6 +68,9 @@ SECRET_SPECS=(
   # Optional chat UI (k8s/chat-ui/, docs/adr/0021) — generated unconditionally, harmless when off;
   # its CHAT_UI_* keys are generated into .env by scripts/chat_ui_identity.py.
   "open-webui-secrets|CHAT_UI_SECRET_KEY,CHAT_UI_OIDC_CLIENT_SECRET,LITELLM_MASTER_KEY"
+  # Optional second chat UI (k8s/chat-ui-librechat/, docs/adr/0026) — harmless when off; its LIBRECHAT_* keys
+  # are generated into .env by scripts/chat_ui_identity.py.
+  "librechat-secrets|LIBRECHAT_OIDC_CLIENT_SECRET,LIBRECHAT_OPENID_SESSION_SECRET,LIBRECHAT_CREDS_KEY,LIBRECHAT_CREDS_IV,LIBRECHAT_JWT_SECRET,LIBRECHAT_JWT_REFRESH_SECRET,LIBRECHAT_MONGO_PASSWORD,LITELLM_MASTER_KEY"
   # Example MCP server + customer API (k8s/mcp-examples/, docs/adr/0022) — harmless when off;
   # CRM_MCP_CLIENT_SECRET / CRM_API_CLIENT_SECRET are generated into .env by scripts/chat_ui_identity.py.
   "crm-api-secrets|KEYCLOAK_ISSUER,CRM_API_CLIENT_SECRET"
