@@ -386,8 +386,11 @@ k3s-pause: k3s-portforward-stop ## Stop the k3d cluster's containers to free CPU
 	@k3d cluster stop "$(K3S_CLUSTER)"
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' stopped — resume with 'make k3s-resume'"
 
-k3s-resume: ## Start a previously paused k3d cluster back up
-	@k3d cluster start "$(K3S_CLUSTER)"
+k3s-resume: ## Start a previously paused k3d cluster back up, then wait for its node to be Ready (at most 5 min)
+	@# k3d's last start step (injecting host.k3d.internal into CoreDNS, which nothing here uses) can hang for
+	@# minutes after the containers are up: give the start 90 s, then wait for what matters, the node being Ready.
+	@timeout --foreground 90 k3d cluster start --wait=false "$(K3S_CLUSTER)" >/dev/null 2>&1 || true
+	@kubectl --context "k3d-$(K3S_CLUSTER)" wait --for=condition=Ready node --all --timeout=300s >/dev/null
 	@echo "✓ k3d cluster '$(K3S_CLUSTER)' started — 'make k3s-wait' to confirm pods are Ready (also restarts the platform-registry port-forward)"
 
 k3s-lite: ## Scale the rarely-used Deployments in K3S_LITE_SKIP (default: mlflow agui-voice) to 0 replicas on the running cluster to save RAM — Langfuse stays on; undo with `make k3s-full`

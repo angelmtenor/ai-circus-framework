@@ -1,4 +1,4 @@
-# MCP Lite Stack — governed tools for chat UIs
+# MCP Lite Stack
 
 A chat UI where each person signs in with Keycloak and uses MCP tools as themselves: every MCP server sees the
 signed-in user's own token, lists only the tools that user's role is granted, and calls its API with a token valid for
@@ -43,6 +43,13 @@ flowchart LR
    Level 3 that token is bound to a key the server holds in memory (DPoP) and both tokens are checked live.
 5. **Answer.** The API applies its own rules (here: only the shops that person may see) and sees the user under a
    pseudonym of its own, never the Keycloak id.
+
+### Services and ports
+
+What `make k3s-mcp-lite OBS=1` runs (the same services run in the full framework), with each Kubernetes service's
+port: one chat UI at a time, Open WebUI or LibreChat with its MongoDB.
+
+<p align="center"><img src="../screenshots/architecture-mcp-lite.svg" alt="Services of the MCP lite profile with observability: Traefik; namespace ai-circus with the chat UI, LibreChat MongoDB, Keycloak and Postgres, llm-gateway and Valkey, crm-mcp and crm-api; namespace observability with the OpenTelemetry Collector, VictoriaMetrics, vmalert, Loki, Tempo and Grafana" width="100%"></p>
 
 ## The pieces
 
