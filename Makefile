@@ -560,15 +560,16 @@ k3s-librechat-down: ## Remove the optional LibreChat UI and its MongoDB. Keeps t
 
 # The MCP lite profile (docs/adr/0027): the MCP Lite Stack alone on its own k3d cluster (own kubeconfig file; the
 # default kubeconfig and its context are never touched). It holds port 80 as the framework cluster does: pause one
-# to run the other. CHAT_UI picks the chat UI (open-webui | librechat).
+# to run the other. CHAT_UI picks the chat UI (open-webui | librechat); OBS=1 adds the observability bundle
+# (k3s-obs-up, ~1 GiB, run against the lite cluster) and makes k3s-mcp-lite-verify check its signals.
 MCP_LITE_CLUSTER ?= mcp-lite
 CHAT_UI ?= open-webui
-MCP_LITE = MCP_LITE_CLUSTER="$(MCP_LITE_CLUSTER)" CHAT_UI="$(CHAT_UI)" K3S_VERSION="$(strip $(K3S_VERSION))" ./scripts/k3s_mcp_lite.sh
+MCP_LITE = MCP_LITE_CLUSTER="$(MCP_LITE_CLUSTER)" CHAT_UI="$(CHAT_UI)" OBS="$(OBS)" K3S_VERSION="$(strip $(K3S_VERSION))" ./scripts/k3s_mcp_lite.sh
 
-k3s-mcp-lite: ## OPTIONAL MCP lite profile (ADR 0027) on its own k3d cluster MCP_LITE_CLUSTER (default mcp-lite): Keycloak, the AI gateway (llm-gateway: models + MCP gateway), crm-mcp + crm-api (Level 3) and one chat UI (CHAT_UI=open-webui|librechat), nothing else of the framework (~3 GB). Refuses while another k3d cluster holds port 80 (make k3s-pause first)
+k3s-mcp-lite: ## OPTIONAL MCP lite profile (ADR 0027) on its own k3d cluster MCP_LITE_CLUSTER (default mcp-lite): Keycloak, the AI gateway (llm-gateway: models + MCP gateway), crm-mcp + crm-api (Level 3) and one chat UI (CHAT_UI=open-webui|librechat), nothing else of the framework (~3 GB; OBS=1 adds the observability bundle, ~1 GiB). Refuses while another k3d cluster holds port 80 (make k3s-pause first)
 	@$(MCP_LITE) up
 
-k3s-mcp-lite-verify: ## Check the MCP lite profile without a model: each demo user signs in through Keycloak's login pages, then lists and calls every kit server's tools through the gateway with that token, against mcp/catalog.yaml's grants
+k3s-mcp-lite-verify: ## Check the MCP lite profile without a model: each demo user signs in through Keycloak's login pages, then lists and calls every kit server's tools through the gateway with that token, against mcp/catalog.yaml's grants; with the observability bundle deployed, also that those calls reached metrics, audit logs and traces, and that no log line carries a token
 	@$(MCP_LITE) verify
 
 k3s-mcp-lite-down: ## Delete the MCP lite profile's k3d cluster (volumes included). Bring the framework cluster back with make k3s-resume
@@ -786,6 +787,9 @@ OBS_ENDPOINT ?= http://otel-collector.observability:4318
 OBS_SERVICES ?= prediction assistant rag-agent form-agent platform-registry data-platform-manager llm-gateway agui-voice dl-inference data-api data-ingest crm-api crm-mcp
 # The optional chat UI (ADR 0021) reads its own variables, not shared-config: switched on and off here (gRPC, port 4317).
 OBS_CHAT_UI_ENV = ENABLE_OTEL=true ENABLE_OTEL_TRACES=true OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.observability:4317 OTEL_EXPORTER_OTLP_INSECURE=true
+# LibreChat's own OpenTelemetry (docs/adr/0027): traces only (its logs reach Loki from stdout), over OTLP/HTTP. Its HTTP
+# spans carry no headers and redacted query strings; its MCP calls pass the trace context on to the gateway.
+OBS_LIBRECHAT_ENV = OTEL_TRACING_ENABLED=true OTEL_SERVICE_NAME=librechat OTEL_EXPORTER_OTLP_ENDPOINT=$(OBS_ENDPOINT) OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OBS_WORKLOADS = daemonset/otel-collector deployment/victoriametrics deployment/vmalert deployment/loki deployment/tempo deployment/grafana
 
 k3s-obs-up: ## OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMetrics+vmalert, Loki, Tempo, Grafana at http://grafana.localhost; every service starts exporting to it
@@ -802,6 +806,9 @@ k3s-obs-up: ## OPTIONAL observability lab bundle (~1 GiB): collector, VictoriaMe
 	@if kubectl -n ai-circus get deployment/open-webui >/dev/null 2>&1; then \
 		kubectl -n ai-circus set env deployment/open-webui $(OBS_CHAT_UI_ENV) >/dev/null && \
 		kubectl -n ai-circus rollout status deployment/open-webui --timeout=600s >/dev/null && echo "✓ open-webui traces too"; fi
+	@if kubectl -n ai-circus get deployment/librechat >/dev/null 2>&1; then \
+		kubectl -n ai-circus set env deployment/librechat $(OBS_LIBRECHAT_ENV) >/dev/null && \
+		kubectl -n ai-circus rollout status deployment/librechat --timeout=600s >/dev/null && echo "✓ librechat traces too"; fi
 	@echo "✓ services export to $(OBS_ENDPOINT) — Grafana: http://grafana.localhost (anonymous = Viewer; admin password:"
 	@echo "  kubectl -n observability get secret grafana-admin -o jsonpath='{.data.password}' | base64 -d)"
 
@@ -811,6 +818,8 @@ k3s-obs-down: ## Undo k3s-obs-up: services stop exporting, then the bundle and i
 	@$(MAKE) --no-print-directory k3s-obs-restart
 	@if kubectl -n ai-circus get deployment/open-webui >/dev/null 2>&1; then \
 		kubectl -n ai-circus set env deployment/open-webui ENABLE_OTEL- ENABLE_OTEL_TRACES- OTEL_EXPORTER_OTLP_ENDPOINT- OTEL_EXPORTER_OTLP_INSECURE- >/dev/null; fi
+	@if kubectl -n ai-circus get deployment/librechat >/dev/null 2>&1; then \
+		kubectl -n ai-circus set env deployment/librechat OTEL_TRACING_ENABLED- OTEL_SERVICE_NAME- OTEL_EXPORTER_OTLP_ENDPOINT- OTEL_EXPORTER_OTLP_PROTOCOL- >/dev/null; fi
 	@kubectl delete -k observability --ignore-not-found >/dev/null && echo "✓ observability bundle removed"
 
 k3s-obs-restart: ## (internal) Restart each running OBS_SERVICES Deployment in turn so it rereads shared-config
