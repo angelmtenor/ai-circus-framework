@@ -1272,6 +1272,33 @@ created before this needs no `make reset-all`.
 see training/inference *events*, not live feature distributions) are the natural next steps —
 see [Reserved for later](#reserved-for-later-documented-not-built).
 
+### MCP Lite Stack — governed tools for chat UIs (optional)
+
+A chat UI where each person signs in with Keycloak and uses MCP tools **as themselves**: every MCP server sees the
+signed-in user's own token, lists only the tools that user's role is granted, and calls its API with a token valid for
+that API alone. The AI gateway is `llm-gateway` (open-source LiteLLM: models at `/v1`, MCP servers at `/mcp/<server>`),
+and one file, `mcp/catalog.yaml`, decides which servers exist and who may run what.
+
+| What | Where |
+|---|---|
+| Two chat UIs with Keycloak-only sign-in: Open WebUI and LibreChat (MIT) | `make k3s-chat-ui-up` · `make k3s-librechat-up` |
+| MCP servers in front of existing APIs, built with `libs/mcp-kit` (token checks, policy, per-API token exchange, audit); example `crm-mcp` → `crm-api` | `make k3s-mcp-examples-up` |
+| One catalog: generates the gateway routes, both chat UIs' connections, each server's policy and the Keycloak clients; CI fails on drift | `make mcp-catalog` · `make mcp-catalog-portal` |
+| Level 3 for regulated servers: DPoP-bound per-API tokens, live token checks, mutual TLS | `level: 3` in the catalog · `make k3s-mcp-tls` |
+| One trace from the chat UI to the API, masked logs (no token or email stored), an MCP dashboard | `make k3s-obs-up` |
+| Each API sees a pseudonym of the user, never the Keycloak id; an identity admin can map it back | `make k3s-mcp-pseudonym` |
+| The whole stack alone on its own k3d cluster (~3 GB), with a check that needs no model | `make k3s-mcp-lite` · `make k3s-mcp-lite-verify` |
+
+<p align="center">
+  <img src="docs/screenshots/mcp/librechat-analyst.webp" alt="LibreChat, analyst: ran crm-top_customers, three CRM tools listed" width="49%">
+  <img src="docs/screenshots/mcp/librechat-store-manager.webp" alt="LibreChat, store manager: ran crm-search_customers, two CRM tools listed" width="49%">
+</p>
+
+The same question as the analyst and as the S012 store manager: the analyst's answer runs `top_customers`; the store
+manager's role is not granted it, so the model searches instead. Full guide — architecture, security levels, how to
+add an API, operations, known limits: [docs/mcp](docs/mcp/README.md); decisions: ADR 0019 to 0029 in
+[docs/adr](docs/adr/README.md).
+
 ---
 
 ## LLM providers
