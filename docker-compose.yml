@@ -1215,6 +1215,7 @@ services:
       OAUTH_CODE_CHALLENGE_METHOD: S256
       ENABLE_OLLAMA_API: "false"
       BYPASS_MODEL_ACCESS_CONTROL: "true"
+      DEFAULT_MODELS: gemini-flash
       OPENAI_API_BASE_URLS: http://llm-gateway:4000/v1
       OPENAI_API_KEYS: ${LITELLM_MASTER_KEY}
       RAG_EMBEDDING_ENGINE: openai
