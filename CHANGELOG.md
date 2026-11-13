@@ -4,6 +4,28 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.56.0 — 2026-11-13
+
+### Added
+- **LibreChat as a second, optional chat UI** (ADR 0026, MIT): `make k3s-librechat-up` serves it with its own MongoDB at
+  `http://librechat.localhost` (compose profile `chat-ui-librechat`). Sign-in through Keycloak only (client `librechat`,
+  same demo users as Open WebUI); every server of `mcp/catalog.yaml` is reached through the MCP gateway with the
+  signed-in user's own token, so the doors and kit servers decide exactly as for Open WebUI. Models from llm-gateway,
+  `gemini-flash` by default. Run one chat UI at a time on a 16 GB laptop.
+- `make mcp-catalog` also writes LibreChat's MCP servers, and exempts only the gateway from LibreChat's block on private
+  addresses. LibreChat and its database have rows on the Health page.
+
+### Changed
+- The catalog refuses `{{` in a title or description, as it refuses `$`. LibreChat shows a title without the characters
+  it refuses ("Customers (CRM)" reads "Customers CRM").
+- `scripts/chat_ui_identity.py` fills a key left empty in `.env` on its own line instead of adding a second one.
+
+### Known limits
+- LibreChat's OpenID client refuses an http identity provider; the lab's Keycloak is http, so a small load hook
+  (`k8s/chat-ui-librechat/oidc-allow-http.mjs`) turns on the library's own opt-out. Delete it with an https provider.
+- After a token refresh, LibreChat's first MCP call is refused once by the gateway (the session belongs to the old
+  token); LibreChat reopens the connection and the model retries.
+
 ## v0.55.0 — 2026-11-12
 
 ### Added
