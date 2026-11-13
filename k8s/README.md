@@ -36,6 +36,8 @@ k8s/
                     # gateway with each user's token (make k3s-chat-ui-up, docs/adr/0021), never part of k3s-up
   chat-ui-librechat/ # optional overlay: LibreChat + its MongoDB at librechat.localhost, same sign-in and MCP path
                     # (make k3s-librechat-up, docs/adr/0026), never part of k3s-up; one chat UI at a time
+  mcp-lite/         # the MCP lite profile: base's Postgres/Keycloak/Valkey/llm-gateway + mcp-examples + one chat UI
+                    # (open-webui/ or librechat/), on its own cluster (make k3s-mcp-lite, docs/adr/0027)
   mcp-examples/     # optional overlay: crm-mcp (built with libs/mcp-kit) in front of crm-api, per-API tokens
                     # (make k3s-mcp-examples-up, docs/adr/0022), never part of k3s-up
   data-platform/    # optional data tiers — core (Kafka, data-ingest, data-api, data-transform), analytics,
@@ -230,6 +232,13 @@ with its own MongoDB. It runs the same identity step (the `librechat` client, it
 and signs in the same demo users. Pick a server from the composer's **MCP Servers** menu; the servers come
 from `mcp/catalog.yaml` (`k8s/chat-ui-librechat/librechat-config.yaml`). On a 16 GB laptop run one chat UI
 at a time. `make k3s-librechat-down` removes both pods and keeps the database volume and the demo tenant.
+
+The MCP lite profile, `make k3s-mcp-lite` (docs/adr/0027), runs the MCP Lite Stack alone on its own k3d cluster
+`mcp-lite`: Postgres and Keycloak, llm-gateway (models and the MCP gateway) with Valkey, crm-mcp + crm-api and one chat UI
+(`CHAT_UI=open-webui`, the default, or `librechat`), about 3 GB. It uses its own kubeconfig file (`export
+KUBECONFIG=$(k3d kubeconfig write mcp-lite)` to use kubectl on it) and holds port 80, so pause the framework cluster
+first (`make k3s-pause`; `make k3s-resume` afterwards). `make k3s-mcp-lite-verify` signs the demo users in and checks
+every kit server's tools against the catalog through the gateway; `make k3s-mcp-lite-down` deletes the cluster.
 
 `make k3s-mcp-examples-up` (docs/adr/0022) builds and deploys `crm-api` and `crm-mcp`, an MCP server built with
 `libs/mcp-kit` in front of an API that only accepts tokens issued for it. It runs the same realm sync (the `crm-mcp`

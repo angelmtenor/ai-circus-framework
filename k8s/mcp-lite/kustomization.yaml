@@ -1,0 +1,37 @@
+# MCP lite profile (docs/adr/0027): the MCP Lite Stack alone, on its own k3d cluster: Postgres + Keycloak (identity),
+# llm-gateway (the AI gateway: models at /v1, MCP gateway at /mcp) with Valkey (its budget and policy counters; a
+# chat UI that sends the OpenAI `user` field reaches them) and the example kit server in front of its API
+# (crm-mcp + crm-api, Level 3). The chat UI comes from k8s/mcp-lite/open-webui or k8s/mcp-lite/librechat.
+# Nothing else of the framework runs: no registry, scenarios, data platform or Langfuse.
+#
+# It lists the framework's own manifests, never copies of them, so it is built with
+#     kubectl kustomize --load-restrictor LoadRestrictionsNone k8s/mcp-lite
+# (files outside this folder are refused otherwise). `make k3s-mcp-lite` does that.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base/namespace.yaml
+  - ../base/configmap.yaml
+  - ../base/postgres.yaml
+  - ../base/keycloak.yaml
+  - ../base/middleware.yaml
+  - ../base/valkey.yaml
+  - ../base/llm-gateway.yaml
+  - ../mcp-examples
+
+patches:
+  # No Langfuse in the profile: without its keys llm-gateway never switches tracing on (an env entry wins over the
+  # Secret's envFrom; a strategic merge keeps any env the base manifest gains later).
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: llm-gateway, namespace: ai-circus}
+      spec:
+        template:
+          spec:
+            containers:
+              - name: llm-gateway
+                env:
+                  - {name: LANGFUSE_PUBLIC_KEY, value: ""}
+                  - {name: LANGFUSE_SECRET_KEY, value: ""}

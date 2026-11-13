@@ -79,6 +79,28 @@ def test_librechat_reaches_every_server_through_the_gateway_with_the_users_own_t
     assert config["mcpSettings"] == {"allowedAddresses": [catalog.gateway.removeprefix("http://")]}
 
 
+def test_the_lite_profile_lists_only_the_kit_servers_it_deploys() -> None:
+    """docs/adr/0027: the MCP lite profile runs no scenario door, so its chat UIs list the kit servers only, each
+    exactly as the full profile lists it; LibreChat's file is otherwise the full profile's."""
+    catalog = generator.load()
+    kits = [s.name for s in catalog.kit_servers()]
+    assert kits, "the catalog has no kit server for the lite profile"
+    patch = yaml.safe_load((REPO / generator.LITE_OPEN_WEBUI_PATCH).read_text())
+    (container,) = patch["spec"]["template"]["spec"]["containers"]
+    (variable,) = container["env"]
+    lite = json.loads(variable["value"])
+    assert [c["info"]["id"] for c in lite] == kits
+    assert lite == [c for c in generator.chat_ui_connections(catalog) if c["info"]["id"] in kits]
+
+    full = yaml.safe_load((REPO / generator.LIBRECHAT_CONFIG).read_text())
+    lite_config = yaml.safe_load((REPO / generator.LITE_LIBRECHAT_CONFIG).read_text())
+    assert list(lite_config["mcpServers"]) == kits
+    assert lite_config["mcpServers"] == {name: full["mcpServers"][name] for name in kits}
+    assert {k: v for k, v in lite_config.items() if k != "mcpServers"} == {
+        k: v for k, v in full.items() if k != "mcpServers"
+    }
+
+
 def _librechat_accepts(title: str) -> bool:
     """LibreChat's MCP_SERVER_TITLE_PATTERN: a letter or digit first, then letters, digits, marks, apostrophes
     (straight or typographic), spaces and hyphens."""

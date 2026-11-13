@@ -1,0 +1,293 @@
+#!/usr/bin/env python3
+"""
+mcp_lite_check.py
+-----------------
+
+`make k3s-mcp-lite-verify` (docs/adr/0027): checks the MCP lite profile end to end without a model in the loop.
+
+For each demo user it signs in through Keycloak's own login pages (authorization code + PKCE, as the chat UI
+does, with the chat UI's client) and then, through the MCP gateway with that user's token, against every kit
+server of mcp/catalog.yaml:
+
+- the tools listed are exactly the ones the catalog grants the user's role;
+- a granted tool that needs no arguments runs, and a tool the role is not granted is refused;
+- without a token the server lists no tools.
+
+Each server exchanges the token for its own API (Level 3: DPoP, live checks, mutual TLS), so a passing call covers
+that path too. Tokens and passwords are never printed. Needs Traefik on 127.0.0.1:80 (the lite cluster) and the
+gateway forwarded to --gateway (scripts/k3s_mcp_lite.sh verify does both).
+
+Usage: python3 scripts/mcp_lite_check.py --gateway http://127.0.0.1:18033 [--client open-webui|librechat]
+
+Author: Angel Martinez-Tenor
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import html
+import http.cookies
+import importlib.util
+import json
+import re
+import secrets
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+from urllib.parse import parse_qs, urlencode, urlsplit
+
+import httpx
+
+REPO = Path(__file__).resolve().parents[1]
+REALM = "ai-circus"
+KEYCLOAK = "http://keycloak.localhost"
+TRAEFIK = "http://127.0.0.1:80"  # *.localhost resolves in browsers only: send the name as the Host header instead
+CLIENTS = {
+    "open-webui": ("CHAT_UI_OIDC_CLIENT_SECRET", "http://chat.localhost/oauth/oidc/callback"),
+    "librechat": ("LIBRECHAT_OIDC_CLIENT_SECRET", "http://librechat.localhost/oauth/openid/callback"),
+}
+SCOPE = "openid profile email organization"
+PROTOCOL_VERSION = "2025-06-18"
+
+
+def _script(name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, REPO / "scripts" / f"{name}.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class CheckError(AssertionError):
+    pass
+
+
+def via_traefik(url: str) -> tuple[str, dict[str, str]]:
+    """The same request sent to Traefik on loopback, with the *.localhost name as its Host header."""
+    parts = urlsplit(url)
+    target = f"{TRAEFIK}{parts.path}" + (f"?{parts.query}" if parts.query else "")
+    return target, {"Host": parts.netloc}
+
+
+class Browserish:
+    """HTTP through Traefik that carries Keycloak's cookies as a browser does on a *.localhost name.
+
+    Keycloak marks its session cookies Secure; browsers treat http://*.localhost as a secure origin and send them,
+    an HTTP library does not over plain http, and Keycloak then answers 400 (no login session).
+    """
+
+    def __init__(self, http: httpx.Client) -> None:
+        self.http, self.cookies = http, {}
+
+    def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        target, headers = via_traefik(url)
+        if self.cookies:
+            headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
+        response = self.http.request(method, target, headers=headers, **kwargs)
+        self.http.cookies.clear()  # only this class keeps cookies
+        for header in response.headers.get_list("set-cookie"):
+            jar: http.cookies.SimpleCookie = http.cookies.SimpleCookie()
+            jar.load(header)
+            for name, morsel in jar.items():
+                if morsel["max-age"] == "0" or not morsel.value:
+                    self.cookies.pop(name, None)
+                else:
+                    self.cookies[name] = morsel.value
+        return response
+
+
+def sign_in(username: str, password: str, client_id: str, client_secret: str, redirect_uri: str) -> str:
+    """A user access token from Keycloak's real login pages (identity-first: username, then password)."""
+    verifier = secrets.token_urlsafe(48)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    query = urlencode(
+        {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": SCOPE,
+            "state": secrets.token_urlsafe(16),
+            "nonce": secrets.token_urlsafe(16),
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
+    )
+    with httpx.Client(follow_redirects=False, timeout=30) as client:
+        browser = Browserish(client)
+        response = browser.request("GET", f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/auth?{query}")
+        for _ in range(4):  # the login form, maybe a second page for the password, then the redirect
+            if response.status_code in (302, 303):
+                location = response.headers["location"]
+                if location.startswith(redirect_uri):
+                    code = parse_qs(urlsplit(location).query).get("code", [""])[0]
+                    if not code:
+                        raise CheckError(f"{username}: Keycloak redirected without a code")
+                    break
+                response = browser.request("GET", location)
+                continue
+            form = re.search(r'<form[^>]*id="kc-form-login"[^>]*action="([^"]+)"', response.text)
+            if response.status_code != 200 or form is None:
+                raise CheckError(f"{username}: no Keycloak login form (HTTP {response.status_code})")
+            fields = {"username": username}
+            if 'name="password"' in response.text:
+                fields["password"] = password
+            response = browser.request("POST", html.unescape(form.group(1)), data=fields)
+        else:
+            raise CheckError(f"{username}: the sign-in did not finish (wrong password?)")
+        token = browser.request(
+            "POST",
+            f"{KEYCLOAK}/realms/{REALM}/protocol/openid-connect/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code_verifier": verifier,
+            },
+        )
+        if token.status_code != 200:
+            raise CheckError(f"{username}: token request refused (HTTP {token.status_code})")
+        return str(token.json()["access_token"])
+
+
+class McpSession:
+    """A minimal streamable-HTTP MCP client: initialize, then JSON-RPC calls on the session it opened."""
+
+    def __init__(self, http: httpx.Client, url: str, token: str | None) -> None:
+        self.http, self.url, self.next_id = http, url, 0
+        self.headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+        if token:
+            self.headers["Authorization"] = f"Bearer {token}"
+        reply = self._post({"method": "initialize", "params": self._init_params()}, expect_reply=True)
+        if session := reply.get("_session"):
+            self.headers["mcp-session-id"] = session
+        self._post({"method": "notifications/initialized"}, expect_reply=False)
+
+    @staticmethod
+    def _init_params() -> dict[str, Any]:
+        return {"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": {"name": "mcp-lite-check"}}
+
+    def _post(self, message: dict[str, Any], *, expect_reply: bool) -> dict[str, Any]:
+        body: dict[str, Any] = {"jsonrpc": "2.0", **message}
+        if expect_reply:
+            self.next_id += 1
+            body["id"] = self.next_id
+        response = self.http.post(self.url, headers=self.headers, json=body)
+        if not expect_reply:
+            return {}
+        if response.status_code != 200:
+            return {"_status": response.status_code}
+        reply = self._parse(response)
+        if session := response.headers.get("mcp-session-id"):
+            reply["_session"] = session
+        return reply
+
+    @staticmethod
+    def _parse(response: httpx.Response) -> dict[str, Any]:
+        if "text/event-stream" not in response.headers.get("content-type", ""):
+            return dict(response.json())
+        events = [json.loads(line[5:]) for line in response.text.splitlines() if line.startswith("data:")]
+        replies = [e for e in events if "id" in e]
+        return dict(replies[-1]) if replies else {}
+
+    def call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        return self._post({"method": method, "params": params}, expect_reply=True)
+
+    def close(self) -> None:
+        if "mcp-session-id" in self.headers:
+            self.http.delete(self.url, headers=self.headers)
+
+
+def listed_tools(reply: dict[str, Any], server: str) -> tuple[dict[str, dict[str, Any]], str]:
+    """Tool name (without the gateway's `<server>-` prefix) -> its definition, and the prefix the gateway used."""
+    tools = (reply.get("result") or {}).get("tools") or []
+    prefix = f"{server}-" if tools and all(t["name"].startswith(f"{server}-") for t in tools) else ""
+    return {t["name"].removeprefix(prefix): t for t in tools}, prefix
+
+
+def refused(reply: dict[str, Any]) -> bool:
+    result = reply.get("result") or {}
+    return "error" in reply or bool(result.get("isError")) or "_status" in reply
+
+
+def check_user(
+    http: httpx.Client, gateway: str, catalog: Any, user: dict[str, Any], tenant: str, token: str
+) -> list[str]:
+    lines = []
+    for server in catalog.kit_servers():
+        url = f"{gateway}/mcp/{server.name}"
+        wanted: set[str] = set()
+        if server.tenants is None or tenant in server.tenants:
+            for role in user["roles"]:
+                grant = catalog.grants(server).get(role)
+                wanted |= set(server.tools) if grant == "*" else set(grant or ())
+        session = McpSession(http, url, token)
+        try:
+            tools, prefix = listed_tools(session.call("tools/list", {}), server.name)
+            if set(tools) != wanted:
+                raise CheckError(
+                    f"{user['username']} on {server.name}: listed {sorted(tools)}, catalog grants {sorted(wanted)}"
+                )
+            runnable = [n for n, t in tools.items() if not (t.get("inputSchema") or {}).get("required")]
+            if runnable:
+                name = sorted(runnable)[0]
+                if refused(session.call("tools/call", {"name": prefix + name, "arguments": {}})):
+                    raise CheckError(f"{user['username']} on {server.name}: granted tool {name} failed")
+            denied = sorted(set(server.tools) - wanted)
+            # The listed names show the gateway's naming, so a refusal of a denied tool is the policy's.
+            denied_call = {"name": prefix + denied[0], "arguments": {}} if denied else {}
+            if denied and tools and not refused(session.call("tools/call", denied_call)):
+                raise CheckError(f"{user['username']} on {server.name}: {denied[0]} ran without a grant")
+            ran = f", ran {sorted(runnable)[0]}" if runnable else ""
+            no = f", {denied[0]} refused" if denied and tools else ""
+            lines.append(f"✓ {user['username']} on {server.name}: {len(tools)} tools as the catalog grants{ran}{no}")
+        finally:
+            session.close()
+    return lines
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check the MCP lite profile end to end (docs/adr/0027).")
+    parser.add_argument("--gateway", required=True, help="the MCP gateway, e.g. http://127.0.0.1:18033")
+    parser.add_argument("--client", choices=sorted(CLIENTS), default="open-webui", help="the chat UI's client")
+    parser.add_argument("--env-file", type=Path, default=REPO / ".env")
+    args = parser.parse_args()
+
+    identity = _script("chat_ui_identity")
+    generator = _script("generate_mcp_catalog")
+    env = identity.read_env(args.env_file)
+    catalog = generator.load()
+    secret_key, redirect_uri = CLIENTS[args.client]
+    if not catalog.kit_servers():
+        print("❌ mcp/catalog.yaml has no kit server to check", file=sys.stderr)
+        return 1
+    try:
+        with httpx.Client(timeout=60) as http:
+            for server in catalog.kit_servers():
+                session = McpSession(http, f"{args.gateway}/mcp/{server.name}", None)
+                try:
+                    if listed_tools(session.call("tools/list", {}), server.name)[0]:
+                        raise CheckError(f"{server.name}: tools listed without a token")
+                finally:
+                    session.close()
+                print(f"✓ {server.name}: no token, no tools")
+            for user in identity.DEMO_USERS:
+                password = env["CHAT_UI_DEMO_PASSWORD"]
+                token = sign_in(user["username"], password, args.client, env[secret_key], redirect_uri)
+                print(f"✓ {user['username']} signed in through Keycloak ({args.client} client)")
+                for line in check_user(http, args.gateway, catalog, user, identity.ORG["alias"], token):
+                    print(line)
+    except (CheckError, httpx.HTTPError) as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        return 1
+    print("✓ MCP lite stack verified")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

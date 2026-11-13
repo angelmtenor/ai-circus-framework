@@ -180,6 +180,14 @@ accepts only https providers, so `oidc-allow-http.mjs` (a Node load hook, `NODE_
 refresh, so the first call after one gets the gateway's 403 owner mismatch, the connection reopens and the model retries;
 idle connections close after 5 minutes to keep that rare.
 
+**The MCP lite profile** (docs/adr/0027): `make k3s-mcp-lite` runs the MCP Lite Stack alone on its own k3d cluster
+(`mcp-lite`, own kubeconfig file, port 80, so the framework cluster is paused meanwhile): `k8s/mcp-lite/` lists base's
+Postgres, Keycloak, Valkey and llm-gateway (Langfuse off) plus `k8s/mcp-examples`, and `k8s/mcp-lite/open-webui|librechat`
+add one chat UI with the kit servers only (generated from the catalog; scenario doors need the full framework). Built
+with `kubectl kustomize --load-restrictor LoadRestrictionsNone`, since it lists the framework's own files. `make
+k3s-mcp-lite-verify` (`scripts/mcp_lite_check.py`) signs the demo users in through Keycloak's login pages with the chat
+UI's client and checks each kit server's tools, a granted call and a refused one, against the catalog, without a model.
+
 **An MCP server in front of an existing API** (docs/adr/0022) is built with `libs/mcp-kit` (`mcp_kit`): it validates the
 user's token (T1, audience = the server's Keycloak client), applies `policy.yaml` (tools per realm role, optionally per
 tenant: `tools/list` filtered, other calls refused, 403 when nothing is granted), exchanges T1 at Keycloak for a token whose
@@ -197,7 +205,8 @@ not traced, while the chat UI's and LiteLLM's MCP clients send no `traceparent`.
 (`scenario_door`: a scenario's own door, whose tools its entitlements and `scenario.yaml` roles decide, so no group lists
 it; `kit_server`: service, API, tenants, tools) and every group (a realm role → tools per kit server, or `"*"`).
 `scripts/generate_mcp_catalog.py` writes the gateway's `mcp_servers`, both chat UIs' connections (Open WebUI's in k8s and
-compose, LibreChat's `mcpServers` in `k8s/chat-ui-librechat/librechat-config.yaml`), each kit
+compose, LibreChat's `mcpServers` in `k8s/chat-ui-librechat/librechat-config.yaml`, and the lite profile's kit-only
+variants in `k8s/mcp-lite/`), each kit
 server's `policy.yaml` and the Keycloak entries (exchange client, API client, `<api>-audience` scope, `mcp-servers` mapper,
 all marked "Generated from mcp/catalog.yaml."); hand-written files keep their comments around `BEGIN`/`END` markers. It
 refuses a catalog that would route, grant or exchange by mistake (names with `-`, undeclared doors, credential headers,

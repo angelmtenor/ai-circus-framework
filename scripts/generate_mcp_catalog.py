@@ -8,6 +8,7 @@ One catalog entry per MCP server, one entry per group (a realm role in the user'
   `TOOL_SERVER_CONNECTIONS` (k8s/chat-ui/open-webui.yaml and docker-compose.yml, docs/adr/0021) and LibreChat's
   `mcpServers` with the gateway as its only private address (k8s/chat-ui-librechat/librechat-config.yaml, which
   docker compose mounts too, docs/adr/0026);
+- the MCP lite profile's chat UI connections, kit servers only (k8s/mcp-lite/, docs/adr/0027);
 - each kit server's `policy.yaml` (services/<service>/policy.yaml): tools per group, optionally per tenant;
 - the Keycloak entries that let a kit server exchange a user's token for its own API only
   (infra/keycloak/realm-export.json): the server's confidential client, its API's client and audience scope, and
@@ -44,6 +45,10 @@ CATALOG = Path("mcp/catalog.yaml")
 GATEWAY_CONFIG = Path("services/llm-gateway/litellm_config.yaml")
 CHAT_UI_MANIFEST = Path("k8s/chat-ui/open-webui.yaml")
 LIBRECHAT_CONFIG = Path("k8s/chat-ui-librechat/librechat-config.yaml")
+# The MCP lite profile (docs/adr/0027) runs the kit servers only: a scenario door needs the framework's registry and
+# data stack, which the profile leaves out, so its chat UIs list only what is deployed.
+LITE_OPEN_WEBUI_PATCH = Path("k8s/mcp-lite/open-webui/connections.yaml")
+LITE_LIBRECHAT_CONFIG = Path("k8s/mcp-lite/librechat/librechat-config.yaml")
 COMPOSE = Path("docker-compose.yml")
 REALM = Path("infra/keycloak/realm-export.json")
 
@@ -121,6 +126,10 @@ class Catalog:
 
     def kit_servers(self) -> list[Server]:
         return [s for s in self.servers if s.kind == KIT_SERVER]
+
+    def lite(self) -> Catalog:
+        """The servers the MCP lite profile deploys (docs/adr/0027): the kit servers, whatever groups grant."""
+        return Catalog(gateway=self.gateway, servers=tuple(self.kit_servers()), groups=self.groups)
 
     def grants(self, server: Server) -> dict[str, tuple[str, ...] | str]:
         """Each group's grant on one kit server, tools in the server's own order."""
@@ -464,6 +473,39 @@ def librechat_block(catalog: Catalog, indent: str) -> list[str]:
     return [indent + line if line else line for line in lines]
 
 
+LITE_HEADER = (
+    "# Generated from mcp/catalog.yaml by scripts/generate_mcp_catalog.py (docs/adr/0027): "
+    "edit the catalog, not this file.\n"
+    "# MCP lite profile: {what}\n# with the catalog's kit servers only (its scenario doors need the full framework).\n"
+)
+
+
+def lite_open_webui_patch(catalog: Catalog) -> str:
+    """A strategic merge patch giving the lite profile's Open WebUI the kit servers' connections only."""
+    lines = [
+        LITE_HEADER.format(what="Open WebUI's MCP connections, patched over k8s/chat-ui,"),
+        "apiVersion: apps/v1",
+        "kind: Deployment",
+        "metadata:",
+        "  name: open-webui",
+        "  namespace: ai-circus",
+        "spec:",
+        "  template:",
+        "    spec:",
+        "      containers:",
+        "        - name: open-webui",
+        "          env:",
+        *k8s_connections_block(catalog.lite(), "            "),
+    ]
+    return "\n".join(lines).replace("\n\n", "\n", 1) + "\n"
+
+
+def lite_librechat_config(catalog: Catalog, base: str) -> str:
+    """The lite profile's LibreChat configuration: k8s/chat-ui-librechat's file with the kit servers only."""
+    spliced = splice(base, LIBRECHAT_CONFIG, lambda i: librechat_block(catalog.lite(), i))
+    return LITE_HEADER.format(what="k8s/chat-ui-librechat's LibreChat configuration,") + spliced
+
+
 def policy_file(catalog: Catalog, server: Server) -> str:
     """A kit server's policy.yaml (libs/mcp-kit's Policy): tools per realm role, optionally per tenant."""
     lines = [
@@ -637,6 +679,8 @@ def outputs(catalog: Catalog, repo: Path = REPO) -> dict[Path, str]:
         LIBRECHAT_CONFIG: splice(
             (repo / LIBRECHAT_CONFIG).read_text(), LIBRECHAT_CONFIG, lambda i: librechat_block(catalog, i)
         ),
+        LITE_OPEN_WEBUI_PATCH: lite_open_webui_patch(catalog),
+        LITE_LIBRECHAT_CONFIG: lite_librechat_config(catalog, (repo / LIBRECHAT_CONFIG).read_text()),
         REALM: realm_file(catalog, (repo / REALM).read_text()),
     }
     for server in catalog.kit_servers():
@@ -699,6 +743,7 @@ def main() -> int:
             print(f"✓ {len(files)} files match mcp/catalog.yaml")
         return 1 if changed else 0
     for path in changed:
+        (REPO / path).parent.mkdir(parents=True, exist_ok=True)
         (REPO / path).write_text(files[path])
         print(f"✓ wrote {path}")
     if not changed:
