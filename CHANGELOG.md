@@ -4,6 +4,17 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.60.2 — 2026-11-14
+
+### Fixed
+- `make k3s-resume` no longer hangs for minutes on a cluster that is already up: k3d's last start step (a CoreDNS record
+  nothing here uses) could stall. The target now waits for the node to be Ready; a resume takes about 90 s. The MCP lite
+  profile starts an existing cluster the same way.
+
+### Documentation
+- The MCP guide has a diagram of the services the lite profile runs with observability: namespaces, ports and
+  connections. The guide and its README section are now titled "MCP Lite Stack".
+
 ## v0.60.1 — 2026-11-14
 
 ### Documentation
