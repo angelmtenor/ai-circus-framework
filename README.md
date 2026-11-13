@@ -1272,7 +1272,7 @@ created before this needs no `make reset-all`.
 see training/inference *events*, not live feature distributions) are the natural next steps —
 see [Reserved for later](#reserved-for-later-documented-not-built).
 
-### MCP Lite Stack — governed tools for chat UIs (optional)
+### MCP Lite Stack (optional)
 
 A chat UI where each person signs in with Keycloak and uses MCP tools **as themselves**: every MCP server sees the
 signed-in user's own token, lists only the tools that user's role is granted, and calls its API with a token valid for
