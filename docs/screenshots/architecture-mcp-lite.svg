@@ -1,0 +1,168 @@
+<svg viewBox="0 0 1200 820" width="1200" height="820" xmlns="http://www.w3.org/2000/svg">
+<style>
+  .bg { fill: #05070f; }
+  .box { fill: #0b1224; stroke: #1c3a5e; stroke-width: 1.5; }
+  .box.key { fill: #0f2236; stroke: #33c7ff; }
+  .box.tok { fill: #1f1c12; stroke: #ffcf4d; }
+  .box.obsn, .box.api { fill: #170f2e; stroke: #aa3bff; }
+  .box.opt { stroke-dasharray: 5 4; }
+  .zone { fill: none; stroke: #33c7ff; stroke-width: 1.5; stroke-dasharray: 8 6; }
+  .ns { fill: #08101f; stroke: #2c5a8a; stroke-width: 1.2; }
+  .ns2 { fill: #0b0a1c; stroke: #aa3bff; stroke-width: 1.2; stroke-dasharray: 6 5; }
+  .nsl { fill: #7fa3c9; font: 700 12px 'Segoe UI', Arial, sans-serif; letter-spacing: 0.12em; }
+  .t { fill: #f3fbff; font: 700 15px 'Segoe UI', Arial, sans-serif; }
+  .t2 { fill: #f3fbff; font: 700 13.5px 'Segoe UI', Arial, sans-serif; }
+  .s { fill: #7fa3c9; font: 400 12.5px 'Segoe UI', Arial, sans-serif; }
+  .m { fill: #7fa3c9; font: 500 11.5px Consolas, 'DejaVu Sans Mono', monospace; }
+  .zl { fill: #7cf9ff; font: 700 13px 'Segoe UI', Arial, sans-serif; letter-spacing: 0.08em; }
+  .flow { stroke: #33c7ff; stroke-width: 2.5; fill: none; }
+  .tokf { stroke: #ffcf4d; stroke-width: 2.5; fill: none; stroke-dasharray: 7 5; }
+  .pflow { stroke: #aa3bff; stroke-width: 2.2; fill: none; }
+  .sig { stroke: #7fa3c9; stroke-width: 1.8; fill: none; stroke-dasharray: 2 5; stroke-linecap: round; }
+  .al { fill: #33c7ff; font: 500 11.5px Consolas, 'DejaVu Sans Mono', monospace; }
+  .tl { fill: #ffcf4d; font: 500 11.5px Consolas, 'DejaVu Sans Mono', monospace; }
+  .head { fill: #33c7ff; } .headt { fill: #ffcf4d; } .headp { fill: #aa3bff; } .headm { fill: #7fa3c9; }
+</style>
+<title>MCP lite profile with observability: services, ports and connections</title>
+<rect class="bg" x="0" y="0" width="1200" height="820"/>
+        <defs>
+          <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="headt" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="c2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="headp" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="headm" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- outside the cluster -->
+        <rect class="box" x="12" y="200" width="110" height="70" rx="10"/>
+        <text class="t" x="67" y="230" text-anchor="middle">Browser</text>
+        <text class="s" x="67" y="250" text-anchor="middle">you</text>
+        <rect class="box" x="136" y="140" width="144" height="200" rx="10"/>
+        <text class="t" x="208" y="168" text-anchor="middle">Traefik</text>
+        <text class="m" x="208" y="188" text-anchor="middle">:80 ingress</text>
+        <text class="m" x="208" y="222" text-anchor="middle">chat.localhost</text>
+        <text class="m" x="208" y="240" text-anchor="middle">librechat.localhost</text>
+        <text class="m" x="208" y="258" text-anchor="middle">keycloak.localhost</text>
+        <text class="m" x="208" y="276" text-anchor="middle">grafana.localhost</text>
+        <path class="flow" d="M122,235 L132,235" marker-end="url(#a2)"/>
+        <rect class="box" x="40" y="692" width="230" height="70" rx="10"/>
+        <text class="t" x="155" y="721" text-anchor="middle">Model providers</text>
+        <text class="s" x="155" y="742" text-anchor="middle">gemini-flash by default</text>
+
+        <!-- the cluster -->
+        <rect class="zone" x="285" y="14" width="900" height="796" rx="14"/>
+        <text class="zl" x="300" y="38">K3D CLUSTER MCP-LITE · make k3s-mcp-lite OBS=1</text>
+
+        <!-- namespace ai-circus -->
+        <rect class="ns" x="300" y="50" width="870" height="430" rx="10"/>
+        <text class="nsl" x="314" y="70">NAMESPACE AI-CIRCUS</text>
+
+        <rect class="box key" x="320" y="88" width="215" height="98" rx="10"/>
+        <text class="t" x="427" y="116" text-anchor="middle">Chat UI</text>
+        <text class="m" x="427" y="138" text-anchor="middle">open-webui :8080</text>
+        <text class="m" x="427" y="156" text-anchor="middle">or librechat :3080</text>
+        <text class="s" x="427" y="176" text-anchor="middle">Keycloak sign-in only</text>
+
+        <rect class="box opt" x="320" y="205" width="140" height="58" rx="10"/>
+        <text class="t2" x="390" y="229" text-anchor="middle">librechat-mongodb</text>
+        <text class="m" x="390" y="249" text-anchor="middle">:27017</text>
+
+        <rect class="box tok" x="600" y="88" width="215" height="98" rx="10"/>
+        <text class="t" x="707" y="116" text-anchor="middle">keycloak</text>
+        <text class="m" x="707" y="136" text-anchor="middle">:8080</text>
+        <text class="s" x="707" y="156" text-anchor="middle">sign-in · roles · tenant</text>
+        <text class="s" x="707" y="174" text-anchor="middle">token exchange · live checks</text>
+
+        <rect class="box" x="600" y="205" width="215" height="58" rx="10"/>
+        <text class="t2" x="707" y="229" text-anchor="middle">postgres</text>
+        <text class="m" x="707" y="249" text-anchor="middle">:5432 · Keycloak's database</text>
+
+        <rect class="box key" x="320" y="300" width="215" height="100" rx="10"/>
+        <text class="t" x="427" y="328" text-anchor="middle">llm-gateway</text>
+        <text class="m" x="427" y="348" text-anchor="middle">:4000 · LiteLLM</text>
+        <text class="s" x="427" y="368" text-anchor="middle">/v1 models · /mcp/crm</text>
+        <text class="s" x="427" y="386" text-anchor="middle">forwards traceparent</text>
+
+        <rect class="box" x="320" y="415" width="215" height="50" rx="10"/>
+        <text class="t2" x="427" y="436" text-anchor="middle">valkey</text>
+        <text class="m" x="427" y="454" text-anchor="middle">:6379 · budgets, policy</text>
+
+        <rect class="box key" x="870" y="300" width="135" height="110" rx="10"/>
+        <text class="t" x="937" y="328" text-anchor="middle">crm-mcp</text>
+        <text class="m" x="937" y="348" text-anchor="middle">:8000 /mcp/</text>
+        <text class="s" x="937" y="368" text-anchor="middle">role → tools</text>
+        <text class="s" x="937" y="386" text-anchor="middle">audit lines</text>
+
+        <rect class="box api" x="1025" y="300" width="135" height="110" rx="10"/>
+        <text class="t" x="1092" y="328" text-anchor="middle">crm-api</text>
+        <text class="m" x="1092" y="348" text-anchor="middle">:8443 mTLS</text>
+        <text class="s" x="1092" y="368" text-anchor="middle">your shops only</text>
+        <text class="s" x="1092" y="386" text-anchor="middle">sees a pseudonym</text>
+
+        <!-- request and identity paths -->
+        <path class="flow" d="M280,160 L316,160" marker-end="url(#a2)"/>
+        <path class="tokf" d="M208,140 L208,80 L707,80 L707,84" marker-end="url(#b2)"/>
+        <text class="tl" x="560" y="75">sign-in pages</text>
+        <path class="tokf" d="M535,137 L596,137" marker-end="url(#b2)"/>
+        <text class="tl" x="547" y="130">OIDC</text>
+        <path class="flow" d="M707,186 L707,201" marker-end="url(#a2)"/>
+        <path class="flow" d="M390,186 L390,201" marker-end="url(#a2)"/>
+        <path class="flow" d="M500,186 L500,296" marker-end="url(#a2)"/>
+        <text class="al" x="508" y="238">user token</text>
+        <text class="al" x="508" y="254">+ traceparent</text>
+        <path class="flow" d="M427,400 L427,411" marker-end="url(#a2)"/>
+        <path class="flow" d="M535,350 L866,350" marker-end="url(#a2)"/>
+        <text class="al" x="600" y="342">/mcp/crm · same token, same trace</text>
+        <path class="pflow" d="M1005,355 L1021,355" marker-end="url(#c2)"/>
+        <text class="al" x="1015" y="292" text-anchor="middle">mTLS · DPoP</text>
+        <path class="tokf" d="M937,300 L937,150 L819,150" marker-end="url(#b2)"/>
+        <text class="tl" x="824" y="144">check · exchange</text>
+        <path class="tokf" d="M1092,300 L1092,112 L819,112" marker-end="url(#b2)"/>
+        <text class="tl" x="824" y="106">check its token</text>
+        <path class="flow" d="M320,350 L240,350 L240,688" marker-end="url(#a2)"/>
+        <text class="al" x="232" y="530" text-anchor="end">model calls</text>
+
+        <!-- namespace observability -->
+        <rect class="ns2" x="300" y="500" width="870" height="295" rx="10"/>
+        <text class="nsl" x="314" y="520">NAMESPACE OBSERVABILITY</text>
+
+        <path class="sig" d="M560,480 L560,531" marker-end="url(#d2)"/>
+        <text class="m" x="568" y="496">traces (OTLP) and pod logs of every service</text>
+
+        <rect class="box obsn" x="320" y="535" width="215" height="200" rx="10"/>
+        <text class="t" x="427" y="564" text-anchor="middle">otel-collector</text>
+        <text class="m" x="427" y="584" text-anchor="middle">DaemonSet · :4317 :4318</text>
+        <text class="s" x="427" y="612" text-anchor="middle">receives OTLP traces</text>
+        <text class="s" x="427" y="632" text-anchor="middle">tails every pod's log</text>
+        <text class="s" x="427" y="652" text-anchor="middle">masks emails and tokens</text>
+        <text class="s" x="427" y="672" text-anchor="middle">drops content attributes</text>
+
+        <rect class="box obsn" x="600" y="535" width="190" height="50" rx="10"/>
+        <text class="t2" x="695" y="556" text-anchor="middle">victoriametrics</text>
+        <text class="m" x="695" y="574" text-anchor="middle">:8428 · metrics</text>
+        <rect class="box obsn" x="600" y="597" width="190" height="50" rx="10"/>
+        <text class="t2" x="695" y="618" text-anchor="middle">loki</text>
+        <text class="m" x="695" y="636" text-anchor="middle">:3100 · logs</text>
+        <rect class="box obsn" x="600" y="659" width="190" height="50" rx="10"/>
+        <text class="t2" x="695" y="680" text-anchor="middle">tempo</text>
+        <text class="m" x="695" y="698" text-anchor="middle">:3200 · traces</text>
+        <rect class="box obsn" x="810" y="535" width="140" height="50" rx="10"/>
+        <text class="t2" x="880" y="556" text-anchor="middle">vmalert</text>
+        <text class="m" x="880" y="574" text-anchor="middle">:8880 · MCP alerts</text>
+        <rect class="box key" x="1000" y="560" width="160" height="180" rx="10"/>
+        <text class="t" x="1080" y="600" text-anchor="middle">grafana</text>
+        <text class="m" x="1080" y="620" text-anchor="middle">:3000</text>
+        <text class="s" x="1080" y="644" text-anchor="middle">MCP dashboard</text>
+        <text class="s" x="1080" y="664" text-anchor="middle">metrics · logs · traces</text>
+
+        <path class="pflow" d="M535,560 L596,560" marker-end="url(#c2)"/>
+        <path class="pflow" d="M535,622 L596,622" marker-end="url(#c2)"/>
+        <path class="pflow" d="M535,684 L596,684" marker-end="url(#c2)"/>
+        <path class="sig" d="M640,535 L640,440 L937,440 L937,414" marker-end="url(#d2)"/>
+        <text class="m" x="648" y="458">scrapes /metrics: llm-gateway, crm-mcp, crm-api</text>
+        <path class="pflow" d="M810,560 L794,560" marker-end="url(#c2)"/>
+        <path class="pflow" d="M780,535 L780,522 L1080,522 L1080,556" marker-end="url(#c2)"/>
+        <path class="pflow" d="M790,622 L996,622" marker-end="url(#c2)"/>
+        <path class="pflow" d="M790,684 L996,684" marker-end="url(#c2)"/>
+        <path class="flow" d="M1080,790 L1080,744" marker-end="url(#a2)"/>
+        <text class="m" x="1072" y="782" text-anchor="end">grafana.localhost via Traefik</text>
+      </svg>

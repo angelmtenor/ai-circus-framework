@@ -59,7 +59,9 @@ up() {
     refuse_if_port_80_taken
     local existed=false
     if cluster_exists; then
-        k3d cluster start "$CLUSTER" >/dev/null
+        # k3d's last start step (host.k3d.internal into CoreDNS, unused here) can hang after the containers are up:
+        # give it 90 s, then the node's Ready condition below decides.
+        timeout --foreground 90 k3d cluster start --wait=false "$CLUSTER" >/dev/null 2>&1 || true
         existed=true
         echo "✓ k3d cluster '$CLUSTER' exists"
     else
@@ -67,6 +69,7 @@ up() {
             --kubeconfig-update-default=false --kubeconfig-switch-context=false
     fi
     use_cluster_kubeconfig
+    kubectl wait --for=condition=Ready node --all --timeout=300s >/dev/null
 
     echo "── images ──"
     for svc in "${IMAGES[@]}"; do
