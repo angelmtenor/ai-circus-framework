@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-librechat-up k3s-librechat-down k3s-mcp-lite k3s-mcp-lite-verify k3s-mcp-lite-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-librechat-up k3s-librechat-down k3s-mcp-lite k3s-mcp-lite-verify k3s-mcp-lite-down k3s-mcp-pseudonym k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -619,6 +619,10 @@ k3s-mcp-tls: ## Same, and apply them as one Secret per workload (<api>-tls, <ser
 
 mcp-catalog-portal: ## OPTIONAL local portal over mcp/catalog.yaml (ADR 0024) at http://127.0.0.1:8040 (MCP_PORTAL_PORT): tick tools per group, add a server, review the diffs, publish (= make mcp-catalog). Never deploys or commits
 	@$(MCP_CATALOG:generate_mcp_catalog.py=mcp_catalog_portal.py) --port "$${MCP_PORTAL_PORT:-8040}"
+
+k3s-mcp-pseudonym: ## Audit lookup (ADR 0029): the pseudonym each API sees for a user (WHO=<username>), or who a pseudonym from an API's logs is (FIND=<uuid>). Needs Keycloak's admin access; never prints a salt
+	@[ -n "$(WHO)$(FIND)" ] || { echo "❌ usage: make k3s-mcp-pseudonym WHO=<username> | FIND=<pseudonym>"; exit 1; }
+	@python3 scripts/mcp_pseudonym.py --cluster "$(K3S_CLUSTER)" $(if $(WHO),--user "$(WHO)",--find "$(FIND)")
 
 k3s-mcp-catalog-apply: ## Put mcp/catalog.yaml on the running cluster: sync Keycloak (exchange clients), Level 3 certificates, rebuild + import + restart llm-gateway and every deployed kit server (and restart its API), re-apply each deployed chat UI (Open WebUI, LibreChat)
 	@$(MCP_CATALOG) --check

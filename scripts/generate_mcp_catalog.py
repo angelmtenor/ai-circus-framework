@@ -595,6 +595,27 @@ def _client(
         if exchanges_for
         else [],
         "optionalClientScopes": [],
+        # The API sees a pseudonym, never the user's Keycloak id (docs/adr/0029): Keycloak's pairwise subject, stable
+        # per user and per server, computed with a salt Keycloak generates and keeps (never in this file). The
+        # pseudonym's sector is the redirect URI's host; the URI itself is inert, since this client signs no one in.
+        **(
+            {"redirectUris": [f"http://{client_id}/"], "protocolMappers": [_pseudonym_mapper()]}
+            if exchanges_for
+            else {}
+        ),
+    }
+
+
+PSEUDONYM_MAPPER = "pseudonymous subject"
+
+
+def _pseudonym_mapper() -> dict[str, Any]:
+    return {
+        "name": PSEUDONYM_MAPPER,
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sha256-pairwise-sub-mapper",
+        "consentRequired": False,
+        "config": {"sectorIdentifierUri": "", "pairwiseSubAlgorithmSalt": ""},
     }
 
 
