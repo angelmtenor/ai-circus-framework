@@ -13,7 +13,7 @@ CYAN  := $(shell tput setaf 6 2>/dev/null)
 RESET := $(shell tput sgr0 2>/dev/null)
 
 .PHONY: help bootstrap up up-infra generate-console-auth check-public-ready down logs pipeline new-service \
-	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-librechat-up k3s-librechat-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
+	sync-shared check-all clean ollama-up k3s-vllm-up k3s-vllm-down k3s-chat-ui-up k3s-chat-ui-down k3s-librechat-up k3s-librechat-down k3s-mcp-lite k3s-mcp-lite-verify k3s-mcp-lite-down k3s-mcp-examples-up k3s-mcp-examples-down mcp-catalog mcp-catalog-check mcp-catalog-portal k3s-mcp-catalog-apply mcp-tls k3s-mcp-tls all reset-all wait-infra wait-services verify \
 	data-platform-up data-platform-down \
 	k3s-cluster k3s-build k3s-import k3s-secrets k3s-up k3s-wait k3s-pipeline k3s-vectorize k3s-verify k3s-idle-check k3s-embed-onnx k3s-down \
 	k3s-gpu-telemetry k3s-all k3s-all-lite k3s-pause k3s-resume k3s-lite k3s-full k3s-resume-lite k3s-demo k3s-demo-off k3s-clickhouse-drop-system-logs k3s-portforward k3s-portforward-stop k3s-portforward-uninstall k3s-mcp-portforward k3s-mcp-portforward-uninstall \
@@ -557,6 +557,22 @@ k3s-librechat-down: ## Remove the optional LibreChat UI and its MongoDB. Keeps t
 	@kubectl -n ai-circus delete deployment,service librechat librechat-mongodb --ignore-not-found
 	@kubectl -n ai-circus delete ingressroute librechat --ignore-not-found
 	@kubectl -n ai-circus delete configmap -l app.kubernetes.io/part-of=librechat --ignore-not-found >/dev/null
+
+# The MCP lite profile (docs/adr/0027): the MCP Lite Stack alone on its own k3d cluster (own kubeconfig file; the
+# default kubeconfig and its context are never touched). It holds port 80 as the framework cluster does: pause one
+# to run the other. CHAT_UI picks the chat UI (open-webui | librechat).
+MCP_LITE_CLUSTER ?= mcp-lite
+CHAT_UI ?= open-webui
+MCP_LITE = MCP_LITE_CLUSTER="$(MCP_LITE_CLUSTER)" CHAT_UI="$(CHAT_UI)" K3S_VERSION="$(strip $(K3S_VERSION))" ./scripts/k3s_mcp_lite.sh
+
+k3s-mcp-lite: ## OPTIONAL MCP lite profile (ADR 0027) on its own k3d cluster MCP_LITE_CLUSTER (default mcp-lite): Keycloak, the AI gateway (llm-gateway: models + MCP gateway), crm-mcp + crm-api (Level 3) and one chat UI (CHAT_UI=open-webui|librechat), nothing else of the framework (~3 GB). Refuses while another k3d cluster holds port 80 (make k3s-pause first)
+	@$(MCP_LITE) up
+
+k3s-mcp-lite-verify: ## Check the MCP lite profile without a model: each demo user signs in through Keycloak's login pages, then lists and calls every kit server's tools through the gateway with that token, against mcp/catalog.yaml's grants
+	@$(MCP_LITE) verify
+
+k3s-mcp-lite-down: ## Delete the MCP lite profile's k3d cluster (volumes included). Bring the framework cluster back with make k3s-resume
+	@$(MCP_LITE) down
 
 K3S_MCP_EXAMPLE_IMAGES = crm-api crm-mcp
 

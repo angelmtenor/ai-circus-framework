@@ -1,0 +1,19 @@
+# Generated from mcp/catalog.yaml by scripts/generate_mcp_catalog.py (docs/adr/0027): edit the catalog, not this file.
+# MCP lite profile: Open WebUI's MCP connections, patched over k8s/chat-ui,
+# with the catalog's kit servers only (its scenario doors need the full framework).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: ai-circus
+spec:
+  template:
+    spec:
+      containers:
+        - name: open-webui
+          env:
+            - name: TOOL_SERVER_CONNECTIONS
+              value: >-
+                [{"type": "mcp", "url": "http://llm-gateway:4000/mcp/crm", "auth_type": "system_oauth", "key": "",
+                  "config": {"enable": true, "access_grants": [{"principal_type": "user", "principal_id": "*", "permission": "read"}]},
+                  "info": {"id": "crm", "name": "Customers (CRM)", "description": "Customers of the organisation's shops you may see, with masked contact details (read-only)"}}]

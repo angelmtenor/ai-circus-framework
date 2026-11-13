@@ -30,6 +30,11 @@ from headers when the body omits it).
 Monthly reset is free: the spend key is namespaced by the current UTC YYYY-MM, so
 crossing into a new month starts a fresh key automatically — no cron/reset job.
 An org with no cap configured (no `llm_budget_cap:<org>` key) is unlimited.
+
+Valkey unavailable = budgets skipped, never the call failed: a warning is logged and the call goes through, as the
+policy hook does with its counters (policy_hook.py). Otherwise a Valkey outage turned every model call that carries a
+`user` into a 500. The client is synchronous inside async hooks, so its socket timeouts are short: a hanging Valkey
+must not stall the proxy's event loop.
 """
 
 from __future__ import annotations
@@ -47,6 +52,8 @@ from llm_gateway.governance_events import GatewayEvents
 
 logger = get_logger(__name__)
 
+# Seconds: a synchronous call on the proxy's event loop, so a down or hanging Valkey must answer quickly.
+_SOCKET_TIMEOUT_SECONDS = 0.5
 # ~60 days: comfortably past any calendar month, just Valkey hygiene (the key
 # naming itself is what makes the monthly reset work, not this TTL).
 _SPEND_TTL_SECONDS = 60 * 60 * 24 * 60
@@ -76,7 +83,12 @@ class BudgetEnforcer(CustomLogger):
         """Connect to Valkey once, at import time."""
         super().__init__()
         config = get_env_config()
-        self._client = redis.Redis.from_url(config.CACHE_URL, decode_responses=True)
+        self._client = redis.Redis.from_url(
+            config.CACHE_URL,
+            decode_responses=True,
+            socket_connect_timeout=_SOCKET_TIMEOUT_SECONDS,
+            socket_timeout=_SOCKET_TIMEOUT_SECONDS,
+        )
         # Governance event when a budget blocks a call (off unless GOVERNANCE_EVENTS_ENABLED).
         self._events = GatewayEvents.from_config(config, client_factory=lambda: redis.Redis.from_url(config.CACHE_URL))
 
@@ -95,10 +107,14 @@ class BudgetEnforcer(CustomLogger):
         org_id = data.get("user")
         if not org_id:
             return None
-        cap = self._client.get(_tenant_key(org_id, _CAP_KEY))
-        if cap is None:
+        try:
+            cap = self._client.get(_tenant_key(org_id, _CAP_KEY))
+            if cap is None:
+                return None
+            spend = float(self._client.get(_tenant_key(org_id, _spend_key())) or 0.0)
+        except redis.RedisError:
+            logger.warning("Budget store unavailable (Valkey) — monthly budget not checked for this call")
             return None
-        spend = float(self._client.get(_tenant_key(org_id, _spend_key())) or 0.0)
         if spend >= float(cap):
             from fastapi import HTTPException
 
@@ -135,10 +151,14 @@ class BudgetEnforcer(CustomLogger):
         if not org_id or not cost:
             return
         full_key = _tenant_key(org_id, _spend_key())
-        pipe = self._client.pipeline()
-        pipe.incrbyfloat(full_key, float(cost))
-        pipe.expire(full_key, _SPEND_TTL_SECONDS, nx=True)
-        pipe.execute()
+        try:
+            pipe = self._client.pipeline()
+            pipe.incrbyfloat(full_key, float(cost))
+            pipe.expire(full_key, _SPEND_TTL_SECONDS, nx=True)
+            pipe.execute()
+        except redis.RedisError:
+            logger.warning("Budget store unavailable (Valkey) — this call's cost was not added to the monthly spend")
+            return
         logger.debug("org={} spend+=${:.4f} (model={})", org_id, cost, kwargs.get("model"))
 
 

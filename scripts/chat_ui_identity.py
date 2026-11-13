@@ -25,7 +25,7 @@ keys, each MCP server's <CLIENT_ID>_CLIENT_SECRET) are generated into .env when 
 printed; they reach Keycloak over stdin, never as arguments.
 Needs the platform-registry port-forward (make k3s-portforward) for the entitlements step.
 
-Usage: python3 scripts/chat_ui_identity.py [--cluster ai-circus] [--env-file .env]
+Usage: python3 scripts/chat_ui_identity.py [--cluster ai-circus] [--env-file .env] [--keys-only] [--no-entitlements]
 
 Author: Angel Martinez-Tenor
 """
@@ -366,16 +366,27 @@ def main() -> None:
     parser.add_argument("--cluster", default="ai-circus")
     parser.add_argument("--env-file", type=Path, default=REPO / ".env")
     parser.add_argument("--registry", default="http://localhost:8010")
+    parser.add_argument(
+        "--keys-only", action="store_true", help="only generate the missing .env keys (before the cluster's Secrets)"
+    )
+    parser.add_argument(
+        "--no-entitlements",
+        action="store_true",
+        help="skip the platform-registry step (the MCP lite profile has no registry, docs/adr/0027)",
+    )
     args = parser.parse_args()
 
     export = json.loads(REALM_EXPORT.read_text())
     env = ensure_generated_secrets(args.env_file, export)
-    if not env.get("ADMIN_API_KEY"):
+    if args.keys_only:
+        return
+    if not args.no_entitlements and not env.get("ADMIN_API_KEY"):
         sys.exit("❌ ADMIN_API_KEY is not set in .env")
     kc = Kcadm(args.cluster)
     sync_realm(kc, export, env)
     org_id = sync_demo_tenant(kc, env["CHAT_UI_DEMO_PASSWORD"])
-    grant_entitlements(org_id, env["ADMIN_API_KEY"], args.registry)
+    if not args.no_entitlements:
+        grant_entitlements(org_id, env["ADMIN_API_KEY"], args.registry)
     print(
         f"✓ chat UI identity ready: users {', '.join(u['username'] for u in DEMO_USERS)} (password: CHAT_UI_DEMO_PASSWORD in .env)"
     )

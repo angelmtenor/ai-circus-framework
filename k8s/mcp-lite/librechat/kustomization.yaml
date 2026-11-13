@@ -1,0 +1,14 @@
+# MCP lite profile's chat UI, LibreChat (CHAT_UI=librechat; docs/adr/0026, 0027): k8s/chat-ui-librechat with the kit
+# servers only (librechat-config.yaml, generated from mcp/catalog.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../chat-ui-librechat
+
+configMapGenerator:
+  - name: librechat-config
+    namespace: ai-circus
+    behavior: merge
+    files:
+      - librechat.yaml=librechat-config.yaml
