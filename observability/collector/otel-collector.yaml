@@ -12,7 +12,9 @@
 #            services' own /metrics (HTTP, model drift, DCGM-named GPU gauges) are *scraped* by the metrics
 #            store via the pods' prometheus.io/* annotations — not routed through here, so their names stay
 #            Prometheus-native.
-#   logs     the JSON lines every pod writes (LOG_FORMAT=json), tailed from the node, trace ids kept.
+#   logs     the JSON lines every pod writes (LOG_FORMAT=json), tailed from the node, trace ids kept. Emails
+#            and tokens (JWTs) are masked in every line first: the framework's own services never log them,
+#            but third-party ones may (a chat UI logs the signed-in user's email), docs/adr/0028.
 receivers:
   otlp:
     protocols:
@@ -52,6 +54,18 @@ processors:
       - context: spanevent
         statements:
           - delete_matching_keys(attributes, "^(gen_ai\\.(prompt|completion|input\\.messages|output\\.messages).*|input\\.value|output\\.value)$")
+  # Personal data and credentials never reach the log store, whoever wrote the line (docs/adr/0028): a JWT
+  # (header.payload[.signature], base64url parts) becomes <token>, an email address <email>, in the body and in
+  # every attribute value. The masks stay searchable, so a leak upstream still shows up as a count in Loki.
+  transform/ai-circus-mask-logs:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(body, "eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}(\\.[A-Za-z0-9_-]+)?", "<token>")
+          - replace_all_patterns(attributes, "value", "eyJ[A-Za-z0-9_-]{8,}\\.eyJ[A-Za-z0-9_-]{8,}(\\.[A-Za-z0-9_-]+)?", "<token>")
+          - replace_pattern(body, "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}", "<email>")
+          - replace_all_patterns(attributes, "value", "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}", "<email>")
   batch: {}
 
 exporters:
@@ -83,5 +97,5 @@ service:
       exporters: [prometheusremotewrite]
     logs:
       receivers: [filelog/ai-circus, otlp]
-      processors: [memory_limiter, batch]
+      processors: [memory_limiter, transform/ai-circus-mask-logs, batch]
       exporters: [otlphttp/logs]

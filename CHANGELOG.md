@@ -4,6 +4,19 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.59.0 — 2026-11-13
+
+### Added
+- **One trace from the chat to the API** (ADR 0028): the MCP gateway forwards the caller's trace context to every MCP
+  server (never baggage), so a LibreChat question is a single trace through the MCP server, its token exchange and the
+  API. Open WebUI sends no trace context with its MCP calls; its hop is still matched through the audit lines.
+- `make k3s-mcp-lite-verify` (with `OBS=1`) sends its own trace through the gateway and finds it with the MCP server's
+  and the API's spans, and fails if any stored log line carries a token or an email address.
+
+### Changed
+- **The log collector masks emails and tokens** in every log line before storing it (`<email>`, `<token>`), including
+  lines from third-party software such as the chat UIs, which log the signed-in user's email.
+
 ## v0.58.0 — 2026-11-13
 
 ### Added
