@@ -201,8 +201,11 @@ one audience scope, and the `mcp-servers` scope puts it in the user token's audi
 `crm-api` (`k8s/mcp-examples/`, `make k3s-mcp-examples-up`), is the gateway's `crm` door and a chat UI connection. The kit reports for every server (docs/adr/0023):
 `mcp_kit_*` metrics on the service's own `/metrics` (labels: server, tool, outcome, reason only), audit lines in the
 platform's log shape with `trace_id`, and one trace from the server inwards (its Keycloak exchange and API call); the
-"AI Circus · MCP servers" dashboard and the `ai-circus.mcp` alert group read them. The hop into the server is correlated,
-not traced, while the chat UI's and LiteLLM's MCP clients send no `traceparent`.
+"AI Circus · MCP servers" dashboard and the `ai-circus.mcp` alert group read them. LiteLLM injects no trace context into
+MCP calls, so every gateway route forwards the caller's `traceparent`/`tracestate` (never `baggage`, docs/adr/0028): a
+chat UI that sends them (LibreChat) gets one trace through the server to its API; Open WebUI's MCP client sends none, so
+its hop is correlated through the audit lines. The collector masks tokens (`<token>`) and email addresses (`<email>`) in
+every stored log line, whoever wrote it (a chat UI logs the signed-in user's email).
 
 **One catalog for the whole path** (docs/adr/0024): `mcp/catalog.yaml` lists the gateway's address, every server
 (`scenario_door`: a scenario's own door, whose tools its entitlements and `scenario.yaml` roles decide, so no group lists
