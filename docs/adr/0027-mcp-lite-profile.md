@@ -38,6 +38,16 @@ telemetry helpers the example pair takes from `libs/shared`.
   token nothing is listed. Keycloak marks its session cookies Secure and browsers send them to `http://*.localhost`;
   the check carries them the same way. Chat answers depend on a model and a provider key, so they are checked in a
   browser, not here.
+- **Observability is one switch away** (added after v0.57.0). `make k3s-mcp-lite OBS=1` runs the framework's own
+  bundle target (`make k3s-obs-up`: OpenTelemetry Collector, VictoriaMetrics + vmalert, Loki, Tempo, Grafana with the
+  MCP dashboard and alerts of ADR 0023) against the lite cluster's kubeconfig. That target acts on the current
+  context, so it must never run bare while the lite cluster is up. LibreChat now traces too (its own OpenTelemetry
+  switch: HTTP spans without headers, query strings redacted, and it passes the trace context on to the gateway);
+  `k3s-obs-up` wires it in the full framework as well. With the bundle deployed, `make k3s-mcp-lite-verify` also
+  checks that the calls it made reached all three stores (the kit's tool-call metrics with both outcomes, ok and
+  denied; each kit server's audit lines; its traces) and that no log line of the cluster carries a token, the
+  blueprint's test for observability ("a search for tokens or personal data in all signals finds nothing", here
+  for tokens).
 - **A standalone repository stays possible** and becomes mechanical: the profile's file list is its content, plus
   the telemetry helpers. It is built when someone is to receive it.
 
@@ -57,6 +67,13 @@ subjects. Re-running the target on the same cluster restarts what it rebuilt; sw
 chat UI. Memory with LibreChat: about 2.9 GB of pods (llm-gateway 1.2 GB with its embedding model, Keycloak 0.7 GB,
 LibreChat and its MongoDB 0.66 GB), 4.9 GB for the whole node; Open WebUI instead of LibreChat is about 0.5 GB more
 on a first start. The default kubeconfig's context stayed on the framework cluster throughout.
+
+With `OBS=1` (fresh cluster, LibreChat): the verify step found the calls' metrics (`ok` and `denied` outcomes), 12
+crm-mcp audit lines, 20 crm-mcp traces and no token in any log line (Loki held logs of crm-api, crm-mcp, LibreChat,
+llm-gateway, MongoDB and Postgres; Keycloak and Valkey log nothing while idle). Grafana's MCP dashboard showed the
+calls, the refusal outside the grant, the per-API tokens issued, the exchange round trip and the live token checks.
+LibreChat's model requests and llm-gateway's spans form one trace; the MCP hop does not yet (the gateway's `tools/call`
+and crm-mcp each start their own trace, ADR 0023). The bundle added 0.43 GB: about 3.1 GB of pods in all.
 
 **Consequences.** One more way to run the framework, never part of `k3s-all`, that proves the MCP Lite Stack stands
 alone and fits a laptop next to nothing else. Adding an API to it is one catalog entry plus one kit server, as in the

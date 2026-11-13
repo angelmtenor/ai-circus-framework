@@ -13,11 +13,16 @@ server of mcp/catalog.yaml:
 - a granted tool that needs no arguments runs, and a tool the role is not granted is refused;
 - without a token the server lists no tools.
 
+With the observability bundle deployed (--metrics/--logs/--traces, make k3s-mcp-lite OBS=1), it then checks that those
+calls reached it: the kit's tool-call metrics with both outcomes (ok and denied), each kit server's audit lines in the
+logs and its traces, and that no log line of the cluster carries a token (a JWT).
+
 Each server exchanges the token for its own API (Level 3: DPoP, live checks, mutual TLS), so a passing call covers
 that path too. Tokens and passwords are never printed. Needs Traefik on 127.0.0.1:80 (the lite cluster) and the
 gateway forwarded to --gateway (scripts/k3s_mcp_lite.sh verify does both).
 
 Usage: python3 scripts/mcp_lite_check.py --gateway http://127.0.0.1:18033 [--client open-webui|librechat]
+       [--metrics http://…:8428 --logs http://…:3100 --traces http://…:3200]
 
 Author: Angel Martinez-Tenor
 """
@@ -34,6 +39,8 @@ import json
 import re
 import secrets
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -251,12 +258,78 @@ def check_user(
     return lines
 
 
+# Signals arrive on the scrape interval (metrics) and in batches (logs, traces): poll before calling one missing.
+SIGNAL_WAIT_SECONDS = 120
+SIGNAL_WINDOW_SECONDS = 15 * 60
+# A JWT is three base64url parts; its first two always start with `eyJ` ('{"' encoded). Never in a log line.
+JWT_IN_LOGS = r"eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}"
+
+
+def eventually(what: str, probe: Callable[[], str | None]) -> str:
+    """Poll `probe` until it returns a description of what it found, or fail after SIGNAL_WAIT_SECONDS."""
+    deadline = time.monotonic() + SIGNAL_WAIT_SECONDS
+    while True:
+        found = probe()
+        if found:
+            return found
+        if time.monotonic() > deadline:
+            raise CheckError(f"{what}: nothing after {SIGNAL_WAIT_SECONDS} s")
+        time.sleep(5)
+
+
+def check_signals(http: httpx.Client, catalog: Any, metrics: str, logs: str, traces: str) -> list[str]:
+    """The calls just made reached the observability bundle, and no log line carries a token."""
+    lines = []
+
+    def outcomes() -> str | None:
+        reply = http.get(f"{metrics}/api/v1/query", params={"query": "sum by (outcome) (mcp_kit_tool_calls_total)"})
+        seen = {r["metric"].get("outcome"): float(r["value"][1]) for r in reply.json()["data"]["result"]}
+        if seen.get("ok", 0) > 0 and seen.get("denied", 0) > 0:
+            return ", ".join(f"{k} {int(v)}" for k, v in sorted(seen.items()))
+        return None
+
+    lines.append(f"✓ metrics: mcp_kit_tool_calls_total by outcome: {eventually('tool-call metrics', outcomes)}")
+    now = time.time()
+    window = {"start": str(int((now - SIGNAL_WINDOW_SECONDS) * 1e9)), "end": str(int((now + 60) * 1e9))}
+    for server in catalog.kit_servers():
+
+        def audit(service: str = server.service) -> str | None:
+            query = f'{{service_name="{service}"}} | logger="mcp_kit.audit"'
+            reply = http.get(f"{logs}/loki/api/v1/query_range", params={"query": query, "limit": 200, **window})
+            count = sum(len(stream["values"]) for stream in reply.json()["data"]["result"])
+            return f"{count} lines" if count else None
+
+        def spans(service: str = server.service) -> str | None:
+            params = {"tags": f"service.name={service}", "limit": 20, "start": int(now - SIGNAL_WINDOW_SECONDS)}
+            reply = http.get(f"{traces}/api/search", params={**params, "end": int(time.time()) + 60})
+            found = reply.json().get("traces") or []
+            return f"{len(found)} traces" if found else None
+
+        lines.append(f"✓ logs: {server.service} audit lines: {eventually(f'{server.service} audit lines', audit)}")
+        lines.append(f"✓ traces: {server.service}: {eventually(f'{server.service} traces', spans)}")
+    leak = http.get(
+        f"{logs}/loki/api/v1/query_range",
+        params={"query": f'{{service_name=~".+"}} |~ `{JWT_IN_LOGS}`', "limit": 5, **window},
+    )
+    leaked = [s["stream"].get("service_name", "?") for s in leak.json()["data"]["result"]]
+    if leaked:
+        raise CheckError(f"a token (JWT) appears in the logs of {sorted(set(leaked))}")
+    lines.append("✓ logs: no line of the last 15 minutes carries a token")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check the MCP lite profile end to end (docs/adr/0027).")
     parser.add_argument("--gateway", required=True, help="the MCP gateway, e.g. http://127.0.0.1:18033")
     parser.add_argument("--client", choices=sorted(CLIENTS), default="open-webui", help="the chat UI's client")
     parser.add_argument("--env-file", type=Path, default=REPO / ".env")
+    parser.add_argument("--metrics", help="VictoriaMetrics (the observability bundle), e.g. http://127.0.0.1:8428")
+    parser.add_argument("--logs", help="Loki, e.g. http://127.0.0.1:3100")
+    parser.add_argument("--traces", help="Tempo, e.g. http://127.0.0.1:3200")
     args = parser.parse_args()
+    signals = (args.metrics, args.logs, args.traces)
+    if any(signals) and not all(signals):
+        parser.error("--metrics, --logs and --traces go together")
 
     identity = _script("chat_ui_identity")
     generator = _script("generate_mcp_catalog")
@@ -282,7 +355,10 @@ def main() -> int:
                 print(f"✓ {user['username']} signed in through Keycloak ({args.client} client)")
                 for line in check_user(http, args.gateway, catalog, user, identity.ORG["alias"], token):
                     print(line)
-    except (CheckError, httpx.HTTPError) as exc:
+            if all(signals):
+                for line in check_signals(http, catalog, args.metrics, args.logs, args.traces):
+                    print(line)
+    except (CheckError, httpx.HTTPError, KeyError, ValueError) as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 1
     print("✓ MCP lite stack verified")

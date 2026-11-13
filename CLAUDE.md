@@ -43,7 +43,7 @@ make k3s-mcp-portforward              # OPTIONAL: MCP doors on localhost for cli
 make k3s-mcp-examples-up / -down       # OPTIONAL crm-mcp (libs/mcp-kit) in front of crm-api: per-API token exchange, gateway door /mcp/crm (ADR 0022)
 make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
 make k3s-librechat-up / k3s-librechat-down # OPTIONAL second chat UI: LibreChat (MIT) + MongoDB at librechat.localhost, same sign-in and MCP path (ADR 0026); one chat UI at a time
-make k3s-mcp-lite / -verify / -down    # OPTIONAL MCP lite profile (ADR 0027): the MCP Lite Stack alone on its own k3d cluster `mcp-lite` (~3 GB; CHAT_UI=librechat); pause the framework cluster first (port 80)
+make k3s-mcp-lite / -verify / -down    # OPTIONAL MCP lite profile (ADR 0027): the MCP Lite Stack alone on its own k3d cluster `mcp-lite` (~3 GB; CHAT_UI=librechat; OBS=1 adds observability); pause the framework cluster first (port 80)
 make mcp-catalog / mcp-catalog-check   # mcp/catalog.yaml (ADR 0024) -> gateway routes, chat UI connections, kit policy.yaml, Keycloak exchange clients; CI fails on drift
 make mcp-catalog-portal                # OPTIONAL local page over the catalog (127.0.0.1:8040): tick tools per group, review diffs, publish; then make k3s-mcp-catalog-apply
 make k3s-mcp-tls                       # Level 3 (ADR 0025): mutual-TLS certificates per level-3 kit server/API pair (infra/mcp-tls/, gitignored) + per-workload Secrets; renew every 90 days
