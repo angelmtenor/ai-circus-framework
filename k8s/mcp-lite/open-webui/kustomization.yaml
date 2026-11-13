@@ -1,0 +1,10 @@
+# MCP lite profile's chat UI, Open WebUI (the default; docs/adr/0021, 0027): k8s/chat-ui with the kit servers' MCP
+# connections only (connections.yaml, generated from mcp/catalog.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../chat-ui
+
+patches:
+  - path: connections.yaml

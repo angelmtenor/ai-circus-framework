@@ -1,0 +1,73 @@
+# Generated from mcp/catalog.yaml by scripts/generate_mcp_catalog.py (docs/adr/0027): edit the catalog, not this file.
+# MCP lite profile: k8s/chat-ui-librechat's LibreChat configuration,
+# with the catalog's kit servers only (its scenario doors need the full framework).
+# LibreChat's own configuration (librechat.yaml, docs/adr/0026), mounted at /config/librechat.yaml by
+# k8s/chat-ui-librechat (a ConfigMap generated from this file) and by docker-compose.yml's `librechat` service.
+# Sign-in, secrets and switches come from the environment (k8s/chat-ui-librechat/librechat.yaml); this file holds
+# the models, what the interface offers and the MCP servers.
+version: 1.3.17
+cache: true
+
+# Only what this framework provides: no web search, code runner, file search or marketplace (each would need its
+# own provider key), no user-made MCP servers or agents shared with everyone. Chats with the gateway's models and
+# the catalog's MCP servers, which the user picks in the composer's MCP menu.
+interface:
+  customWelcome: "Sign-in through Keycloak; your tools come from the MCP gateway with your own token."
+  webSearch: false
+  runCode: false
+  fileSearch: false
+  fileCitations: false
+  memories: false
+  temporaryChat: true
+  prompts: false
+  agents:
+    use: true
+    create: false
+    share: false
+    public: false
+  mcpServers:
+    use: true
+    create: false
+    share: false
+    public: false
+    configureObo: false
+
+# Models: llm-gateway only (no provider key here), as every other client of the framework.
+endpoints:
+  custom:
+    - name: "AI gateway"
+      apiKey: "${LITELLM_MASTER_KEY}"
+      baseURL: "http://llm-gateway:4000/v1"
+      models:
+        default: ["gemini-flash"]
+        fetch: true
+      titleConvo: true
+      titleModel: "current_model"
+      modelDisplayLabel: "AI gateway"
+
+# A new chat starts on the model the demos use; every other gateway model stays one click away.
+modelSpecs:
+  prioritize: false
+  addedEndpoints: ["AI gateway"]
+  list:
+    - name: gemini-flash
+      label: "gemini-flash"
+      default: true
+      preset:
+        endpoint: "AI gateway"
+        model: "gemini-flash"
+
+# One server per entry of mcp/catalog.yaml, each through the MCP gateway with the signed-in user's own token.
+# BEGIN generated from mcp/catalog.yaml (scripts/generate_mcp_catalog.py): edit the catalog, not this block
+mcpSettings:
+  allowedAddresses: ["llm-gateway:4000"]
+mcpServers:
+  crm:
+    type: streamable-http
+    url: http://llm-gateway:4000/mcp/crm
+    title: "Customers CRM"
+    description: "Customers of the organisation's shops you may see, with masked contact details (read-only)"
+    headers:
+      Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+    requiresOAuth: false
+# END generated from mcp/catalog.yaml
