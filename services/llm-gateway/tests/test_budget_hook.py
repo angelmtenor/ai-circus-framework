@@ -9,6 +9,7 @@ import asyncio
 
 import fakeredis
 import pytest
+import redis
 from fastapi import HTTPException
 
 from llm_gateway import budget_hook
@@ -115,3 +116,30 @@ def test_a_call_that_pushes_an_org_over_budget_is_not_itself_blocked(client: fak
     assert allowed_before is None
     with pytest.raises(HTTPException):
         asyncio.run(enforcer.async_pre_call_hook(None, None, {"user": "org-1"}, "completion"))
+
+
+class _UnreachableValkey:
+    """A client whose every call fails as a down Valkey does (the MCP lite profile once ran without one)."""
+
+    def get(self, key: str) -> str:
+        raise redis.ConnectionError("Error -2 connecting to valkey:6379. Name or service not known.")
+
+    def pipeline(self) -> _UnreachableValkey:
+        return self
+
+    def incrbyfloat(self, key: str, amount: float) -> None:
+        return None
+
+    def expire(self, key: str, seconds: int, nx: bool = False) -> None:
+        return None
+
+    def execute(self) -> None:
+        raise redis.ConnectionError("Error -2 connecting to valkey:6379. Name or service not known.")
+
+
+def test_an_unreachable_budget_store_never_fails_the_call() -> None:
+    """Regression: with Valkey down, a request carrying `user` raised and the proxy answered 500 for every call."""
+    enforcer = _enforcer(_UnreachableValkey())  # type: ignore[arg-type]
+
+    assert asyncio.run(enforcer.async_pre_call_hook(None, None, {"user": "org-a"}, "completion")) is None
+    asyncio.run(enforcer.async_log_success_event({"user": "org-a", "response_cost": 0.01}, None, None, None))
