@@ -126,6 +126,9 @@ on a fired rule's `legal_basis` — a libs/shared test checks each one resolves 
 
 ## The MCP door (docs/adr/0019)
 
+The whole MCP path (chat UIs, gateway, kit servers, catalog, Level 3, observability, pseudonyms, the lite profile) as a
+guide: [docs/mcp](mcp/README.md). The paragraphs below are the implementation notes.
+
 A `conversational_rag` scenario may open a **read-only MCP door** on its documents (`mcp: {expose: [list_sources,
 search_documents, read_document]}`, needs `vector_store`; first on `ai_circus_reference`). rag-agent mounts one stateless
 FastMCP app (Streamable HTTP, JSON responses) at `/mcp`; `McpDoor` (`core/mcp_door.py`) takes `/mcp/{slug}`, answers 404
