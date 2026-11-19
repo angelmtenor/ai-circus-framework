@@ -1071,6 +1071,8 @@ class NetworkExplorerExtra(BaseModel):
     # Numeric features listed in the dossier with their percentile among all rows.
     facts: list[str] = []
     outcome_label: str = "Adverse outcome"
+    # What the reveal shows, e.g. "investigation" — None = "public record".
+    record_label: str | None = Field(default=None, max_length=40)
     # The tier (label) from which a row counts as "flagged" in the backtest reveal —
     # None = the top tier only.
     flag_from_tier: str | None = None
