@@ -1838,3 +1838,62 @@ def test_mcp_needs_known_tools_and_scenario_slugs(mcp: dict) -> None:  # type: i
 def test_the_reference_guide_chat_consumes_its_own_door_for_the_demo() -> None:
     guide = _reference_guide()
     assert guide.mcp is not None and guide.mcp.consume == ["ai_circus_reference"]
+
+
+# --- insurance_portfolio: three models, a retention watchlist with a next best offer ---
+
+
+def test_repo_insurance_portfolio_has_three_models_and_a_next_best_offer() -> None:
+    portfolio = _repo_scenario("insurance_portfolio")
+    assert portfolio.industry == "insurance"
+    assert set(portfolio.model_views()) == {
+        "insurance_portfolio",
+        "insurance_portfolio~cross_sell",
+        "insurance_portfolio~products",
+    }
+    offer = portfolio.ui_extras.next_best_offer  # type: ignore[union-attr]
+    assert offer is not None and offer.propensity_model == "cross_sell" and offer.recommender == "products"
+    # Every holding is a feature, and the propensity model reads the very same record.
+    assert set(offer.holdings) <= set(portfolio.dataset.feature_columns)  # type: ignore[union-attr]
+    cross_sell = portfolio.model_views()["insurance_portfolio~cross_sell"]
+    assert cross_sell.dataset.feature_columns == portfolio.dataset.feature_columns  # type: ignore[union-attr]
+    assert cross_sell.ui_extras.positive_is_adverse is False  # type: ignore[union-attr]
+
+
+def test_next_best_offer_must_name_models_of_its_own_scenario() -> None:
+    portfolio = _repo_scenario("insurance_portfolio")
+    extras = portfolio.ui_extras.model_dump()  # type: ignore[union-attr]
+    offer = extras["next_best_offer"]
+
+    def with_offer(**changes: object) -> ScenarioDefinition:
+        return _with(portfolio, ui_extras={**extras, "next_best_offer": {**offer, **changes}})
+
+    with pytest.raises(ValidationError, match="propensity_model must be a classification extra model"):
+        with_offer(propensity_model="nope")
+    with pytest.raises(ValidationError, match="propensity_model must be a classification extra model"):
+        with_offer(propensity_model="products")
+    with pytest.raises(ValidationError, match="recommender must be a recommendation extra model"):
+        with_offer(recommender="cross_sell")
+    with pytest.raises(ValidationError, match=r"is not among dataset\.feature_columns"):
+        with_offer(holdings={"HasBoat": "BOAT"})
+    # Without its extra models the offer has nothing to call.
+    with pytest.raises(ValidationError, match="propensity_model must be a classification extra model"):
+        _with(portfolio, extra_models=[])
+
+
+def test_next_best_offer_propensity_model_must_read_the_same_features() -> None:
+    portfolio = _repo_scenario("insurance_portfolio")
+    extra_models = [extra.model_dump() for extra in portfolio.extra_models]
+    cross_sell = extra_models[0]
+    fewer = [f for f in cross_sell["dataset"]["feature_columns"] if f != "Region"]
+    schema = {k: v for k, v in cross_sell["dataset"]["feature_schema"].items() if k != "Region"}
+    pillars = [
+        {**p, "features": [f for f in p["features"] if f != "Region"]} for p in cross_sell["ui_extras"]["pillars"]
+    ]
+    extra_models[0] = {
+        **cross_sell,
+        "dataset": {**cross_sell["dataset"], "feature_columns": fewer, "feature_schema": schema},
+        "ui_extras": {**cross_sell["ui_extras"], "pillars": pillars},
+    }
+    with pytest.raises(ValidationError, match="same feature_columns"):
+        _with(portfolio, extra_models=extra_models)
