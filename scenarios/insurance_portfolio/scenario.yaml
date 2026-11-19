@@ -1,0 +1,242 @@
+# A multi-line insurer's portfolio (fictional, synthetic: scripts/generate_insurance_portfolio.py),
+# one scenario with three models (docs/adr/0018-several-models-per-scenario.md):
+#   - main model: which policyholders will lapse at renewal (the retention watchlist);
+#   - `cross_sell`: who will add one more product (the cross-sell leads watchlist);
+#   - `products`: a basket recommender over the products each policyholder holds.
+# The retention watchlist's `next_best_offer` brings the other two to the selected policyholder:
+# propensity to buy with its SHAP drivers, and the products that go with what they already hold.
+# Policyholders are ids only: there is no name, and no protected attribute, in the data.
+
+slug: insurance_portfolio
+kind: tabular_ml
+title: "Insurance Retention & Next Best Offer"
+description: >
+  A multi-line insurer's portfolio (motor, home, health, life, pet, funeral, accident): who is about
+  to lapse at renewal and why, who is ready to add a product, and which product goes with what each
+  customer already holds. Three models, SHAP explanations and a chat assistant over all of them.
+  Synthetic data.
+role_required: "scenario:insurance_portfolio"
+industry: insurance
+icon: "🛡️"
+
+credits:
+  source: "Synthetic — scripts/generate_insurance_portfolio.py"
+  url: "https://github.com/angelmtenor/ai-circus-framework/blob/develop/scripts/generate_insurance_portfolio.py"
+  note: "Invented policyholders of a fictional insurer: no real person, insurer or market behind the numbers."
+
+chat:
+  context: >
+    The portfolio of a fictional multi-line insurer (motor, home, health, life, pet, funeral and
+    personal accident). The main model predicts lapse at renewal from the policies held, tenure,
+    total premium and the last renewal's price change, claims, late payments, channel and use of
+    the digital area. The cross_sell model predicts who will add another product from the same
+    features. The products recommender says which products are held together, by lift. The data
+    is synthetic, so its numbers illustrate the method, not a real market.
+  sample_questions:
+    - "Which factors matter most for predicting a lapse?"
+    - "Does a big price increase at renewal drive customers away?"
+    - "Which customers are the best cross-sell targets, and why?"
+    - "Which products go with a home policy?"
+    - "How accurate are the lapse and cross-sell models?"
+
+dataset:
+  bucket: "scenario-insurance-lapse"
+  raw_object: "raw/policyholders_lapse.csv"
+  seed_file: "sample_data/policyholders_lapse.csv"
+  index_col: "CustomerId"
+  target: "Lapsed"
+  feature_columns: &policyholder_features
+    - Age
+    - Region
+    - TenureYears
+    - NumPolicies
+    - HasAuto
+    - HasHome
+    - HasHealth
+    - HasLife
+    - HasPet
+    - HasFuneral
+    - HasAccident
+    - AnnualPremium
+    - ClaimsLast3Y
+    - PremiumChangePct
+    - Channel
+    - DigitalActive
+    - LatePayments
+  # 0/1 flags stay numeric: the CSV stores them as integers (see scenarios/churn).
+  feature_schema: &policyholder_schema
+    Age: {type: numeric, label: "Age", min: 18, max: 90, default: 45, step: 1, info: "Policyholder's age in years."}
+    Region:
+      {type: categorical, label: "Region", options: ["Capital", "North", "South", "East", "West"], default: "Capital",
+       info: "Sales region the policyholder belongs to."}
+    TenureYears:
+      {type: numeric, label: "Years as customer", min: 0, max: 30, default: 5, step: 1,
+       info: "Years since the policyholder's first policy."}
+    NumPolicies:
+      {type: numeric, label: "Policies held", min: 1, max: 7, default: 2, step: 1,
+       info: "Active policies across every line — bundled customers tend to stay."}
+    HasAuto: {type: numeric, label: "Motor policy", min: 0, max: 1, default: 1, step: 1, info: "1 if the policyholder has car or motorbike cover."}
+    HasHome: {type: numeric, label: "Home policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has home cover."}
+    HasHealth: {type: numeric, label: "Health policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has health cover."}
+    HasLife: {type: numeric, label: "Life policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has life cover."}
+    HasPet: {type: numeric, label: "Pet policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has pet cover."}
+    HasFuneral: {type: numeric, label: "Funeral policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has funeral-expenses cover."}
+    HasAccident:
+      {type: numeric, label: "Accident policy", min: 0, max: 1, default: 0, step: 1, info: "1 if the policyholder has personal-accident cover."}
+    AnnualPremium:
+      {type: numeric, label: "Annual premium (EUR)", min: 50, max: 2500, default: 700, step: 10,
+       info: "Total yearly premium across every policy held."}
+    ClaimsLast3Y: {type: numeric, label: "Claims (3 years)", min: 0, max: 6, default: 0, step: 1, info: "Claims filed in the last three years."}
+    PremiumChangePct:
+      {type: numeric, label: "Renewal price change (%)", min: -10, max: 30, default: 3, step: 0.5,
+       info: "How much the total premium changed at the last renewal."}
+    Channel:
+      {type: categorical, label: "Channel", options: ["Online", "Agent", "Branch", "Phone"], default: "Online",
+       info: "The policyholder's main sales and service channel."}
+    DigitalActive:
+      {type: numeric, label: "Uses the digital area", min: 0, max: 1, default: 1, step: 1,
+       info: "1 if the policyholder used the web or app area in the last 90 days."}
+    LatePayments: {type: numeric, label: "Late payments", min: 0, max: 5, default: 0, step: 1, info: "Late premium payments in the last year."}
+  default_charts:
+    - {type: bar, x: Channel, y: Lapsed, agg: mean, color_by: Channel}
+    - {type: bar, x: NumPolicies, y: Lapsed, agg: mean}
+    - {type: scatter, x: PremiumChangePct, y: AnnualPremium, color_by: Lapsed}
+
+model:
+  task_type: classification
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  selection_metric: roc_auc
+  explainability: shap
+  target_label: "Policy lapsed"
+  target_description: "Whether the policyholder let their policies lapse at the last renewal."
+  target_value_labels: {"0": "Renewed", "1": "Lapsed"}
+
+main_model_title: "Lapse risk"
+ui_extras:
+  kind: risk_watchlist
+  tab_label: "Retention watchlist"
+  title: "Who is about to lapse — and what to offer them?"
+  subtitle: >
+    Every policyholder scored by the lapse model and sorted into tiers. Pick one to see what drives the
+    risk and the next best offer: the cross-sell model's propensity and the products that go with what
+    they already hold. Then reveal who really lapsed. Policyholders are shown by id only.
+  entity_noun: policyholder
+  size_feature: AnnualPremium
+  landscape_x: PremiumChangePct
+  landscape_y: AnnualPremium
+  score_label: "P(lapse)"
+  outcome_label: "Lapsed"
+  outcome_past: "lapsed"
+  push_up: "lapsing"
+  push_down: "renewing"
+  tiers:
+    - {label: "Loyal", min_probability: 0.0, description: "No sign of leaving: routine service."}
+    - {label: "Watch", min_probability: 0.3, description: "Above the portfolio's base rate: include in the next renewal campaign."}
+    - {label: "At risk", min_probability: 0.5, description: "Call before renewal and review the price and the cover."}
+    - {label: "Likely to lapse", min_probability: 0.7, description: "Act now: a retention offer from the account manager."}
+  pillars:
+    - {label: "Relationship", features: [TenureYears, NumPolicies, Channel, DigitalActive]}
+    - {label: "Cover held", features: [HasAuto, HasHome, HasHealth, HasLife, HasPet, HasFuneral, HasAccident]}
+    - {label: "Price and service", features: [AnnualPremium, PremiumChangePct, ClaimsLast3Y, LatePayments]}
+    - {label: "Profile", features: [Age, Region]}
+  next_best_offer:
+    propensity_model: cross_sell
+    recommender: products
+    holdings:
+      HasAuto: MOTOR
+      HasHome: HOME
+      HasHealth: HEALTH
+      HasLife: LIFE
+      HasPet: PET
+      HasFuneral: FUNERAL
+      HasAccident: ACCIDENT
+    title: "Next best offer"
+    score_label: "P(adds a product)"
+    at_risk_note: "Lapse risk is high: make the offer part of the retention call, not a separate campaign."
+
+extra_models:
+  - id: cross_sell
+    title: "Cross-sell"
+    dataset:
+      bucket: "scenario-insurance-cross-sell"
+      raw_object: "raw/policyholders_cross_sell.csv"
+      seed_file: "sample_data/policyholders_cross_sell.csv"
+      index_col: "CustomerId"
+      target: "AddedProduct"
+      feature_columns: *policyholder_features
+      feature_schema: *policyholder_schema
+      default_charts:
+        - {type: bar, x: DigitalActive, y: AddedProduct, agg: mean}
+        - {type: bar, x: NumPolicies, y: AddedProduct, agg: mean}
+        - {type: histogram, x: Age, color_by: AddedProduct}
+    model:
+      task_type: classification
+      candidates: ["lightgbm"]
+      accuracy_gain_threshold_for_complexity: 0.02
+      selection_metric: roc_auc
+      explainability: shap
+      target_label: "Added a product"
+      target_description: "Whether the policyholder bought one more product after the last campaign."
+      target_value_labels: {"0": "No", "1": "Added"}
+    ui_extras:
+      kind: risk_watchlist
+      tab_label: "Cross-sell leads"
+      title: "Who will buy the next product?"
+      subtitle: >
+        Every policyholder scored for the propensity to add a product. Filter a tier, pick a customer to
+        see what drives it, then reveal who really bought. Policyholders are shown by id only.
+      entity_noun: policyholder
+      positive_is_adverse: false
+      size_feature: AnnualPremium
+      landscape_x: Age
+      landscape_y: TenureYears
+      score_label: "P(buy)"
+      outcome_label: "Added a product"
+      outcome_past: "added a product"
+      push_up: "buying"
+      push_down: "not buying"
+      tiers:
+        - {label: "Cold", min_probability: 0.0, description: "Unlikely to buy: leave out of the campaign."}
+        - {label: "Warm", min_probability: 0.4, description: "Include in the next-best-offer mailing."}
+        - {label: "Hot", min_probability: 0.6, description: "Agent follow-up with a tailored offer."}
+        - {label: "Ready to buy", min_probability: 0.8, description: "Priority lead: contact this week."}
+      pillars:
+        - {label: "Relationship", features: [TenureYears, NumPolicies, Channel, DigitalActive]}
+        - {label: "Cover held", features: [HasAuto, HasHome, HasHealth, HasLife, HasPet, HasFuneral, HasAccident]}
+        - {label: "Price and service", features: [AnnualPremium, PremiumChangePct, ClaimsLast3Y, LatePayments]}
+        - {label: "Profile", features: [Age, Region]}
+
+  - id: products
+    title: "Product affinity"
+    dataset:
+      bucket: "scenario-insurance-products"
+      raw_object: "raw/portfolio_baskets.csv"
+      seed_file: "sample_data/portfolio_baskets.csv"
+      index_col: "row_id"
+      target: "product_family"
+      feature_columns: [basket_id, product_id, product_name]
+      feature_schema:
+        basket_id: {type: text, label: "Policyholder", max_length: 20, info: "The policyholder's id: one basket per policyholder."}
+        product_id: {type: text, label: "Product id", max_length: 20, info: "The product line's id."}
+        product_name: {type: text, label: "Product", max_length: 40, info: "The product line's name."}
+      default_charts:
+        - {type: histogram, x: product_family, color_by: product_family}
+    model:
+      task_type: recommendation
+      candidates: ["association_rules", "item_factors"]
+      accuracy_gain_threshold_for_complexity: 0.02
+      target_label: "Held together with this product"
+      target_description: "Products the same policyholders hold together with it."
+    recommender:
+      basket_column: basket_id
+      item_column: product_id
+      label_column: product_name
+      top_k: 3
+      factors: 4
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

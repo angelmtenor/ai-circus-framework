@@ -3,6 +3,7 @@ import { useCopilotReadable } from "@copilotkit/react-core";
 import { datasetSample, modelCard, predict, type RiskWatchlistExtra, type ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 import { GeoBubbleMap, type GeoFrame, type GeoMark } from "./GeoBubbleMap";
+import { NextBestOfferPanel } from "./NextBestOfferPanel";
 import { PlotlyChart } from "./PlotlyChart";
 import type { PlotlyDatum, PlotlyLayout } from "./plotly";
 import { explainByFeature, featureLabel, type Record_ } from "./predictUtils";
@@ -683,6 +684,17 @@ export function RiskWatchlistView({ scenario, accessToken }: { scenario: Scenari
               </p>
             )}
           </div>
+          {extras.next_best_offer && (
+            <NextBestOfferPanel
+              key={selected.id}
+              scenario={scenario}
+              offer={extras.next_best_offer}
+              record={selected.record}
+              noun={noun}
+              atRisk={selected.tier > 0}
+              accessToken={accessToken}
+            />
+          )}
         </section>
       )}
     </div>

@@ -61,6 +61,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "prestaciones_sociales",
         "surf_retail",
         "surf_ml",
+        "insurance_portfolio",
     }
     churn = session.get(Scenario, "churn")
     assert churn.kind == "tabular_ml"
@@ -258,6 +259,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "prestaciones_sociales",
         "surf_retail",
         "surf_ml",
+        "insurance_portfolio",
     }
 
 
@@ -274,8 +276,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 32
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 32
+    assert session.query(Scenario).count() == 33
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 33
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

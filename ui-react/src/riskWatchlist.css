@@ -619,3 +619,56 @@
     transform: scaleX(1);
   }
 }
+
+/* Next best offer (NextBestOfferPanel.tsx): a full-width row under the selected entity's profile. */
+.rw-offer {
+  grid-column: 1 / -1;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+.rw-offer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.2rem;
+}
+.rw-offer-headline {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: var(--text-h);
+}
+.rw-offer-headline strong {
+  color: var(--accent);
+}
+.rw-offer-why,
+.rw-offer-also {
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+.rw-offer-also {
+  margin: 0 0 0.35rem;
+}
+.rw-offer-score {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+.rw-offer-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.rw-offer-driver {
+  grid-template-columns: minmax(0, 1.5fr) 3.8rem 4.4rem;
+}
+.rw-offer-up {
+  color: var(--accent);
+}
+.rw-offer-down {
+  color: var(--dim);
+}
+@media (max-width: 760px) {
+  .rw-offer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
