@@ -54,6 +54,16 @@ def test_prompt_contains_the_rubric_rules_and_guardrails() -> None:
     assert RUBRIC.guidance.strip() in prompt
 
 
+def test_prompt_opens_with_the_scenarios_reviewer_role() -> None:
+    desk = ScenarioDefinition.load(REPO / "scenarios/financial_crime_desk/scenario.yaml")
+    assert desk.rubric_check is not None and desk.rubric_check.reviewer_role is not None
+    prompt = build_rubric_prompt(desk.rubric_check)
+    assert prompt.startswith("You are an experienced financial-crime analyst")
+    assert "leadership coach" not in prompt
+    assert "`armed_group_support` — Support for an armed or extremist group" in prompt
+    assert build_rubric_prompt(RUBRIC).startswith("You are an experienced engineering-leadership coach")
+
+
 def test_parser_trusts_the_rubric_not_the_model() -> None:
     result = parse_rubric_response(f"Sure! ```json\n{_answer()}\n```", RUBRIC, DESCRIPTION)
 

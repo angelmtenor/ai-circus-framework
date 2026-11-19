@@ -1107,6 +1107,28 @@ def test_row_triage_needs_out_of_fold_scores() -> None:
         _with(steel, model={**model, "out_of_fold_scores": False})
 
 
+def test_message_screening_reads_real_columns_and_honest_scores() -> None:
+    desk = _repo_scenario("financial_crime_desk")
+    assert desk.ui_extras.kind == "message_screening"  # type: ignore[union-attr]
+    extras = desk.ui_extras.model_dump()  # type: ignore[union-attr]
+    model = desk.model.model_dump()  # type: ignore[union-attr]
+    with pytest.raises(ValidationError, match="requires a classification model"):
+        _with(desk, model={**model, "out_of_fold_scores": False})
+    with pytest.raises(ValidationError, match="must be a `type: text` feature"):
+        _with(desk, ui_extras={**extras, "text_feature": "Currency"})
+    with pytest.raises(ValidationError, match="that are not the index, a display column or a feature"):
+        _with(desk, ui_extras={**extras, "fields": [{"tag": ":59:", "label": "Beneficiary", "columns": ["Nope"]}]})
+    with pytest.raises(ValidationError, match="typology_column must be a display column"):
+        _with(desk, ui_extras={**extras, "typology_column": "Currency"})
+
+
+def test_extra_model_views_drop_the_scenarios_documents_and_vector_store() -> None:
+    desk = _repo_scenario("financial_crime_desk")
+    assert desk.documents is not None and desk.vector_store is not None
+    view = desk.model_views()["financial_crime_desk~payments"]
+    assert view.documents is None and view.vector_store is None and view.rubric_check is None
+
+
 def test_fleet_health_scenarios_are_valid_and_their_rules_hold() -> None:
     for slug in ("turbofan_rul", "electric_motor", "luznova_gas_anomaly", "luznova_ev_charging"):
         assert _repo_scenario(slug).ui_extras.kind == "fleet_health"  # type: ignore[union-attr]
