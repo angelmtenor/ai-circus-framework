@@ -4,6 +4,20 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.61.0 — 2026-11-19
+
+### Added
+- **Insurance Retention & Next Best Offer** ([docs](docs/scenarios/insurance_portfolio.md)), `insurance_portfolio`: a
+  fictional multi-line insurer (motor, home, health, life, pet, funeral, accident) with three models in one scenario —
+  lapse at renewal, cross-sell propensity and a product-affinity recommender over the products each policyholder holds.
+  A Retention watchlist and a Cross-sell leads watchlist; 5,000 synthetic policyholders from
+  `scripts/generate_insurance_portfolio.py`, hold-out ROC AUC 0.78 (lapse) and 0.82 (cross-sell).
+- **A next best offer in the risk watchlist** (`ui_extras.risk_watchlist.next_best_offer`): the selected entity is
+  scored by another classifier of the scenario (propensity to buy, with its SHAP drivers) and the scenario's
+  recommender suggests what goes with the products it already holds. The chat sees the same offer. The schema checks
+  that both are extra models of the scenario and that the classifier reads the same feature columns.
+- An `insurance` domain in the scenario picker.
+
 ## v0.60.2 — 2026-11-14
 
 ### Fixed
