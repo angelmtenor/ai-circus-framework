@@ -134,7 +134,8 @@ export function RubricCheckPanel({ scenario, accessToken }: { scenario: Scenario
   );
 }
 
-function LlmReading({ reading, rubric }: { reading: RubricCheckResult; rubric: RubricCheckConfig }) {
+/** The LLM's rubric reading: verdict, balance, quoted signals and advice (also used by MessageScreeningView). */
+export function LlmReading({ reading, rubric }: { reading: RubricCheckResult; rubric: RubricCheckConfig }) {
   const positive = reading.behaviours.filter((b) => b.polarity === "positive");
   const negative = reading.behaviours.filter((b) => b.polarity === "negative");
   return (
