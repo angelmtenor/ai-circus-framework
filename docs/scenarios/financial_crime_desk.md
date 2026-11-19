@@ -1,17 +1,19 @@
 # 🕵️ Payment Fraud & Financial Crime
 
-A bank's financial-crime desk with two models in one scenario (`financial_crime_desk`,
+A bank's financial-crime desk with three models in one scenario (`financial_crime_desk`,
 [ADR 0018](../adr/0018-several-models-per-scenario.md)):
 
 | Model | Address | Question | Kind |
 |---|---|---|---|
 | Transfer screening (main) | `financial_crime_desk` | Should an analyst look at this outgoing cross-border transfer? | LightGBM on the message's fields and its free-text purpose (TF-IDF), SHAP, a sentence-embedding challenger, an LLM analyst |
 | Payment fraud | `financial_crime_desk~payments` | Is this customer payment fraud? | Deterministic rules, then LightGBM on session and payment signals, SHAP |
+| Mule accounts | `financial_crime_desk~mules` | Is this account a money mule? | Behaviour features computed offline from 60 days of transfers, logistic regression or LightGBM, SHAP, the account network |
 
 The assistant also searches eight articles of the EU Anti-Money Laundering Regulation (EU) 2024/1624.
 
 **The data is synthetic.** `scripts/generate_financial_crime.py` invents 3,000 credit-transfer messages and 5,000
-customer payments of a fictional European bank. No real customer, bank, payment or investigation is behind the
+customer payments of a fictional European bank, and `scripts/generate_financial_crime_mules.py` 60 days of
+transfers between 800 of its accounts. No real customer, bank, payment or investigation is behind the
 numbers, so the metrics illustrate the method, not a real bank's detection rates.
 
 ## Contents
@@ -19,6 +21,7 @@ numbers, so the metrics illustrate the method, not a real bank's detection rates
 - [The Message screening tab](#the-message-screening-tab)
 - [The LLM analyst](#the-llm-analyst)
 - [The Payment stream tab](#the-payment-stream-tab)
+- [The Mule network tab](#the-mule-network-tab)
 - [The data](#the-data)
 - [The models](#the-models)
 - [Responsible AI](#responsible-ai)
@@ -87,6 +90,25 @@ business rules run on every payment:
 Blocked payments and those awaiting confirmation are kept for analytics, but the model is never trained on them.
 The Predictions tab shows which rules fired for any payment you enter.
 
+## The Mule network tab
+
+The `mules` model's `network_explorer` tab draws every account as a node, coloured by its out-of-fold score and
+sized by the money it received. Lines are transfers between accounts, replayed day by day on the timeline.
+Hexagons are the devices and home addresses that two or more accounts share. Outside parties (payers,
+employers, crypto exchanges, the ATM network) are unscored; everyday card spending is counted in the features
+but not drawn. From there you can:
+
+- open an account's dossier: its score, the SHAP drivers rolled into six pillars (*Money in*, *Pass-through*,
+  *Cash-out*, *Shared identity*, *Network position*, *Profile*) and its facts as percentiles;
+- trace a path between two accounts, or switch to *Investigate an account* to work outwards from one account
+  and score a hypothetical one from the ties you give it;
+- reveal the investigation: who was confirmed as a mule.
+
+The model never sees the network itself, only numbers computed from it offline: money in and out, the
+pass-through ratio, the median dwell time between money arriving and leaving, distinct senders and recipients,
+the shares cashed out or sent to crypto, night activity, the accounts sharing a device or an address, and
+PageRank and clustering.
+
 ## The data
 
 **Transfers** (`payment_messages.csv`, target `Escalated`, 15% positive). Each message comes from a typology:
@@ -107,6 +129,22 @@ payee account age, time from login to payment (very fast for a script, very slow
 logins, changed credentials, an active phone call or remote-access software during the session, amount against the
 customer's usual, hour, cross-border.
 
+**Mule accounts** (`mule_accounts.csv`, target `Mule`, 10% positive, and `mule_network.json`). Fifteen rings in
+three shapes:
+
+- *collector rings*: many outside payers → two or three collectors → layering accounts → crypto or cash;
+- *chains*: A → B → C → D → exchange;
+- *device farms*: recent accounts on shared devices and addresses that collect and cash out.
+
+They overlap with genuine behaviour on purpose:
+
+- a third of the rings are patient: they hold the money for days and keep a share of it;
+- small businesses also collect from many payers, households and couples also share addresses and tablets;
+- some people sweep their pay to another account the same day, and students also spend what they receive at once;
+- some recruited mules are students, and some recruited accounts are years old.
+
+An investigation confirms 88% of ring members and 1% of genuine accounts.
+
 ## The models
 
 Both are LightGBM with SHAP explanations and out-of-fold scores (each row scored by a model that never saw it),
@@ -117,6 +155,7 @@ which the two tabs use.
 | Transfer screening (TF-IDF + LightGBM, deployed) | 3,000 | 0.925 | 0.952 |
 | Transfer screening challenger (voyage-4-nano embeddings + LightGBM) | 3,000 | 0.934 | — |
 | Payment fraud | 4,868 (132 stopped by a blocking rule) | 0.945 | 0.952 |
+| Mule accounts (logistic regression: Green Code picks the simpler model within 0.01) | 800 | 0.962 (5-fold CV) | 0.958 |
 
 The transfer model reads both the structured fields and the words: on this data neither alone reaches the
 combined score. The challenger scores slightly higher on the hold-out and the model card says so, but it is not
@@ -137,7 +176,8 @@ promoted on its own: a person decides, after weighing its cost (an embedding cal
 ## Run it yourself
 
 ```bash
-python scripts/generate_financial_crime.py            # regenerate the two CSVs (seeded)
+python scripts/generate_financial_crime.py            # regenerate the transfers and payments (seeded)
+python scripts/generate_financial_crime_mules.py      # regenerate the mule accounts and their network (seeded)
 make k3s-pipeline                                     # ETL + training of every tabular scenario
 make k3s-vectorize                                    # index the AMLR articles for the assistant's document tool
 make k3s-text-embeddings SCENARIOS=financial_crime_desk   # optional: the challenger (host GPU), then retrain

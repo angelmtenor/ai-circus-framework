@@ -1,12 +1,15 @@
 # A fictional European bank's financial-crime desk (synthetic: scripts/generate_financial_crime.py),
-# one scenario with two models (docs/adr/0018-several-models-per-scenario.md):
+# one scenario with three models (docs/adr/0018-several-models-per-scenario.md):
 #   - main model: which outgoing cross-border credit transfers (MT103 / pacs.008-style messages)
 #     the team escalates as suspicious — structured fields plus the free-text remittance
 #     information read word by word (TF-IDF), a sentence-embedding challenger, and an LLM analyst
 #     reading the same message against a red-flag rubric (`rubric_check`);
 #   - `payments`: which customer payments (transfers and cards) are fraud — deterministic rules
 #     first (mule list, sanctions, verification of payee, step-up), then the model, replayed as a
-#     live payment stream (`row_triage`).
+#     live payment stream (`row_triage`);
+#   - `mules`: which accounts are money mules — behaviour features computed offline from 60 days of
+#     transfers (scripts/generate_financial_crime_mules.py), drawn as the account network with its
+#     shared devices and addresses (`network_explorer`).
 # The assistant also searches eight articles of the EU AML Regulation (`documents.tool`).
 # Customers and beneficiaries are pseudonymous ids: there is no name in the data, the wording
 # never names a religion, nationality or real organisation, and the customer's age is kept out
@@ -19,8 +22,9 @@ title: "Payment Fraud & Financial Crime"
 description: >
   A bank's financial-crime desk: which cross-border transfers to escalate as possible money
   laundering, terrorist financing or sanctions evasion, read field by field and word by word by a
-  model, a transformer challenger and an LLM analyst; and which customer payments are fraud, with
-  rules before the model and every alert explained. Synthetic data.
+  model, a transformer challenger and an LLM analyst; which customer payments are fraud, with rules
+  before the model; and which accounts are money mules, on the network of who pays whom. Every alert
+  explained. Synthetic data.
 role_required: "scenario:financial_crime_desk"
 industry: banking_finance
 icon: "🕵️"
@@ -70,7 +74,13 @@ chat:
     from session and payment signals, after deterministic rules: payee on the mule list or a
     sanctions match blocks the payment, a verification-of-payee mismatch or a large payment from
     a new device asks for confirmation, remote-access software sends it to an analyst. The
-    customer's age is kept out of the model and used only to audit outcomes. A document tool
+    customer's age is kept out of the model and used only to audit outcomes. The `mules` model
+    scores 800 accounts for being a confirmed money mule, from behaviour over 60 days of
+    transfers: money in and out, pass-through ratio, median dwell time between money arriving and
+    leaving, distinct senders and recipients, share cashed out at ATMs or sent to crypto exchanges,
+    night activity, other accounts sharing a device or a home address, and network centrality.
+    Mule rings come as collector rings, chains and device farms; genuine small businesses,
+    households and students overlap with each. Many mules are themselves recruited victims. A document tool
     searches eight articles of the EU AML Regulation (2024/1624). The data is synthetic, so its
     numbers illustrate the method, not a real bank. Never claim that a crime happened: talk about
     indicators, red flags and what warrants review. Never judge a person, a nationality, a religion
@@ -83,6 +93,7 @@ chat:
     - "Draft a case note for the highest-scoring message: facts, red flags, next checks — fictional, for an analyst."
     - "What does the payment fraud model look at, and how do the rules come first?"
     - "Does a phone call during the session matter for fraud?"
+    - "What makes an account look like a money mule, and how do genuine small businesses differ?"
     - "What does the AML Regulation say about reporting a suspicion, and about telling the customer?"
 
 dataset:
@@ -393,6 +404,124 @@ extra_models:
       review_lane_label: "Analyst review"
       review_at: 0.3
       tick_seconds: 2
+
+  - id: mules
+    title: "Mule accounts"
+    dataset:
+      bucket: "scenario-financial-crime-mules"
+      raw_object: "raw/mule_accounts.csv"
+      seed_file: "sample_data/mule_accounts.csv"
+      index_col: "AccountId"
+      target: "Mule"
+      display_columns: ["Name", "Typology"]
+      # The network the Mule network tab draws: every account, the outside parties, and the devices and
+      # addresses two or more accounts share. The model reads only the numeric features computed from it.
+      graph:
+        seed_file: "sample_data/mule_network.json"
+        raw_object: "raw/mule_network.json"
+      feature_columns:
+        - Segment
+        - AccountAgeDays
+        - InflowEUR
+        - OutflowEUR
+        - DistinctSenders
+        - DistinctRecipients
+        - DistinctCounterparties
+        - PassThroughRatio
+        - MedianDwellHours
+        - CryptoShare
+        - CashShare
+        - NightShare
+        - ActiveDays
+        - SharedDeviceAccounts
+        - SharedAddressAccounts
+        - PageRankPctl
+        - Clustering
+      feature_schema:
+        Segment:
+          {type: categorical, label: "Segment", options: ["Retail", "Student", "Freelancer", "Small business"], default: "Retail",
+           info: "The account's customer segment."}
+        AccountAgeDays: {type: numeric, label: "Account age (days)", min: 1, max: 9000, default: 1200, step: 1, info: "Days since the account was opened."}
+        InflowEUR: {type: numeric, label: "Money in (EUR, 60 days)", min: 0, max: 200000, default: 3000, step: 10, info: "Everything the account received in the 60 days."}
+        OutflowEUR: {type: numeric, label: "Money out (EUR, 60 days)", min: 0, max: 200000, default: 2500, step: 10, info: "Everything the account paid out in the 60 days."}
+        DistinctSenders: {type: numeric, label: "Distinct senders", min: 0, max: 200, default: 2, step: 1, info: "How many different parties paid into the account."}
+        DistinctRecipients: {type: numeric, label: "Distinct recipients", min: 0, max: 200, default: 8, step: 1, info: "How many different parties the account paid."}
+        DistinctCounterparties:
+          {type: numeric, label: "Distinct counterparties", min: 0, max: 300, default: 10, step: 1,
+           info: "Everyone the account paid or was paid by."}
+        PassThroughRatio:
+          {type: numeric, label: "Pass-through ratio", min: 0, max: 3, default: 0.8, step: 0.01,
+           info: "Money out divided by money in: close to 1 means what comes in goes straight back out."}
+        MedianDwellHours:
+          {type: numeric, label: "Median dwell (hours)", min: 0, max: 720, default: 150, step: 1,
+           info: "Typical time between money arriving and the next payment out: mules pass money on within hours."}
+        CryptoShare: {type: numeric, label: "Share out to crypto", min: 0, max: 1, default: 0, step: 0.01, info: "Share of the money out that went to a crypto exchange."}
+        CashShare: {type: numeric, label: "Share out as cash", min: 0, max: 1, default: 0.05, step: 0.01, info: "Share of the money out withdrawn at ATMs."}
+        NightShare: {type: numeric, label: "Night activity", min: 0, max: 1, default: 0.03, step: 0.01, info: "Share of the account's transfers between midnight and 6 am."}
+        ActiveDays: {type: numeric, label: "Active days", min: 0, max: 60, default: 12, step: 1, info: "Days with at least one transfer."}
+        SharedDeviceAccounts:
+          {type: numeric, label: "Accounts sharing a device", min: 0, max: 20, default: 0, step: 1,
+           info: "Other accounts signed in from the same phone or computer (couples share tablets too)."}
+        SharedAddressAccounts:
+          {type: numeric, label: "Accounts at the same address", min: 0, max: 20, default: 1, step: 1,
+           info: "Other accounts registered at the same home address (households share one too)."}
+        PageRankPctl: {type: numeric, label: "Network centrality (percentile)", min: 0, max: 100, default: 50, step: 1, info: "PageRank of the account in the money-flow network, as a percentile."}
+        Clustering:
+          {type: numeric, label: "Clustering", min: 0, max: 1, default: 0.1, step: 0.01,
+           info: "How many of the account's counterparties also pay each other."}
+      default_charts:
+        - {type: bar, x: Segment, y: Mule, agg: mean, color_by: Segment}
+        - {type: scatter, x: MedianDwellHours, y: PassThroughRatio, color_by: Mule}
+        - {type: bar, x: SharedDeviceAccounts, y: Mule, agg: mean}
+    model:
+      task_type: classification
+      candidates: ["logistic_regression", "lightgbm_small_data"]
+      accuracy_gain_threshold_for_complexity: 0.01
+      selection_metric: roc_auc
+      cv_folds: 5
+      explainability: shap
+      out_of_fold_scores: true
+      target_label: "Confirmed money mule"
+      target_description: "Whether the account was confirmed, after investigation, as receiving and passing on proceeds of crime."
+      target_value_labels: {"0": "Not a mule", "1": "Money mule"}
+    ui_extras:
+      kind: network_explorer
+      tab_label: "Mule network"
+      title: "Follow the money between accounts · 60 days"
+      subtitle: >
+        Every glowing node is an account, coloured by how closely its behaviour resembles a money mule's,
+        scored by a model that never saw its own label. Lines are transfers between accounts; hexagons are
+        devices and home addresses that two or more accounts share. Pick an account, trace where its money
+        goes, replay the 60 days, then reveal the rings the investigation found.
+      entity_noun: account
+      name_column: Name
+      size_feature: InflowEUR
+      facts: [PassThroughRatio, MedianDwellHours, DistinctSenders, CryptoShare, CashShare, SharedDeviceAccounts, PageRankPctl, AccountAgeDays]
+      outcome_label: "Confirmed money mule"
+      record_label: "investigation"
+      flag_from_tier: "Review"
+      flow_edge_kind: transfer
+      link_noun: "EUR"
+      group_label: "Community"
+      entity_label: "shared identifier"
+      context_label: "outside party"
+      tiers:
+        - {label: "Background", min_probability: 0.0, description: "Behaves like an ordinary account."}
+        - {label: "Elevated", min_probability: 0.15, description: "Some mule-like behaviour: look at it in context."}
+        - {label: "Review", min_probability: 0.4, description: "Strong resemblance: an analyst should review the account and its links."}
+        - {label: "Priority", min_probability: 0.7, description: "Very close to a confirmed mule: review first, consider restricting outgoing payments."}
+      pillars:
+        - {label: "Money in", features: [InflowEUR, DistinctSenders]}
+        - {label: "Pass-through", features: [OutflowEUR, PassThroughRatio, MedianDwellHours, DistinctRecipients, ActiveDays]}
+        - {label: "Cash-out", features: [CryptoShare, CashShare, NightShare]}
+        - {label: "Shared identity", features: [SharedDeviceAccounts, SharedAddressAccounts]}
+        - {label: "Network position", features: [DistinctCounterparties, PageRankPctl, Clustering]}
+        - {label: "Profile", features: [Segment, AccountAgeDays]}
+      tie_features: {contacts: DistinctCounterparties, sent: OutflowEUR, received: InflowEUR, clustering: Clustering, centrality: PageRankPctl}
+      disclaimer: >
+        Synthetic accounts of a fictional bank. A score measures resemblance to the behaviour of confirmed
+        mules; it is not evidence of wrongdoing, and many mules are themselves victims recruited with job or
+        investment offers. A high score is a case for an analyst to review, never a conclusion.
 
 services:
   etl: etl-tabular

@@ -1122,6 +1122,13 @@ def test_message_screening_reads_real_columns_and_honest_scores() -> None:
         _with(desk, ui_extras={**extras, "typology_column": "Currency"})
 
 
+def test_an_extra_model_can_ship_a_network_and_name_its_reveal() -> None:
+    mules = _repo_scenario("financial_crime_desk").model_views()["financial_crime_desk~mules"]
+    assert mules.dataset is not None and mules.dataset.graph is not None
+    assert mules.ui_extras.kind == "network_explorer"  # type: ignore[union-attr]
+    assert mules.ui_extras.record_label == "investigation"  # type: ignore[union-attr]
+
+
 def test_extra_model_views_drop_the_scenarios_documents_and_vector_store() -> None:
     desk = _repo_scenario("financial_crime_desk")
     assert desk.documents is not None and desk.vector_store is not None
