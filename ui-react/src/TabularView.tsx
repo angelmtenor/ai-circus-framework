@@ -34,6 +34,7 @@ const RecommenderPredictView = lazy(() => import("./RecommenderViews").then((m) 
 const RecommenderInsightsView = lazy(() => import("./RecommenderViews").then((m) => ({ default: m.RecommenderInsightsView })));
 const FleetHealthView = lazy(() => import("./FleetHealthView").then((m) => ({ default: m.FleetHealthView })));
 const RowTriageView = lazy(() => import("./RowTriageView").then((m) => ({ default: m.RowTriageView })));
+const MessageScreeningView = lazy(() => import("./MessageScreeningView").then((m) => ({ default: m.MessageScreeningView })));
 
 // `model:<i>` / `extra:<i>`: the i-th model's tab and its ui_extras tab (see modelViews).
 type Tab = "scenario" | "tutorial" | "data" | `model:${number}` | `extra:${number}`;
@@ -56,6 +57,7 @@ const EXTRA_TABS: Partial<Record<UiExtras["kind"], { icon: IconName; label: stri
   forecast_board: { icon: "pulse", label: "Forecast board" },
   fleet_health: { icon: "gauge", label: "Fleet health" },
   row_triage: { icon: "scan", label: "Triage" },
+  message_screening: { icon: "mail", label: "Message screening" },
 };
 
 function extraTabLabel(extras: UiExtras): string | undefined {
@@ -176,6 +178,8 @@ function ExtraTab({ scenario, accessToken }: { scenario: ScenarioSummary; access
       return <FleetHealthView {...props} />;
     case "row_triage":
       return <RowTriageView {...props} />;
+    case "message_screening":
+      return <MessageScreeningView {...props} />;
     default:
       return null;
   }

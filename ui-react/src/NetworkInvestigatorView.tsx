@@ -24,6 +24,9 @@ import { useTheme } from "./useTheme";
 import "./networkExplorer.css";
 import "./networkInvestigator.css";
 
+/** "a person", "an account": the noun with its indefinite article. */
+const an = (noun: string) => `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
+
 /**
  * "Investigate a person" — the second workspace of the Network tab (NetworkTab.tsx).
  * Pick anyone (or invent a new individual) and see their ego network: who they
@@ -558,7 +561,7 @@ export function NetworkInvestigatorView({
         <div className="nx-search ni-contact-search">
           <input
             type="search"
-            placeholder={`Add a contact — search a ${noun}…`}
+            placeholder={`Add a contact — search ${an(noun)}…`}
             value={contactQuery}
             onChange={(e) => setContactQuery(e.target.value)}
             aria-label="Add a contact"
@@ -689,7 +692,7 @@ export function NetworkInvestigatorView({
             aria-expanded={searchOpen && results.length > 0}
             aria-controls="ni-search-list"
             aria-autocomplete="list"
-            placeholder={`Search a ${noun} to investigate…`}
+            placeholder={`Search ${an(noun)} to investigate…`}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);

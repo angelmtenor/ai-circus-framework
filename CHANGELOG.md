@@ -4,6 +4,29 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.62.0 — 2026-11-19
+
+### Added
+- **Payment Fraud & Financial Crime** ([docs](docs/scenarios/financial_crime_desk.md)), `financial_crime_desk`: a
+  fictional bank's financial-crime desk with three models in one scenario. Transfer screening reads MT103 /
+  pacs.008-style messages, fields and free-text purpose, with a sentence-embedding challenger and an LLM analyst
+  that reads the message against a red-flag rubric. Payment fraud runs mule-list, sanctions, verification-of-payee
+  and step-up rules before the model. Mule accounts scores 800 accounts from 60 days of transfers. An AML Regulation
+  document tool. Synthetic data from `scripts/generate_financial_crime.py` and `scripts/generate_financial_crime_mules.py`;
+  out-of-fold ROC AUC 0.952, 0.952 and 0.958.
+- **A Message screening tab** (`ui_extras: message_screening`): an inbox of messages by out-of-fold score, the open
+  one drawn field by field with each field tinted by its SHAP push and the free text word by word, the text
+  challenger and the LLM rubric reading side by side, and a typology reveal.
+- `rubric_check.reviewer_role` sets who the LLM reads as (default: the leadership coach), and a network explorer's
+  `record_label` names what its reveal shows.
+
+### Changed
+- A network over 600 nodes gets half the warm-up layout, so it draws sooner and rests within the idle check.
+
+### Fixed
+- dnspython 2.9.2 and opentelemetry-api 1.45.2 in llm-gateway and rag-agent, for two new advisories.
+- An extra model's view no longer keeps the scenario's `vector_store` without its documents.
+
 ## v0.61.0 — 2026-11-19
 
 ### Added

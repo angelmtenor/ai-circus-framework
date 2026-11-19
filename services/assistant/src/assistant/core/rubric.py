@@ -34,10 +34,13 @@ def build_rubric_prompt(rubric: RubricCheckConfig) -> str:
     def behaviours(items: list[Any]) -> str:
         return "\n".join(f"- `{b.key}` — {b.name}: {b.description}" for b in items)
 
-    return (
+    role = rubric.reviewer_role or (
         f"You are an experienced engineering-leadership coach and organisational psychologist. You assess a "
         f"written description of what a {rubric.subject_noun} does against an evidence-based rubric, and explain "
-        "your reading to the person who wrote it.\n\n"
+        "your reading to the person who wrote it."
+    )
+    return (
+        f"{role.strip()}\n\n"
         f"## Rubric — {rubric.positive_label} (positive behaviours)\n{behaviours(rubric.positive)}\n\n"
         f"## Rubric — {rubric.negative_label} (negative behaviours)\n{behaviours(rubric.negative)}\n\n"
         "## Rules\n"

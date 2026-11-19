@@ -14,6 +14,7 @@ const NetworkInvestigatorView = lazy(() => import("./NetworkInvestigatorView").t
  */
 export function NetworkTab({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const [workspace, setWorkspace] = useState<"map" | "investigate">("map");
+  const noun = scenario.ui_extras && "entity_noun" in scenario.ui_extras ? scenario.ui_extras.entity_noun : "person";
   const [focusId, setFocusId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
 
@@ -29,7 +30,7 @@ export function NetworkTab({ scenario, accessToken }: { scenario: ScenarioSummar
         {(
           [
             ["map", "Network map"],
-            ["investigate", "Investigate a person"],
+            ["investigate", `Investigate ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`],
           ] as const
         ).map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={workspace === key} className={workspace === key ? "nx-seg--on" : ""} onClick={() => setWorkspace(key)}>
