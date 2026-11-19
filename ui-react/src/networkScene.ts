@@ -44,6 +44,7 @@ type SimLink = { source: NxNode; target: NxNode; weight: number; flow: boolean }
 type LabelBox = { x: number; y: number; w: number; h: number };
 
 const WARM_TICKS = 320;
+const LARGE_NETWORK_NODES = 600;
 const REVEAL_STEP_MS = 110;
 const INTRO_MS = 1900;
 // Ambient motion (the top tier's breathing glow, particles on a focused node's ties) rests
@@ -264,7 +265,11 @@ export class NetworkScene {
       .force("x", forceX<NxNode>((n) => (n.groupIndex >= 0 ? anchors[n.groupIndex].x : 0)).strength((n) => (n.groupIndex >= 0 ? 0.035 : 0.015)))
       .force("y", forceY<NxNode>((n) => (n.groupIndex >= 0 ? anchors[n.groupIndex].y : 0)).strength((n) => (n.groupIndex >= 0 ? 0.035 : 0.015)))
       .stop();
-    for (let i = 0; i < WARM_TICKS; i++) this.sim.tick();
+    // A large network gets half the warm-up, with a faster decay so it still ends settled (alpha below
+    // alphaMin, or the scene would keep animating): the warm-up blocks the main thread before the first frame.
+    const warmTicks = active.length > LARGE_NETWORK_NODES ? WARM_TICKS / 2 : WARM_TICKS;
+    if (warmTicks < WARM_TICKS) this.sim.alphaDecay(1 - Math.pow(this.sim.alphaMin() / 2, 1 / warmTicks));
+    for (let i = 0; i < warmTicks; i++) this.sim.tick();
     // Centre the settled layout on the origin (the orbit ring is drawn around it).
     let cx = 0;
     let cy = 0;

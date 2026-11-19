@@ -803,6 +803,40 @@ class RowTriageExtra(BaseModel):
     tick_seconds: int = Field(default=2, ge=1, le=60)
 
 
+class MessageField(BaseModel):
+    """One block of a `MessageScreeningExtra` message: a tag (e.g. ":32A:") and the columns it shows."""
+
+    tag: str = Field(min_length=1, max_length=12)  # e.g. ":50K:"
+    label: str = Field(min_length=1, max_length=60)  # e.g. "Ordering customer"
+    columns: list[str] = Field(min_length=1, max_length=6)
+
+
+class MessageScreeningExtra(BaseModel):
+    """Opt-in 5th workspace tab for a binary `tabular_ml` scenario whose rows are *messages* with a
+    free-text field (e.g. a credit transfer's remittance information) and whose positive class means
+    "escalate to an analyst": an inbox of every message sorted by its out-of-fold score; the selected
+    one drawn as a message, each field tinted by its SHAP push and the free text word by word; the
+    deployed model, the text challenger and (when the scenario has a `rubric_check`) an LLM reading
+    of the same message side by side; then the real outcome and its `typology_column`. See ui-react's
+    MessageScreeningView.tsx — DOM only, no frame loop, a capped inbox.
+    """
+
+    kind: Literal["message_screening"] = "message_screening"
+    tab_label: str = "Message screening"
+    title: str
+    subtitle: str | None = None
+    item_noun: str = "message"
+    reviewer_noun: str = "analyst"
+    format_label: str = Field(default="Message", max_length=40)  # e.g. "MT103 / pacs.008"
+    text_feature: str  # a `type: text` feature, drawn word by word
+    text_tag: str = Field(default="Text", max_length=12)  # e.g. ":70:"
+    fields: list[MessageField] = Field(min_length=1, max_length=12)
+    typology_column: str | None = None  # a display column revealed with the real outcome
+    review_at: float = Field(default=0.5, gt=0, lt=1)
+    release_label: str = Field(default="Release", max_length=30)
+    escalate_label: str = Field(default="Escalate", max_length=30)
+
+
 class ReadingRoomExtra(BaseModel):
     """Opt-in 5th workspace tab for an image `deep_learning` scenario: a simulated
     reading-room worklist of held-out studies, prioritized by the model's probability
@@ -1037,6 +1071,8 @@ class NetworkExplorerExtra(BaseModel):
     # Numeric features listed in the dossier with their percentile among all rows.
     facts: list[str] = []
     outcome_label: str = "Adverse outcome"
+    # What the reveal shows, e.g. "investigation" — None = "public record".
+    record_label: str | None = Field(default=None, max_length=40)
     # The tier (label) from which a row counts as "flagged" in the backtest reveal —
     # None = the top tier only.
     flag_from_tier: str | None = None
@@ -1289,6 +1325,9 @@ class RubricCheckConfig(BaseModel):
     """
 
     title: str  # e.g. "Leadership check"
+    # Who reads the description, as the prompt's opening sentence — None keeps the leadership coach.
+    # e.g. "You are an experienced financial-crime analyst. You assess a payment message against …"
+    reviewer_role: str | None = Field(default=None, max_length=600)
     intro: str  # markdown shown above the input
     input_label: str
     placeholder: str | None = None
@@ -1443,6 +1482,7 @@ UiExtras = Annotated[
     | RiskWatchlistExtra
     | FleetHealthExtra
     | RowTriageExtra
+    | MessageScreeningExtra
     | CaseTrackerExtra
     | SourceLibraryExtra
     | NetworkExplorerExtra
@@ -1462,6 +1502,7 @@ UiExtras = Annotated[
 _TABULAR_UI_EXTRAS = (
     FleetHealthExtra,
     RowTriageExtra,
+    MessageScreeningExtra,
     RegionMapExtra,
     LivePlantExtra,
     ProcessOptimizerExtra,
@@ -2450,6 +2491,7 @@ class ScenarioDefinition(BaseModel):
                     "tutorial": None,
                     "rubric_check": None,
                     "documents": None,
+                    "vector_store": None,
                 }
             )
         return views
@@ -2693,6 +2735,28 @@ class ScenarioDefinition(BaseModel):
             return self
         if self.model.task_type != "classification" or not self.model.out_of_fold_scores:
             raise ValueError("ui_extras.row_triage requires a classification model with model.out_of_fold_scores.")
+        return self
+
+    @model_validator(mode="after")
+    def _message_screening_reads_real_columns(self) -> ScenarioDefinition:
+        """`message_screening` reveals real outcomes next to scores and draws named columns: fail fast
+        on a dishonest score, a missing column or a text field that is not free text."""
+        extras = self.ui_extras
+        if not isinstance(extras, MessageScreeningExtra) or self.dataset is None or self.model is None:
+            return self
+        where = "ui_extras.message_screening"
+        if self.model.task_type != "classification" or not self.model.out_of_fold_scores:
+            raise ValueError(f"{where} requires a classification model with model.out_of_fold_scores.")
+        if extras.text_feature not in self.dataset.text_columns():
+            raise ValueError(f"{where} text_feature {extras.text_feature!r} must be a `type: text` feature.")
+        known = {self.dataset.index_col, *self.dataset.display_columns, *self.dataset.feature_columns}
+        unknown = sorted({c for f in extras.fields for c in f.columns} - known)
+        if unknown:
+            raise ValueError(
+                f"{where} fields name columns {unknown} that are not the index, a display column or a feature."
+            )
+        if extras.typology_column is not None and extras.typology_column not in self.dataset.display_columns:
+            raise ValueError(f"{where} typology_column must be a display column (never a model input).")
         return self
 
     @model_validator(mode="after")

@@ -42,6 +42,9 @@ import { NETWORK_PALETTE, RISK_RAMP, surfaceMode, TIER_GLYPHS, tierColor } from 
 import { useTheme } from "./useTheme";
 import "./networkExplorer.css";
 
+/** "a person", "an account": the noun with its indefinite article. */
+const an = (noun: string) => `${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun}`;
+
 /**
  * Generic 5th workspace tab for a binary-classification tabular_ml scenario that ships
  * a network (`dataset.graph`; `ui_extras: {kind: network_explorer}`, see
@@ -568,7 +571,7 @@ export function NetworkExplorerView({ scenario, accessToken, onInvestigate }: { 
             aria-expanded={searchOpen && results.length > 0}
             aria-controls="nx-search-list"
             aria-autocomplete="list"
-            placeholder={pathFrom ? `Pick the destination — search a ${noun} or ${extras.entity_label}…` : `Search a ${noun}, id or ${extras.entity_label}…  ( / )`}
+            placeholder={pathFrom ? `Pick the destination — search ${an(noun)} or ${extras.entity_label}…` : `Search ${an(noun)}, id or ${extras.entity_label}…  ( / )`}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);

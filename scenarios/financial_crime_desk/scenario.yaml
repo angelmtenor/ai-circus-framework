@@ -1,0 +1,530 @@
+# A fictional European bank's financial-crime desk (synthetic: scripts/generate_financial_crime.py),
+# one scenario with three models (docs/adr/0018-several-models-per-scenario.md):
+#   - main model: which outgoing cross-border credit transfers (MT103 / pacs.008-style messages)
+#     the team escalates as suspicious — structured fields plus the free-text remittance
+#     information read word by word (TF-IDF), a sentence-embedding challenger, and an LLM analyst
+#     reading the same message against a red-flag rubric (`rubric_check`);
+#   - `payments`: which customer payments (transfers and cards) are fraud — deterministic rules
+#     first (mule list, sanctions, verification of payee, step-up), then the model, replayed as a
+#     live payment stream (`row_triage`);
+#   - `mules`: which accounts are money mules — behaviour features computed offline from 60 days of
+#     transfers (scripts/generate_financial_crime_mules.py), drawn as the account network with its
+#     shared devices and addresses (`network_explorer`).
+# The assistant also searches eight articles of the EU AML Regulation (`documents.tool`).
+# Customers and beneficiaries are pseudonymous ids: there is no name in the data, the wording
+# never names a religion, nationality or real organisation, and the customer's age is kept out
+# of the fraud model (audit only).
+# The challenger needs the host-GPU embedding step: `make k3s-text-embeddings SCENARIOS=financial_crime_desk`.
+
+slug: financial_crime_desk
+kind: tabular_ml
+title: "Payment Fraud & Financial Crime"
+description: >
+  A bank's financial-crime desk: which cross-border transfers to escalate as possible money
+  laundering, terrorist financing or sanctions evasion, read field by field and word by word by a
+  model, a transformer challenger and an LLM analyst; which customer payments are fraud, with rules
+  before the model; and which accounts are money mules, on the network of who pays whom. Every alert
+  explained. Synthetic data.
+role_required: "scenario:financial_crime_desk"
+industry: banking_finance
+icon: "🕵️"
+
+credits:
+  source: "Synthetic — scripts/generate_financial_crime.py · AML Regulation (EU) 2024/1624, EUR-Lex"
+  url: "https://github.com/angelmtenor/ai-circus-framework/blob/develop/scripts/generate_financial_crime.py"
+  note: >
+    Invented messages and payments of a fictional bank: no real customer, bank, payment or
+    investigation behind the numbers. Eight AMLR articles are reproduced unmodified (© European
+    Union, reuse authorised, Decision 2011/833/EU). Not legal advice.
+
+# Illustrative governance declaration (owner to confirm): feeds the AI-system inventory only.
+governance:
+  intended_purpose: >
+    Prioritise outgoing transfers and customer payments for review by a financial-crime analyst,
+    with an explanation of every score. The analyst decides; nothing is blocked or reported by the model.
+  owner: Financial Crime Compliance (fictional bank)
+  ai_act:
+    role: deployer
+    risk_category: unassessed
+  human_oversight:
+    mode: review
+    description: The models only rank and explain; an analyst escalates, reports or releases every alert.
+  data:
+    personal_data: false
+    special_categories: false
+    datasets: [financial_crime_desk]
+  limitations:
+    - Trained on synthetic messages and payments; not validated on a real bank's data.
+    - The typologies are designed, so real-world precision will be lower.
+  known_risks:
+    - A destination or customer type could act as a proxy; the data mixes ordinary and suspicious traffic to every jurisdiction.
+
+chat:
+  context: >
+    A fictional European bank's financial-crime desk with two synthetic datasets. The main model
+    scores 3,000 outgoing cross-border credit transfers (MT103 / pacs.008-style messages) for
+    escalation as suspicious, from the amount, currency, ordering customer type and account age,
+    beneficiary type and jurisdiction, intermediary banks, new beneficiary, prior payments, charges
+    code and the free-text remittance information (field 70). Each message has a typology:
+    payroll, supplier invoice, legitimate trade, rent, tuition, family support, property purchase,
+    humanitarian donation, crypto purchase (ordinary), or trade-based laundering, sanctions evasion,
+    terrorist-financing indicators, structuring, scam proceeds (suspicious). The typology is shown
+    to explain outcomes and is never a model input. The `payments` model scores 5,000 customer
+    payments for fraud (account takeover, impersonation scam, investment scam, card-not-present)
+    from session and payment signals, after deterministic rules: payee on the mule list or a
+    sanctions match blocks the payment, a verification-of-payee mismatch or a large payment from
+    a new device asks for confirmation, remote-access software sends it to an analyst. The
+    customer's age is kept out of the model and used only to audit outcomes. The `mules` model
+    scores 800 accounts for being a confirmed money mule, from behaviour over 60 days of
+    transfers: money in and out, pass-through ratio, median dwell time between money arriving and
+    leaving, distinct senders and recipients, share cashed out at ATMs or sent to crypto exchanges,
+    night activity, other accounts sharing a device or a home address, and network centrality.
+    Mule rings come as collector rings, chains and device farms; genuine small businesses,
+    households and students overlap with each. Many mules are themselves recruited victims. A document tool
+    searches eight articles of the EU AML Regulation (2024/1624). The data is synthetic, so its
+    numbers illustrate the method, not a real bank. Never claim that a crime happened: talk about
+    indicators, red flags and what warrants review. Never judge a person, a nationality, a religion
+    or a destination by itself.
+  sample_questions:
+    - "Which fields and words push a transfer towards escalation?"
+    - "Show the escalated messages to higher-risk jurisdictions and what they have in common."
+    - "How accurate is the escalation model, and how many suspicious transfers does it miss at 50%?"
+    - "Which typologies does the model catch best, and which does it miss?"
+    - "Draft a case note for the highest-scoring message: facts, red flags, next checks — fictional, for an analyst."
+    - "What does the payment fraud model look at, and how do the rules come first?"
+    - "Does a phone call during the session matter for fraud?"
+    - "What makes an account look like a money mule, and how do genuine small businesses differ?"
+    - "What does the AML Regulation say about reporting a suspicion, and about telling the customer?"
+
+dataset:
+  bucket: "scenario-financial-crime-messages"
+  raw_object: "raw/payment_messages.csv"
+  seed_file: "sample_data/payment_messages.csv"
+  index_col: "MessageRef"
+  target: "Escalated"
+  display_columns: ["MessageType", "ValueDate", "OrderingCustomer", "Beneficiary", "Typology"]
+  feature_columns:
+    - Currency
+    - AmountEUR
+    - RoundAmount
+    - OrderingType
+    - AccountAgeMonths
+    - PaymentsLast7Days
+    - BeneficiaryType
+    - BeneficiaryJurisdiction
+    - Intermediaries
+    - NewBeneficiary
+    - PriorPaymentsToBeneficiary
+    - ChargesCode
+    - RemittanceInfo
+  feature_schema:
+    Currency:
+      {type: categorical, label: "Currency", options: ["EUR", "USD", "GBP", "CHF", "CNY", "Other"], default: "EUR",
+       info: "Currency of the transfer (field 32A)."}
+    AmountEUR:
+      {type: numeric, label: "Amount (EUR equivalent)", min: 20, max: 500000, default: 2500, step: 10,
+       info: "The transfer's amount converted to euro."}
+    RoundAmount:
+      {type: numeric, label: "Round amount", min: 0, max: 1, default: 0, step: 1,
+       info: "1 if the amount is a whole multiple of 1,000."}
+    OrderingType:
+      {type: categorical, label: "Ordering customer", options: ["Individual", "Company"], default: "Individual",
+       info: "Whether the bank's customer sending the money is a person or a company (field 50K)."}
+    AccountAgeMonths:
+      {type: numeric, label: "Account age (months)", min: 1, max: 360, default: 48, step: 1,
+       info: "How long the ordering customer has held the account."}
+    PaymentsLast7Days:
+      {type: numeric, label: "Customer's transfers (7 days)", min: 0, max: 30, default: 1, step: 1,
+       info: "Outgoing cross-border transfers by the same customer in the last seven days."}
+    BeneficiaryType:
+      {type: categorical, label: "Beneficiary type", options: ["Individual", "Company", "Charity", "Crypto exchange"],
+       default: "Company", info: "Who receives the money (field 59)."}
+    BeneficiaryJurisdiction:
+      {type: categorical, label: "Beneficiary jurisdiction",
+       options: ["Eurozone", "Other EU", "United Kingdom", "Switzerland", "United States", "Asian trade hub",
+                 "Offshore centre", "High-risk third country", "Conflict-adjacent region"],
+       default: "Eurozone",
+       info: "Where the beneficiary's bank is, grouped by risk profile. A reason to look closer, never a verdict by itself."}
+    Intermediaries:
+      {type: numeric, label: "Intermediary banks", min: 0, max: 3, default: 0, step: 1,
+       info: "Correspondent banks in the chain (field 56A): more hops make the money harder to follow."}
+    NewBeneficiary:
+      {type: numeric, label: "New beneficiary", min: 0, max: 1, default: 0, step: 1,
+       info: "1 if the customer never paid this beneficiary before."}
+    PriorPaymentsToBeneficiary:
+      {type: numeric, label: "Prior payments to beneficiary", min: 0, max: 60, default: 6, step: 1,
+       info: "Earlier transfers from the same customer to the same beneficiary."}
+    ChargesCode:
+      {type: categorical, label: "Charges", options: ["SHA", "OUR", "BEN"], default: "SHA",
+       info: "Who pays the fees (field 71A): SHA shared, OUR all by the sender, BEN all by the beneficiary."}
+    RemittanceInfo:
+      {type: text, label: "Remittance information", max_length: 140,
+       default: "INV 2026-4471 OFFICE CHAIRS PO 5521",
+       placeholder: "e.g. INV 2026-118 LED PANELS 400 PCS PO 5521",
+       info: "The free-text purpose of the payment (field 70, at most 4 lines of 35 characters)."}
+  default_charts:
+    - {type: bar, x: BeneficiaryJurisdiction, y: Escalated, agg: mean, color_by: BeneficiaryJurisdiction}
+    - {type: bar, x: BeneficiaryType, y: Escalated, agg: mean, color_by: BeneficiaryType}
+    - {type: bar, x: Intermediaries, y: Escalated, agg: mean}
+    - {type: histogram, x: AccountAgeMonths, color_by: Escalated}
+
+documents:
+  bucket: "scenario-financial-crime-messages"
+  raw_prefix: "regulation/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 900
+    chunk_overlap: 120
+  embedding:
+    model: "voyageai/voyage-4-nano"
+  tool:
+    name: search_aml_regulation
+    label: "AML Regulation"
+    description: >
+      Searches eight articles of the EU Anti-Money Laundering Regulation (EU) 2024/1624:
+      customer due diligence (Art. 19-20), ongoing monitoring (Art. 26), enhanced due diligence
+      (Art. 34), reporting of suspicions (Art. 69), refraining from carrying out transactions
+      (Art. 71), prohibition of disclosure / tipping-off (Art. 73) and record retention (Art. 77).
+      Use it for what the bank must do with a suspicious transfer; write a short, specific query
+      (e.g. "report suspicion to the FIU", "tell the customer").
+    max_calls_per_run: 3
+    sample_questions:
+      - "What must the bank do when it suspects a transfer is linked to terrorist financing?"
+      - "Can the analyst tell the customer that their payment was reported?"
+      - "Can the bank hold a suspicious transfer before executing it?"
+      - "When does enhanced due diligence apply?"
+      - "How long must the records of an investigation be kept?"
+
+vector_store:
+  backend: qdrant
+  collection_prefix: "financial_crime_desk_regulation"
+  top_k: 4
+
+model:
+  task_type: classification
+  candidates: ["lightgbm"]
+  accuracy_gain_threshold_for_complexity: 0.02
+  selection_metric: roc_auc
+  explainability: shap
+  out_of_fold_scores: true
+  target_label: "Escalated as suspicious"
+  target_description: "Whether the financial-crime team investigated the transfer and reported it as suspicious."
+  target_value_labels: {"0": "Released", "1": "Escalated"}
+  text_challenger:
+    embedding_model: local-embed
+    hf_model_id: "voyageai/voyage-4-nano"
+    label: "voyage-4-nano sentence embeddings"
+    estimator: lightgbm_small_data
+
+main_model_title: "Transfer screening"
+ui_extras:
+  kind: message_screening
+  tab_label: "Message screening"
+  title: "Which transfers should an analyst look at?"
+  subtitle: >
+    Every outgoing cross-border transfer, scored by a model that never saw it. Open one to read it
+    as the message the bank sends: each field tinted by how much it pushed the score, the free-text
+    purpose word by word, the transformer challenger and an LLM analyst reading the same message.
+    Then reveal what the investigation found. Customers are shown by pseudonymous id only.
+  item_noun: transfer
+  reviewer_noun: analyst
+  format_label: "MT103 / pacs.008"
+  text_feature: RemittanceInfo
+  text_tag: ":70:"
+  typology_column: Typology
+  review_at: 0.5
+  release_label: "Release"
+  escalate_label: "Escalate"
+  fields:
+    - {tag: ":23B:", label: "Message", columns: [MessageType]}
+    - {tag: ":32A:", label: "Value date · currency · amount", columns: [ValueDate, Currency, AmountEUR, RoundAmount]}
+    - {tag: ":50K:", label: "Ordering customer", columns: [OrderingCustomer, OrderingType, AccountAgeMonths, PaymentsLast7Days]}
+    - {tag: ":56A:", label: "Intermediary banks", columns: [Intermediaries]}
+    - {tag: ":59:", label: "Beneficiary", columns: [Beneficiary, BeneficiaryType, BeneficiaryJurisdiction, NewBeneficiary, PriorPaymentsToBeneficiary]}
+    - {tag: ":71A:", label: "Charges", columns: [ChargesCode]}
+
+rubric_check:
+  title: "LLM analyst"
+  reviewer_role: >
+    You are an experienced financial-crime analyst at a European bank. You read one outgoing
+    cross-border credit transfer (its structured fields and its free-text remittance information)
+    against a rubric of money-laundering, terrorist-financing, sanctions-evasion and fraud red flags
+    and of legitimate indicators, and explain your reading to the analyst who decides whether to
+    escalate it.
+  intro: >
+    The active LLM reads the transfer against a rubric of **red flags** and **legitimate
+    indicators** and quotes the message as evidence. It is a second reader for the analyst,
+    never a decision: it judges the message, not a person.
+  input_label: "The transfer, as text"
+  max_chars: 1500
+  text_feature: RemittanceInfo
+  subject_noun: transfer
+  positive_label: "No red flags"
+  negative_label: "Red flags"
+  negative:
+    - {key: vague_purpose, name: "Vague or generic purpose", description: "The purpose says little or nothing verifiable: 'goods', 'services', 'as agreed', 'settlement', with no invoice, contract or order reference — especially for a large amount."}
+    - {key: third_party, name: "Payment for a third party", description: "The money is paid on behalf of, or for the benefit of, someone who is not the ordering customer or the beneficiary."}
+    - {key: transshipment, name: "Transit, re-export or undisclosed end user", description: "The goods are re-exported, in transit, routed via a third country, or the final consignee is not named."}
+    - {key: sensitive_goods, name: "Sensitive or dual-use goods", description: "Industrial machinery parts, electronic components, controllers or navigation modules — goods that could be diverted to a restricted end use."}
+    - {key: armed_group_support, name: "Support for an armed or extremist group", description: "Wording about funding fighters, a group, a cause, volunteers' travel or crossings — not humanitarian aid to a registered charity."}
+    - {key: scam_hallmarks, name: "Scam hallmarks", description: "Fees to release an inheritance, profits or a parcel; guaranteed returns; deposits to 'verify' an account — signs the customer may be a victim."}
+    - {key: structuring, name: "Possible structuring", description: "An amount just below a reporting threshold, or repeated transfers to the same beneficiary within days."}
+    - {key: profile_mismatch, name: "Profile mismatch", description: "A new account or new beneficiary, a large or round amount, several intermediary banks or an offshore destination that do not fit the stated purpose."}
+  positive:
+    - {key: specific_reference, name: "Specific, verifiable reference", description: "An invoice, purchase order, contract, bill of lading or letter-of-credit number the analyst could check."}
+    - {key: everyday_purpose, name: "Recognisable everyday purpose", description: "Salary, rent, tuition, family support, a property purchase with a notary reference — with an amount that fits it."}
+    - {key: registered_charity, name: "Registered charity", description: "A donation to an appeal with a charity registration or receipt number."}
+    - {key: established_relationship, name: "Established relationship", description: "Earlier payments to the same beneficiary and a long-standing account."}
+  guidance: >
+    Use the verdict `great` when the transfer shows clear legitimate indicators and no clear red
+    flag, `toxic` when it shows at least two clear red flags or one strong one (support for an armed
+    group, sanctions evasion, a scam hallmark), `mixed` or `unclear` otherwise. A higher-risk
+    jurisdiction, a currency or a customer type is a reason to look closer, never a red flag by
+    itself; never judge a nationality, a religion or a person. Never state that a crime happened:
+    write "indicator", "red flag" or "warrants review". As advice, give the next checks an analyst
+    could make (ask for the invoice or contract, check the end user, screen the counterparty, review
+    the customer's history) and say whether it looks worth escalating.
+
+extra_models:
+  - id: payments
+    title: "Payment fraud"
+    dataset:
+      bucket: "scenario-financial-crime-payments"
+      raw_object: "raw/payments.csv"
+      seed_file: "sample_data/payments.csv"
+      index_col: "PaymentId"
+      target: "Fraud"
+      display_columns: ["Typology"]
+      protected_features_excluded: ["CustomerAge"]
+      # Kept only to audit outcome rates per age group — never a model input.
+      audit_columns: ["CustomerAge"]
+      feature_columns:
+        - Channel
+        - AmountEUR
+        - AmountVsUsual
+        - HourOfDay
+        - NewDevice
+        - NewPayee
+        - PayeeAccountAgeDays
+        - SecondsLoginToPayment
+        - FailedLogins24h
+        - CredentialsChanged7d
+        - OnCallDuringSession
+        - RemoteAccessApp
+        - TenureYears
+        - PaymentsLast24h
+        - CrossBorder
+      feature_schema:
+        Channel:
+          {type: categorical, label: "Channel",
+           options: ["Mobile app transfer", "Online banking transfer", "Card online", "Card in store"],
+           default: "Mobile app transfer", info: "How the payment was made."}
+        AmountEUR:
+          {type: numeric, label: "Amount (EUR)", min: 1, max: 50000, default: 120, step: 1, info: "The payment's amount."}
+        AmountVsUsual:
+          {type: numeric, label: "Amount vs usual", min: 0, max: 200, default: 1, step: 0.1,
+           info: "The amount divided by the customer's average payment over 90 days."}
+        HourOfDay: {type: numeric, label: "Hour of day", min: 0, max: 23, default: 13, step: 1, info: "Local hour the payment was made."}
+        NewDevice: {type: numeric, label: "New device", min: 0, max: 1, default: 0, step: 1, info: "1 if the session came from a device the customer never used."}
+        NewPayee: {type: numeric, label: "New payee", min: 0, max: 1, default: 0, step: 1, info: "1 if the customer never paid this account or merchant before."}
+        PayeeAccountAgeDays:
+          {type: numeric, label: "Payee account age (days)", min: 1, max: 7000, default: 900, step: 1,
+           info: "How old the receiving account (or merchant) is: mule accounts are often days old."}
+        SecondsLoginToPayment:
+          {type: numeric, label: "Seconds from login to payment", min: 1, max: 3600, default: 90, step: 1,
+           info: "Very fast suggests a script; very slow can mean a customer being coached on the phone."}
+        FailedLogins24h: {type: numeric, label: "Failed logins (24 h)", min: 0, max: 20, default: 0, step: 1, info: "Failed sign-in attempts in the last day."}
+        CredentialsChanged7d:
+          {type: numeric, label: "Credentials changed (7 days)", min: 0, max: 1, default: 0, step: 1,
+           info: "1 if the password, phone number or e-mail changed in the last week."}
+        OnCallDuringSession:
+          {type: numeric, label: "On a call during the session", min: 0, max: 1, default: 0, step: 1,
+           info: "1 if the phone was on an active call while the transfer was made — a classic sign of a coached scam."}
+        RemoteAccessApp:
+          {type: numeric, label: "Remote-access app active", min: 0, max: 1, default: 0, step: 1,
+           info: "1 if screen-sharing or remote-control software was running during the session."}
+        TenureYears: {type: numeric, label: "Customer tenure (years)", min: 0, max: 40, default: 6, step: 1, info: "Years as a customer of the bank."}
+        PaymentsLast24h: {type: numeric, label: "Payments (24 h)", min: 0, max: 30, default: 1, step: 1, info: "Payments by the same customer in the last day."}
+        CrossBorder: {type: numeric, label: "Cross-border", min: 0, max: 1, default: 0, step: 1, info: "1 if the payee or merchant is outside the customer's country."}
+      rule_columns:
+        PayeeOnMuleList: {type: categorical, label: "Payee on the shared mule list", options: ["Yes", "No"], default: "No"}
+        SanctionsMatch: {type: categorical, label: "Sanctions screening match", options: ["Yes", "No"], default: "No"}
+        VerificationOfPayee:
+          {type: categorical, label: "Verification of payee", options: ["Match", "Close match", "No match", "Not applicable"],
+           default: "Match", info: "Whether the payee's name matches the account (transfers only)."}
+      business_rules:
+        outcome_labels:
+          reject: "Blocked"
+          request_info: "Confirm with the customer"
+          review: "Analyst review"
+        families:
+          - {key: lists, label: "Lists", description: "The payee or the payment matches a list the bank must act on."}
+          - {key: confirmation, label: "Customer confirmation", description: "The payment needs the customer's explicit confirmation before it leaves."}
+          - {key: session, label: "Session signals", description: "Something in the session needs a person to look."}
+        rules:
+          - {key: L1, family: lists, label: "Mule list", field: PayeeOnMuleList, op: equals, value: "Yes", outcome: reject,
+             message: "The payee account is on the shared mule-account list.", legal_basis: "Internal fraud policy (fictional)"}
+          - {key: L2, family: lists, label: "Sanctions", field: SanctionsMatch, op: equals, value: "Yes", outcome: reject,
+             message: "The payee matches a sanctions list: block and refer to compliance.", legal_basis: "EU restrictive measures (Art. 215 TFEU)"}
+          - {key: C1, family: confirmation, label: "Verification of payee", field: VerificationOfPayee, op: equals, value: "No match", outcome: request_info,
+             message: "The payee's name does not match the account: warn the customer and ask them to confirm.",
+             legal_basis: "Reg. (EU) 260/2012, Art. 5c (inserted by Reg. (EU) 2024/886)"}
+          - {key: C2, family: confirmation, label: "Large payment from a new device", field: NewDevice, op: gt, value: 0,
+             when: {field: AmountEUR, op: gt, value: 5000}, outcome: request_info,
+             message: "Over 5,000 EUR from a device never seen before: step up the authentication.", legal_basis: "PSD2, Art. 97 (strong customer authentication)"}
+          - {key: S1, family: session, label: "Remote access", field: RemoteAccessApp, op: gt, value: 0, outcome: review,
+             message: "Remote-access software was running during the session: an analyst calls the customer.", legal_basis: "Internal fraud policy (fictional)"}
+      default_charts:
+        - {type: bar, x: Channel, y: Fraud, agg: mean, color_by: Channel}
+        - {type: bar, x: OnCallDuringSession, y: Fraud, agg: mean}
+        - {type: histogram, x: HourOfDay, color_by: Fraud}
+        - {type: scatter, x: SecondsLoginToPayment, y: AmountVsUsual, color_by: Fraud}
+    model:
+      task_type: classification
+      candidates: ["lightgbm"]
+      accuracy_gain_threshold_for_complexity: 0.02
+      selection_metric: roc_auc
+      explainability: shap
+      out_of_fold_scores: true
+      target_label: "Confirmed fraud"
+      target_description: "Whether the payment was later confirmed as fraud (reported by the customer or found by the bank)."
+      target_value_labels: {"0": "Genuine", "1": "Fraud"}
+    ui_extras:
+      kind: row_triage
+      tab_label: "Payment stream"
+      title: "Live payment stream: hold or let it through?"
+      subtitle: >
+        Payments arrive one by one, after the rules, and go to an analyst or straight through by the
+        threshold you set. Every score comes from a model that never saw that payment. Open a card to
+        see what pushed it.
+      item_noun: payment
+      reviewer_noun: analyst
+      auto_lane_label: "Straight through"
+      review_lane_label: "Analyst review"
+      review_at: 0.3
+      tick_seconds: 2
+
+  - id: mules
+    title: "Mule accounts"
+    dataset:
+      bucket: "scenario-financial-crime-mules"
+      raw_object: "raw/mule_accounts.csv"
+      seed_file: "sample_data/mule_accounts.csv"
+      index_col: "AccountId"
+      target: "Mule"
+      display_columns: ["Name", "Typology"]
+      # The network the Mule network tab draws: every account, the outside parties, and the devices and
+      # addresses two or more accounts share. The model reads only the numeric features computed from it.
+      graph:
+        seed_file: "sample_data/mule_network.json"
+        raw_object: "raw/mule_network.json"
+      feature_columns:
+        - Segment
+        - AccountAgeDays
+        - InflowEUR
+        - OutflowEUR
+        - DistinctSenders
+        - DistinctRecipients
+        - DistinctCounterparties
+        - PassThroughRatio
+        - MedianDwellHours
+        - CryptoShare
+        - CashShare
+        - NightShare
+        - ActiveDays
+        - SharedDeviceAccounts
+        - SharedAddressAccounts
+        - PageRankPctl
+        - Clustering
+      feature_schema:
+        Segment:
+          {type: categorical, label: "Segment", options: ["Retail", "Student", "Freelancer", "Small business"], default: "Retail",
+           info: "The account's customer segment."}
+        AccountAgeDays: {type: numeric, label: "Account age (days)", min: 1, max: 9000, default: 1200, step: 1, info: "Days since the account was opened."}
+        InflowEUR: {type: numeric, label: "Money in (EUR, 60 days)", min: 0, max: 200000, default: 3000, step: 10, info: "Everything the account received in the 60 days."}
+        OutflowEUR: {type: numeric, label: "Money out (EUR, 60 days)", min: 0, max: 200000, default: 2500, step: 10, info: "Everything the account paid out in the 60 days."}
+        DistinctSenders: {type: numeric, label: "Distinct senders", min: 0, max: 200, default: 2, step: 1, info: "How many different parties paid into the account."}
+        DistinctRecipients: {type: numeric, label: "Distinct recipients", min: 0, max: 200, default: 8, step: 1, info: "How many different parties the account paid."}
+        DistinctCounterparties:
+          {type: numeric, label: "Distinct counterparties", min: 0, max: 300, default: 10, step: 1,
+           info: "Everyone the account paid or was paid by."}
+        PassThroughRatio:
+          {type: numeric, label: "Pass-through ratio", min: 0, max: 3, default: 0.8, step: 0.01,
+           info: "Money out divided by money in: close to 1 means what comes in goes straight back out."}
+        MedianDwellHours:
+          {type: numeric, label: "Median dwell (hours)", min: 0, max: 720, default: 150, step: 1,
+           info: "Typical time between money arriving and the next payment out: mules pass money on within hours."}
+        CryptoShare: {type: numeric, label: "Share out to crypto", min: 0, max: 1, default: 0, step: 0.01, info: "Share of the money out that went to a crypto exchange."}
+        CashShare: {type: numeric, label: "Share out as cash", min: 0, max: 1, default: 0.05, step: 0.01, info: "Share of the money out withdrawn at ATMs."}
+        NightShare: {type: numeric, label: "Night activity", min: 0, max: 1, default: 0.03, step: 0.01, info: "Share of the account's transfers between midnight and 6 am."}
+        ActiveDays: {type: numeric, label: "Active days", min: 0, max: 60, default: 12, step: 1, info: "Days with at least one transfer."}
+        SharedDeviceAccounts:
+          {type: numeric, label: "Accounts sharing a device", min: 0, max: 20, default: 0, step: 1,
+           info: "Other accounts signed in from the same phone or computer (couples share tablets too)."}
+        SharedAddressAccounts:
+          {type: numeric, label: "Accounts at the same address", min: 0, max: 20, default: 1, step: 1,
+           info: "Other accounts registered at the same home address (households share one too)."}
+        PageRankPctl: {type: numeric, label: "Network centrality (percentile)", min: 0, max: 100, default: 50, step: 1, info: "PageRank of the account in the money-flow network, as a percentile."}
+        Clustering:
+          {type: numeric, label: "Clustering", min: 0, max: 1, default: 0.1, step: 0.01,
+           info: "How many of the account's counterparties also pay each other."}
+      default_charts:
+        - {type: bar, x: Segment, y: Mule, agg: mean, color_by: Segment}
+        - {type: scatter, x: MedianDwellHours, y: PassThroughRatio, color_by: Mule}
+        - {type: bar, x: SharedDeviceAccounts, y: Mule, agg: mean}
+    model:
+      task_type: classification
+      candidates: ["logistic_regression", "lightgbm_small_data"]
+      accuracy_gain_threshold_for_complexity: 0.01
+      selection_metric: roc_auc
+      cv_folds: 5
+      explainability: shap
+      out_of_fold_scores: true
+      target_label: "Confirmed money mule"
+      target_description: "Whether the account was confirmed, after investigation, as receiving and passing on proceeds of crime."
+      target_value_labels: {"0": "Not a mule", "1": "Money mule"}
+    ui_extras:
+      kind: network_explorer
+      tab_label: "Mule network"
+      title: "Follow the money between accounts · 60 days"
+      subtitle: >
+        Every glowing node is an account, coloured by how closely its behaviour resembles a money mule's,
+        scored by a model that never saw its own label. Lines are transfers between accounts; hexagons are
+        devices and home addresses that two or more accounts share. Pick an account, trace where its money
+        goes, replay the 60 days, then reveal the rings the investigation found.
+      entity_noun: account
+      name_column: Name
+      size_feature: InflowEUR
+      facts: [PassThroughRatio, MedianDwellHours, DistinctSenders, CryptoShare, CashShare, SharedDeviceAccounts, PageRankPctl, AccountAgeDays]
+      outcome_label: "Confirmed money mule"
+      record_label: "investigation"
+      flag_from_tier: "Review"
+      flow_edge_kind: transfer
+      link_noun: "EUR"
+      group_label: "Community"
+      entity_label: "shared identifier"
+      context_label: "outside party"
+      tiers:
+        - {label: "Background", min_probability: 0.0, description: "Behaves like an ordinary account."}
+        - {label: "Elevated", min_probability: 0.15, description: "Some mule-like behaviour: look at it in context."}
+        - {label: "Review", min_probability: 0.4, description: "Strong resemblance: an analyst should review the account and its links."}
+        - {label: "Priority", min_probability: 0.7, description: "Very close to a confirmed mule: review first, consider restricting outgoing payments."}
+      pillars:
+        - {label: "Money in", features: [InflowEUR, DistinctSenders]}
+        - {label: "Pass-through", features: [OutflowEUR, PassThroughRatio, MedianDwellHours, DistinctRecipients, ActiveDays]}
+        - {label: "Cash-out", features: [CryptoShare, CashShare, NightShare]}
+        - {label: "Shared identity", features: [SharedDeviceAccounts, SharedAddressAccounts]}
+        - {label: "Network position", features: [DistinctCounterparties, PageRankPctl, Clustering]}
+        - {label: "Profile", features: [Segment, AccountAgeDays]}
+      tie_features: {contacts: DistinctCounterparties, sent: OutflowEUR, received: InflowEUR, clustering: Clustering, centrality: PageRankPctl}
+      disclaimer: >
+        Synthetic accounts of a fictional bank. A score measures resemblance to the behaviour of confirmed
+        mules; it is not evidence of wrongdoing, and many mules are themselves victims recruited with job or
+        investment offers. A high score is a case for an analyst to review, never a conclusion.
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

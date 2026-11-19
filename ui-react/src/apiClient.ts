@@ -294,6 +294,24 @@ export type RowTriageExtra = {
   review_at: number;
   tick_seconds: number;
 };
+// Mirrors scenario_schema.MessageScreeningExtra — see MessageScreeningView.tsx.
+export type MessageField = { tag: string; label: string; columns: string[] };
+export type MessageScreeningExtra = {
+  kind: "message_screening";
+  tab_label: string;
+  title: string;
+  subtitle?: string | null;
+  item_noun: string;
+  reviewer_noun: string;
+  format_label: string;
+  text_feature: string;
+  text_tag: string;
+  fields: MessageField[];
+  typology_column?: string | null;
+  review_at: number;
+  release_label: string;
+  escalate_label: string;
+};
 // Mirrors scenario_schema.FleetHealthExtra — see FleetHealthView.tsx.
 export type FleetHealthMeasure = {
   value: "score" | "residual";
@@ -527,6 +545,7 @@ export type UiExtras =
   | ForecastBoardExtra
   | FleetHealthExtra
   | RowTriageExtra
+  | MessageScreeningExtra
   | CaseTrackerExtra
   | SourceLibraryExtra;
 
@@ -735,6 +754,7 @@ export type ReferenceDocument = { name: string; title: string; note: string; tex
 export type RubricBehaviour = { key: string; name: string; description: string };
 export type RubricCheckConfig = {
   title: string;
+  reviewer_role?: string | null;
   intro: string;
   input_label: string;
   placeholder?: string | null;
