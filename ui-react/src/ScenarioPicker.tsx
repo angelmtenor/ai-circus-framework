@@ -22,6 +22,7 @@ type Category = {
 // called `industry`; see scenario_schema.py for why it wasn't renamed.)
 export const INDUSTRY_LABELS: Record<string, string> = {
   banking_finance: "Banking & Finance",
+  insurance: "Insurance",
   manufacturing_industry: "Manufacturing & Industry",
   energy_utilities: "Energy & Utilities",
   retail: "Retail",

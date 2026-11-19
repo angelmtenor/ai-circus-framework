@@ -254,6 +254,17 @@ export type RiskWatchlistExtra = {
   outcome_past: string;
   push_up: string;
   push_down: string;
+  next_best_offer?: NextBestOffer | null;
+};
+// Mirrors scenario_schema.NextBestOffer — see NextBestOfferPanel.tsx. Model ids are extra models of the same scenario.
+export type NextBestOffer = {
+  propensity_model: string;
+  recommender?: string | null;
+  holdings: Record<string, string>;
+  title: string;
+  score_label: string;
+  top_k: number;
+  at_risk_note?: string | null;
 };
 // Mirrors scenario_schema.SourceLibraryExtra — see SourceLibraryView.tsx.
 export type SourceLibraryExtra = { kind: "source_library"; chat_tab_label: string; tab_label: string; title: string };

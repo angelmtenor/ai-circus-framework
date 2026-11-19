@@ -75,6 +75,7 @@ FeatureUI = Annotated[NumericFeatureUI | CategoricalFeatureUI | TextFeatureUI, F
 # rather than silently creating an unfiltered domain nobody meant to add.
 Industry = Literal[
     "banking_finance",
+    "insurance",
     "manufacturing_industry",
     "energy_utilities",
     "retail",
@@ -927,6 +928,25 @@ class WatchlistMap(BaseModel):
     scope: Literal["usa", "europe", "world"] = "world"
 
 
+class NextBestOffer(BaseModel):
+    """What to offer the watchlist's selected entity, from two other models of the same scenario
+    (`extra_models` ids, so one entitlement covers all three): `propensity_model` scores the same
+    record (same feature columns) for buying anything more, with its SHAP drivers; `recommender`
+    (a basket recommender whose baskets are what each entity holds) ranks the products that go
+    with the ones the entity holds, leaving out what it already has. `holdings` maps each
+    0/1 numeric feature (1 = holds it) to the recommender's item id. See ui-react's
+    NextBestOfferPanel.tsx."""
+
+    propensity_model: str = Field(pattern=r"^[a-z0-9_]+$", max_length=40)
+    recommender: str | None = Field(default=None, pattern=r"^[a-z0-9_]+$", max_length=40)
+    holdings: dict[str, str] = Field(min_length=1)
+    title: str = Field(default="Next best offer", max_length=60)
+    score_label: str = Field(default="Propensity to buy", max_length=40)
+    top_k: int = Field(default=3, ge=1, le=8)
+    # Shown when the selected entity sits above the first tier, e.g. "bundle it with a retention call".
+    at_risk_note: str | None = Field(default=None, max_length=160)
+
+
 class RiskWatchlistExtra(BaseModel):
     """Opt-in 5th workspace tab for a binary-classification `tabular_ml` scenario whose
     rows are *entities under supervision* (banks, suppliers, borrowers) and whose
@@ -963,6 +983,7 @@ class RiskWatchlistExtra(BaseModel):
     outcome_past: str = "failed"  # "the banks that <failed>"
     push_up: str = "failure"  # a SHAP push raising the score is "towards <failure>"
     push_down: str = "survival"
+    next_best_offer: NextBestOffer | None = None
 
 
 class NetworkEvent(BaseModel):
@@ -2363,6 +2384,8 @@ class ScenarioDefinition(BaseModel):
         """
         if self.model_id is None and MODEL_ADDRESS_SEPARATOR in self.slug:
             raise ValueError(f"slug must not contain {MODEL_ADDRESS_SEPARATOR!r}: it separates a model's address.")
+        if self.model_id is None:  # a view has no extra_models: its offers were checked on the scenario
+            self._check_next_best_offers()
         if not self.extra_models:
             return self
         if self.kind != "tabular_ml":
@@ -2379,6 +2402,29 @@ class ScenarioDefinition(BaseModel):
                 raise ValueError("ui_extras.case_desk calls the assistant by scenario: main model only.")
         self.model_views()
         return self
+
+    def _check_next_best_offers(self) -> None:
+        """A `next_best_offer` names models of this scenario: a classifier over the same features
+        as the watchlist's own model, and a recommender."""
+        by_id = {extra.id: extra for extra in self.extra_models}
+        watchlists = [(self.dataset, self.ui_extras), *((e.dataset, e.ui_extras) for e in self.extra_models)]
+        for dataset, extras in watchlists:
+            if not isinstance(extras, RiskWatchlistExtra) or extras.next_best_offer is None or dataset is None:
+                continue
+            offer, where = extras.next_best_offer, "ui_extras.risk_watchlist.next_best_offer"
+            propensity = by_id.get(offer.propensity_model)
+            if propensity is None or propensity.model.task_type != "classification":
+                raise ValueError(
+                    f"{where}.propensity_model must be a classification extra model, got {offer.propensity_model!r}."
+                )
+            if propensity.dataset.feature_columns != dataset.feature_columns:
+                raise ValueError(f"{where}.propensity_model must read the same feature_columns as the watchlist model.")
+            if offer.recommender is not None:
+                recommender = by_id.get(offer.recommender)
+                if recommender is None or recommender.model.task_type != "recommendation":
+                    raise ValueError(
+                        f"{where}.recommender must be a recommendation extra model, got {offer.recommender!r}."
+                    )
 
     def model_views(self) -> dict[str, ScenarioDefinition]:
         """Every model of this scenario by address, as a complete definition: the main model is the
@@ -2621,6 +2667,10 @@ class ScenarioDefinition(BaseModel):
         if unknown:
             raise ValueError(f"{where} columns {unknown} are not dataset.display_columns.")
         self._check_tiers_and_pillars(extras.tiers, extras.pillars, where)
+        offer = extras.next_best_offer
+        if offer is not None:
+            for feature in offer.holdings:
+                self._feature_of_type(feature, "numeric", f"{where}.next_best_offer.holdings")
         return self
 
     def _check_tiers_and_pillars(self, tiers: list[WatchlistTier], pillars: list[WatchlistPillar], where: str) -> None:
