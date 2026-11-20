@@ -4,6 +4,23 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.63.0 — 2026-11-20
+
+### Added
+- **Reservoirs & Drought Watch** ([docs](docs/scenarios/water_reservoirs_drought_guide.md)), `water_reservoirs_drought`:
+  a fictional water authority's nine reservoirs in four supply systems, forecast 7, 30, 90 and 180 days ahead with
+  p10/p50/p90 bands (`lightgbm_quantile`), backtested by year against persistence and seasonal climatology. The
+  storage state is read against an illustrative drought plan, with what-if and measure comparison, data-quality flags
+  and a weekly bulletin (PDF) from the assistant. Synthetic data from a calibrated, seeded basin generator
+  (`scripts/generate_water_data.py`); MAE 4.2 / 10.2 / 16.5 points at 30 / 90 / 180 days against persistence's
+  5.6 / 13.2 / 18.7, weaker than persistence at 90 and 180 days in the 2022-2024 drought.
+- **A `lightgbm_quantile` forecast candidate**: one direct quantile model per horizon, with past-only features.
+- **A forecast board map and labels** (`ui_extras.forecast_board`): an optional schematic `map` (static SVG; a
+  click picks the series and outlines its group, each site coloured by where its forecast heads), `series_labels`
+  for readable names, and `summary: change` for a level, where a sum means nothing.
+- Shared modules other scenarios can reuse: series quality flags, threshold states, decision support, a rulebook
+  with cited articles, read-only SQL, traceability, geo helpers and an observation shape.
+
 ## v0.62.0 — 2026-11-19
 
 ### Added

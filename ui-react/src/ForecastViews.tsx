@@ -16,6 +16,8 @@ import {
   type Forecast,
   type ForecastBacktest,
   type ForecastBoardExtra,
+  type ForecastBoardMap,
+  type ForecastMapSite,
   type ForecastSeries,
   type ModelCard,
   type ScenarioSummary,
@@ -28,6 +30,7 @@ const CANDIDATE_LABELS: Record<string, string> = {
   seasonal_naive: "Seasonal naive",
   auto_ets: "Exponential smoothing",
   lightgbm_lags: "LightGBM on lags",
+  lightgbm_quantile: "LightGBM quantiles",
 };
 const CANDIDATE_COLORS = [CHART_COLORS.amber, CHART_COLORS.purple, CHART_COLORS.accent, CHART_COLORS.green];
 
@@ -212,7 +215,28 @@ function seriesLines(s: ForecastSeries, levels: string[], forecastLabel: string)
   };
 }
 
-function SeriesPicker({ forecast, value, onChange }: { forecast: Forecast; value: number; onChange: (i: number) => void }) {
+/** A series id as a reader sees it: the scenario's own label, else "south_valley" -> "South valley". */
+const seriesName = (label: string, labels?: Record<string, string>) => {
+  if (labels?.[label]) return labels[label];
+  const words = label.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+/** The series names a scenario's forecast board declares, for the other forecast tabs too. */
+const boardLabels = (scenario: ScenarioSummary) =>
+  scenario.ui_extras?.kind === "forecast_board" ? scenario.ui_extras.series_labels : undefined;
+
+function SeriesPicker({
+  forecast,
+  value,
+  onChange,
+  labels,
+}: {
+  forecast: Forecast;
+  value: number;
+  onChange: (i: number) => void;
+  labels?: Record<string, string>;
+}) {
   if (forecast.series.length < 2) return null;
   return (
     <label className="forecast-series-picker">
@@ -220,11 +244,101 @@ function SeriesPicker({ forecast, value, onChange }: { forecast: Forecast; value
       <select value={value} onChange={(e) => onChange(Number(e.target.value))}>
         {forecast.series.map((s, i) => (
           <option key={s.label} value={i}>
-            {s.label}
+            {seriesName(s.label, labels)}
           </option>
         ))}
       </select>
     </label>
+  );
+}
+
+/** Where a site's name sits, beside or over/under its dot. */
+function labelAt(site: ForecastMapSite, cy: number, unit: number) {
+  const gap = 3.2 * unit;
+  switch (site.label ?? "right") {
+    case "left":
+      return { x: site.x - gap, y: cy + unit, textAnchor: "end" as const };
+    case "above":
+      return { x: site.x, y: cy - gap, textAnchor: "middle" as const };
+    case "below":
+      return { x: site.x, y: cy + gap + 2 * unit, textAnchor: "middle" as const };
+    default:
+      return { x: site.x + gap, y: cy + unit, textAnchor: "start" as const };
+  }
+}
+
+/**
+ * The board's schematic map (`ui_extras.map`): lines (rivers, a coast) and one dot per series, coloured by where its
+ * forecast ends against today (green up, red down). Clicking a dot selects that series; the selected series' group
+ * (or the group's members, when a group is selected) is outlined. Static SVG: nothing moves.
+ */
+function SeriesMap({
+  map,
+  forecast,
+  selected,
+  labels,
+  onSelect,
+}: {
+  map: ForecastBoardMap;
+  forecast: Forecast;
+  selected: string;
+  labels?: Record<string, string>;
+  onSelect: (i: number) => void;
+}) {
+  const index = new Map(forecast.series.map((s, i) => [s.label, i]));
+  const unit = Math.max(map.width, map.height) / 100;
+  const y = (v: number) => map.height - v;
+  const group = map.sites.find((s) => s.series === selected)?.group ?? selected;
+  const trend = (series: string) => {
+    const s = forecast.series[index.get(series) ?? -1];
+    if (!s) return CHART_COLORS.dim;
+    const change = s.forecast.mean[s.forecast.mean.length - 1] - s.history.y[s.history.y.length - 1];
+    return Math.abs(change) < 1 ? CHART_COLORS.dim : change > 0 ? CHART_COLORS.green : CHART_COLORS.red;
+  };
+  return (
+    <figure className="forecast-map">
+      <svg viewBox={`0 0 ${map.width} ${map.height}`} role="img" aria-label={map.caption || "Map of the series"}>
+        <rect width={map.width} height={map.height} rx={2 * unit} className="forecast-map-ground" />
+        {map.lines.map((line, i) => (
+          <polyline
+            key={i}
+            points={line.map(([px, py]) => `${px},${y(py)}`).join(" ")}
+            className={i === 0 ? "forecast-map-line forecast-map-line-first" : "forecast-map-line"}
+            strokeWidth={0.6 * unit}
+          />
+        ))}
+        {map.sites.map((site) => {
+          const i = index.get(site.series);
+          const on = site.series === selected;
+          const inGroup = !on && (site.group === group || site.series === group);
+          return (
+            <g
+              key={site.series}
+              className="forecast-map-site"
+              role="button"
+              tabIndex={i === undefined ? -1 : 0}
+              aria-pressed={on}
+              onClick={() => i !== undefined && onSelect(i)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && i !== undefined && onSelect(i)}
+            >
+              <title>{seriesName(site.series, labels)}</title>
+              {(on || inGroup) && (
+                <circle cx={site.x} cy={y(site.y)} r={3.6 * unit} className="forecast-map-halo" strokeWidth={0.5 * unit} />
+              )}
+              <circle cx={site.x} cy={y(site.y)} r={(on ? 2.6 : 2) * unit} fill={trend(site.series)} />
+              <text
+                {...labelAt(site, y(site.y), unit)}
+                fontSize={3 * unit}
+                className={on ? "forecast-map-label on" : "forecast-map-label"}
+              >
+                {seriesName(site.series, labels)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {map.caption && <figcaption className="panel-hint">{map.caption}</figcaption>}
+    </figure>
   );
 }
 
@@ -266,7 +380,7 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
           <h3>
             {target.label}: the next {forecast.horizon} steps
           </h3>
-          <SeriesPicker forecast={forecast} value={index} onChange={setIndex} />
+          <SeriesPicker forecast={forecast} value={index} onChange={setIndex} labels={boardLabels(scenario)} />
         </div>
         <TimeChart lines={lines} bands={bands} frequency={forecast.frequency} yLabel={`${target.label}${target.units}`} marker={{ ds: series.history.ds[series.history.ds.length - 1], label: "now" }} />
         <p className="panel-hint">
@@ -464,6 +578,11 @@ export function ForecastBoardView({ scenario, accessToken }: { scenario: Scenari
   if (!forecast || !base || !shown) return <div className="tab-panel"><div className="panel-hint">Loading the forecast…</div></div>;
   const total = (s: ForecastSeries) => s.forecast.mean.reduce((a, b) => a + b, 0);
   const delta = total(shown) - total(base);
+  // A level (storage %) is not summed: its tile is where the window ends against the last observation.
+  const end = (s: ForecastSeries) => s.forecast.mean[s.forecast.mean.length - 1];
+  const change = (s: ForecastSeries) => end(s) - s.history.y[s.history.y.length - 1];
+  const signed = (v: number) => `${v >= 0 ? "+" : ""}${fmt(v)}`;
+  const levers = extras.levers.length > 0;
   const { lines, bands } = seriesLines(shown, forecast.levels, reForecast ? "What-if forecast" : "Forecast");
   if (reForecast) lines.push({ key: "baseline", label: "Baseline forecast", ds: base.forecast.ds, values: base.forecast.mean, color: CHART_COLORS.amber, dashed: true, width: 1.5 });
 
@@ -480,18 +599,34 @@ export function ForecastBoardView({ scenario, accessToken }: { scenario: Scenari
           sub={`${fmt(shown.peak.value)} ${target.unit}${reForecast && shown.peak.ds !== base.peak.ds ? ` (was ${timeLabel(base.peak.ds, forecast.frequency)})` : ""}`}
           highlight
         />
-        <StatTile label={`Total, next ${forecast.horizon} steps`} value={`${fmt(total(shown))} ${target.unit}`} sub={reForecast ? `${delta >= 0 ? "+" : ""}${fmt(delta)} (${((delta / total(base)) * 100).toFixed(1)}%) vs baseline` : "baseline"} color={reForecast ?(delta > 0 ? CHART_COLORS.red : CHART_COLORS.green) : undefined} />
+        {extras.summary === "change" ? (
+          <StatTile
+            label={`Change, next ${forecast.horizon} steps`}
+            value={`${signed(change(shown))} ${target.unit}`}
+            sub={`${fmt(end(shown))} ${target.unit} at the end${reForecast ? ` (baseline ${fmt(end(base))})` : ""}`}
+          />
+        ) : (
+          <StatTile label={`Total, next ${forecast.horizon} steps`} value={`${fmt(total(shown))} ${target.unit}`} sub={reForecast ? `${delta >= 0 ? "+" : ""}${fmt(delta)} (${((delta / total(base)) * 100).toFixed(1)}%) vs baseline` : "baseline"} color={reForecast ?(delta > 0 ? CHART_COLORS.red : CHART_COLORS.green) : undefined} />
+        )}
       </div>
-      <div className="forecast-board-body">
+      <div className={extras.map ? "forecast-board-body with-map" : "forecast-board-body"}>
         <div className="panel-card forecast-levers">
-          <h3>What if…</h3>
-          <SeriesPicker forecast={forecast} value={index} 
+          {levers && <h3>What if…</h3>}
+          <SeriesPicker forecast={forecast} value={index} labels={extras.series_labels}
             onChange={(i) => {
               setIndex(i);
               setShifts({});
             }}
           />
-          {!forecast.what_if && <p className="panel-hint">The selected forecaster ({candidateLabel(forecast.model_name)}) reads only the series' own past, so these inputs cannot move it.</p>}
+          {extras.map && (
+            <SeriesMap map={extras.map} forecast={forecast} selected={base.label} labels={extras.series_labels}
+              onSelect={(i) => {
+                setIndex(i);
+                setShifts({});
+              }}
+            />
+          )}
+          {levers && !forecast.what_if && <p className="panel-hint">The selected forecaster ({candidateLabel(forecast.model_name)}) cannot re-forecast from shifted inputs, so these levers are off.</p>}
           {extras.levers.map((lever) => {
             const value = shifts[lever.feature] ?? 0;
             return (
@@ -517,7 +652,7 @@ export function ForecastBoardView({ scenario, accessToken }: { scenario: Scenari
             </button>
           )}
           {whatIfError && <div className="error">{whatIfError}</div>}
-          <p className="panel-hint">Each lever shifts the assumed value over the whole forecast window; the model re-forecasts step by step from there.</p>
+          {levers && <p className="panel-hint">Each lever shifts the assumed value over the whole forecast window; the model re-forecasts step by step from there.</p>}
         </div>
         <div className="panel-card">
           <TimeChart lines={lines} bands={bands} frequency={forecast.frequency} yLabel={`${target.label}${target.units}`} marker={{ ds: shown.history.ds[shown.history.ds.length - 1], label: "now" }} height={320} />

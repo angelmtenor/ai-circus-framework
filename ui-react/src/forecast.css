@@ -100,8 +100,14 @@
   align-items: start;
 }
 
+/* A map needs room to read: the side column widens when the board has one. */
+.forecast-board-body.with-map {
+  grid-template-columns: minmax(300px, 400px) 1fr;
+}
+
 @media (max-width: 860px) {
-  .forecast-board-body {
+  .forecast-board-body,
+  .forecast-board-body.with-map {
     grid-template-columns: 1fr;
   }
 }
@@ -114,6 +120,70 @@
 
 .forecast-levers h3 {
   margin: 0;
+}
+
+.forecast-map {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forecast-map svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.forecast-map-ground {
+  pointer-events: none;
+  fill: color-mix(in srgb, var(--accent) 5%, transparent);
+  stroke: var(--border);
+  stroke-width: 0.4;
+}
+
+.forecast-map-line {
+  fill: none;
+  stroke: var(--blue);
+  stroke-opacity: 0.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The first line is the coast: dimmer and dashed, so the rivers read as water. */
+.forecast-map-line-first {
+  stroke: var(--dim);
+  stroke-dasharray: 2 1.5;
+}
+
+.forecast-map-site {
+  cursor: pointer;
+  outline: none;
+}
+
+.forecast-map-site:focus-visible .forecast-map-halo {
+  stroke: var(--accent);
+}
+
+.forecast-map-site:hover .forecast-map-label,
+.forecast-map-site:focus-visible .forecast-map-label {
+  fill: var(--text);
+}
+
+.forecast-map-halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-opacity: 0.8;
+}
+
+/* The name is clickable too: a dot alone is a small target. */
+.forecast-map-label {
+  fill: var(--dim);
+}
+
+.forecast-map-label.on {
+  fill: var(--text);
+  font-weight: 600;
 }
 
 .forecast-lever {

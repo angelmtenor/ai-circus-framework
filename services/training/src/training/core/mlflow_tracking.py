@@ -54,6 +54,39 @@ def experiment_name(scenario_slug: str) -> str:
     return f"scenario/{scenario_slug}"
 
 
+def log_report_run(
+    tracking_uri: str | None,
+    *,
+    scenario_slug: str,
+    run_name: str,
+    params: dict[str, Any],
+    metrics: dict[str, float],
+    report: dict[str, Any],
+) -> bool:
+    """Record a run that is not a row-model fit (a backtest report) in the scenario's experiment.
+
+    Same contract as `log_training_run`: a no-op without a tracker, and it never raises. Returns whether the
+    run was recorded, so a caller can say so in its own report.
+    """
+    if not tracking_uri:
+        return False
+    for name, value in _MLFLOW_FAIL_FAST.items():
+        os.environ.setdefault(name, value)
+    try:
+        import mlflow
+
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment(experiment_name(scenario_slug))
+        with mlflow.start_run(run_name=run_name, tags={"scenario_slug": scenario_slug}):
+            mlflow.log_params(params)
+            mlflow.log_metrics(metrics)
+            mlflow.log_dict(report, "report.json")
+        return True
+    except Exception:
+        logger.warning("Could not record the {} run in MLflow at {}", run_name, tracking_uri, exc_info=True)
+        return False
+
+
 def log_training_run(
     tracking_uri: str | None,
     *,

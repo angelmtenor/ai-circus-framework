@@ -328,11 +328,24 @@ class TimeSeriesConfig(BaseModel):
     prediction_intervals: list[int] = [80, 95]
     # The target's physical minimum (0 for energy or sales): forecasts and bands never go below it.
     target_min: float | None = None
+    # `lightgbm_quantile` only (docs/adr/0030): the horizons, in days, it is trained for directly (one model per
+    # horizon and quantile); the last one is `horizon`, and the days between are joined by straight lines.
+    horizons: list[int] = []
+    # A daily scenario with many series can need more rows than the default cap (ai_circus_shared.tabular_ml's
+    # MAX_DATASET_ROWS) to keep its history; None = that cap. Bounded so a scenario cannot ask for unbounded memory.
+    max_rows: int | None = Field(default=None, gt=0, le=250_000)
 
     @model_validator(mode="after")
     def _consistent(self) -> TimeSeriesConfig:
         if any(lag <= 0 for lag in self.lags) or len(set(self.lags)) != len(self.lags):
             raise ValueError("time_series.lags must be distinct positive integers.")
+        if self.horizons:
+            if self.horizons != sorted(set(self.horizons)) or self.horizons[0] <= 0:
+                raise ValueError("time_series.horizons must be distinct positive integers in increasing order.")
+            if self.horizons[-1] != self.horizon:
+                raise ValueError("time_series.horizons must end at time_series.horizon.")
+            if self.frequency != "D":
+                raise ValueError("time_series.horizons (direct quantile forecasting) needs frequency 'D'.")
         if any(not 50 <= level <= 99 for level in self.prediction_intervals):
             raise ValueError("time_series.prediction_intervals must be levels between 50 and 99.")
         groups = [self.series_id_columns, self.static_features, self.exogenous_features]
@@ -355,7 +368,12 @@ class TimeSeriesConfig(BaseModel):
 # Code rule keeps the simplest whose MASE is within accuracy_gain_threshold_for_complexity of the best.
 # `lightgbm_lags`: LightGBM on the lags/rolling/calendar/exogenous features of ai_circus_shared.forecasting,
 # forecast recursively.
-FORECAST_CANDIDATES = ("seasonal_naive", "auto_ets", "lightgbm_lags")
+#
+# `lightgbm_quantile` (docs/adr/0030) is a different kind of candidate and runs alone: a direct multi-horizon quantile
+# forecast (p10/p50/p90 at `time_series.horizons`, one LightGBM per horizon and quantile, pooled over the series),
+# backtested by year against persistence and seasonal climatology. It needs `time_series.horizons`.
+FORECAST_CANDIDATES = ("seasonal_naive", "auto_ets", "lightgbm_lags", "lightgbm_quantile")
+QUANTILE_CANDIDATE = "lightgbm_quantile"
 # The recommendation candidates training knows (training/core/recommender.py), simplest first:
 # association rules ranked by confidence, then item factors learned from the baskets (truncated SVD).
 RECOMMENDER_CANDIDATES = ("association_rules", "item_factors")
@@ -445,6 +463,8 @@ class TabularModel(BaseModel):
                 raise ValueError(
                     f"forecast model.candidates must be among {list(FORECAST_CANDIDATES)} (got {unknown})."
                 )
+            if QUANTILE_CANDIDATE in self.candidates and self.candidates != [QUANTILE_CANDIDATE]:
+                raise ValueError(f"model.candidates: {QUANTILE_CANDIDATE!r} runs alone (it has its own baselines).")
             if self.text_challenger is not None:
                 raise ValueError("model.text_challenger is not available for forecast.")
         elif set(self.candidates) & set(FORECAST_CANDIDATES):
@@ -1460,6 +1480,37 @@ class ForecastLever(BaseModel):
         return self
 
 
+class ForecastMapSite(BaseModel):
+    """One series on the board's map: a point, and the group series it belongs to (e.g. its supply system)."""
+
+    series: str
+    x: float
+    y: float
+    group: str | None = None
+    label: Literal["right", "left", "above", "below"] = "right"  # where its name sits, so close sites do not collide
+
+
+class ForecastBoardMap(BaseModel):
+    """A schematic map of the board's series on a plain x/y plane (x right, y up, any unit), with optional lines
+    such as rivers and a coast. No projection and no real place needed: a fictional site plan works as well."""
+
+    caption: str = ""
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    lines: list[list[tuple[float, float]]] = Field(default=[], max_length=50)
+    sites: list[ForecastMapSite] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _inside(self) -> ForecastBoardMap:
+        points = [(s.x, s.y) for s in self.sites] + [p for line in self.lines for p in line]
+        outside = [p for p in points if not (0 <= p[0] <= self.width and 0 <= p[1] <= self.height)]
+        if outside:
+            raise ValueError(f"forecast_board map: points outside {self.width} x {self.height}: {outside[:3]}.")
+        if any(len(line) < 2 for line in self.lines):
+            raise ValueError("forecast_board map: a line needs at least two points.")
+        return self
+
+
 class ForecastBoardExtra(BaseModel):
     """`forecast` scenarios only — the forecast board tab (ForecastBoardView.tsx): every series as a
     sparkline tile (one series = a single focus view), the focus series' history + forecast with its
@@ -1471,6 +1522,11 @@ class ForecastBoardExtra(BaseModel):
     subtitle: str | None = None
     levers: list[ForecastLever] = []
     peak_label: str = "Peak"  # what the forecast's maximum is called, e.g. "Peak hour"
+    # The second tile: "total" sums the window (a flow such as energy use); "change" is the end of the window
+    # minus the last observation (a level such as storage %, where a sum means nothing).
+    summary: Literal["total", "change"] = "total"
+    series_labels: dict[str, str] = {}  # series id -> the name the board shows (default: the id, made readable)
+    map: ForecastBoardMap | None = None  # sites to click instead of (as well as) the series list
 
 
 UiExtras = Annotated[
@@ -2321,6 +2377,10 @@ class ScenarioDefinition(BaseModel):
     # workspace tabs (see UiExtras above); conversational_rag — the knowledge-graph panel.
     # None (the common case) means the plain workspace every scenario of that kind gets.
     ui_extras: UiExtras | None = None
+    # tabular_ml only — a named toolset the assistant adds to the model tools, reading the scenario's own committed
+    # artifacts (public data, identical for every tenant; the entitlement check still gates the chat). The names are a
+    # closed list the assistant implements, never a path or a module a scenario file can point at.
+    analysis_toolset: Literal["drought_watch"] | None = None
     # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
     tutorial: TutorialConfig | None = None
     # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
@@ -2377,6 +2437,15 @@ class ScenarioDefinition(BaseModel):
         if not forecast or self.dataset is None or self.time_series is None:
             return self
         ts, ds = self.time_series, self.dataset
+        if (QUANTILE_CANDIDATE in self.model.candidates) != bool(ts.horizons):  # type: ignore[union-attr]
+            raise ValueError(
+                f"time_series.horizons is required for (and only for) the {QUANTILE_CANDIDATE!r} candidate."
+            )
+        if ts.horizons and (ts.prediction_intervals != [80] or len(ts.series_id_columns) != 1):
+            raise ValueError(
+                f"{QUANTILE_CANDIDATE!r} gives the p10-p90 band: prediction_intervals must be [80], "
+                "and the series are identified by exactly one column."
+            )
         expected = [*ts.series_id_columns, *ts.static_features, *ts.exogenous_features]
         if set(ds.feature_columns) != set(expected):
             raise ValueError(
@@ -2397,6 +2466,17 @@ class ScenarioDefinition(BaseModel):
             unknown = sorted({lever.feature for lever in self.ui_extras.levers} - set(ts.exogenous_features))
             if unknown:
                 raise ValueError(f"ui_extras.forecast_board levers must shift exogenous features, not {unknown}.")
+            series = ds.feature_schema.get(ts.series_id_columns[0]) if ts.series_id_columns else None
+            known = set(getattr(series, "options", None) or [])
+            board_map = self.ui_extras.map
+            named = set(self.ui_extras.series_labels)
+            if board_map is not None:
+                named |= {s.series for s in board_map.sites} | {s.group for s in board_map.sites if s.group}
+            if known and named - known:
+                raise ValueError(
+                    "ui_extras.forecast_board names series that are not in the series options: "
+                    f"{sorted(named - known)}."
+                )
         if self.tutorial is not None:
             raise ValueError("tutorial is not available for a forecast scenario yet.")
         return self

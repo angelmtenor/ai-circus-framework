@@ -44,7 +44,9 @@ def ensure_raw_dataset(store: ObjectStore, org_id: str, dataset: TabularDataset,
 def load_raw(store: ObjectStore, org_id: str, dataset: TabularDataset) -> pd.DataFrame:
     """Load the tenant's raw CSV dataset from SeaweedFS into a DataFrame."""
     raw_bytes = store.get(org_id, dataset.raw_object)
-    df = pd.read_csv(io.BytesIO(raw_bytes), index_col=dataset.index_col)
+    # A seed may be committed gzipped (a daily series of many years): the magic bytes say so, not the key's name.
+    compression = "gzip" if raw_bytes[:2] == b"\x1f\x8b" else None
+    df = pd.read_csv(io.BytesIO(raw_bytes), index_col=dataset.index_col, compression=compression)
     logger.info("Loaded raw dataset for org={}: {} rows, {} columns", org_id, *df.shape)
     return df
 
@@ -173,10 +175,11 @@ def clean_series(df: pd.DataFrame, dataset: TabularDataset, time_series: TimeSer
         if frame[filled].isna().any().any():
             raise ValueError("an exogenous or static feature is missing at the start of a series.")
 
-    if len(frame) > MAX_DATASET_ROWS:
+    row_cap = time_series.max_rows or MAX_DATASET_ROWS
+    if len(frame) > row_cap:
         times = frame[time_column].drop_duplicates().sort_values()
         per_time = len(frame) / len(times)
-        cutoff = times.iloc[-max(1, int(MAX_DATASET_ROWS // per_time))]
+        cutoff = times.iloc[-max(1, int(row_cap // per_time))]
         frame = frame[frame[time_column] >= cutoff].reset_index(drop=True)
         logger.info("Kept the most recent {} rows (from {}) under the row cap", len(frame), cutoff)
 

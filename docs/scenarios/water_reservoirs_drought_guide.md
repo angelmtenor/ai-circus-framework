@@ -1,0 +1,96 @@
+# Reservoirs & Drought Watch: what is built, how it works, what is not
+
+> **Reference implementation on synthetic data. Not an operational tool.**
+
+The scenario's files are in [`scenarios/water_reservoirs_drought/`](../../scenarios/water_reservoirs_drought/README.md),
+with how the synthetic basin is generated. This page says what exists, how the pieces fit, the simplifications made, and
+what is left.
+
+## Status
+
+The scenario is **registered** as an ordinary `tabular_ml` forecast (`scenario.yaml`): `platform-registry` seeds it,
+the pipeline runs it like any forecast scenario (etl-tabular reads `sample_data/water_storage_daily.csv.gz`, training
+runs the `lightgbm_quantile` candidate and writes the tenant's `forecast.json`/`backtest.json`, `prediction` serves them
+through its existing org-scoped `/forecast` and `/model/.../backtest` routes), the UI shows it on the `forecast_board`
+tab with a schematic map of the basin, and the assistant adds the eight drought tools to its chat
+(`analysis_toolset: drought_watch`). Two limits remain: the assistant's tools read the **committed** artifacts in the
+scenario folder (`forecast.json`, `drought_outlook.json`), not the ones the pipeline trains for a tenant; and the forecast
+board has **no what-if re-forecast** for this model (it is served from the stored forecast, like a statistical winner).
+
+| Part | State | Where |
+|---|---|---|
+| Data: calibrated synthetic basin, seeded, with an unvalidated feed's faults | Built; the banner is in every generated text and on the board's subtitle | `scripts/generate_water_data.py`, `config/`, `sample_data/` |
+| Domain model: reservoirs, systems, observations, system storage, drought state | Built as config and tables | `config/systems.yaml`, `water.sqlite.gz` |
+| Rulebook: markdown plan + YAML twin, EN and ES | Built; one source of truth, generated both ways, drift-tested | `rulebook/`, `ai_circus_shared.rulebook` |
+| Map | Built as the forecast board's schematic map (`ui_extras.map`): a dot per reservoir coloured by where its forecast ends, its supply system outlined, click to select | `ForecastViews.tsx` |
+| Data & BI tab | The framework's generic tab; the assistant's SQL tool covers ad-hoc charts | |
+| Data quality | Built: five checks, score, documented training policy; **no UI view yet** | `ai_circus_shared.series_quality`, `dq_flags.parquet` |
+| Forecast, backtest, SHAP | Built; trained by the pipeline as the `lightgbm_quantile` candidate and served by `prediction`'s existing routes (p10-p90 as the 80 % band; drivers are in the assistant's `forecast` tool, not on the board) | `training/core/quantile_forecast.py`, `quantile_pipeline.py`, `backtest_report.md` |
+| Drought-state engine, days to threshold | Built (hysteresis, probability ranges) | `ai_circus_shared.threshold_states`, `drought_outlook` |
+| What-if and optimiser | Built, with the simplifications below | `ai_circus_shared.decision_support` |
+| Assistant tools (8) | Built and tested without a model; wired into the scenario's chat; not yet evaluated against a live model | `assistant/core/drought_tools.py` |
+| Weekly bulletin, markdown and PDF | Built; PDF served by the assistant's `GET /bulletin/{slug}` | `ai_circus_shared.drought_bulletin`, `assistant/core/bulletin_pdf.py` |
+| Governance block | Built, in the framework's schema | `scenario.yaml` (`governance:`) |
+| Demo flow | Built as an offline walkthrough | `scripts/demo_water_drought.py` |
+
+## How the pieces fit
+
+```
+config/ ──generate──> sample_data/*.parquet (seeded, SHA-256 in SNAPSHOT.json)
+                                 │
+          series_quality.check ──┴─> dq_flags.parquet, quality score, cleaned training copy
+                                 │
+        storage_series.build_series  (cleaned % per reservoir and per system, catchment rain and temperature)
+                                 │
+        quantile_forecast (LightGBM p10/p50/p90 at 7/30/90/180 days) ──> forecast.json, backtest.json, backtest_report.md
+                                 │
+ rulebook.yaml ──> threshold_states + decision_support ──> drought_outlook.json
+        │                                                      │
+        └─> plan_en.md, plan_es.md                             ├─> assistant tools (forecast, what_if, optimise_measures,
+                                                               │     drought_state, search_rulebook, dq_report, run_sql)
+                                                               └─> drought_bulletin ──> markdown ──> PDF
+```
+
+Reusable pieces live in `libs/shared` (observation shape, geo, data quality, state machine, decision support, rulebook, bulletin,
+read-only SQL, traceability) and in `training` (`quantile_forecast`, `storage_series`, `storage_report`); the
+scenario-specific parts are config files, the generator and the small `drought_tools` toolset. A basin with real data
+needs the same `sample_data/` layout and no code.
+
+## Forecast and backtest
+
+LightGBM quantile regression, one model per horizon and quantile, pooled over the 13 series (9 reservoirs, 4 systems),
+predicting the change from today. Features are past-only; a test proves altering the future leaves them unchanged. The
+p10-p90 band is widened by a split-conformal step calibrated one year out of sample. The rolling-origin backtest runs
+by test year (2010 to 2026) and compares with persistence and seasonal climatology; seasonal drift is shown as a
+stronger reference. The committed [backtest report](../../scenarios/water_reservoirs_drought/backtest_report.md) is the
+source of the numbers; read its list of weak spots before trusting a single system or a drought-year 180-day
+forecast. The pooled acceptance checks (median beats both baselines at 30 and 90 days; coverage within 10 points of
+nominal at 7, 30 and 90) pass; per system in the 2022-2024 drought they do not all hold, and the report says where.
+
+The data is synthetic, so these numbers show the method, not accuracy on a real basin: the model learns the
+generator's water balance. The generator is calibrated (climate, mean storage, turnover, drought depth) so the series
+behave like real storage, and it never lets a forecast see a year it is tested on.
+
+## Simplifications, and why
+
+- **Scenarios use the model's own quantiles.** A direct model cannot take future rain as a feature, so "dry/normal/wet"
+  moves the forecast distribution by the p10 or p90 distance from the median. The dry stress is conservative. A milder
+  definition is a one-function change.
+- **Savings come from the rulebook's illustrative demand split**, not estimated from historical dry-period rates.
+- **Rulebook search is lexical and in-process**, not a vector search: the plan has about 40 paragraphs.
+- **The fictional tenant is content, not a Keycloak organisation:** the scenario is seeded for the `admin` tenant like
+  every scenario; a Riverbend organisation with its own entitlement is a deployment step, not code.
+- **Other languages** are answered by the assistant (it translates); the plan and bulletin exist in English and Spanish.
+- **The map is schematic:** a plain x/y grid of a fictional basin, drawn as SVG, not a projected map of a real place.
+
+## What is left
+
+1. **Assistant on the tenant's artifacts.** Point the drought tools at the forecast the pipeline trained for the
+   caller's org (and recompute the outlook from it) instead of the committed files; and, if wanted, a what-if
+   re-forecast for the quantile model on the board.
+2. **UI:** the data-quality view, the drought state on the map, and the forecast's drivers on the board.
+3. **A live evaluation** of the golden prompts against a real model, using `untraceable()` on the answers.
+
+## Running it
+
+See the scenario README for the commands. `scripts/demo_water_drought.py` walks the ten-minute demo offline.

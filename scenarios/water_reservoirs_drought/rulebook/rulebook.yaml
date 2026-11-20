@@ -1,0 +1,65 @@
+# Drought rulebook for the fictional Riverbend Water Authority. THE source of truth: plan_en.md and plan_es.md are
+# generated from it (scripts/generate_rulebook.py), the rules engine reads it, and the measure packages of the
+# optimiser are derived from it. A test fails if a generated file differs from this one.
+#
+# FICTIONAL. Inspired by the structure of typical drought plans; thresholds, cuts and caps are illustrative and
+# are not those of any real plan or authority.
+
+id: riverbend_drought_plan
+languages: [en, es]
+title:
+  en: "Riverbend Water Authority: Drought Plan (illustrative)"
+  es: "Autoridad del Agua de Riverbend: Plan de Sequía (ilustrativo)"
+disclaimer:
+  en: "Fictional plan, inspired by the structure of typical drought plans, written for a reference implementation on synthetic data. It is not an operational document and declares nothing."
+  es: "Plan ficticio, inspirado en la estructura de los planes de sequía habituales, escrito para una implementación de referencia con datos sintéticos. No es un documento operativo y no declara nada."
+indicator:
+  en: "system storage"
+  es: "almacenamiento del sistema"
+
+hysteresis_days: 7
+
+# Illustrative split of demand, to turn each state's sector cuts into one savings figure for the optimiser.
+demand:
+  shares: {agriculture: 0.40, industry: 0.10, urban: 0.50}
+  urban_baseline_lpd: 280
+
+states:
+  - id: normal
+    min_pct: 60
+    label: {en: "Normal", es: "Normalidad"}
+    measures: {}
+  - id: pre_alert
+    min_pct: 40
+    label: {en: "Pre-alert", es: "Prealerta"}
+    measures:
+      actions:
+        en: ["Awareness campaign for all sectors.", "Closer monitoring of storage and inflows."]
+        es: ["Campaña de sensibilización para todos los sectores.", "Seguimiento más estrecho de reservas y aportaciones."]
+  - id: alert
+    min_pct: 25
+    label: {en: "Alert", es: "Alerta"}
+    measures: {agriculture_pct: 20, industry_pct: 5, urban_cap_lpd: 250}
+  - id: exceptional
+    min_pct: 15
+    label: {en: "Exceptional", es: "Excepcionalidad"}
+    measures: {agriculture_pct: 40, industry_pct: 15, urban_cap_lpd: 230}
+  - id: emergency
+    label: {en: "Emergency", es: "Emergencia"}
+    measures: {agriculture_pct: 75, industry_pct: 25, urban_cap_lpd: 200}
+
+intro_articles:
+  - title: {en: "Nature of this plan", es: "Naturaleza de este plan"}
+    paragraphs:
+      - {en: "This plan is fictional and illustrative. It is inspired by the structure of typical drought plans and has no legal effect.", es: "Este plan es ficticio e ilustrativo. Se inspira en la estructura de los planes de sequía habituales y no tiene efecto jurídico."}
+      - {en: "The thresholds, reductions and caps below are configuration of a reference implementation, not decisions of any authority.", es: "Los umbrales, reducciones y límites siguientes son configuración de una implementación de referencia, no decisiones de ninguna autoridad."}
+  - title: {en: "Indicator", es: "Indicador"}
+    paragraphs:
+      - {en: "The indicator is the storage of a supply system: the sum of the stored volumes of its reservoirs over the sum of their capacities, as a percentage.", es: "El indicador es el almacenamiento de un sistema de suministro: la suma de los volúmenes almacenados de sus embalses entre la suma de sus capacidades, en porcentaje."}
+      - {en: "The indicator is evaluated once a day, on the latest published readings. The source publishes data unvalidated, so a reading flagged as needing review is shown next to the state, not hidden.", es: "El indicador se evalúa una vez al día con las últimas lecturas publicadas. La fuente publica datos sin validar, por lo que una lectura marcada como pendiente de revisión se muestra junto al estado, no se oculta."}
+
+closing_articles:
+  - title: {en: "Review and human oversight", es: "Revisión y supervisión humana"}
+    paragraphs:
+      - {en: "Any operational decision that follows from a state, a forecast or a what-if requires a human decision by the responsible person.", es: "Toda decisión operativa derivada de un estado, una previsión o un escenario requiere la decisión de la persona responsable."}
+      - {en: "Forecasts and what-if results are decision support with a stated uncertainty. They never declare a state.", es: "Las previsiones y los resultados de escenarios son apoyo a la decisión con una incertidumbre declarada. Nunca declaran un estado."}

@@ -24,7 +24,7 @@ from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
@@ -33,8 +33,16 @@ from qdrant_client import QdrantClient
 
 from assistant import get_env_config
 from assistant.core.agent import ModelUsageCallback, build_agui_agent
+from assistant.core.bulletin_pdf import render as render_pdf
 from assistant.core.chat import documents_only_instructions
 from assistant.core.data_tools import DataApiClient, build_data_tools, data_system_prompt
+from assistant.core.drought_tools import (
+    DroughtToolkit,
+    ToolError,
+    build_drought_tools,
+    drought_system_prompt,
+    get_toolkit,
+)
 from assistant.core.extraction import MAX_OCR_CHARS, build_extraction_prompt, parse_extraction
 from assistant.core.identity import resolve_identity
 from assistant.core.logger import get_logger
@@ -406,6 +414,38 @@ def intake_sample_endpoint(
     return FileResponse(path, filename=filename, headers={"Cache-Control": "private, max-age=3600"})
 
 
+def _drought_toolkit(definition: ScenarioDefinition) -> DroughtToolkit:
+    """The drought-watch toolkit of a scenario that declares `analysis_toolset: drought_watch`, else a 404."""
+    if definition.analysis_toolset != "drought_watch":
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no bulletin.")
+    try:
+        return get_toolkit(str(Path(get_env_config().SCENARIOS_DIR) / definition.slug))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="The scenario's analysis artifacts are not available.") from exc
+
+
+@router.get("/bulletin/{scenario_slug}")
+def bulletin_endpoint(
+    lang: str = "en",
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> Response:
+    """This week's drought bulletin as a PDF. Same entitlement check as every route (the scenario must be one the
+    caller may use); the content is synthetic data and the same for every tenant.
+    """
+    toolkit = _drought_toolkit(definition)
+    try:
+        result = toolkit.bulletin(None, lang)
+    except ToolError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    pdf = render_pdf(result["markdown"], title=f"{definition.title} ({result['week_of']})")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="drought-bulletin-{result["week_of"]}.pdf"'},
+    )
+
+
 @router.get("/documents/{scenario_slug}", response_model=list[DocumentOut])
 def documents_endpoint(
     request: Request,
@@ -568,6 +608,10 @@ async def agui_endpoint(
     elif scope == SCOPE_ALL:
         prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
         tools = build_model_tools(prediction_client, definition, authorization=request.headers.get("authorization"))
+        if getattr(definition, "analysis_toolset", None) == "drought_watch":
+            toolkit = await run_in_threadpool(_drought_toolkit, definition)
+            tools.extend(build_drought_tools(toolkit, scenario_slug=definition.slug))
+            system_prompt += drought_system_prompt(toolkit)
     else:
         system_prompt += documents_only_instructions(definition)
     if definition.documents is not None and definition.documents.tool is not None and document_search is not None:
