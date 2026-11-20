@@ -1,0 +1,22 @@
+# Data-quality thresholds and the training policy (ai_circus_shared.series_quality.QualityConfig).
+# A flag means "needs review", never "wrong": the readings stay visible, the training copy follows the rule below.
+#
+# Policy for training (documented here, applied by series_quality.cleaned):
+#   - duplicate days  -> the first published reading is kept;
+#   - `jump` flags -> the reading is left out of the training copy;
+#   - up to 3 missing days (originals, or created by the line above) -> linear interpolation; longer gaps stay gaps;
+#   - `pct_range` (a reservoir above 100 % may be spilling), `flatline` and `level_volume` are shown but kept: the
+#     target is the published percentage, and a level_volume flag usually marks a revised level-to-volume table
+#     (the curve is fitted per year for that reason), which says nothing about the percentage itself.
+
+flatline_days: 14
+max_daily_jump_pct: 5.0
+pct_min: 0.0
+pct_max: 100.0
+curve_bins: 60
+curve_min_points: 200
+curve_window_days: 365
+curve_mad_k: 8.0
+curve_min_abs_residual: 0.05   # hm3: below this a residual is rounding, whatever the series' own scatter
+exclude_flags: [jump]
+max_impute_gap_days: 3

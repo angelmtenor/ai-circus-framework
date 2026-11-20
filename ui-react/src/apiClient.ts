@@ -565,6 +565,24 @@ export type ForecastBoardExtra = {
   subtitle: string | null;
   levers: ForecastLever[];
   peak_label: string;
+  summary?: "total" | "change";
+  series_labels?: Record<string, string>;
+  map?: ForecastBoardMap | null;
+};
+// A schematic map of the board's series: x right, y up, in the map's own units.
+export type ForecastMapSite = {
+  series: string;
+  x: number;
+  y: number;
+  group?: string | null;
+  label?: "right" | "left" | "above" | "below";
+};
+export type ForecastBoardMap = {
+  caption: string;
+  width: number;
+  height: number;
+  lines: [number, number][][];
+  sites: ForecastMapSite[];
 };
 
 // Mirrors ai_circus_shared.network_graph.NetworkGraph — prediction's GET /graph/{slug}.

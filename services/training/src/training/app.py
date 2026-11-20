@@ -26,6 +26,7 @@ from ai_circus_shared.business_rules import passes
 from ai_circus_shared.embeddings import GatewayEmbeddingProvider
 from ai_circus_shared.forecasting import MODEL_BACKTEST_KEY, MODEL_FORECAST_KEY, MODEL_FORECASTER_KEY
 from ai_circus_shared.scenario_schema import (
+    QUANTILE_CANDIDATE,
     ScenarioDefinition,
     base_scenario_slug,
     expand_model_views,
@@ -59,6 +60,7 @@ from training.core.forecasting import split_series, train_forecast
 from training.core.governance_events import emit_model_trained
 from training.core.logger import configure_logger, get_logger
 from training.core.mlflow_tracking import log_training_run
+from training.core.quantile_pipeline import run_quantile_forecast
 from training.core.recommender import train_recommender
 from training.core.training import (
     DEFAULT_SELECTION_METRIC,
@@ -329,8 +331,15 @@ def _train_forecast(
     assert definition.dataset is not None and definition.model is not None and definition.time_series is not None
     model, ts = definition.model, definition.time_series
     selection_metric = model.selection_metric or "mase"
-    series = split_series(df, definition.dataset, ts)
-    run = train_forecast(model.candidates, ts, series, selection_metric, model.accuracy_gain_threshold_for_complexity)
+    if QUANTILE_CANDIDATE in model.candidates:
+        run = run_quantile_forecast(df, definition)  # docs/adr/0030: direct p10/p50/p90, its own baselines
+        series_count = len(run.forecast["series"])
+    else:
+        series = split_series(df, definition.dataset, ts)
+        series_count = len(series)
+        run = train_forecast(
+            model.candidates, ts, series, selection_metric, model.accuracy_gain_threshold_for_complexity
+        )
     logger.success("Selected forecaster: {!r} (backtest {})", run.selected.name, run.selected.metrics)
 
     checksums: dict[str, str] = {}
@@ -371,13 +380,14 @@ def _train_forecast(
             "frequency": ts.frequency,
             "horizon": ts.horizon,
             "season_length": ts.resolved_season_length(),
-            "series": len(series),
+            "series": series_count,
             "backtest_windows": len(run.backtest["windows"]),
             "prediction_intervals": ts.prediction_intervals,
             "what_if": run.forecaster is not None,
         },
         # The what-if inputs are shifts of assumed exogenous values, not observations: no drift reference.
         "drift_reference": None,
+        **run.metadata_extra,
         MODEL_CHECKSUMS_METADATA_FIELD: checksums,
     }
     signature = sign_checksums(checksums)

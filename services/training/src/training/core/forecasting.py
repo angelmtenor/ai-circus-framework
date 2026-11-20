@@ -364,6 +364,8 @@ class ForecastRun:
     forecaster: dict[str, Any] | None
     feature_importance: list[dict[str, Any]] | None
     training_rows: int
+    # Extra entries for the model's metadata.json (the `lightgbm_quantile` candidate reports its per-horizon errors).
+    metadata_extra: dict[str, Any] = field(default_factory=dict)
 
 
 def train_forecast(

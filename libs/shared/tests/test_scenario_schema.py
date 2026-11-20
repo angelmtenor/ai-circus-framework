@@ -1730,6 +1730,30 @@ def test_forecast_board_rules() -> None:
         _with(churn, ui_extras={**board, "levers": []})
 
 
+def test_forecast_board_summary_defaults_to_total_and_a_level_shows_the_change() -> None:
+    energy = _energy_forecast()
+    board = energy.ui_extras.model_dump()  # type: ignore[union-attr]
+    assert board["summary"] == "total"
+    assert _with(energy, ui_extras={**board, "summary": "change"}).ui_extras.summary == "change"  # type: ignore[union-attr]
+    with pytest.raises(ValidationError):
+        _with(energy, ui_extras={**board, "summary": "mean"})
+    water = _repo_scenario("water_reservoirs_drought")
+    assert water.ui_extras.summary == "change"  # type: ignore[union-attr]
+
+
+def test_forecast_board_map_and_labels_must_name_known_series_inside_the_map() -> None:
+    water = _repo_scenario("water_reservoirs_drought")
+    board = water.ui_extras.model_dump()  # type: ignore[union-attr]
+    assert board["map"]["sites"] and board["series_labels"]["central"] == "Central system"
+    site = board["map"]["sites"][0]
+    with pytest.raises(ValidationError, match="not in the series options"):
+        _with(water, ui_extras={**board, "map": {**board["map"], "sites": [{**site, "series": "atlantis"}]}})
+    with pytest.raises(ValidationError, match="not in the series options"):
+        _with(water, ui_extras={**board, "series_labels": {"atlantis": "Atlantis"}})
+    with pytest.raises(ValidationError, match="points outside"):
+        _with(water, ui_extras={**board, "map": {**board["map"], "sites": [{**site, "x": 999}]}})
+
+
 # --- several models per scenario (docs/adr/0018-several-models-per-scenario.md) --------------
 
 

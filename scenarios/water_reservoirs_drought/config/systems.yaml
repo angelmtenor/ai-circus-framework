@@ -1,0 +1,28 @@
+# Supply systems of the fictional Riverbend basin: groups of reservoirs that serve the same area. Declared by the
+# scenario owner, in config. Positions are on the basin's own grid (km east `x_km`, km north `y_km`), not a place on
+# Earth. `target_mean_pct` and `turnover` are the generator's calibration targets (scripts/generate_water_data.py).
+
+systems:
+  - id: central
+    name: "Central system"
+    reservoirs: [highmoor, alder_falls, stonebridge, millbrook, ravens_gorge]
+  - id: westfield
+    name: "Westfield system"
+    reservoirs: [lantern_lake]
+  - id: north_coast
+    name: "North Coast system"
+    reservoirs: [kestrel_water]
+  - id: south_valley
+    name: "South Valley system"
+    reservoirs: [copper_hollow, fernmere]
+
+reservoirs:
+  highmoor:      {name: "Highmoor",      capacity_hm3: 150.0, x_km: 30, y_km: 82, river: "Riverbend",   target_mean_pct: 62, turnover: 1.1}
+  alder_falls:   {name: "Alder Falls",   capacity_hm3: 205.0, x_km: 78, y_km: 82, river: "Alder",       target_mean_pct: 70, turnover: 1.0}
+  stonebridge:   {name: "Stonebridge",   capacity_hm3: 96.0,  x_km: 50, y_km: 72, river: "Riverbend",   target_mean_pct: 71, turnover: 1.3}
+  millbrook:     {name: "Millbrook",     capacity_hm3: 28.0,  x_km: 35, y_km: 60, river: "Mill Brook",  target_mean_pct: 76, turnover: 0.8}
+  ravens_gorge:  {name: "Ravens Gorge",  capacity_hm3: 64.0,  x_km: 22, y_km: 70, river: "Mill Brook",  target_mean_pct: 67, turnover: 0.9}
+  lantern_lake:  {name: "Lantern Lake",  capacity_hm3: 4.1,   x_km: 48, y_km: 25, river: "Lantern",     target_mean_pct: 91, turnover: 6.0}
+  kestrel_water: {name: "Kestrel Water", capacity_hm3: 58.0,  x_km: 120, y_km: 82, river: "Kestrel",    target_mean_pct: 57, turnover: 1.6}
+  copper_hollow: {name: "Copper Hollow", capacity_hm3: 14.0,  x_km: 12, y_km: 38, river: "Copper",      target_mean_pct: 54, turnover: 1.2}
+  fernmere:      {name: "Fernmere",      capacity_hm3: 6.2,   x_km: 20, y_km: 18, river: "Copper",      target_mean_pct: 46, turnover: 1.8}

@@ -1,0 +1,1527 @@
+{
+  "rulebook": "riverbend_drought_plan",
+  "forecast_origin": "2026-11-20",
+  "systems": [
+    {
+      "system": "central",
+      "as_of": "2026-11-20",
+      "current_pct": 85.34,
+      "change_7d_pp": 6.4,
+      "change_30d_pp": 6.72,
+      "state": "normal",
+      "raw_state": "normal",
+      "days_in_state": 602,
+      "hysteresis_days": 7,
+      "recent_transitions": [
+        {
+          "day": "2009-02-21",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2009-04-04",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2011-09-29",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2011-10-28",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2013-08-13",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2014-07-22",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2014-11-10",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2015-04-17",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2016-08-11",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2017-03-14",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2017-08-03",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2018-01-30",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2019-12-03",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2019-12-12",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2021-09-08",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-04-07",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2022-07-12",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-10-01",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2023-07-24",
+          "from": "alert",
+          "to": "exceptional"
+        },
+        {
+          "day": "2024-08-03",
+          "from": "exceptional",
+          "to": "emergency"
+        },
+        {
+          "day": "2024-10-29",
+          "from": "emergency",
+          "to": "exceptional"
+        },
+        {
+          "day": "2025-01-06",
+          "from": "exceptional",
+          "to": "alert"
+        },
+        {
+          "day": "2025-03-11",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2025-03-29",
+          "from": "pre_alert",
+          "to": "normal"
+        }
+      ],
+      "forecast_states": {
+        "7": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "30": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "90": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "180": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        }
+      },
+      "crossings": [
+        {
+          "state_below": "pre_alert",
+          "threshold_pct": 60.0,
+          "threshold": 60.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "alert",
+          "threshold_pct": 40.0,
+          "threshold": 40.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "exceptional",
+          "threshold_pct": 25.0,
+          "threshold": 25.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "emergency",
+          "threshold_pct": 15.0,
+          "threshold": 15.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        }
+      ],
+      "what_if": {
+        "horizon": 90,
+        "emergency_threshold_pct": 15.0,
+        "no_measures": {
+          "dry": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 70.3,
+              "p50": 82.83,
+              "p90": 88.84
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "normal": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "normal",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 82.83,
+              "p50": 95.36,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "wet": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "wet",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 88.84,
+              "p50": 100.0,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        },
+        "next_threshold_crossing": {
+          "dry": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "normal": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "wet": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          }
+        }
+      },
+      "optimiser": {
+        "scenario": "dry",
+        "horizon": 180,
+        "emergency_threshold_pct": 15.0,
+        "target": 0.1,
+        "meets_target": true,
+        "chosen": "normal",
+        "outcomes": [
+          {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 60.09,
+              "p50": 77.73,
+              "p90": 81.25
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "pre_alert",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 60.09,
+              "p50": 77.73,
+              "p90": 81.25
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "alert",
+            "savings": 0.1386,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 63.58949174585636,
+              "p50": 78.78458774585636,
+              "p90": 81.81671574585636
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "exceptional",
+            "savings": 0.2643,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 66.76327322099448,
+              "p50": 79.74102122099448,
+              "p90": 82.33068522099447
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "emergency",
+            "savings": 0.4679,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 71.9039407495396,
+              "p50": 81.29018474953959,
+              "p90": 83.16317674953959
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        ],
+        "note": "normal is the least restrictive package with P(below 15) <= 10%."
+      },
+      "note": "Illustrative decision support on synthetic data. A person decides."
+    },
+    {
+      "system": "westfield",
+      "as_of": "2026-11-20",
+      "current_pct": 100.02,
+      "change_7d_pp": 0.0,
+      "change_30d_pp": 0.02,
+      "state": "normal",
+      "raw_state": "normal",
+      "days_in_state": 34,
+      "hysteresis_days": 7,
+      "recent_transitions": [
+        {
+          "day": "2005-09-09",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2005-12-09",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2007-09-20",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2007-10-19",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2008-08-18",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2008-12-10",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2014-08-30",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2014-10-18",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2021-08-20",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2021-10-14",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2022-08-30",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-12-12",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2023-09-08",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2023-10-26",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2023-11-13",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2024-02-26",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2024-07-17",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2024-12-20",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2026-09-20",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2026-10-18",
+          "from": "pre_alert",
+          "to": "normal"
+        }
+      ],
+      "forecast_states": {
+        "7": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "30": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "90": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "180": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        }
+      },
+      "crossings": [
+        {
+          "state_below": "pre_alert",
+          "threshold_pct": 60.0,
+          "threshold": 60.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "alert",
+          "threshold_pct": 40.0,
+          "threshold": 40.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "exceptional",
+          "threshold_pct": 25.0,
+          "threshold": 25.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "emergency",
+          "threshold_pct": 15.0,
+          "threshold": 15.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        }
+      ],
+      "what_if": {
+        "horizon": 90,
+        "emergency_threshold_pct": 15.0,
+        "no_measures": {
+          "dry": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 91.24,
+              "p50": 95.6,
+              "p90": 97.56
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "normal": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "normal",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 95.6,
+              "p50": 99.96,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "wet": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "wet",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 97.56,
+              "p50": 100.0,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        },
+        "next_threshold_crossing": {
+          "dry": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "normal": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "wet": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          }
+        }
+      },
+      "optimiser": {
+        "scenario": "dry",
+        "horizon": 180,
+        "emergency_threshold_pct": 15.0,
+        "target": 0.1,
+        "meets_target": true,
+        "chosen": "normal",
+        "outcomes": [
+          {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 87.28,
+              "p50": 94.31,
+              "p90": 98.26
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "pre_alert",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 87.28,
+              "p50": 94.31,
+              "p90": 98.26
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "alert",
+            "savings": 0.1386,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 89.04637248780489,
+              "p50": 95.10201448780488,
+              "p90": 98.50454448780488
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "exceptional",
+            "savings": 0.2643,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 90.64834234146342,
+              "p50": 95.82031334146342,
+              "p90": 98.72632834146341
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "emergency",
+            "savings": 0.4679,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 93.24310019512195,
+              "p50": 96.98376319512195,
+              "p90": 99.08555819512196
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        ],
+        "note": "normal is the least restrictive package with P(below 15) <= 10%."
+      },
+      "note": "Illustrative decision support on synthetic data. A person decides."
+    },
+    {
+      "system": "north_coast",
+      "as_of": "2026-11-20",
+      "current_pct": 75.78,
+      "change_7d_pp": 12.19,
+      "change_30d_pp": 14.57,
+      "state": "normal",
+      "raw_state": "normal",
+      "days_in_state": 3,
+      "hysteresis_days": 7,
+      "recent_transitions": [
+        {
+          "day": "2019-12-21",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2020-06-10",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2020-09-18",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2020-10-11",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2021-07-16",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2021-08-25",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2021-10-29",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2021-11-30",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2022-03-26",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-04-09",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2022-05-14",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-07-14",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2022-08-28",
+          "from": "alert",
+          "to": "exceptional"
+        },
+        {
+          "day": "2023-07-21",
+          "from": "exceptional",
+          "to": "emergency"
+        },
+        {
+          "day": "2025-01-04",
+          "from": "emergency",
+          "to": "exceptional"
+        },
+        {
+          "day": "2025-01-11",
+          "from": "exceptional",
+          "to": "alert"
+        },
+        {
+          "day": "2025-03-11",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2025-03-23",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2025-09-24",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2026-01-16",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2026-08-22",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2026-10-25",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2026-11-09",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2026-11-18",
+          "from": "pre_alert",
+          "to": "normal"
+        }
+      ],
+      "forecast_states": {
+        "7": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "30": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "90": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        },
+        "180": {
+          "p10": "normal",
+          "p50": "normal",
+          "p90": "normal"
+        }
+      },
+      "crossings": [
+        {
+          "state_below": "pre_alert",
+          "threshold_pct": 60.0,
+          "threshold": 60.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "alert",
+          "threshold_pct": 40.0,
+          "threshold": 40.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "exceptional",
+          "threshold_pct": 25.0,
+          "threshold": 25.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "emergency",
+          "threshold_pct": 15.0,
+          "threshold": 15.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        }
+      ],
+      "what_if": {
+        "horizon": 90,
+        "emergency_threshold_pct": 15.0,
+        "no_measures": {
+          "dry": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 54.30999999999999,
+              "p50": 70.16,
+              "p90": 86.07
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "normal": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "normal",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 70.16,
+              "p50": 86.01,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "wet": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "wet",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 86.07,
+              "p50": 100.0,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        },
+        "next_threshold_crossing": {
+          "dry": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": 59.1
+          },
+          "normal": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "wet": {
+            "threshold": 60.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          }
+        }
+      },
+      "optimiser": {
+        "scenario": "dry",
+        "horizon": 180,
+        "emergency_threshold_pct": 15.0,
+        "target": 0.1,
+        "meets_target": true,
+        "chosen": "normal",
+        "outcomes": [
+          {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 41.480000000000004,
+              "p50": 64.89,
+              "p90": 76.77000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "pre_alert",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 41.480000000000004,
+              "p50": 64.89,
+              "p90": 76.77000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "alert",
+            "savings": 0.1386,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 46.233406482758625,
+              "p50": 66.39878048275862,
+              "p90": 76.77000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "exceptional",
+            "savings": 0.2643,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 50.54439634482759,
+              "p50": 67.76713334482758,
+              "p90": 76.77000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "emergency",
+            "savings": 0.4679,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 57.52703386206897,
+              "p50": 69.98349486206897,
+              "p90": 76.77000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        ],
+        "note": "normal is the least restrictive package with P(below 15) <= 10%."
+      },
+      "note": "Illustrative decision support on synthetic data. A person decides."
+    },
+    {
+      "system": "south_valley",
+      "as_of": "2026-11-20",
+      "current_pct": 52.18,
+      "change_7d_pp": 2.78,
+      "change_30d_pp": 2.07,
+      "state": "pre_alert",
+      "raw_state": "pre_alert",
+      "days_in_state": 86,
+      "hysteresis_days": 7,
+      "recent_transitions": [
+        {
+          "day": "2018-03-14",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2019-07-23",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2019-09-14",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2019-12-13",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2020-05-19",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2020-06-09",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2020-06-16",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2020-09-08",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2020-10-11",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2021-07-30",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2021-09-15",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2022-04-06",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-04-13",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2022-05-17",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2022-07-18",
+          "from": "pre_alert",
+          "to": "alert"
+        },
+        {
+          "day": "2022-09-08",
+          "from": "alert",
+          "to": "exceptional"
+        },
+        {
+          "day": "2023-08-05",
+          "from": "exceptional",
+          "to": "emergency"
+        },
+        {
+          "day": "2025-02-25",
+          "from": "emergency",
+          "to": "exceptional"
+        },
+        {
+          "day": "2025-03-13",
+          "from": "exceptional",
+          "to": "alert"
+        },
+        {
+          "day": "2025-03-20",
+          "from": "alert",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2025-04-01",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2025-10-09",
+          "from": "normal",
+          "to": "pre_alert"
+        },
+        {
+          "day": "2026-01-16",
+          "from": "pre_alert",
+          "to": "normal"
+        },
+        {
+          "day": "2026-08-27",
+          "from": "normal",
+          "to": "pre_alert"
+        }
+      ],
+      "forecast_states": {
+        "7": {
+          "p10": "pre_alert",
+          "p50": "pre_alert",
+          "p90": "pre_alert"
+        },
+        "30": {
+          "p10": "pre_alert",
+          "p50": "pre_alert",
+          "p90": "normal"
+        },
+        "90": {
+          "p10": "pre_alert",
+          "p50": "pre_alert",
+          "p90": "normal"
+        },
+        "180": {
+          "p10": "pre_alert",
+          "p50": "normal",
+          "p90": "normal"
+        }
+      },
+      "crossings": [
+        {
+          "state_below": "alert",
+          "threshold_pct": 40.0,
+          "threshold": 40.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "exceptional",
+          "threshold_pct": 25.0,
+          "threshold": 25.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        },
+        {
+          "state_below": "emergency",
+          "threshold_pct": 15.0,
+          "threshold": 15.0,
+          "optimistic": null,
+          "median": null,
+          "pessimistic": null
+        }
+      ],
+      "what_if": {
+        "horizon": 90,
+        "emergency_threshold_pct": 15.0,
+        "no_measures": {
+          "dry": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 41.730000000000004,
+              "p50": 50.02,
+              "p90": 79.83000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "normal": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "normal",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 50.02,
+              "p50": 58.31,
+              "p90": 88.12
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          "wet": {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "wet",
+            "horizon": 90,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 79.83000000000001,
+              "p50": 88.12,
+              "p90": 100.0
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        },
+        "next_threshold_crossing": {
+          "dry": {
+            "threshold": 40.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "normal": {
+            "threshold": 40.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          },
+          "wet": {
+            "threshold": 40.0,
+            "optimistic": null,
+            "median": null,
+            "pessimistic": null
+          }
+        }
+      },
+      "optimiser": {
+        "scenario": "dry",
+        "horizon": 180,
+        "emergency_threshold_pct": 15.0,
+        "target": 0.1,
+        "meets_target": true,
+        "chosen": "normal",
+        "outcomes": [
+          {
+            "package": "normal",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 36.63,
+              "p50": 49.81,
+              "p90": 89.55000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "pre_alert",
+            "savings": 0.0,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 36.63,
+              "p50": 49.81,
+              "p90": 89.55000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "alert",
+            "savings": 0.1386,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 38.785669128712875,
+              "p50": 50.13892112871287,
+              "p90": 89.55000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "exceptional",
+            "savings": 0.2643,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 40.740702386138615,
+              "p50": 50.437228386138614,
+              "p90": 89.55000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          },
+          {
+            "package": "emergency",
+            "savings": 0.4679,
+            "scenario": "dry",
+            "horizon": 180,
+            "threshold": 15.0,
+            "probability_below": 0.01,
+            "worst_checkpoint": 7,
+            "final": {
+              "p10": 43.90732745544555,
+              "p50": 50.92040545544555,
+              "p90": 89.55000000000001
+            },
+            "crossing": {
+              "threshold": 15.0,
+              "optimistic": null,
+              "median": null,
+              "pessimistic": null
+            }
+          }
+        ],
+        "note": "normal is the least restrictive package with P(below 15) <= 10%."
+      },
+      "note": "Illustrative decision support on synthetic data. A person decides."
+    }
+  ],
+  "note": "Illustrative decision support on synthetic data. Not an operational tool."
+}

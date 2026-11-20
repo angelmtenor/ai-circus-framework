@@ -1,0 +1,80 @@
+# Golden prompts of the drought-watch assistant . For each: the tools a correct answer uses (`tools`; the
+# render_* ones are the chat UI's own), and a reference `plan`, the calls with arguments that produce the figures a
+# correct answer states. services/assistant/tests/test_drought_tools.py runs every plan through the real tools and
+# checks what must be in the results; `expect` keys: `equals` (top-level key -> value), `has_keys`, `text_contains`.
+#
+# What this does NOT test: whether a language model picks these tools and copies their figures faithfully. That needs a
+# live model; see docs/scenarios/water_reservoirs_drought_guide.md. `ai_circus_shared.traceability.untraceable` is the check
+# to run on a live answer against the tool results.
+
+- id: top_losers
+  prompt: "Which three reservoirs lost most storage in the last 30 days? Show a chart."
+  tools: [run_sql, render_chart]
+  plan:
+    - tool: run_sql
+      args:
+        sql: >
+          SELECT r.name, ROUND(e.pct - s.pct, 2) AS change_pp
+          FROM reservoirs r
+          JOIN storage_daily e ON e.series = r.id AND e.day = (SELECT max(day) FROM storage_daily)
+          JOIN storage_daily s ON s.series = r.id AND s.day = date((SELECT max(day) FROM storage_daily), '-30 day')
+          ORDER BY change_pp ASC LIMIT 3
+      expect: {equals: {row_count: 3}, has_keys: [columns, rows]}
+
+- id: when_alert
+  prompt: "At the current trend, when does the main system enter alert? And with a dry quarter?"
+  tools: [drought_state, what_if]
+  plan:
+    - tool: drought_state
+      args: {system: central}
+      expect: {has_keys: [state, current_pct, as_of]}
+    - tool: what_if
+      args: {system: central, scenario: normal, savings_pct: 0, horizon: 90}
+      expect: {has_keys: [thresholds, end_of_horizon_pct], text_contains: [alert]}
+    - tool: what_if
+      args: {system: central, scenario: dry, savings_pct: 0, horizon: 90}
+      expect: {has_keys: [thresholds, end_of_horizon_pct], text_contains: [alert]}
+
+- id: measures_exceptional_agriculture
+  prompt: "What measures apply in exceptional state for agriculture? Cite the article."
+  tools: [search_rulebook]
+  plan:
+    - tool: search_rulebook
+      args: {query: "agriculture measures in exceptional state", lang: en}
+      expect: {text_contains: ["Art. 8.1", "Agriculture"]}
+
+- id: compare_with_2023
+  prompt: "Compare storage today with the same date in 2023."
+  tools: [run_sql, render_chart]
+  plan:
+    - tool: run_sql
+      args:
+        sql: >
+          SELECT n.series, n.pct AS today_pct, o.pct AS pct_2023
+          FROM storage_daily n JOIN storage_daily o ON o.series = n.series AND o.day = '2023-11-20'
+          WHERE n.day = (SELECT max(day) FROM storage_daily) AND n.kind = 'system' ORDER BY n.series
+      expect: {equals: {row_count: 4}}
+
+- id: readings_to_review
+  prompt: "Are there readings that need review this month in reservoir Lantern Lake? Why?"
+  tools: [dq_report]
+  plan:
+    - tool: dq_report
+      args: {reservoir: Lantern Lake}
+      expect: {has_keys: [flags_by_code, meaning, score_pct], text_contains: [pct_range]}
+
+- id: least_restrictive_package
+  prompt: "What is the least restrictive package that keeps us out of emergency for 180 days in a dry scenario?"
+  tools: [optimise_measures]
+  plan:
+    - tool: optimise_measures
+      args: {system: south_valley, target_probability_pct: 10, horizon: 180, scenario: dry}
+      expect: {has_keys: [packages, least_restrictive_package, meets_target]}
+
+- id: weekly_bulletin
+  prompt: "Draft this week's drought bulletin."
+  tools: [generate_bulletin]
+  plan:
+    - tool: generate_bulletin
+      args: {lang: en}
+      expect: {has_keys: [markdown, week_of, pdf_path], text_contains: ["Weekly drought bulletin", "Central system"]}

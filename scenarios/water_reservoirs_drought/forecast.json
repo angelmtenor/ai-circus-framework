@@ -1,0 +1,832 @@
+{
+  "generated": "2026-11-20",
+  "origin": "2026-11-20",
+  "horizons": [
+    7,
+    30,
+    90,
+    180
+  ],
+  "series": [
+    {
+      "series": "alder_falls",
+      "origin": "2026-11-20",
+      "current_pct": 85.0,
+      "horizons": {
+        "7": {
+          "p10": 84.66,
+          "p50": 85.19,
+          "p90": 88.48,
+          "drivers_pp": {
+            "recent trend": 0.87,
+            "storage history": 0.0,
+            "rainfall": -0.2,
+            "temperature": -0.07,
+            "season": 0.17,
+            "which series": -0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 84.02,
+          "p50": 90.01,
+          "p90": 100.35,
+          "drivers_pp": {
+            "recent trend": 5.17,
+            "storage history": 0.26,
+            "rainfall": -0.4,
+            "temperature": -0.21,
+            "season": 1.57,
+            "which series": -0.05,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 82.49,
+          "p50": 95.67,
+          "p90": 100.0,
+          "drivers_pp": {
+            "recent trend": 5.94,
+            "storage history": -0.85,
+            "rainfall": -1.59,
+            "temperature": 0.39,
+            "season": 7.44,
+            "which series": 1.0,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 78.43,
+          "p50": 96.14,
+          "p90": 99.48,
+          "drivers_pp": {
+            "recent trend": 4.33,
+            "storage history": -5.32,
+            "rainfall": -2.45,
+            "temperature": 2.1,
+            "season": 11.56,
+            "which series": 2.7,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "central",
+      "origin": "2026-11-20",
+      "current_pct": 85.34,
+      "horizons": {
+        "7": {
+          "p10": 85.01,
+          "p50": 85.51,
+          "p90": 88.64,
+          "drivers_pp": {
+            "recent trend": 0.87,
+            "storage history": -0.02,
+            "rainfall": -0.21,
+            "temperature": -0.06,
+            "season": 0.17,
+            "which series": -0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 84.35,
+          "p50": 90.09,
+          "p90": 100.0,
+          "drivers_pp": {
+            "recent trend": 5.05,
+            "storage history": 0.15,
+            "rainfall": -0.54,
+            "temperature": -0.08,
+            "season": 1.56,
+            "which series": -0.05,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 82.83,
+          "p50": 95.36,
+          "p90": 101.37,
+          "drivers_pp": {
+            "recent trend": 6.0,
+            "storage history": -0.47,
+            "rainfall": -1.8,
+            "temperature": 0.37,
+            "season": 7.25,
+            "which series": 0.33,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 77.73,
+          "p50": 95.37,
+          "p90": 98.89,
+          "drivers_pp": {
+            "recent trend": 4.14,
+            "storage history": -4.52,
+            "rainfall": -2.86,
+            "temperature": 2.0,
+            "season": 11.53,
+            "which series": 1.7,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "copper_hollow",
+      "origin": "2026-11-20",
+      "current_pct": 58.6,
+      "horizons": {
+        "7": {
+          "p10": 58.17,
+          "p50": 58.56,
+          "p90": 61.17,
+          "drivers_pp": {
+            "recent trend": 0.46,
+            "storage history": -0.01,
+            "rainfall": -0.02,
+            "temperature": -0.02,
+            "season": 0.14,
+            "which series": -0.04,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 57.18,
+          "p50": 60.25,
+          "p90": 73.65,
+          "drivers_pp": {
+            "recent trend": 1.51,
+            "storage history": 0.46,
+            "rainfall": 0.06,
+            "temperature": 0.01,
+            "season": 1.34,
+            "which series": -0.39,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 55.83,
+          "p50": 65.34,
+          "p90": 91.09,
+          "drivers_pp": {
+            "recent trend": 1.14,
+            "storage history": 2.13,
+            "rainfall": -0.03,
+            "temperature": 0.24,
+            "season": 6.63,
+            "which series": -1.71,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 55.6,
+          "p50": 68.74,
+          "p90": 104.09,
+          "drivers_pp": {
+            "recent trend": 1.77,
+            "storage history": 0.65,
+            "rainfall": 0.29,
+            "temperature": 2.6,
+            "season": 11.01,
+            "which series": -4.53,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "fernmere",
+      "origin": "2026-11-20",
+      "current_pct": 37.6,
+      "horizons": {
+        "7": {
+          "p10": 37.34,
+          "p50": 37.78,
+          "p90": 41.35,
+          "drivers_pp": {
+            "recent trend": 0.64,
+            "storage history": 0.04,
+            "rainfall": -0.04,
+            "temperature": -0.02,
+            "season": 0.14,
+            "which series": -0.03,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 36.64,
+          "p50": 40.3,
+          "p90": 56.17,
+          "drivers_pp": {
+            "recent trend": 2.4,
+            "storage history": 0.85,
+            "rainfall": -0.35,
+            "temperature": 0.06,
+            "season": 1.32,
+            "which series": -0.24,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 36.34,
+          "p50": 46.3,
+          "p90": 76.83,
+          "drivers_pp": {
+            "recent trend": 1.47,
+            "storage history": 2.85,
+            "rainfall": -0.08,
+            "temperature": 0.89,
+            "season": 6.82,
+            "which series": -1.6,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 34.86,
+          "p50": 50.67,
+          "p90": 95.43,
+          "drivers_pp": {
+            "recent trend": 3.06,
+            "storage history": 4.38,
+            "rainfall": -0.34,
+            "temperature": 2.45,
+            "season": 10.89,
+            "which series": -5.72,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "highmoor",
+      "origin": "2026-11-20",
+      "current_pct": 85.7,
+      "horizons": {
+        "7": {
+          "p10": 85.15,
+          "p50": 85.68,
+          "p90": 89.21,
+          "drivers_pp": {
+            "recent trend": 0.58,
+            "storage history": -0.03,
+            "rainfall": -0.09,
+            "temperature": -0.03,
+            "season": 0.13,
+            "which series": -0.04,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 83.85,
+          "p50": 89.03,
+          "p90": 98.66,
+          "drivers_pp": {
+            "recent trend": 4.01,
+            "storage history": 0.13,
+            "rainfall": -0.68,
+            "temperature": -0.09,
+            "season": 1.4,
+            "which series": -0.11,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 81.79,
+          "p50": 94.16,
+          "p90": 102.77,
+          "drivers_pp": {
+            "recent trend": 5.66,
+            "storage history": -1.17,
+            "rainfall": -1.43,
+            "temperature": 0.25,
+            "season": 7.22,
+            "which series": -0.42,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 75.96,
+          "p50": 94.12,
+          "p90": 98.88,
+          "drivers_pp": {
+            "recent trend": 3.96,
+            "storage history": -4.53,
+            "rainfall": -1.83,
+            "temperature": 1.87,
+            "season": 11.3,
+            "which series": -0.72,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "kestrel_water",
+      "origin": "2026-11-20",
+      "current_pct": 75.8,
+      "horizons": {
+        "7": {
+          "p10": 75.18,
+          "p50": 76.36,
+          "p90": 80.85,
+          "drivers_pp": {
+            "recent trend": 1.31,
+            "storage history": -0.0,
+            "rainfall": -0.28,
+            "temperature": -0.06,
+            "season": 0.18,
+            "which series": -0.04,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 73.76,
+          "p50": 82.53,
+          "p90": 95.27,
+          "drivers_pp": {
+            "recent trend": 6.3,
+            "storage history": 0.74,
+            "rainfall": 0.01,
+            "temperature": -0.35,
+            "season": 1.46,
+            "which series": -0.09,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 69.68,
+          "p50": 86.12,
+          "p90": 102.39,
+          "drivers_pp": {
+            "recent trend": 6.35,
+            "storage history": 1.16,
+            "rainfall": -2.23,
+            "temperature": -0.12,
+            "season": 7.11,
+            "which series": -0.3,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 64.83,
+          "p50": 87.67,
+          "p90": 99.97,
+          "drivers_pp": {
+            "recent trend": 4.03,
+            "storage history": -1.11,
+            "rainfall": -2.25,
+            "temperature": 1.77,
+            "season": 12.05,
+            "which series": -0.98,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "lantern_lake",
+      "origin": "2026-11-20",
+      "current_pct": 100.0,
+      "horizons": {
+        "7": {
+          "p10": 99.64,
+          "p50": 99.94,
+          "p90": 100.23,
+          "drivers_pp": {
+            "recent trend": 0.37,
+            "storage history": -0.02,
+            "rainfall": 0.01,
+            "temperature": -0.0,
+            "season": 0.12,
+            "which series": 0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 98.52,
+          "p50": 99.59,
+          "p90": 100.11,
+          "drivers_pp": {
+            "recent trend": 0.84,
+            "storage history": -1.01,
+            "rainfall": 0.02,
+            "temperature": -0.01,
+            "season": 0.99,
+            "which series": 0.09,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 94.62,
+          "p50": 99.98,
+          "p90": 101.99,
+          "drivers_pp": {
+            "recent trend": 0.79,
+            "storage history": -5.57,
+            "rainfall": 0.39,
+            "temperature": 0.57,
+            "season": 4.19,
+            "which series": 1.34,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 93.07,
+          "p50": 101.18,
+          "p90": 105.2,
+          "drivers_pp": {
+            "recent trend": -0.28,
+            "storage history": -12.19,
+            "rainfall": 1.01,
+            "temperature": 2.92,
+            "season": 8.58,
+            "which series": 2.78,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "millbrook",
+      "origin": "2026-11-20",
+      "current_pct": 87.1,
+      "horizons": {
+        "7": {
+          "p10": 86.87,
+          "p50": 87.29,
+          "p90": 89.72,
+          "drivers_pp": {
+            "recent trend": 0.65,
+            "storage history": 0.01,
+            "rainfall": -0.05,
+            "temperature": -0.02,
+            "season": 0.14,
+            "which series": 0.01,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 86.29,
+          "p50": 90.05,
+          "p90": 98.9,
+          "drivers_pp": {
+            "recent trend": 2.65,
+            "storage history": 0.15,
+            "rainfall": 0.07,
+            "temperature": 0.02,
+            "season": 1.34,
+            "which series": 0.06,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 84.99,
+          "p50": 93.93,
+          "p90": 101.27,
+          "drivers_pp": {
+            "recent trend": 3.75,
+            "storage history": -2.34,
+            "rainfall": -0.46,
+            "temperature": 0.65,
+            "season": 6.06,
+            "which series": 0.81,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 81.93,
+          "p50": 98.48,
+          "p90": 102.01,
+          "drivers_pp": {
+            "recent trend": 4.3,
+            "storage history": -5.58,
+            "rainfall": 0.26,
+            "temperature": 2.0,
+            "season": 10.69,
+            "which series": 1.35,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "north_coast",
+      "origin": "2026-11-20",
+      "current_pct": 75.78,
+      "horizons": {
+        "7": {
+          "p10": 75.03,
+          "p50": 76.25,
+          "p90": 80.63,
+          "drivers_pp": {
+            "recent trend": 1.19,
+            "storage history": -0.0,
+            "rainfall": -0.26,
+            "temperature": -0.06,
+            "season": 0.18,
+            "which series": -0.03,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 73.99,
+          "p50": 82.62,
+          "p90": 94.84,
+          "drivers_pp": {
+            "recent trend": 6.32,
+            "storage history": 0.76,
+            "rainfall": 0.02,
+            "temperature": -0.35,
+            "season": 1.47,
+            "which series": -0.04,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 70.16,
+          "p50": 86.01,
+          "p90": 101.92,
+          "drivers_pp": {
+            "recent trend": 6.35,
+            "storage history": 1.1,
+            "rainfall": -2.26,
+            "temperature": -0.12,
+            "season": 7.11,
+            "which series": -0.29,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 64.89,
+          "p50": 88.3,
+          "p90": 100.18,
+          "drivers_pp": {
+            "recent trend": 4.1,
+            "storage history": -0.87,
+            "rainfall": -2.2,
+            "temperature": 1.77,
+            "season": 12.05,
+            "which series": -0.69,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "ravens_gorge",
+      "origin": "2026-11-20",
+      "current_pct": 77.8,
+      "horizons": {
+        "7": {
+          "p10": 77.44,
+          "p50": 77.8,
+          "p90": 80.74,
+          "drivers_pp": {
+            "recent trend": 0.48,
+            "storage history": -0.01,
+            "rainfall": -0.02,
+            "temperature": -0.02,
+            "season": 0.14,
+            "which series": -0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 76.66,
+          "p50": 80.22,
+          "p90": 95.05,
+          "drivers_pp": {
+            "recent trend": 1.94,
+            "storage history": 0.39,
+            "rainfall": 0.25,
+            "temperature": -0.02,
+            "season": 1.27,
+            "which series": -0.07,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 75.16,
+          "p50": 87.14,
+          "p90": 102.85,
+          "drivers_pp": {
+            "recent trend": 3.22,
+            "storage history": 0.65,
+            "rainfall": 0.2,
+            "temperature": 0.29,
+            "season": 6.71,
+            "which series": -0.08,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 70.85,
+          "p50": 93.57,
+          "p90": 102.79,
+          "drivers_pp": {
+            "recent trend": 4.11,
+            "storage history": -0.87,
+            "rainfall": -0.01,
+            "temperature": 1.93,
+            "season": 11.97,
+            "which series": 0.27,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "south_valley",
+      "origin": "2026-11-20",
+      "current_pct": 52.18,
+      "horizons": {
+        "7": {
+          "p10": 51.77,
+          "p50": 52.23,
+          "p90": 55.0,
+          "drivers_pp": {
+            "recent trend": 0.54,
+            "storage history": -0.02,
+            "rainfall": -0.02,
+            "temperature": -0.02,
+            "season": 0.14,
+            "which series": -0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 50.9,
+          "p50": 54.53,
+          "p90": 69.01,
+          "drivers_pp": {
+            "recent trend": 1.94,
+            "storage history": 0.5,
+            "rainfall": -0.01,
+            "temperature": 0.03,
+            "season": 1.35,
+            "which series": -0.12,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 50.02,
+          "p50": 58.31,
+          "p90": 88.12,
+          "drivers_pp": {
+            "recent trend": 0.95,
+            "storage history": 1.78,
+            "rainfall": -0.14,
+            "temperature": 0.24,
+            "season": 6.65,
+            "which series": -1.7,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 49.81,
+          "p50": 62.99,
+          "p90": 102.73,
+          "drivers_pp": {
+            "recent trend": 2.21,
+            "storage history": 0.97,
+            "rainfall": 0.29,
+            "temperature": 2.56,
+            "season": 10.44,
+            "which series": -4.04,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "stonebridge",
+      "origin": "2026-11-20",
+      "current_pct": 90.1,
+      "horizons": {
+        "7": {
+          "p10": 89.79,
+          "p50": 90.7,
+          "p90": 94.0,
+          "drivers_pp": {
+            "recent trend": 1.32,
+            "storage history": 0.02,
+            "rainfall": -0.28,
+            "temperature": -0.07,
+            "season": 0.18,
+            "which series": -0.03,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 88.74,
+          "p50": 95.34,
+          "p90": 97.83,
+          "drivers_pp": {
+            "recent trend": 5.71,
+            "storage history": -0.08,
+            "rainfall": -0.72,
+            "temperature": -0.14,
+            "season": 1.68,
+            "which series": 0.13,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 85.65,
+          "p50": 95.46,
+          "p90": 101.67,
+          "drivers_pp": {
+            "recent trend": 5.49,
+            "storage history": -3.61,
+            "rainfall": -2.59,
+            "temperature": 0.02,
+            "season": 6.88,
+            "which series": 0.83,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 80.44,
+          "p50": 95.95,
+          "p90": 99.98,
+          "drivers_pp": {
+            "recent trend": 4.25,
+            "storage history": -8.34,
+            "rainfall": -3.1,
+            "temperature": 1.93,
+            "season": 11.22,
+            "which series": 1.53,
+            "base": -1.64
+          }
+        }
+      }
+    },
+    {
+      "series": "westfield",
+      "origin": "2026-11-20",
+      "current_pct": 100.02,
+      "horizons": {
+        "7": {
+          "p10": 99.93,
+          "p50": 100.02,
+          "p90": 100.26,
+          "drivers_pp": {
+            "recent trend": 0.48,
+            "storage history": -0.05,
+            "rainfall": 0.01,
+            "temperature": -0.0,
+            "season": 0.09,
+            "which series": 0.02,
+            "base": -0.55
+          }
+        },
+        "30": {
+          "p10": 98.99,
+          "p50": 99.65,
+          "p90": 100.12,
+          "drivers_pp": {
+            "recent trend": 1.01,
+            "storage history": -1.2,
+            "rainfall": -0.02,
+            "temperature": -0.01,
+            "season": 0.92,
+            "which series": 0.27,
+            "base": -1.34
+          }
+        },
+        "90": {
+          "p10": 95.6,
+          "p50": 99.96,
+          "p90": 101.92,
+          "drivers_pp": {
+            "recent trend": 0.67,
+            "storage history": -7.83,
+            "rainfall": 0.43,
+            "temperature": 0.59,
+            "season": 4.33,
+            "which series": 3.41,
+            "base": -1.65
+          }
+        },
+        "180": {
+          "p10": 94.31,
+          "p50": 101.34,
+          "p90": 105.29,
+          "drivers_pp": {
+            "recent trend": 0.21,
+            "storage history": -14.7,
+            "rainfall": 0.91,
+            "temperature": 2.75,
+            "season": 8.74,
+            "which series": 5.03,
+            "base": -1.64
+          }
+        }
+      }
+    }
+  ],
+  "note": "Illustrative decision support on synthetic data. Not an operational tool."
+}

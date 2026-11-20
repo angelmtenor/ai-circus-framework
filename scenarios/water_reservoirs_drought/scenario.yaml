@@ -1,0 +1,188 @@
+# Seed definition for the "water_reservoirs_drought" scenario — loaded into the `platform` Postgres schema by
+# services/platform-registry at bootstrap, and read as build-time config by etl-tabular, training and prediction
+# (see the header of scenarios/luznova_regional_demand/scenario.yaml). Design: docs/adr/0030,
+# docs/scenarios/water_reservoirs_drought_guide.md.
+#
+# Riverbend Water Authority and its basin are FICTIONAL, and so is all the data: a calibrated synthetic basin generated
+# by scripts/generate_water_data.py (weather stations, nine reservoirs, a simple water balance, multi-year droughts and
+# the faults of an unvalidated feed). The drought plan (rulebook/) is fictional too. A reference implementation: not an
+# operational tool.
+#
+# A forecast of 13 series (9 reservoirs, 4 supply systems) with `lightgbm_quantile`: p10/p50/p90 at 7, 30, 90 and
+# 180 days, backtested by year against persistence and seasonal climatology. `pct` is the cleaned storage % (the
+# data-quality policy of config/quality.yaml applied by scripts/prepare_water_storage_seed.py); `precip_mm` and `temp_c`
+# are the mean of the weather stations around each series' reservoirs (the model reads them as past rain and a
+# temperature anomaly; the forecast never assumes future weather).
+
+slug: water_reservoirs_drought
+kind: tabular_ml
+title: "Reservoirs & Drought Watch"
+description: >
+  Where is the water stored, and where is it heading? A daily storage forecast for nine reservoirs and four supply
+  systems (p10/p50/p90 at 7, 30, 90 and 180 days) on a map of the basin, the state against an illustrative drought
+  plan, what-if and measure comparison, data-quality flags and a weekly bulletin — for a fictional water authority, on
+  synthetic data. Illustrative decision support: not an operational tool.
+role_required: "scenario:water_reservoirs_drought"
+industry: public_sector
+icon: "💧"
+
+chat:
+  context: >
+    Riverbend Water Authority (fictional) watches nine reservoirs of the fictional Riverbend basin, grouped into four
+    supply systems (Central, Westfield, North Coast, South Valley). The data is synthetic: a simulated basin with dry
+    summers, wet autumns and multi-year droughts, published like an unvalidated feed. The model forecasts each
+    reservoir's and each system's storage as a percentage of capacity at 7, 30, 90 and 180 days, with a 10th-90th
+    percentile band, from today's level, its recent changes, last year's level, and the rain and temperature of the
+    catchment so far. It is backtested by year against two baselines (persistence and seasonal climatology): it beats
+    both at 30 and 90 days overall, but is weaker than persistence at 90 and 180 days in the 2022-2024 drought; say so
+    when asked about accuracy, and that on synthetic data the backtest shows the method, not real-world accuracy.
+    Storage is compared with an illustrative, fictional drought plan (normal at or above 60 %, pre-alert 40-60, alert
+    25-40, exceptional 15-25, emergency below 15). A reading that needs review is flagged, never called wrong. This is
+    illustrative decision support; a person decides.
+  sample_questions:
+    - "Which three reservoirs lost most storage in the last 30 days? Show a chart."
+    - "At the current trend, when does the Central system enter alert? And with a dry quarter?"
+    - "What measures apply in exceptional state for agriculture? Cite the article."
+    - "Compare storage today with the same date in 2023."
+    - "Are there readings that need review this month in Lantern Lake? Why?"
+    - "What is the least restrictive package that keeps South Valley out of emergency for 180 days in a dry scenario?"
+    - "Draft this week's drought bulletin."
+
+dataset:
+  bucket: "scenario-water-reservoirs-drought"
+  raw_object: "raw/water_storage_daily.csv"
+  seed_file: "sample_data/water_storage_daily.csv.gz"
+  index_col: "date"
+  target: "pct"
+  feature_columns:
+    - series
+    - precip_mm
+    - temp_c
+  feature_schema:
+    series:
+      {type: categorical, label: "Reservoir or supply system",
+       options: [central, westfield, north_coast, south_valley, highmoor, alder_falls, stonebridge, millbrook, ravens_gorge, lantern_lake, kestrel_water, copper_hollow, fernmere],
+       default: central,
+       info: "A reservoir, or a supply system (the capacity-weighted storage of its reservoirs)."}
+    precip_mm: {type: numeric, label: "Catchment rain", min: 0, max: 250, default: 0, step: 0.1,
+       info: "Mean daily precipitation of the weather stations around the series' reservoirs, in mm."}
+    temp_c: {type: numeric, label: "Catchment temperature", min: -10, max: 40, default: 14, step: 0.1,
+       info: "Mean daily temperature of the same stations, in °C."}
+  default_charts:
+    - {type: histogram, x: pct, color_by: series}
+    - {type: bar, x: series, y: pct, agg: mean}
+    - {type: scatter, x: temp_c, y: pct, color_by: series}
+
+model:
+  task_type: forecast
+  # A direct multi-horizon quantile model (docs/adr/0030), run alone: its baselines are persistence and seasonal
+  # climatology, evaluated in the same rolling-origin backtest by year.
+  candidates: ["lightgbm_quantile"]
+  accuracy_gain_threshold_for_complexity: 0.05
+  selection_metric: mase
+  explainability: shap
+  target_units: "% of capacity"
+  target_label: "Stored water"
+  target_description: "Water stored in a reservoir or a supply system, as a percentage of its capacity."
+
+time_series:
+  time_column: date
+  series_id_columns: [series]
+  frequency: D
+  horizon: 180
+  horizons: [7, 30, 90, 180]
+  # lags/rolling/date features are listed for the schema; `lightgbm_quantile` builds its own past-only features
+  # (lags 1/7/30/90/365, same day last year, 365-day range, rain over 7/30/90/365 days, temperature anomaly, season).
+  lags: [1, 7, 30, 90, 365]
+  date_features: [dayofyear]
+  exogenous_features: [precip_mm, temp_c]
+  future_exogenous: last_value
+  # The last 8 calendar years, each trained without ever seeing it: the 2022-2024 drought is among them.
+  backtest: {windows: 8}
+  prediction_intervals: [80]
+  target_min: 0
+  # 13 series x 9,800 days: more than the default row cap, which would cut the history to six years.
+  max_rows: 140000
+
+ui_extras:
+  kind: forecast_board
+  tab_label: "Storage forecast"
+  title: "Where the water is heading"
+  subtitle: "Each reservoir and supply system of the fictional Riverbend basin, 180 days ahead, with the 10th-90th percentile band. Illustrative decision support on synthetic data."
+  peak_label: "Highest day"
+  # Storage is a level: the board shows the change over the window, not a sum of percentages.
+  summary: change
+  series_labels:
+    central: "Central system"
+    westfield: "Westfield system"
+    north_coast: "North Coast system"
+    south_valley: "South Valley system"
+    highmoor: "Highmoor"
+    alder_falls: "Alder Falls"
+    stonebridge: "Stonebridge"
+    millbrook: "Millbrook"
+    ravens_gorge: "Ravens Gorge"
+    lantern_lake: "Lantern Lake"
+    kestrel_water: "Kestrel Water"
+    copper_hollow: "Copper Hollow"
+    fernmere: "Fernmere"
+  # The same grid as config/systems.yaml (km east, km north): a schematic of a fictional basin, not a real place.
+  map:
+    caption: "Riverbend basin (fictional, schematic). Click a reservoir; its supply system is outlined."
+    width: 140
+    height: 100
+    lines:
+      - [[0, 4], [30, 6], [60, 8], [95, 10], [118, 14], [128, 35], [134, 70], [140, 84]]   # coast
+      - [[15, 95], [30, 82], [50, 72], [70, 55], [95, 35], [118, 14]]                      # Riverbend
+      - [[6, 78], [22, 70], [35, 60], [52, 57], [70, 55]]                                  # Mill Brook
+      - [[72, 98], [78, 82], [74, 66], [70, 55]]                                           # Alder
+      - [[108, 96], [120, 82], [134, 70]]                                                  # Kestrel
+      - [[44, 42], [48, 25], [50, 9]]                                                      # Lantern
+      - [[6, 48], [12, 38], [20, 18], [24, 6]]                                             # Copper
+    sites:
+      - {series: highmoor, x: 30, y: 82, group: central}
+      - {series: alder_falls, x: 78, y: 82, group: central}
+      - {series: stonebridge, x: 50, y: 72, group: central}
+      - {series: millbrook, x: 35, y: 60, group: central}
+      - {series: ravens_gorge, x: 22, y: 70, group: central, label: above}
+      - {series: lantern_lake, x: 48, y: 25, group: westfield}
+      - {series: kestrel_water, x: 120, y: 82, group: north_coast, label: below}
+      - {series: copper_hollow, x: 12, y: 38, group: south_valley}
+      - {series: fernmere, x: 20, y: 18, group: south_valley}
+
+analysis_toolset: drought_watch
+
+governance:
+  ai_system_id: water_reservoirs_drought
+  intended_purpose: >
+    Decision support for planning and communication on reservoir data: an explained storage forecast, the state
+    against an illustrative drought plan, what-if and measure-package comparison, a data-quality view and a weekly
+    bulletin. It is not a safety component of water supply operation and declares no drought state.
+  owner: "Riverbend Water Authority (fictional)"
+  ai_act:
+    risk_category: limited
+  human_oversight:
+    mode: approve
+    description: >
+      A person decides every operational step that follows from a state, a forecast, a what-if or a bulletin. The
+      assistant presents results with their uncertainty and never acts.
+  data:
+    personal_data: false
+    special_categories: false
+    datasets:
+      - "Synthetic reservoir storage of the fictional Riverbend basin (scripts/generate_water_data.py), with the faults of an unvalidated feed"
+      - "Synthetic daily weather of the same basin's stations"
+      - "Synthetic drought plan (fictional, in this repository)"
+  limitations:
+    - "EU AI Act Annex III (critical infrastructure) applies only to safety components of water supply operation; this scenario is planning and communication support, with human oversight, and does not declare an Annex III area."
+    - "All data is synthetic: the backtest shows the method (baselines, uncertainty band, weak spots), not accuracy on a real basin."
+    - "The drought plan is fictional; thresholds, cuts and caps are illustrative."
+    - "The 90- and 180-day forecasts are weaker than persistence in the 2022-2024 drought for some systems (see backtest_report.md)."
+  known_risks:
+    - "A reader may take an illustrative probability or package recommendation as advice: every result states its uncertainty and that a person decides."
+
+services:
+  etl: etl-tabular
+  training: training
+  prediction: prediction
+  assistant: assistant

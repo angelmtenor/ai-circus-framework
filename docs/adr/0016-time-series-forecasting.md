@@ -49,7 +49,10 @@ kind that nothing produced. A new service per task would cost ~200 MiB per pod o
 - **UI:** the gallery's "Time Series" subtype and technique key on `task_type === "forecast"` (the
   phantom kind is gone). Predict and ML Insights get forecast variants, and a new
   **`forecast_board`** tab shows history + forecast + 80/95 % bands, the backtest, the peak and
-  levers that shift exogenous features. Static SVG — no canvas, so no frame loop.
+  levers that shift exogenous features. Static SVG — no canvas, so no frame loop. Its second tile
+  is the window's total for a flow (`summary: total`, the default) or, for a level such as storage
+  %, the change from the last observation (`summary: change`); with no levers it shows only the
+  series picker.
 - **First series: `energy_building`.** Its committed file is a random sample of the 10-minute
   data, so it is re-seeded hourly (`scripts/prepare_energy_building_hourly.py`: 3,289 hours, 40
   interpolated) under a new raw object key. `surf_demand_forecast` stays a regression for now:
