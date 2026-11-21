@@ -56,6 +56,10 @@ def test_the_generated_files_match_the_catalog() -> None:
         if p.read_text(encoding="utf-8") != text
     ]
     assert drifted == [], "run: libs/shared/.venv/bin/python scripts/generate_architecture.py"
+    generator = _generator()
+    pieces = {p for p in generator.expected(ROOT) if p.parent == generator.TUTORIAL_DOCS}
+    assert set(generator.TUTORIAL_DOCS.glob("*.md")) == pieces, "stale tutorial documents: rerun the generator"
+    assert all(len(p.read_text(encoding="utf-8")) <= 4100 for p in pieces)  # small embedding calls to llm-gateway
 
 
 def test_the_catalog_rejects_a_link_or_flow_to_nowhere() -> None:

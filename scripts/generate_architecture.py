@@ -19,9 +19,30 @@ import re
 import sys
 from pathlib import Path
 
-from ai_circus_shared.architecture import export, load_catalog, render_markdown, render_svg
+from ai_circus_shared.architecture import (
+    export,
+    load_catalog,
+    render_markdown,
+    render_svg,
+    scenario_components_markdown,
+    split_markdown,
+)
+from ai_circus_shared.scenario_schema import load_all
 
 ROOT = Path(__file__).resolve().parent.parent
+# The architecture tutorial (scenarios/framework_architecture) searches this repository's own documentation: a
+# snapshot cut into small pieces, rewritten with everything else here so it never drifts from the docs.
+TUTORIAL_DOCS = ROOT / "scenarios" / "framework_architecture" / "sample_docs"
+TUTORIAL_SOURCES = [
+    "docs/architecture/README.md",
+    "docs/architecture/components.md",
+    "docs/architecture-details.md",
+    "docs/mcp/README.md",
+    "docs/data-platform/README.md",
+    "docs/governance/README.md",
+    "docs/adr/*.md",
+    "docs/scenarios/*.md",
+]
 
 
 def adr_files(root: Path = ROOT) -> dict[int, str]:
@@ -34,11 +55,28 @@ def adr_files(root: Path = ROOT) -> dict[int, str]:
     return out
 
 
+def tutorial_docs(root: Path = ROOT) -> dict[Path, str]:
+    """The architecture tutorial's documents: every source cut into small pieces, plus what each scenario uses."""
+    out: dict[Path, str] = {}
+    folder = root / TUTORIAL_DOCS.relative_to(ROOT)
+    sources = sorted({p for pattern in TUTORIAL_SOURCES for p in root.glob(pattern) if p.name != "README.md" or "adr" not in p.parts})
+    for path in sources:
+        rel = path.relative_to(root).as_posix()
+        stem = rel.removesuffix(".md").replace("/", "-").lower()
+        for i, piece in enumerate(split_markdown(rel, path.read_text(encoding="utf-8")), start=1):
+            out[folder / f"{stem}--{i:02d}.md"] = piece
+    components = scenario_components_markdown(load_all(root / "scenarios"))
+    for i, piece in enumerate(split_markdown("generated from every scenario.yaml", components), start=1):
+        out[folder / f"scenario-components--{i:02d}.md"] = piece
+    return out
+
+
 def expected(root: Path = ROOT) -> dict[Path, str]:
     """Every generated file and its content."""
     catalog = load_catalog()
     adrs = adr_files(root)
     return {
+        **tutorial_docs(root),
         root / "docs" / "architecture" / "architecture.svg": render_svg(catalog),
         root / "docs" / "architecture" / "components.md": render_markdown(catalog, adrs),
         root / "ui-react" / "src" / "generated" / "architecture.json": json.dumps(export(catalog, adrs), indent=1, ensure_ascii=False) + "\n",
@@ -48,7 +86,8 @@ def expected(root: Path = ROOT) -> dict[Path, str]:
 def main() -> int:
     check = "--check" in sys.argv[1:]
     drifted = []
-    for path, content in expected().items():
+    files = expected()
+    for path, content in files.items():
         current = path.read_text(encoding="utf-8") if path.exists() else None
         if current == content:
             continue
@@ -58,6 +97,14 @@ def main() -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
             print(f"wrote {path.relative_to(ROOT)}")
+    # A piece that is no longer generated (a source shrank or was removed) is stale.
+    stale = sorted(p for p in TUTORIAL_DOCS.glob("*.md") if p not in files)
+    for path in stale:
+        if check:
+            drifted.append(path.relative_to(ROOT).as_posix())
+        else:
+            path.unlink()
+            print(f"removed {path.relative_to(ROOT)}")
     if drifted:
         print("Out of date (run scripts/generate_architecture.py):", ", ".join(drifted))
         return 1

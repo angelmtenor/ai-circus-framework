@@ -1529,6 +1529,15 @@ class ForecastBoardExtra(BaseModel):
     map: ForecastBoardMap | None = None  # sites to click instead of (as well as) the series list
 
 
+class ArchitectureMapExtra(BaseModel):
+    """conversational_rag only: a tab with the platform's architecture map, drawn from the architecture catalog
+    (ai_circus_shared.architecture) — every component by layer, what each does and the request flows — next to a
+    chat that answers from the repository's own documentation. Used by the architecture tutorial."""
+
+    kind: Literal["architecture_map"]
+    tab_label: str = Field(default="Architecture", max_length=40)
+
+
 UiExtras = Annotated[
     RegionMapExtra
     | ForecastBoardExtra
@@ -1549,7 +1558,8 @@ UiExtras = Annotated[
     | TriageBoardExtra
     | ReadingRoomExtra
     | CameraWallExtra
-    | KnowledgeGraphExtra,
+    | KnowledgeGraphExtra
+    | ArchitectureMapExtra,
     Field(discriminator="kind"),
 ]
 
@@ -1574,7 +1584,7 @@ _TABULAR_UI_EXTRAS = (
 # A forecast scenario has no single-row model to drive the row-based tabs.
 _FORECAST_UI_EXTRAS = (ForecastBoardExtra,)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
-_RAG_UI_EXTRAS = (KnowledgeGraphExtra, SourceLibraryExtra)
+_RAG_UI_EXTRAS = (KnowledgeGraphExtra, SourceLibraryExtra, ArchitectureMapExtra)
 _FORM_UI_EXTRAS = (CaseTrackerExtra,)
 
 
@@ -2392,10 +2402,10 @@ class StoryConfig(BaseModel):
     boxes link to the tabs, where every input comes from, the question each model answers, and a presenter's
     demo script. Tabs depend on the kind (`ScenarioDefinition.story_tabs`): tabular_ml has `overview`, `data`,
     `assistant` (opens the chat), `tutorial`, `model` / `extra` (the main model and its `ui_extras` tab) and
-    `model:<id>` / `extra:<id>`; conversational_rag `assistant` (the chat), `library`; assisted_form `assistant`
-    (the form and its chat), `cases`; deep_learning `data`, `predict`, `insights`, `extra`; data_product `tour`,
-    `data`, `flow`, `dashboards`, `explore`, `quality`, `insights`, `shop`, `assistant`; any kind with an MCP
-    door `mcp`.
+    `model:<id>` / `extra:<id>`; conversational_rag `assistant` (the chat), `library`, `architecture`;
+    assisted_form `assistant` (the form and its chat), `cases`; deep_learning `data`, `predict`, `insights`,
+    `extra`; data_product `tour`, `data`, `flow`, `dashboards`, `explore`, `quality`, `insights`, `shop`,
+    `assistant`; any kind with an MCP door `mcp`.
     """
 
     headline: str = Field(min_length=1, max_length=120)
@@ -3212,6 +3222,8 @@ class ScenarioDefinition(BaseModel):
             tabs.add("assistant")  # the chat, with its knowledge graph beside it when there is one
             if isinstance(self.ui_extras, SourceLibraryExtra):
                 tabs.add("library")
+            if isinstance(self.ui_extras, ArchitectureMapExtra):
+                tabs.add("architecture")
         elif self.kind == "assisted_form":
             tabs.add("assistant")  # the form and the assistant filling it
             if isinstance(self.ui_extras, CaseTrackerExtra):
