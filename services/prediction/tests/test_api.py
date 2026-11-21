@@ -112,6 +112,45 @@ def test_predict_returns_422_for_missing_feature_column(client: TestClient) -> N
     assert "Geography" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("value", "detail"),
+    [
+        ("Yes", "'CreditScore' must be a number"),
+        ("inf", "'CreditScore' must be a number"),
+        ([600, 700], "'CreditScore' must be a single value"),
+    ],
+)
+def test_predict_returns_422_for_a_value_the_model_cannot_read(client: TestClient, value: object, detail: str) -> None:
+    """A word or an infinite number in a numeric feature, or a list anywhere, is a 422 naming the field, not a 500."""
+    client.app.dependency_overrides[_scenario_definition] = lambda: _typed_definition("churn")  # type: ignore[attr-defined]
+    response = client.post("/predict/churn", json={"records": [{"CreditScore": value, "Geography": "France"}]})
+    assert response.status_code == 422
+    assert response.json()["detail"] == f"Record 0: {detail}."
+
+
+def test_predict_accepts_nulls_numbers_as_text_and_unknown_categories(client: TestClient) -> None:
+    """What the pipeline already handles stays valid: it imputes nulls and ignores unknown categories."""
+    client.app.dependency_overrides[_scenario_definition] = lambda: _typed_definition("churn")  # type: ignore[attr-defined]
+    records = [
+        {"CreditScore": "612.5", "Geography": "Atlantis"},
+        {"CreditScore": None, "Geography": None},
+        {"CreditScore": 9999, "Geography": 3},
+    ]
+    assert client.post("/predict/churn", json={"records": records}).status_code == 200
+
+
+def _typed_definition(slug: str) -> SimpleNamespace:
+    """`_definition` with a numeric and a categorical feature in its schema."""
+    from ai_circus_shared.scenario_schema import CategoricalFeatureUI, NumericFeatureUI
+
+    definition = _definition(slug)
+    definition.dataset.feature_schema = {
+        "CreditScore": NumericFeatureUI(label="Credit score", min=300, max=900, default=650),
+        "Geography": CategoricalFeatureUI(label="Country", options=["France", "Spain"], default="France"),
+    }
+    return definition
+
+
 def test_predict_matches_real_predict_function(client: TestClient) -> None:
     """Sanity check that the fakes used here satisfy predict()'s real call contract."""
     import pandas as pd

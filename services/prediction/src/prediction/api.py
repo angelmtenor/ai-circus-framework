@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
@@ -489,6 +490,7 @@ def predict_endpoint(
     # resolve_identity() already guarantees org_id is set (401s otherwise).
     assert identity.org_id is not None
     _check_text_values(body, definition)
+    _check_feature_values(body, definition)
     artifacts = model_cache.get(identity.org_id, definition.slug)
     records = pd.DataFrame(body.records)
     try:
@@ -627,6 +629,34 @@ def _check_text_values(body: PredictRequest, definition: ScenarioDefinition) -> 
             value = record.get(column)
             if value is not None and len(str(value)) > max_length:
                 raise HTTPException(status_code=422, detail=f"{column!r} is longer than {max_length} characters.")
+
+
+def _check_feature_values(body: PredictRequest, definition: ScenarioDefinition) -> None:
+    """422 on a value the model pipeline (or a business rule) cannot read, instead of a 500 from inside it: a list
+    or an object, an infinite number, or a word in a numeric feature. Nulls, numbers written as text, unknown
+    categories and numbers outside the UI's slider range stay valid: the pipeline imputes nulls and ignores unknown
+    categories, and real rows can fall outside a slider's range.
+    """
+    assert definition.dataset is not None
+    schema = {**definition.dataset.feature_schema, **getattr(definition.dataset, "rule_columns", {})}
+    for i, record in enumerate(body.records):
+        for column, spec in schema.items():
+            value = record.get(column)
+            if value is None:
+                continue
+            if not isinstance(value, str | int | float):  # bool is an int
+                raise HTTPException(status_code=422, detail=f"Record {i}: {column!r} must be a single value.")
+            if spec.type == "numeric" and not _is_finite_or_missing(value):
+                raise HTTPException(status_code=422, detail=f"Record {i}: {column!r} must be a number.")
+
+
+def _is_finite_or_missing(value: str | float) -> bool:
+    """A number (or a number written as text) that is not infinite; NaN is a missing value the pipeline imputes."""
+    try:
+        number = float(value)
+    except ValueError:
+        return False
+    return not math.isinf(number)
 
 
 @router.get("/dataset/{scenario_slug}/sample", response_model=DatasetSampleOut)
