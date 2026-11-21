@@ -18,18 +18,21 @@ from pathlib import Path
 
 import uvicorn
 from ai_circus_shared.deployment_guard import enforce_safe_for_public_deployment
+from ai_circus_shared.embeddings import build_embedding_provider
 from ai_circus_shared.observability import configure_metrics
 from ai_circus_shared.telemetry import configure_tracing
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from platform_registry import get_env_config
 from platform_registry.api import router
 from platform_registry.core.db import ensure_added_columns, init_engine
 from platform_registry.core.governance import catalog_enabled, publish_catalog, start_outbox_deliverer
 from platform_registry.core.logger import configure_logger, get_logger
-from platform_registry.core.models import Base
+from platform_registry.core.models import Base, Scenario
+from platform_registry.core.scenario_search import scenario_text, start_background_build
 from platform_registry.core.seed import seed_default_llm_setting, seed_default_voice_setting, seed_scenarios
 from platform_registry.governance_api import router as governance_router
 
@@ -56,6 +59,18 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         # Self-hosted/no-API-key by default (faster-whisper, Piper) — matches
         # agui-voice's own static STT_PROVIDER/TTS_PROVIDER env defaults.
         seed_default_voice_setting(session, default_stt_provider="whisper", default_tts_provider="piper")
+
+    # The gallery's semantic search: scenarios embedded through llm-gateway in the background (never blocking start-up).
+    def load_texts() -> dict[str, str]:
+        with Session(engine) as text_session:
+            return {s.slug: scenario_text(s) for s in text_session.scalars(select(Scenario))}
+
+    start_background_build(
+        load_texts,
+        lambda: build_embedding_provider(
+            "local", None, None, None, config.LLM_GATEWAY_URL, config.LLM_GATEWAY_API_KEY.get_secret_value()
+        ),
+    )
 
     if catalog_enabled():
         with Session(engine) as catalog_session:
