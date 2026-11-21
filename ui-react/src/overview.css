@@ -837,3 +837,8 @@
   color: var(--dim);
   margin-left: 6px;
 }
+
+/* The RAG workspace hides its hero on the Overview (its own CSS sets display, which beats the attribute). */
+.rag-hero[hidden] {
+  display: none;
+}

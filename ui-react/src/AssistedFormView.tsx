@@ -12,6 +12,8 @@ import { useConversation } from "./useConversation";
 import { useFormAssistActions, type UpdateFormFieldsArgs } from "./formAssistUi";
 import { selectedVariant, validateForm } from "./formValidation";
 import { useScenarioAgent } from "./useScenarioAgent";
+import { ScenarioOverview } from "./ScenarioOverview";
+import { useStoryDemo } from "./storyWorkspace";
 
 const CaseTrackerView = lazy(() => import("./CaseTrackerView").then((m) => ({ default: m.CaseTrackerView })));
 
@@ -57,23 +59,52 @@ export function PdfPreviewOverlay({ preview, onClose }: { preview: PdfPreview; o
  */
 export function AssistedFormView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const extras = scenario.ui_extras?.kind === "case_tracker" ? scenario.ui_extras : null;
-  const [tab, setTab] = useState<"form" | "cases">("form");
-  if (!extras) return <FormWorkspace scenario={scenario} accessToken={accessToken} />;
+  const story = scenario.story ?? null;
+  // A scenario with a story opens on its Overview.
+  const [tab, setTabState] = useState<"overview" | "form" | "cases">(story ? "overview" : "form");
+  // A question for the assistant from the Overview or the guided demo, dropped when the form is left.
+  const [prompt, setPrompt] = useState<{ id: number; text: string } | null>(null);
+  const setTab = (next: "overview" | "form" | "cases") => {
+    setTabState(next);
+    if (next !== "form") setPrompt(null);
+  };
+  const formLabel = extras?.form_tab_label ?? "Form";
+  const storyTabs = useMemo(() => {
+    const tabs: Record<string, string> = { overview: "Overview", assistant: formLabel };
+    if (extras) tabs.cases = extras.tab_label;
+    return tabs;
+  }, [extras, formLabel]);
+  const openStoryTab = (t: string) => setTab(t === "assistant" ? "form" : (t as "overview" | "cases"));
+  const ask = (text: string) => {
+    setTab("form");
+    setPrompt({ id: Date.now(), text });
+  };
+  const { tabLabel, startDemo, demoBar, demoActive } = useStoryDemo(scenario, storyTabs, openStoryTab, ask);
+  if (!extras && !story) return <FormWorkspace scenario={scenario} accessToken={accessToken} />;
   return (
-    <div className="workspace">
+    <div className={`workspace${demoActive ? " workspace--demo" : ""}`}>
       <div className="workspace-tabs">
+        {story && (
+          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
+            <Icon name="book" /> Overview
+          </button>
+        )}
         <button className={tab === "form" ? "active" : ""} onClick={() => setTab("form")}>
-          <Icon name="book" /> {extras.form_tab_label}
+          <Icon name="book" /> {formLabel}
         </button>
-        <button className={tab === "cases" ? "active" : ""} onClick={() => setTab("cases")}>
-          <Icon name="desk" /> {extras.tab_label}
-        </button>
+        {extras && (
+          <button className={tab === "cases" ? "active" : ""} onClick={() => setTab("cases")}>
+            <Icon name="desk" /> {extras.tab_label}
+          </button>
+        )}
       </div>
-      {/* Kept mounted: a half-filled form and its conversation survive a look at the tray. */}
+      {story && tab === "overview" && <ScenarioOverview scenario={scenario} tabLabel={tabLabel} onOpen={openStoryTab} onAsk={ask} onStartDemo={startDemo} />}
+      {demoBar}
+      {/* Kept mounted: a half-filled form and its conversation survive a look at another tab. */}
       <div hidden={tab !== "form"}>
-        <FormWorkspace scenario={scenario} accessToken={accessToken} />
+        <FormWorkspace scenario={scenario} accessToken={accessToken} prompt={prompt} />
       </div>
-      {tab === "cases" && (
+      {extras && tab === "cases" && (
         <Suspense fallback={<div className="app-loading">Loading…</div>}>
           <CaseTrackerView scenario={scenario} extras={extras} accessToken={accessToken} />
         </Suspense>
@@ -82,7 +113,15 @@ export function AssistedFormView({ scenario, accessToken }: { scenario: Scenario
   );
 }
 
-function FormWorkspace({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
+function FormWorkspace({
+  scenario,
+  accessToken,
+  prompt = null,
+}: {
+  scenario: ScenarioSummary;
+  accessToken: string | null;
+  prompt?: { id: number; text: string } | null;
+}) {
   const conversation = useConversation(config.formAgentUrl, scenario.slug, accessToken);
   const agent = useScenarioAgent(config.formAgentUrl, scenario.slug, conversation.conversationId, accessToken);
   // See TabularView.tsx's identical note: must be memoized, or every re-render
@@ -91,7 +130,7 @@ function FormWorkspace({ scenario, accessToken }: { scenario: ScenarioSummary; a
 
   return (
     <CopilotKit selfManagedAgents={selfManagedAgents}>
-      <AssistedFormContent scenario={scenario} accessToken={accessToken} agent={agent} conversation={conversation} />
+      <AssistedFormContent scenario={scenario} accessToken={accessToken} agent={agent} conversation={conversation} prompt={prompt} />
     </CopilotKit>
   );
 }
@@ -101,11 +140,13 @@ function AssistedFormContent({
   accessToken,
   agent,
   conversation,
+  prompt,
 }: {
   scenario: ScenarioSummary;
   accessToken: string | null;
   agent: ReturnType<typeof useScenarioAgent>;
   conversation: ReturnType<typeof useConversation>;
+  prompt: { id: number; text: string } | null;
 }) {
   const form = scenario.form;
   useFormAssistActions(form);
@@ -298,6 +339,7 @@ function AssistedFormContent({
           sampleQuestions={scenario.sample_questions}
           accessToken={accessToken}
           variant="full"
+          prompt={prompt}
           title={
             <>
               Ask about {scenario.title}

@@ -77,7 +77,8 @@ export function ScenarioOverview({
   audience?: Audience;
   tabLabel: StoryTabLabel;
   onOpen: (tab: string) => void;
-  onAsk: (question: string) => void;
+  // Absent where the workspace has no chat (deep learning): no "ask" buttons then.
+  onAsk?: (question: string) => void;
   onStartDemo?: () => void;
 }) {
   const story = scenario.story ?? null;
@@ -125,9 +126,11 @@ export function ScenarioOverview({
               Open {tabLabel("extra")} <Icon name="arrow" size={14} />
             </button>
           )}
-          <button className="btn-secondary" onClick={() => onOpen("assistant")}>
-            <Icon name="chat" size={14} /> Ask the assistant
-          </button>
+          {onAsk && (
+            <button className="btn-secondary" onClick={() => onOpen("assistant")}>
+              <Icon name="chat" size={14} /> Ask the assistant
+            </button>
+          )}
         </div>
         {!story && scenario.credits && <Credits scenario={scenario} />}
       </section>
@@ -146,7 +149,7 @@ export function ScenarioOverview({
 
       {audience !== "executive" && <Glossary scenario={scenario} open={audience === "engineer" || !scenario.story} />}
 
-      {scenario.sample_questions.length > 0 && (
+      {onAsk && scenario.sample_questions.length > 0 && (
         <section className="panel-card">
           <h3>Things you can ask the assistant</h3>
           <div className="overview-questions">
@@ -334,6 +337,7 @@ function Models({
           const told = story.models.find((m) => m.model === id);
           const title = index === 0 ? (scenario.main_model_title ?? "ML model") : view.title;
           const extraLabel = tabLabel(extraTab);
+          const modelLabel = tabLabel(modelTab);
           return (
             <article key={view.slug} className="overview-model">
               <span className="overview-model-index">{index + 1}</span>
@@ -346,9 +350,11 @@ function Models({
                   {told?.used_by ? ` · for ${told.used_by}` : ""}
                 </p>
                 <div className="overview-model-actions">
-                  <button className="btn-secondary" onClick={() => onOpen(modelTab)}>
-                    <Icon name="target" size={14} /> {title}
-                  </button>
+                  {modelLabel && (
+                    <button className="btn-secondary" onClick={() => onOpen(modelTab)}>
+                      <Icon name="target" size={14} /> {title}
+                    </button>
+                  )}
                   {extraLabel && (
                     <button className="btn-secondary" onClick={() => onOpen(extraTab)}>
                       {extraLabel} <Icon name="arrow" size={14} />

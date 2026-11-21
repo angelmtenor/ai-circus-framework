@@ -9,10 +9,12 @@ import { TriageBoardView } from "./TriageBoardView";
 import { ReadingRoomView } from "./ReadingRoomView";
 import { CameraWallView } from "./CameraWallView";
 import { domainLabel } from "./ScenarioPicker";
+import { ScenarioOverview } from "./ScenarioOverview";
+import { useStoryDemo } from "./storyWorkspace";
 import { DlModelUnavailable, isAnomaly, labelsOf, pct, useDlModel } from "./dlShared";
 import "./deepLearning.css";
 
-type Tab = "scenario" | "data" | "predict" | "insights" | "extra";
+type Tab = "overview" | "scenario" | "data" | "predict" | "insights" | "extra";
 
 // Tab chrome per ui_extras kind (a triage board names its own tab: it may be a
 // patient-message board or a visual-inspection line).
@@ -34,15 +36,27 @@ function extraTab(extra: UiExtras | null | undefined, isImage: boolean): { icon:
  * tab from `ui_extras` (TriageBoardView / ReadingRoomView / CameraWallView).
  */
 export function DeepLearningView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
-  const [tab, setTab] = useState<Tab>("scenario");
+  // A scenario with a story opens on its Overview (ScenarioOverview); the model card stays on "Scenario".
+  const [tab, setTab] = useState<Tab>(scenario.story ? "overview" : "scenario");
   const model = useDlModel(scenario.slug, accessToken);
   const isImage = scenario.deep_learning?.modality === "image";
   const extra = extraTab(scenario.ui_extras, isImage);
+  const storyTabs = useMemo(() => {
+    const tabs: Record<string, string> = { overview: "Overview", data: isImage ? "Images" : "Texts", predict: "Try the model", insights: "Model insights" };
+    if (extra) tabs.extra = extra.label;
+    return tabs;
+  }, [isImage, extra]);
+  const { tabLabel, startDemo, demoBar, demoActive } = useStoryDemo(scenario, storyTabs, (t) => setTab(t as Tab));
 
-  const needsModel = tab !== "scenario";
+  const needsModel = tab !== "scenario" && tab !== "overview";
   return (
-    <div className="workspace">
+    <div className={`workspace${demoActive ? " workspace--demo" : ""}`}>
       <div className="workspace-tabs">
+        {scenario.story && (
+          <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
+            <Icon name="book" /> Overview
+          </button>
+        )}
         <button className={tab === "scenario" ? "active" : ""} onClick={() => setTab("scenario")}>
           <Icon name="book" /> Scenario
         </button>
@@ -62,6 +76,8 @@ export function DeepLearningView({ scenario, accessToken }: { scenario: Scenario
         )}
       </div>
 
+      {tab === "overview" && <ScenarioOverview scenario={scenario} tabLabel={tabLabel} onOpen={(t) => setTab(t as Tab)} onStartDemo={startDemo} />}
+      {demoBar}
       {tab === "scenario" && <DlScenarioView scenario={scenario} model={model.data} />}
       {needsModel && model.loading && !model.data && <div className="app-loading">Loading the deployed model…</div>}
       {needsModel && model.error && <DlModelUnavailable error={model.error} />}

@@ -7,6 +7,8 @@ import { config } from "./config";
 import { dataClient, DataApiError, formatMetric, optionLabel, viewAsHeaders, type DataClient, type Overview, type ViewAs } from "./dataApi";
 import { Icon, type IconName } from "./Icon";
 import { domainLabel } from "./ScenarioPicker";
+import { ScenarioOverview } from "./ScenarioOverview";
+import { useStoryDemo } from "./storyWorkspace";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
@@ -21,9 +23,10 @@ const InsightsView = lazy(() => import("./InsightsView").then((m) => ({ default:
 const StorefrontView = lazy(() => import("./StorefrontView").then((m) => ({ default: m.StorefrontView })));
 const McpConnectView = lazy(() => import("./McpConnectView").then((m) => ({ default: m.McpConnectView })));
 
-type Tab = "tour" | "overview" | "flow" | "dashboards" | "explore" | "quality" | "shop" | "insights" | "mcp";
+type Tab = "story" | "tour" | "overview" | "flow" | "dashboards" | "explore" | "quality" | "shop" | "insights" | "mcp";
 
 const TABS: { key: Tab; icon: IconName; label: string }[] = [
+  { key: "story", icon: "book", label: "Overview" },
   { key: "tour", icon: "cap", label: "Guided tour" },
   // Only when the data product declares apps.insights (its control room).
   { key: "insights", icon: "wave", label: "Insights" },
@@ -43,7 +46,7 @@ export type DataProductProps = {
   overview: Overview | null;
   refresh: () => void;
   // Workspace-level moves a tab may make (the guided tour drives the others).
-  navigate?: (tab: Exclude<Tab, "tour" | "overview">) => void;
+  navigate?: (tab: Exclude<Tab, "story" | "tour" | "overview">) => void;
   accessToken?: string | null;
   onViewAs?: (viewAs: ViewAs) => void;
   openChat?: () => void;
@@ -82,14 +85,22 @@ function DataProductContent({
   conversation: ReturnType<typeof useConversation>;
 }) {
   useChatGenerativeUiActions();
-  const [tab, setTab] = useState<Tab>("tour");
+  // A data product with a story opens on its Overview (the business), then the guided tour (the platform).
+  const [tab, setTab] = useState<Tab>(scenario.story ? "story" : "tour");
   const [viewAs, setViewAs] = useState<ViewAs>(null);
   const client = useMemo(() => dataClient(scenario.slug, accessToken, viewAs), [scenario.slug, accessToken, viewAs]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpenState] = useState(false);
+  // A question for the assistant from the Overview or the guided demo, dropped when the dock closes.
+  const [prompt, setPrompt] = useState<{ id: number; text: string } | null>(null);
+  const setChatOpen = (next: boolean | ((open: boolean) => boolean)) => {
+    const value = typeof next === "function" ? next(chatOpen) : next;
+    setChatOpenState(value);
+    if (!value) setPrompt(null);
+  };
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
@@ -109,6 +120,31 @@ function DataProductContent({
     };
   }, [client, tick]);
 
+  const apps = scenario.data_product?.apps;
+  const storyTabs: Record<string, string> = {
+    overview: "Overview",
+    tour: "Guided tour",
+    data: "Data product",
+    flow: "Live flow",
+    dashboards: "Dashboards",
+    explore: "Explore",
+    quality: "Quality & lineage",
+    assistant: "Assistant",
+    ...(apps?.insights ? { insights: apps.insights.title ?? "Insights" } : {}),
+    ...(apps?.storefront ? { shop: "Web shop" } : {}),
+    ...((scenario.mcp?.expose.length ?? 0) > 0 ? { mcp: "Connect via MCP" } : {}),
+  };
+  const ask = (text: string) => {
+    setChatOpen(true);
+    setPrompt({ id: Date.now(), text });
+  };
+  // Story tab names (scenario_schema.story_tabs) to this view's tabs: "overview" is the story, "data" the product.
+  const openStoryTab = (t: string) => {
+    if (t === "assistant") return setChatOpen(true);
+    setChatOpen(false);
+    setTab(t === "overview" ? "story" : t === "data" ? "overview" : (t as Tab));
+  };
+  const { tabLabel, startDemo, demoBar, demoActive } = useStoryDemo(scenario, storyTabs, openStoryTab, ask);
   const props: DataProductProps = {
     scenario,
     client,
@@ -120,10 +156,11 @@ function DataProductContent({
     openChat: () => setChatOpen(true),
   };
   return (
-    <div className="workspace data-product">
+    <div className={`workspace data-product${demoActive ? " workspace--demo" : ""}`}>
       <div className="workspace-tabs">
         {TABS.filter(
           (t) =>
+            (t.key !== "story" || scenario.story) &&
             (t.key !== "shop" || scenario.data_product?.apps?.storefront) &&
             (t.key !== "insights" || scenario.data_product?.apps?.insights) &&
             (t.key !== "mcp" || (scenario.mcp?.expose.length ?? 0) > 0),
@@ -145,6 +182,8 @@ function DataProductContent({
       )}
 
       <Suspense fallback={<div className="app-loading">Loading…</div>}>
+        {tab === "story" && <ScenarioOverview scenario={scenario} tabLabel={tabLabel} onOpen={openStoryTab} onAsk={ask} onStartDemo={startDemo} />}
+        {demoBar}
         {tab === "tour" && <DataTourView {...props} />}
         {tab === "overview" && <DataProductOverview {...props} />}
         {tab === "flow" && <DataFlowView {...props} />}
@@ -221,6 +260,7 @@ function DataProductContent({
                 onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
                 // The assistant's data tools call data-api with the same "view as".
                 forwardedProps={viewAs ? { data_view_as: viewAs } : undefined}
+                prompt={prompt}
               />
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import type { ChatModel, KnowledgeGraphTrace, ScenarioSummary } from "./apiClient";
 import { config } from "./config";
@@ -6,6 +6,8 @@ import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
 import { Icon } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
+import { ScenarioOverview } from "./ScenarioOverview";
+import { useStoryDemo } from "./storyWorkspace";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
@@ -80,8 +82,29 @@ function RagViewContent({
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
   const libraryExtras = scenario.ui_extras?.kind === "source_library" ? scenario.ui_extras : null;
   const mcpTools = scenario.mcp?.expose.length ? scenario.mcp.expose : null;
-  const hasTabs = Boolean(libraryExtras || mcpTools);
-  const [tab, setTab] = useState<"chat" | "library" | "mcp">("chat");
+  const story = scenario.story ?? null;
+  const hasTabs = Boolean(story || libraryExtras || mcpTools);
+  // A scenario with a story opens on its Overview.
+  const [tab, setTabState] = useState<"overview" | "chat" | "library" | "mcp">(story ? "overview" : "chat");
+  // A question sent to the chat from the Overview or the guided demo (ChatPanel's `prompt`), dropped when the
+  // chat is left so coming back never sends it twice.
+  const [prompt, setPrompt] = useState<{ id: number; text: string } | null>(null);
+  const setTab = useCallback((next: "overview" | "chat" | "library" | "mcp") => {
+    setTabState(next);
+    if (next !== "chat") setPrompt(null);
+  }, []);
+  const storyTabs = useMemo(() => {
+    const tabs: Record<string, string> = { overview: "Overview", assistant: libraryExtras?.chat_tab_label ?? "Chat" };
+    if (libraryExtras) tabs.library = libraryExtras.tab_label;
+    if (mcpTools) tabs.mcp = "Connect via MCP";
+    return tabs;
+  }, [libraryExtras, mcpTools]);
+  const openStoryTab = (t: string) => setTab(t === "assistant" ? "chat" : (t as "overview" | "library" | "mcp"));
+  const ask = (text: string) => {
+    setTab("chat");
+    setPrompt({ id: Date.now(), text });
+  };
+  const { tabLabel, startDemo, demoBar, demoActive } = useStoryDemo(scenario, storyTabs, openStoryTab, ask);
   const [trace, setTrace] = useState<KnowledgeGraphTrace | null>(null);
   const [chatPct, setChatPct] = useState(storedSplit);
   const splitRef = useRef<HTMLDivElement>(null);
@@ -142,12 +165,13 @@ function RagViewContent({
         conversationReady={conversation.ready}
         onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
         mcpServers={scenario.mcp?.consume}
+        prompt={prompt}
       />
     </div>
   );
 
   return (
-    <div className={`workspace workspace--rag${graphExtras ? " workspace--kg" : ""}`}>
+    <div className={`workspace workspace--rag${graphExtras ? " workspace--kg" : ""}${demoActive ? " workspace--demo" : ""}`}>
       <ConversationSidebar
         collapsible
         baseUrl={config.ragAgentUrl}
@@ -160,7 +184,7 @@ function RagViewContent({
         refreshKey={sidebarRefreshKey}
       />
       <div className="rag-main">
-        <div className={`rag-hero${graphExtras ? " rag-hero--compact" : ""}`}>
+        <div className={`rag-hero${graphExtras ? " rag-hero--compact" : ""}`} hidden={tab === "overview"}>
           <div className="rag-hero-icon">{scenario.icon}</div>
           <div>
             <h2>
@@ -177,6 +201,11 @@ function RagViewContent({
         </div>
         {hasTabs && (
           <div className="workspace-tabs">
+            {story && (
+              <button className={tab === "overview" ? "active" : ""} onClick={() => setTab("overview")}>
+                <Icon name="book" /> Overview
+              </button>
+            )}
             <button className={tab === "chat" ? "active" : ""} onClick={() => setTab("chat")}>
               <Icon name="chat" /> {libraryExtras?.chat_tab_label ?? "Chat"}
             </button>
@@ -192,6 +221,8 @@ function RagViewContent({
             )}
           </div>
         )}
+        {story && tab === "overview" && <ScenarioOverview scenario={scenario} tabLabel={tabLabel} onOpen={openStoryTab} onAsk={ask} onStartDemo={startDemo} />}
+        {demoBar}
         {mcpTools && tab === "mcp" && (
           <Suspense fallback={<div className="app-loading">Loading…</div>}>
             <McpConnectView scenarioSlug={scenario.slug} exposed={mcpTools} accessToken={accessToken} />
@@ -208,6 +239,8 @@ function RagViewContent({
             {chat}
           </div>
         ) : graphExtras ? (
+          // The graph's canvas is only mounted on the chat tab, so the Overview leaves the page quiet.
+          tab === "chat" && (
           <div className="rag-split" ref={splitRef} style={{ gridTemplateColumns: `minmax(300px, ${chatPct}fr) 0.75rem minmax(320px, ${100 - chatPct}fr)` }}>
             {chat}
             <div
@@ -231,6 +264,7 @@ function RagViewContent({
               <KnowledgeGraphView scenarioSlug={scenario.slug} extras={graphExtras} accessToken={accessToken} trace={trace} />
             </Suspense>
           </div>
+          )
         ) : (
           chat
         )}
