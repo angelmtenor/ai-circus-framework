@@ -35,6 +35,7 @@ from qdrant_client import QdrantClient
 
 from assistant import get_env_config
 from assistant.api import router
+from assistant.core.drought_tools import warm_toolkits
 from assistant.core.logger import configure_logger, get_logger
 from assistant.core.prompt_cache import SystemPromptCache
 
@@ -87,6 +88,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     app.state.definitions = definitions
     app.state.document_stores = document_stores
+    # The drought control room's toolkit and weekly history, built before the pod reports Ready.
+    warm_toolkits(
+        Path(config.SCENARIOS_DIR),
+        [slug for slug, d in definitions.items() if getattr(d, "analysis_toolset", None) == "drought_watch"],
+    )
     # Query embeddings for the document tool — only when a served scenario has one (the
     # provider probes llm-gateway at start-up, which an instance without documents
     # needn't wait for). A remote call (llm-gateway's `local-embed` by default), nothing

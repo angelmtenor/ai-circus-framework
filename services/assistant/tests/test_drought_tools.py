@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import date
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -170,3 +172,75 @@ def test_the_system_prompt_states_the_rules(toolkit: DroughtToolkit) -> None:
     prompt = drought_system_prompt(toolkit)
     for phrase in ("Never state a number", "search_rulebook", "needs review", "render_chart", "translate yourself"):
         assert phrase in prompt
+
+
+# ---- the control-room tab's reads ----------------------------------------------------------------------------------
+
+
+def test_the_control_room_holds_the_plan_every_system_and_every_reservoir(toolkit: DroughtToolkit) -> None:
+    room = toolkit.control_room()
+    assert [s["id"] for s in room["states"]] == ["normal", "pre_alert", "alert", "exceptional", "emergency"]
+    assert room["states"][0]["savings_pct"] == 0 and room["states"][-1]["min_pct"] is None
+    assert {s["id"] for s in room["systems"]} == set(toolkit.system_names)
+    assert {r["id"] for r in room["reservoirs"]} == set(toolkit.reservoir_names)
+    for reservoir in room["reservoirs"]:
+        assert reservoir["system"] in toolkit.system_names and reservoir["flags_30d"] >= 0
+    assert set(room["drivers"]["central"]) == {"7", "30", "90", "180"}
+
+
+def test_the_history_is_weekly_ends_today_and_states_follow_the_plan(toolkit: DroughtToolkit) -> None:
+    history = toolkit.history
+    dates = history["dates"]
+    assert dates[-1] == toolkit.as_of.isoformat()
+    assert all((date.fromisoformat(b) - date.fromisoformat(a)).days == 7 for a, b in pairwise(dates))
+    assert set(history["series"]) == set(toolkit.system_names) | set(toolkit.reservoir_names)
+    assert set(history["states"]) == set(toolkit.system_names)
+    for sid, states in history["states"].items():
+        assert len(states) == len(dates) == len(history["series"][sid])
+    # the synthetic basin's long drought reaches at least alert somewhere in 2022-2024
+    in_drought = [
+        s for i, d in enumerate(dates) if "2022" <= d < "2025" for s in (v[i] for v in history["states"].values())
+    ]
+    assert {"alert", "exceptional", "emergency"} & set(in_drought)
+
+
+def test_the_quality_views_count_every_flag_and_stay_neutral(toolkit: DroughtToolkit) -> None:
+    overview = toolkit.quality_overview()
+    snapshot = json.loads((SCENARIO / "sample_data" / "SNAPSHOT.json").read_text())
+    by_code = Counter()
+    for reservoir in overview["reservoirs"]:
+        by_code.update(reservoir["flags_by_code"])
+        assert sum(reservoir["flags_by_code"].values()) == sum(reservoir["flags_by_year"].values())
+    assert sum(by_code.values()) == snapshot["rows"]["dq_flags"]
+    assert "needs review" in overview["note"]
+    window = toolkit.quality_series("Lantern Lake")
+    assert window["reservoir"] == "lantern_lake" and window["published"] and window["cleaned"]
+    assert window["period"][1] == toolkit.as_of.isoformat()
+    with pytest.raises(ToolError, match="at most 400 days"):
+        toolkit.quality_series("lantern_lake", date(2020, 1, 1), date(2022, 1, 1))
+    shifted = toolkit.quality_series("lantern_lake", code="level_volume")
+    assert "level_volume" in shifted["flags_by_code"]
+    with pytest.raises(ToolError, match="Unknown flag"):
+        toolkit.quality_series("lantern_lake", code="nonsense")
+    assert all(0 <= r["score_pct"] <= 100 for r in overview["reservoirs"] if r["score_pct"] is not None)
+
+
+def test_first_requests_at_once_share_one_toolkit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The control room asks for several views together: concurrent first calls must build one toolkit, not race."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from assistant.core import drought_tools
+
+    drought_tools._toolkit.cache_clear()
+    monkeypatch.setattr(tempfile_module(), "gettempdir", lambda: str(tmp_path))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        kits = list(pool.map(lambda _: drought_tools.get_toolkit(str(SCENARIO)), range(4)))
+    assert all(kit is kits[0] for kit in kits)
+    drought_tools.warm_toolkits(SCENARIO.parent, ["water_reservoirs_drought", "no_such_scenario"])
+    drought_tools._toolkit.cache_clear()
+
+
+def tempfile_module() -> Any:
+    import tempfile
+
+    return tempfile

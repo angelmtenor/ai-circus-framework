@@ -663,3 +663,42 @@ def test_conversation_title_is_bounded() -> None:
     assert ConversationCreateIn(title="x" * 200).title is not None
     with pytest.raises(ValidationError):
         ConversationCreateIn(title="x" * 201)
+
+
+def test_the_drought_routes_serve_the_toolkit_and_refuse_other_scenarios(tmp_path: Any) -> None:
+    """The control room's routes answer for a drought_watch scenario, 400 on a bad request, and 404 for any other."""
+    from pathlib import Path
+
+    from ai_circus_shared.scenario_schema import ScenarioDefinition
+
+    scenarios = Path(__file__).resolve().parents[3] / "scenarios"
+    if not (scenarios / "water_reservoirs_drought" / "forecast.json").exists():
+        pytest.skip("scenario artifacts not present")
+    water = ScenarioDefinition.load(scenarios / "water_reservoirs_drought" / "scenario.yaml")
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="o", roles=frozenset())
+    app.dependency_overrides[_scenario_definition] = lambda: water
+    original = api_module.get_env_config
+
+    class _Env:
+        SCENARIOS_DIR = str(scenarios)
+
+    api_module.get_env_config = lambda: _Env()  # type: ignore[assignment]
+    try:
+        client = TestClient(app)
+        room = client.get("/drought/water_reservoirs_drought/control-room")
+        assert room.status_code == 200 and len(room.json()["systems"]) == 4
+        what_if = client.post(
+            "/drought/water_reservoirs_drought/what-if",
+            json={"system": "central", "scenario": "dry", "savings_pct": 10, "horizon": 90},
+        )
+        assert what_if.status_code == 200 and what_if.json()["scenario"] == "dry"
+        assert client.post("/drought/water_reservoirs_drought/what-if", json={"system": "nowhere"}).status_code == 400
+        too_long = client.post("/drought/water_reservoirs_drought/what-if", json={"system": "x" * 81})
+        assert too_long.status_code == 422
+        assert client.get("/drought/water_reservoirs_drought/bulletin").json()["markdown"]
+        app.dependency_overrides[_scenario_definition] = lambda: SimpleNamespace(slug="churn", analysis_toolset=None)
+        assert client.get("/drought/churn/control-room").status_code == 404
+    finally:
+        api_module.get_env_config = original  # type: ignore[assignment]

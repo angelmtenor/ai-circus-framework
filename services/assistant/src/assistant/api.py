@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +22,8 @@ from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
 from copilotkit import LangGraphAGUIAgent
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import Path as Path_
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -38,7 +39,9 @@ from assistant.core.chat import documents_only_instructions
 from assistant.core.data_tools import DataApiClient, build_data_tools, data_system_prompt
 from assistant.core.drought_tools import (
     DroughtToolkit,
+    OptimiseArgs,
     ToolError,
+    WhatIfArgs,
     build_drought_tools,
     drought_system_prompt,
     get_toolkit,
@@ -417,7 +420,7 @@ def intake_sample_endpoint(
 def _drought_toolkit(definition: ScenarioDefinition) -> DroughtToolkit:
     """The drought-watch toolkit of a scenario that declares `analysis_toolset: drought_watch`, else a 404."""
     if definition.analysis_toolset != "drought_watch":
-        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no bulletin.")
+        raise HTTPException(status_code=404, detail=f"Scenario {definition.slug!r} has no drought watch.")
     try:
         return get_toolkit(str(Path(get_env_config().SCENARIOS_DIR) / definition.slug))
     except FileNotFoundError as exc:
@@ -444,6 +447,95 @@ def bulletin_endpoint(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="drought-bulletin-{result["week_of"]}.pdf"'},
     )
+
+
+# ---- the drought control room (analysis_toolset: drought_watch) ------------------------------------------------
+# Read-only views of the same committed artifacts the chat's tools read, through the same toolkit, so the tab and the
+# assistant can never disagree. Plain `def` routes: FastAPI runs them in its threadpool.
+
+
+def _drought_call(fn: Any, *args: Any) -> dict[str, Any]:
+    try:
+        return fn(*args)
+    except ToolError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/drought/{scenario_slug}/control-room")
+def drought_control_room_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """The plan's states, each system's outlook and each reservoir's current state, flags and forecast drivers."""
+    return _drought_toolkit(definition).control_room()
+
+
+@router.get("/drought/{scenario_slug}/history")
+def drought_history_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """Every series weekly since the first reading, with each system's plan state: the control room's replay."""
+    return _drought_toolkit(definition).history
+
+
+@router.get("/drought/{scenario_slug}/quality")
+def drought_quality_endpoint(
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """Every reservoir's quality flags by kind and year, its score, and what the cleaning removed."""
+    return _drought_toolkit(definition).quality_overview()
+
+
+@router.get("/drought/{scenario_slug}/quality/{reservoir}")
+def drought_quality_series_endpoint(
+    reservoir: str = Path_(max_length=80),
+    start: date | None = None,
+    end: date | None = None,
+    code: str | None = Query(None, max_length=20),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """One reservoir's published readings next to the cleaned series, with the window's flags (at most 400 days);
+    `code` alone picks the window around that kind of flag's latest occurrence.
+    """
+    toolkit = _drought_toolkit(definition)
+    return _drought_call(toolkit.quality_series, reservoir, start, end, code)
+
+
+@router.post("/drought/{scenario_slug}/what-if")
+def drought_what_if_endpoint(
+    body: WhatIfArgs,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """A system's storage under a rainfall scenario and demand savings, with the days to each threshold."""
+    toolkit = _drought_toolkit(definition)
+    return _drought_call(toolkit.what_if, body.system, body.scenario, body.savings_pct, body.horizon)
+
+
+@router.post("/drought/{scenario_slug}/optimise")
+def drought_optimise_endpoint(
+    body: OptimiseArgs,
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """The least restrictive package of the plan keeping the chance of emergency at or below the target."""
+    toolkit = _drought_toolkit(definition)
+    return _drought_call(
+        toolkit.optimise_measures, body.system, body.target_probability_pct, body.horizon, body.scenario
+    )
+
+
+@router.get("/drought/{scenario_slug}/bulletin")
+def drought_bulletin_endpoint(
+    lang: str = Query("en", max_length=5),
+    identity: Identity = Depends(resolve_identity),
+    definition: ScenarioDefinition = Depends(_scenario_definition),
+) -> dict[str, Any]:
+    """This week's bulletin as markdown, for the tab's preview (`/bulletin/{slug}` serves the PDF)."""
+    return _drought_call(_drought_toolkit(definition).bulletin, None, lang)
 
 
 @router.get("/documents/{scenario_slug}", response_model=list[DocumentOut])
