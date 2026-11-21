@@ -43,6 +43,42 @@ governance:
   limitations:
     - Public aggregate data only; no forward-looking supervisory information.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from the scenario's sample data (FDIC BankFind).
+story:
+  headline: "Which banks will fail in the next two years, and why?"
+  problem: >
+    A banking supervisor watches thousands of banks with a limited number of examiners. The question every quarter
+    is which ones to look at first. This scenario replays the end of 2008: every US bank's balance sheet then, scored
+    for failure in the next 24 months, explained by the supervisory pillars, against what really happened.
+  audience: ["Banking supervisors", "Risk analysts", "Deposit insurers"]
+  today: >
+    Ratio thresholds and periodic examinations; a bank in trouble is often seen once the losses show.
+  with_ai: >
+    A watchlist of every bank ranked by the chance of failing, on a map, with the reasons grouped by pillar, and the
+    real outcome revealed after.
+  value:
+    - {value: "8,196", label: "Real bank balance sheets", note: "Call reports of 31 December 2008."}
+    - {value: "304", label: "Failures that followed", note: "Banks the regulator closed in 2009-2010."}
+    - {value: "6", label: "Supervisory pillars", note: "Capital, asset quality, management, earnings, liquidity, concentration."}
+  flow:
+    - {title: "Balance sheets", kind: source, tab: data, text: "Every US bank's call report at the end of 2008: capital, loans, deposits, earnings."}
+    - {title: "Failure model", kind: model, tab: model, text: "Logistic regression or LightGBM, whichever cross-validates better, with SHAP rolled up by pillar."}
+    - {title: "Watchlist", kind: decision, tab: extra, text: "Every bank on a map in risk tiers; reveal which ones failed."}
+    - {title: "Supervisor acts", kind: person, text: "Schedules examinations and asks for capital where the risk is."}
+  data_sources:
+    - {name: "FDIC BankFind", kind: table, origin: public, provider: "Federal Deposit Insurance Corporation", url: "https://api.fdic.gov/banks/docs/", license: "US public domain", feeds: "The ratios of every bank and the label: failed within 24 months.", period: "Call reports of 2008-12-31; failures of 2009-2010", size: "8,196 banks · 304 failures"}
+  models:
+    - {model: main, question: "Will this bank fail within the next 24 months?", used_by: "supervisors"}
+  demo:
+    minutes: 6
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "End of 2008. Thousands of banks, few examiners: where do you look first?"}
+      - {title: "The watchlist", tab: extra, show: "Every bank on the map in risk tiers.", say: "Each bank is scored from its own balance sheet at the end of 2008."}
+      - {title: "One bank", tab: extra, show: "Open a high-risk bank: its probability and the reasons by pillar.", say: "Construction lending, bad loans, thin capital: the reasons a supervisor would recognise."}
+      - {title: "Reveal", tab: extra, show: "Reveal the failures of 2009-2010.", say: "Now we see which banks the regulator actually closed, and how high they were on the list."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer.", say: "The assistant answers from the model and the data.", ask: "Which ratios best separate the banks that failed from those that survived?"}
+
 chat:
   context: >
     An early-warning system for a bank-resolution authority / banking supervisor. A

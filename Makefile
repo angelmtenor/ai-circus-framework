@@ -611,6 +611,12 @@ mcp-catalog: ## Regenerate every file mcp/catalog.yaml decides (ADR 0024), then 
 mcp-catalog-check: ## Fail if a file generated from mcp/catalog.yaml drifted (CI runs the same check in libs/shared's tests)
 	@$(MCP_CATALOG) --check
 
+architecture: ## Regenerate docs/architecture/ (map + component reference) and the app's copy from the architecture catalog
+	@libs/shared/.venv/bin/python scripts/generate_architecture.py
+
+architecture-check: ## Fail if a file generated from the architecture catalog drifted (libs/shared's tests run the same check)
+	@libs/shared/.venv/bin/python scripts/generate_architecture.py --check
+
 # Level 3 (ADR 0025): one certificate authority per level-3 kit server and its API, files in infra/mcp-tls/ (gitignored).
 MCP_TLS = uv run --project libs/mcp-kit --quiet python scripts/mcp_tls_certs.py
 

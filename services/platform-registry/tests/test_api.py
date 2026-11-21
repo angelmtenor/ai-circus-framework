@@ -342,3 +342,23 @@ def test_admin_setting_bodies_are_bounded() -> None:
         ActiveLlmModelIn(model_name="m" * 129)
     with pytest.raises(ValidationError):
         ActiveVoiceSettingsIn(stt_provider="s" * 65, tts_provider="piper")
+
+
+def test_scenario_search_is_lexical_until_ready_then_ranks_only_entitled_scenarios(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from platform_registry import api
+    from platform_registry.core.scenario_search import ScenarioSearch
+
+    index = ScenarioSearch()
+    monkeypatch.setattr(api, "SEARCH", index)
+    vocab = ["bank", "customer", "churn"]
+
+    def embed(text: str) -> list[float]:
+        return [float(text.lower().count(v)) + 0.01 for v in vocab]
+
+    assert client.get("/scenario-search/org-1", params={"q": "churn"}).json() == {"semantic": False, "results": []}
+    assert client.get("/scenario-search/org-1", params={"q": "x"}).status_code == 422
+    index.build({"churn": "customer churn bank"}, lambda texts: [embed(x) for x in texts], embed)
+    body = client.get("/scenario-search/org-1", params={"q": "bank customer"}).json()
+    assert body["semantic"] is True and body["results"] == []  # org-1 has no entitlement in this fixture

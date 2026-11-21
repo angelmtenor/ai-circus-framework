@@ -38,7 +38,7 @@ const AGG_OPTIONS: { value: ChartAgg; label: string }[] = [
  * aggregate per card, seeded from the scenario's YAML `default_charts` — see
  * chartBuilder.ts). Model behavior/performance lives in the ML Insights tab
  * instead, to keep this tab "just the data". Scenario-level description/credits/
- * feature glossary live in the Scenario tab (see ScenarioView.tsx).
+ * feature glossary live in the Overview tab (see ScenarioOverview.tsx).
  */
 export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const { theme } = useTheme();
@@ -57,14 +57,18 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   // column returned by the sample endpoint — worth exploring alongside the features
   // it's a numeric target for regression scenarios, a class label for classification.
   const targetName = scenario.target ?? null;
-  const targetIsNumeric = scenario.task_type === "regression";
+  // A forecast's target is a measured quantity too (storage %, demand in MW): a range, never a category.
+  const targetIsNumeric = scenario.task_type === "regression" || scenario.task_type === "forecast";
+  // A time series' time column: a date-range filter and an x axis for line charts.
+  const timeColumn = scenario.task_type === "forecast" ? (scenario.time_series?.time_column ?? null) : null;
   // Stable across unrelated re-renders (e.g. the chat dock's own state) — an inline
   // arrow function here would get a fresh reference every render, invalidating
   // ChartCard's buildChart memo below and forcing a Plotly.react() that resets an
   // in-progress gl3d drag (see PlotlyChart.tsx's PLOT_CONFIG comment for the sibling bug).
   const labelFor = useCallback(
-    (f: string) => (f === targetName ? `${scenario.target_label ?? targetName} (target)` : featureLabel(scenario, f)),
-    [targetName, scenario],
+    (f: string) =>
+      f === targetName ? `${scenario.target_label ?? targetName} (target)` : f === timeColumn ? "Date" : featureLabel(scenario, f),
+    [targetName, timeColumn, scenario],
   );
 
   // Legend names for the target's classes (e.g. "0"/"1" -> "Stayed"/"Churned").
@@ -154,10 +158,15 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   // in-progress edits to a card aren't lost.
   const [charts, setCharts] = useState<ChartCardConfig[]>(() => initialCharts());
   function initialCharts(): ChartCardConfig[] {
+    // A time series opens on its target over time, one line per series.
+    const overTime: ChartCardConfig[] =
+      timeColumn && targetName
+        ? [specToChartCardConfig({ type: "line", x: timeColumn, y: targetName, color_by: scenario.time_series?.series_id_columns[0] ?? null, agg: "count" })]
+        : [];
     if (scenario.default_charts && scenario.default_charts.length > 0) {
-      return scenario.default_charts.map(specToChartCardConfig);
+      return [...overTime, ...scenario.default_charts.map(specToChartCardConfig)];
     }
-    return [defaultChartCardConfig(numericFeaturesWithTarget, categoricalFeaturesWithTarget)];
+    return overTime.length > 0 ? overTime : [defaultChartCardConfig(numericFeaturesWithTarget, categoricalFeaturesWithTarget)];
   }
   useEffect(() => {
     setCharts(initialCharts());
@@ -180,6 +189,8 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
   // scenarios' default_charts compute e.g. `agg: mean` directly over the raw 0/1
   // target to get a rate), so this never touches the underlying row data.
   function displayValue(column: string, value: string | number | boolean | null): string {
+    // A time series' time column reads as a date ("2021-07-15"), not an ISO timestamp.
+    if (column === timeColumn && typeof value === "string") return value.slice(0, 10);
     if (column === targetName && scenario.target_value_labels) {
       return scenario.target_value_labels[String(value)] ?? String(value);
     }
@@ -199,6 +210,9 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
     () => [...featureColumns, ...(targetName ? [targetName] : [])],
     [featureColumns, targetName],
   );
+  // The time column has its own date-range slider, so the free-text search leaves it out.
+  const searchColumns = useMemo(() => identityColumns.filter((c) => c !== timeColumn), [identityColumns, timeColumn]);
+  const timeOptions = useMemo(() => (timeColumn ? [timeColumn] : []), [timeColumn]);
 
   if (error) {
     return (
@@ -216,7 +230,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
       <div className="panel-card">
         <h3>Data overview</h3>
         <p className="panel-hint" style={{ marginTop: "-0.2rem" }}>
-          See the Scenario tab for what this data is and what each feature means.
+          See the Overview tab for what this data is, where it comes from and what each feature means.
         </p>
         <div className="explore-controls">
           <label>
@@ -273,7 +287,8 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
           labelFor={labelFor}
           rows={sample.rows}
           onFilteredChange={setFiltered}
-          searchColumns={identityColumns}
+          searchColumns={searchColumns}
+          dateColumn={timeColumn ?? undefined}
         />
         <button className="btn-secondary" onClick={() => exportJson(`${scenario.slug}-filtered.json`, filtered)} style={{ marginTop: "0.6rem" }}>
           <Icon name="download" size={14} /> Export {filtered.length} filtered rows
@@ -296,6 +311,7 @@ export function DataView({ scenario, accessToken }: { scenario: ScenarioSummary;
               numericOptions={numericFeaturesWithTarget}
               categoricalOptions={categoricalFeaturesWithTarget}
               allOptions={allFeaturesWithTarget}
+              timeOptions={timeOptions}
               palette={theme.categoryPalette}
               labelFor={labelFor}
               valueLabelFor={valueLabelFor}
@@ -345,6 +361,7 @@ function ChartCard({
   numericOptions,
   categoricalOptions,
   allOptions,
+  timeOptions,
   palette,
   labelFor,
   valueLabelFor,
@@ -356,6 +373,8 @@ function ChartCard({
   numericOptions: string[];
   categoricalOptions: string[];
   allOptions: string[];
+  // A time series' time column: offered as the x axis of a line chart only.
+  timeOptions: string[];
   palette: string[];
   labelFor: (f: string) => string;
   valueLabelFor: ValueLabelFor;
@@ -367,7 +386,14 @@ function ChartCard({
   const showZ = cfg.type === "scatter3d";
   const showColorBy = cfg.type !== "box";
   const showAgg = (cfg.type === "bar" || cfg.type === "pie") && Boolean(cfg.y);
-  const xOptions = cfg.type === "bar" ? allOptions : cfg.type === "pie" || cfg.type === "box" ? categoricalOptions : numericOptions;
+  const xOptions =
+    cfg.type === "bar"
+      ? allOptions
+      : cfg.type === "pie" || cfg.type === "box"
+        ? categoricalOptions
+        : cfg.type === "line"
+          ? [...timeOptions, ...numericOptions]
+          : numericOptions;
   // Scatter/scatter3d render a numeric colorBy as a continuous gradient (see
   // chartBuilder.ts's isNumericColumn branch) — other chart types still only group
   // by discrete category, so numeric columns would be meaningless there.

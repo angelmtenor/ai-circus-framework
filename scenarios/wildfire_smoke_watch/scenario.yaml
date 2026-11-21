@@ -44,6 +44,36 @@ credits:
     (Apache-2.0). Not validated for operational use — never a substitute for a lookout, a
     911 call or an official fire detection system.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Can a wall of lookout cameras spot the first smoke of a wildfire?"
+  problem: >
+    Fire lookouts watch dozens of mountain-top cameras, and the first minutes of a fire decide how big it gets. A
+    model that scores every frame as it arrives and raises an alert when smoke persists lets a few people watch many
+    cameras, without crying wolf at clouds and fog.
+  audience: ["Fire lookouts", "Emergency services", "Forestry"]
+  with_ai: "Real recordings replayed on a camera wall, every frame scored live, an alert when smoke persists, controls with no fire."
+  value:
+    - {value: "11", label: "Cameras on the wall", note: "Real HPWREN lookouts, replayed one frame a minute."}
+    - {value: "12", label: "Other lookouts to train", note: "The wall's cameras are never seen in training."}
+  flow:
+    - {title: "Camera recordings", kind: source, tab: data, text: "Frames from forty minutes before a plume appears to forty minutes after."}
+    - {title: "Smoke network", kind: model, tab: insights, text: "A ConvNeXt V2 network fine-tuned on other lookouts' frames."}
+    - {title: "One frame", kind: model, tab: predict, text: "The chance of smoke in a frame, and where."}
+    - {title: "Watch wall", kind: decision, tab: extra, text: "Cameras replayed live; an alert when smoke persists for a few frames."}
+    - {title: "Lookout confirms", kind: person, text: "A person confirms the alert and calls it in."}
+  data_sources:
+    - {name: "HPWREN Fire Ignition images Library", kind: images, origin: public, provider: "HPWREN, UC San Diego (FIgLib)", url: "https://www.hpwren.ucsd.edu/", feeds: "The frames, their time to ignition and the no-fire controls."}
+  models:
+    - {model: main, question: "Is there smoke in this frame?", used_by: "fire lookouts"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "The first minutes decide the size of a fire."}
+      - {title: "The wall", tab: "extra", show: "Pick cameras and play: every frame scored as it arrives.", say: "Real recordings, scored live by a model that never saw these cameras."}
+      - {title: "The alert", tab: "extra", show: "Watch an alert fire when smoke persists, and a control camera stay quiet.", say: "Persistence avoids false alarms from clouds and fog."}
+      - {title: "Is it any good?", tab: "insights", show: "Held-out evaluation on unseen cameras.", say: "Tested on lookouts it was never trained on."}
+
 chat:
   context: >
     A wildfire smoke detector watching six fixed lookout cameras. It scores each frame as clear

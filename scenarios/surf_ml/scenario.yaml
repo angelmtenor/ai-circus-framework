@@ -24,6 +24,36 @@ credits:
     Fictional: Angel's Surf Co. was invented by the framework's author, Ángel Martínez Tenor,
     a surf enthusiast; every customer and sale behind these models is simulated.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "What will each surf shop sell next week, who buys a new board, and what goes with it?"
+  problem: >
+    A chain of surf shops orders boards and gear weekly, runs loyalty campaigns and suggests add-ons at the till. All
+    three questions sit on the same data platform's history, and each needs its own model.
+  audience: ["Store managers", "Marketing", "E-commerce"]
+  with_ai: "Three models on the data platform's gold marts: weekly demand per shop, board buyers, and what goes with what."
+  value:
+    - {value: "3", label: "Models", note: "Demand, buyer propensity and recommenders."}
+    - {value: "0", label: "Names seen", note: "Customers are pseudonymised keys; recommenders see anonymous baskets."}
+  flow:
+    - {title: "Gold marts", kind: source, tab: data, text: "The surf_retail data platform's curated sales, customers and baskets."}
+    - {title: "Weekly demand", kind: model, tab: model, text: "Units each shop sells next week, per rider group."}
+    - {title: "Board buyers", kind: model, tab: "extra:buyers", text: "Loyalty customers about to buy a new board, in a watchlist."}
+    - {title: "Recommenders", kind: output, tab: "model:recommender", text: "What goes with a product, by two recommenders side by side."}
+  data_sources:
+    - {name: "Angel's Surf Co. marts", kind: table, origin: synthetic, provider: "The surf_retail data product (fictional), through its gold marts", feeds: "Each model's training data, rebuilt from the platform.", size: "4,000 shop-weeks for demand"}
+  models:
+    - {model: main, question: "How many units will this shop sell next week?", used_by: "store managers"}
+    - {model: buyers, question: "Is this loyalty customer about to buy a new board?", used_by: "marketing"}
+    - {model: recommender, question: "What goes with this product?", used_by: "the shop and the web shop"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the three models.", say: "Three questions of one retailer, on one data platform."}
+      - {title: "Next week", tab: "model", section: "predictions", show: "The demand forecast for a shop and a rider group.", say: "Orders follow the forecast."}
+      - {title: "Who buys", tab: "extra:buyers", show: "The buyer watchlist and one customer's reasons.", say: "Campaigns go to the customers about to buy."}
+      - {title: "What goes with it", tab: "model:recommender", show: "Pick a surfboard: what goes with it, by both recommenders.", say: "The till and the web shop suggest from real baskets."}
+
 chat:
   context: >
     The models of Angel's Surf Co., a fictional chain of surf, SUP and kite shops on Europe's coasts.

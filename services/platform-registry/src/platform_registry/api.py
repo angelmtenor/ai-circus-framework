@@ -28,7 +28,7 @@ from ai_circus_shared.auth import (
     resolve_org_identity,
 )
 from ai_circus_shared.entitlements import ScenarioSummary
-from fastapi import APIRouter, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -38,8 +38,11 @@ from platform_registry import get_env_config
 from platform_registry.core import document_extraction, llm_settings
 from platform_registry.core.db import get_session
 from platform_registry.core.governance import publish_change, record_change
+from platform_registry.core.logger import get_logger
 from platform_registry.core.models import Entitlement, LlmSetting, Scenario, VoiceSetting
+from platform_registry.core.scenario_search import SEARCH
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -240,6 +243,33 @@ def list_entitled_scenarios(org_id: str, session: Session = Depends(get_session)
     """Return the scenarios the given tenant (Keycloak Organization) is entitled to."""
     stmt = select(Scenario).join(Entitlement).where(Entitlement.org_id == org_id)
     return list(session.scalars(stmt))
+
+
+class ScenarioSearchOut(BaseModel):
+    """The gallery's semantic ranking: `semantic` is false until the index is ready (the UI then ranks by words)."""
+
+    semantic: bool
+    results: list[dict[str, float | str]]
+
+
+@router.get("/scenario-search/{org_id}", response_model=ScenarioSearchOut, dependencies=[Depends(require_org_match)])
+def search_scenarios(
+    org_id: str,
+    q: str = Query(min_length=2, max_length=300),
+    session: Session = Depends(get_session),
+) -> ScenarioSearchOut:
+    """Rank the tenant's entitled scenarios by how close their meaning is to `q` (see core/scenario_search.py)."""
+    if not SEARCH.ready:
+        return ScenarioSearchOut(semantic=False, results=[])
+    allowed = set(session.scalars(select(Entitlement.scenario_slug).where(Entitlement.org_id == org_id)))
+    try:
+        ranked = SEARCH.search(q, allowed)
+    except Exception as exc:  # the gateway may be restarting: fall back to the UI's word ranking
+        logger.warning("Scenario search fell back to words: {}", type(exc).__name__)
+        return ScenarioSearchOut(semantic=False, results=[])
+    return ScenarioSearchOut(
+        semantic=True, results=[{"slug": slug, "score": round(score, 4)} for slug, score in ranked]
+    )
 
 
 @router.get("/entitlements/{org_id}/{scenario_slug}")

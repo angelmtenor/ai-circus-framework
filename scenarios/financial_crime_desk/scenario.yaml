@@ -59,6 +59,119 @@ governance:
   known_risks:
     - A destination or customer type could act as a proxy; the data mixes ordinary and suspicious traffic to every jurisdiction.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/financial_crime_desk.md.
+story:
+  headline: "Which payments should an analyst look at first, and why?"
+  problem: >
+    A bank's financial-crime desk sees thousands of outgoing transfers and customer payments a day. A few hide
+    money laundering, sanctions evasion, scams or accounts used as money mules. Analysts can read only a fraction,
+    so the question is where to look first, and how to explain an alert to the person who must decide on it.
+  audience: ["Financial-crime analysts", "Fraud operations", "Compliance"]
+  today: >
+    Hundreds of rule alerts a day, most of them false. Each message is read one by one, and the reason for an alert
+    is a rule code.
+  with_ai: >
+    Rules still run first. Then three models rank transfers, payments and accounts by risk, every score explained
+    field by field and word by word, and an LLM reads the message as an analyst would, quoting it. The analyst decides.
+  value:
+    - {value: "3", label: "Models on one desk", note: "Transfers, customer payments and money-mule accounts."}
+    - {value: "0.95", label: "ROC AUC, out of fold", note: "Transfers and payments, each row scored by a model that never saw it."}
+    - {value: "5", label: "Rules before the model", note: "Mule list, sanctions, verification of payee, step-up and remote access."}
+    - {value: "8", label: "AML Regulation articles", note: "Searched and quoted by the assistant, never a model input."}
+  flow:
+    - title: "Messages and payments"
+      kind: source
+      text: "Cross-border credit transfers (MT103 / pacs.008 style), customer payments, and 60 days of transfers between accounts."
+      tab: data
+    - title: "Rules first"
+      kind: rules
+      text: "A mule list, a sanctions match, verification of payee and step-up authentication block or hold a payment before any model scores it."
+      tab: "extra:payments"
+    - title: "Three models"
+      kind: model
+      text: "Transfers by their fields and free-text purpose, payments by session signals, accounts by how money flows through them."
+      tab: model
+    - title: "LLM analyst"
+      kind: assistant
+      text: "Reads a transfer as text against a red-flag rubric and must quote the message for every signal it raises."
+      tab: extra
+    - title: "Ranked queues"
+      kind: decision
+      text: "An inbox, a payment stream and an account network, highest risk first, every score explained."
+      tab: "extra:mules"
+    - title: "Analyst decides"
+      kind: person
+      text: "Escalates, reports or releases. No model blocks or reports anything on its own."
+  data_sources:
+    - name: "Credit-transfer messages"
+      kind: messages
+      origin: synthetic
+      provider: "scripts/generate_financial_crime.py: a fictional European bank, seeded"
+      feeds: "Transfer screening: the message's fields and its free-text purpose. 15 % were escalated."
+      size: "3,000 messages"
+    - name: "Customer payments"
+      kind: table
+      origin: synthetic
+      provider: "The same generator: genuine payments, account takeover, impersonation and investment scams, card-not-present"
+      feeds: "Payment fraud: new device, new payee, time from login to payment, a call or remote access during the session. 6 % fraud."
+      size: "5,000 payments"
+    - name: "Transfers between accounts"
+      kind: network
+      origin: synthetic
+      provider: "scripts/generate_financial_crime_mules.py: fifteen mule rings among genuine accounts, seeded"
+      feeds: "Mule accounts: money in and out, dwell time, shared devices and addresses, network position. 10 % mules."
+      period: "60 days"
+      size: "800 accounts"
+    - name: "EU Anti-Money Laundering Regulation"
+      kind: documents
+      origin: official
+      provider: "Regulation (EU) 2024/1624, EUR-Lex"
+      url: "https://eur-lex.europa.eu/eli/reg/2024/1624/oj"
+      license: "© European Union, reuse authorised"
+      feeds: "Eight articles the assistant searches and quotes: due diligence, reporting a suspicion, not telling the customer, record keeping."
+      size: "8 articles"
+  models:
+    - {model: main, question: "Should an analyst look at this outgoing cross-border transfer?", used_by: "AML analysts"}
+    - {model: payments, question: "Is this customer payment fraud?", used_by: "fraud operations"}
+    - {model: mules, question: "Is this account a money mule?", used_by: "investigators"}
+  demo:
+    minutes: 10
+    steps:
+      - title: "The desk"
+        tab: overview
+        show: "The flow: rules first, three models, an LLM analyst, and a person at the end."
+        say: "A financial-crime desk can never read everything. The question is where to look first, and how to explain why."
+      - title: "An inbox by risk"
+        tab: extra
+        show: "The inbox, highest score first, and the threshold that splits Escalate from Release."
+        say: "Every transfer is scored by a model that never saw it during training, so the scores you see here are honest."
+      - title: "Read the message"
+        tab: extra
+        show: "Open the top transfer: each field tinted by how much it pushed the score, the purpose shaded word by word."
+        say: "The analyst sees why, field by field and word by word, instead of a rule code."
+      - title: "A second opinion"
+        tab: extra
+        show: "Run the LLM analyst on the open transfer: every red flag comes with a quote from the message."
+        say: "The LLM never sees the score or the outcome. A quote that is not in the message is marked as unverified."
+      - title: "Payments: rules first"
+        tab: "extra:payments"
+        show: "The stream: blocked by a rule, sent to review or straight through. Move the threshold and watch the workload."
+        say: "Deterministic rules run before the model, and the model is never trained on what a rule blocked."
+      - title: "Follow the money"
+        tab: "extra:mules"
+        show: "The account network: hexagons are shared devices and addresses. Open a high-scoring account's dossier."
+        say: "Mules show in how money moves: fast in, fast out, shared devices. The model only sees numbers computed from the network."
+      - title: "Cite the law"
+        tab: assistant
+        show: "The answer with its article of the AML Regulation."
+        say: "The assistant searches the regulation itself and quotes it; it is not legal advice, and it says so."
+        ask: "What does the AML Regulation say about reporting a suspicion, and about telling the customer?"
+      - title: "Who decides"
+        tab: overview
+        show: "Limits and human oversight, at the end of this page."
+        say: "Synthetic data, designed typologies. The models rank and explain; an analyst escalates, reports or releases."
+
 chat:
   context: >
     A fictional European bank's financial-crime desk with two synthetic datasets. The main model

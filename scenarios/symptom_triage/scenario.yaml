@@ -31,6 +31,36 @@ credits:
     pre-trained on biomedical literature and clinical notes. Neither the data nor the
     model is clinically validated — outputs are illustrative only.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which condition do a patient's own words point to, and where should the message go?"
+  problem: >
+    Patients describe their symptoms in their own words in messages and portals. Someone has to read each one and
+    route it. A language model can suggest the likely condition and explain which words led there, so the message
+    reaches the right queue faster. It is a demonstration, not a diagnosis; a clinician decides.
+  audience: ["Triage nurses", "Patient services", "Health IT"]
+  with_ai: "A suggested condition among 22, explained word by word, with similar cases, routed on a live triage board."
+  value:
+    - {value: "22", label: "Conditions", note: "Common conditions in a public dataset."}
+    - {value: "1,065", label: "Patient descriptions", note: "Written in patient language."}
+  flow:
+    - {title: "Patient messages", kind: source, tab: data, text: "Free-text symptom descriptions, each labelled with a condition."}
+    - {title: "Clinical language model", kind: model, tab: insights, text: "BioClinical ModernBERT fine-tuned on them."}
+    - {title: "One message", kind: model, tab: predict, text: "The likely conditions, the words that led there and similar cases."}
+    - {title: "Triage board", kind: decision, tab: extra, text: "Incoming messages routed to the right queue."}
+    - {title: "Clinician decides", kind: person, text: "A clinician reads and answers every message."}
+  data_sources:
+    - {name: "Symptom to diagnosis", kind: messages, origin: public, provider: "Hugging Face Hub, gretelai/symptom_to_diagnosis", license: "Apache-2.0", feeds: "The descriptions and their conditions.", size: "1,065 descriptions"}
+  models:
+    - {model: main, question: "Which condition does this description most likely point to?", used_by: "triage nurses"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Messages in patients' own words, routed faster and explained."}
+      - {title: "One message", tab: "predict", show: "Type a description: the likely conditions and the words that weigh.", say: "The explanation is in the patient's own words."}
+      - {title: "The triage board", tab: "extra", show: "Messages flowing into queues.", say: "Routing, not diagnosing: a clinician answers every one."}
+      - {title: "Is it any good?", tab: "insights", show: "Held-out evaluation.", say: "Measured on descriptions the model never saw."}
+
 chat:
   context: >
     A clinical NLP triage model that maps a patient's free-text symptom description to

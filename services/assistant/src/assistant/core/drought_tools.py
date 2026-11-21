@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 import tempfile
+import threading
 from collections import Counter
 from datetime import date, timedelta
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,9 +35,15 @@ from ai_circus_shared.threshold_states import run_states
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
+from assistant.core.logger import get_logger
+
+logger = get_logger(__name__)
+
 TABLES = {"systems", "reservoirs", "readings", "storage_daily", "dq_flags"}
 MAX_HORIZON = 180
 FULL = 100.0
+HISTORY_STEP_DAYS = 7  # the control room's replay: one point a week keeps 27 years of 13 series near 18,000 values
+QUALITY_WINDOW_MAX_DAYS = 400
 RULEBOOK_TOP_K = 4
 _WORD = re.compile(r"[\wáéíóúüñç]+", re.IGNORECASE)
 _STOP = {
@@ -260,19 +268,185 @@ class DroughtToolkit:
     def _history(self, sid: str, until: date) -> list[tuple[str, float]]:
         # The state machine needs the whole history up to the date; a direct read keeps it exact and bounded
         # (about 9,800 rows for one series), so it does not go through the row-capped SQL tool.
-        import sqlite3
+        return [
+            (d, float(p))
+            for d, p in self._read(
+                "SELECT day, pct FROM storage_daily WHERE series = ? AND day <= ? ORDER BY day",
+                (sid, until.isoformat()),
+            )
+        ]
 
+    def _read(self, sql: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
+        """A fixed query of this module over the read-only file — never SQL a model or a caller wrote (that goes
+        through `run_sql`, with its guard and row cap).
+        """
         con = sqlite3.connect(f"file:{self.db.path.as_posix()}?mode=ro", uri=True)
         try:
-            return [
-                (d, float(p))
-                for d, p in con.execute(
-                    "SELECT day, pct FROM storage_daily WHERE series = ? AND day <= ? ORDER BY day",
-                    (sid, until.isoformat()),
-                )
-            ]
+            return list(con.execute(sql, params))
         finally:
             con.close()
+
+    # ---- the control-room tab (read-only views of the same artifacts) ---------------------------------------------
+    def control_room(self) -> dict[str, Any]:
+        """What the control-room tab draws at once: the plan's states, each system's outlook, each reservoir's current
+        storage and state, its quality flags over the last 30 days, and what drives each forecast.
+        """
+        model = self.book.state_model()
+        system_of = {rid: sid for sid, members in self.members.items() for rid in members}
+        since = (self.as_of - timedelta(days=29)).isoformat()
+        flagged = dict(
+            self._read(
+                "SELECT reservoir, count(*) FROM dq_flags WHERE day BETWEEN ? AND ? GROUP BY reservoir",
+                (since, self.as_of.isoformat()),
+            )
+        )
+        keys = (
+            "current_pct",
+            "state",
+            "days_in_state",
+            "change_7d_pp",
+            "change_30d_pp",
+            "forecast_states",
+            "crossings",
+        )
+        return {
+            "as_of": self.as_of.isoformat(),
+            "plan_title": self.book.title["en"],
+            "hysteresis_days": self.book.hysteresis_days,
+            "states": [
+                {
+                    "id": spec.id,
+                    "label": spec.label["en"],
+                    "min_pct": spec.min_pct,
+                    "savings_pct": round(self.book.savings(spec) * 100, 1),
+                    "measures": spec.measures.model_dump(),
+                }
+                for spec in self.book.states
+            ],
+            "systems": [
+                {
+                    "id": sid,
+                    "name": name,
+                    "members": self.members[sid],
+                    **{key: self.outlooks[sid][key] for key in keys},
+                    "recent_transitions": self.outlooks[sid]["recent_transitions"][-6:],
+                }
+                for sid, name in self.system_names.items()
+            ],
+            "reservoirs": [
+                {
+                    "id": rid,
+                    "name": name,
+                    "system": system_of[rid],
+                    "current_pct": self._forecast_by_series[rid]["current_pct"],
+                    "state": model.classify(self._forecast_by_series[rid]["current_pct"]),
+                    "flags_30d": flagged.get(rid, 0),
+                }
+                for rid, name in self.reservoir_names.items()
+            ],
+            "drivers": {
+                s["series"]: {h: v.get("drivers_pp", {}) for h, v in s["horizons"].items()}
+                for s in self.forecast["series"]
+            },
+            "attribution": self.attribution,
+            "note": "Illustrative decision support on synthetic data. A reservoir's state is its own storage against "
+            "the plan's thresholds; the plan's state applies to a supply system. A person decides.",
+        }
+
+    @cached_property
+    def history(self) -> dict[str, Any]:
+        """Every series one point a week from the first reading to the latest, and each system's plan state on those
+        days (the state machine runs over every day, so hysteresis holds), for the control room's replay.
+        """
+        daily: dict[str, dict[str, float]] = {}
+        for series, day, pct in self._read("SELECT series, day, pct FROM storage_daily ORDER BY series, day"):
+            daily.setdefault(series, {})[day] = float(pct)
+        first = date.fromisoformat(min(min(days) for days in daily.values()))
+        calendar = [first + timedelta(days=i) for i in range((self.as_of - first).days + 1)]
+        picks = list(range(len(calendar) - 1, -1, -HISTORY_STEP_DAYS))[::-1]  # always ends on the latest day
+        model = self.book.state_model()
+        series_out: dict[str, list[float | None]] = {}
+        states_out: dict[str, list[str | None]] = {}
+        for sid, days in daily.items():
+            values = [days.get(d.isoformat()) for d in calendar]
+            carried: list[float | None] = []
+            last: float | None = None
+            for v in values:
+                last = v if v is not None else last
+                carried.append(last)
+            series_out[sid] = [None if carried[i] is None else round(carried[i], 1) for i in picks]  # type: ignore[arg-type]
+            if sid in self.system_names:
+                states = run_states(values, model, self.book.hysteresis_days)
+                states_out[sid] = [states[i] for i in picks]
+        return {
+            "dates": [calendar[i].isoformat() for i in picks],
+            "step_days": HISTORY_STEP_DAYS,
+            "series": series_out,
+            "states": states_out,
+            "note": "Cleaned storage, one point a week. A system's state follows the plan's state machine with "
+            f"{self.book.hysteresis_days}-day hysteresis; a reservoir has no state of its own.",
+        }
+
+    def quality_overview(self) -> dict[str, Any]:
+        """Every reservoir's quality flags by kind and by year, its quality score, and what the cleaning removed."""
+        by_code: dict[str, dict[str, int]] = {}
+        for rid, code, n in self._read("SELECT reservoir, code, count(*) FROM dq_flags GROUP BY reservoir, code"):
+            by_code.setdefault(rid, {})[code] = n
+        by_year: dict[str, dict[str, int]] = {}
+        for rid, year, n in self._read(
+            "SELECT reservoir, substr(day, 1, 4), count(*) FROM dq_flags GROUP BY reservoir, substr(day, 1, 4)"
+        ):
+            by_year.setdefault(rid, {})[year] = n
+        scores = dict(self._read("SELECT id, dq_score FROM reservoirs"))
+        return {
+            "as_of": self.as_of.isoformat(),
+            "reservoirs": [
+                {
+                    "id": rid,
+                    "name": name,
+                    "score_pct": None if scores.get(rid) is None else round(float(scores[rid]), 1),
+                    "flags_by_code": by_code.get(rid, {}),
+                    "flags_by_year": by_year.get(rid, {}),
+                }
+                for rid, name in self.reservoir_names.items()
+            ],
+            "cleaning_applied": self.backtest.get("cleaning_policy_applied", {}),
+            "meaning": {code: text.removeprefix("needs review: ") for code, text in DESCRIPTIONS.items()},
+            "note": "A flag means the reading needs review by a person, never that it is wrong.",
+        }
+
+    def quality_series(
+        self, reservoir: str, start: date | None = None, end: date | None = None, code: str | None = None
+    ) -> dict[str, Any]:
+        """One reservoir's readings as published next to the cleaned series the model learns from, with the flags
+        of the window (default: the 120 days to the latest reading; at most 400 days). With `code` and no dates, the
+        window is the 120 days around the latest flag of that kind, so each kind of fault can be shown.
+        """
+        if code is not None and start is None and end is None:
+            if code not in DESCRIPTIONS:
+                raise ToolError(f"Unknown flag {code!r}. Known: {sorted(DESCRIPTIONS)}.")
+            rid = self.resolve(reservoir)
+            latest = self._read("SELECT max(day) FROM dq_flags WHERE reservoir = ? AND code = ?", (rid, code))[0][0]
+            if latest is None:
+                raise ToolError(f"{self.reservoir_names.get(rid, rid)} has no {code!r} flag.")
+            end = min(self.as_of, date.fromisoformat(latest) + timedelta(days=30))
+        report = self.dq_report(reservoir, start or (end or self.as_of) - timedelta(days=119), end)
+        first, last = report["period"]
+        if (date.fromisoformat(last) - date.fromisoformat(first)).days + 1 > QUALITY_WINDOW_MAX_DAYS:
+            raise ToolError(f"A window is at most {QUALITY_WINDOW_MAX_DAYS} days.")
+        rid = report["reservoir"]
+        raw = self._read(
+            "SELECT day, pct FROM readings WHERE reservoir = ? AND day BETWEEN ? AND ? ORDER BY day", (rid, first, last)
+        )
+        clean = self._read(
+            "SELECT day, pct FROM storage_daily WHERE series = ? AND day BETWEEN ? AND ? ORDER BY day",
+            (rid, first, last),
+        )
+        return {
+            **report,
+            "published": [{"day": d, "pct": None if p is None else round(float(p), 2)} for d, p in raw],
+            "cleaned": [{"day": d, "pct": round(float(p), 2)} for d, p in clean],
+        }
 
     def search_rulebook(self, query: str, lang: str = "en", top_k: int = RULEBOOK_TOP_K) -> dict[str, Any]:
         """The rulebook's paragraphs that best match a question, each with its article citation."""
@@ -392,10 +566,33 @@ def _tokens(text: str) -> list[str]:
     return [w.lower() for w in _WORD.findall(text) if w.lower() not in _STOP]
 
 
-@lru_cache(maxsize=4)
+_toolkit_lock = threading.Lock()
+
+
 def get_toolkit(scenario_dir: str) -> DroughtToolkit:
-    """One toolkit per scenario directory and process (the files are committed and do not change at run time)."""
+    """One toolkit per scenario directory and process (the files are committed and do not change at run time).
+
+    Built under a lock: two first requests at once (the control room asks for several views together) would otherwise
+    both unpack the SQLite file into the same place, and one would read it half-written.
+    """
+    with _toolkit_lock:
+        return _toolkit(scenario_dir)
+
+
+@lru_cache(maxsize=4)
+def _toolkit(scenario_dir: str) -> DroughtToolkit:
     return DroughtToolkit(Path(scenario_dir))
+
+
+def warm_toolkits(scenarios_dir: Path, slugs: list[str]) -> None:
+    """Build each drought-watch toolkit and its weekly history at start-up, so the first demo is instant (best effort:
+    a scenario whose artifacts are missing logs and is skipped, its routes then answer 503).
+    """
+    for slug in slugs:
+        try:
+            _ = get_toolkit(str(scenarios_dir / slug)).history
+        except (FileNotFoundError, OSError, ValueError) as exc:
+            logger.warning("Drought toolkit for {} not warmed: {}", slug, exc)
 
 
 # ---- LangChain tools ---------------------------------------------------------------------------------------------
@@ -406,14 +603,18 @@ class _ForecastArgs(BaseModel):
     horizon: int | None = Field(None, ge=1, le=MAX_HORIZON, description="Days ahead: 7, 30, 90 or 180. Omit for all.")
 
 
-class _WhatIfArgs(BaseModel):
+class WhatIfArgs(BaseModel):
+    """A what-if over one supply system: the chat's tool and the control room's route take the same request."""
+
     system: str = Field(max_length=80, description="A supply system, by id or name.")
     scenario: Literal["dry", "normal", "wet"] = "normal"
     savings_pct: float = Field(0, ge=0, le=100, description="Demand-side savings as a % of the net drawdown.")
     horizon: int = Field(90, ge=1, le=MAX_HORIZON, description="Days ahead.")
 
 
-class _OptimiseArgs(BaseModel):
+class OptimiseArgs(BaseModel):
+    """The measure optimiser's request, shared by the chat's tool and the control room's route."""
+
     system: str = Field(max_length=80)
     target_probability_pct: float = Field(10, gt=0, lt=100, description="Largest acceptable probability of emergency.")
     horizon: int = Field(180, ge=1, le=MAX_HORIZON)
@@ -487,7 +688,7 @@ def build_drought_tools(toolkit: DroughtToolkit, *, scenario_slug: str) -> list[
             lambda system, scenario="normal", savings_pct=0, horizon=90: toolkit.what_if(
                 system, scenario, savings_pct, horizon
             ),
-            _WhatIfArgs,
+            WhatIfArgs,
             "What if the coming days are dry/normal/wet and demand is cut by a percentage? Returns the end-of-horizon "
             "storage bands and state, and the days to each threshold below the current state.",
         ),
@@ -496,7 +697,7 @@ def build_drought_tools(toolkit: DroughtToolkit, *, scenario_slug: str) -> list[
             lambda system, target_probability_pct=10, horizon=180, scenario="dry": toolkit.optimise_measures(
                 system, target_probability_pct, horizon, scenario
             ),
-            _OptimiseArgs,
+            OptimiseArgs,
             "Find the least restrictive package of the plan's measures that keeps the probability of reaching the "
             "emergency threshold within the horizon at or below a target. Illustrative decision support.",
         ),

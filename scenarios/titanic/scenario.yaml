@@ -27,6 +27,34 @@ credits:
   url: "https://www.kaggle.com/competitions/titanic"
   note: "ported from angelmtenor/data-science-keras (titanic notebook) and modernised"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Who survived the Titanic, and why? Machine learning from raw data to an explained answer"
+  problem: >
+    The Titanic passenger list is the classic first machine-learning problem: small, real and easy to reason about.
+    This scenario walks the whole workflow on it, from raw data to an explained survival probability for anyone you
+    put aboard, so a newcomer sees every step of how a model is built and read.
+  audience: ["Students", "Newcomers to machine learning", "Teams onboarding"]
+  value:
+    - {value: "891", label: "Real passengers", note: "The Kaggle training list."}
+    - {value: "10+", label: "Tutorial chapters", note: "Data, features, models, metrics, explanations."}
+  flow:
+    - {title: "Passenger list", kind: source, tab: data, text: "Class, sex, age, family aboard, fare, port of embarkation, and who survived."}
+    - {title: "The tutorial", kind: quality, tab: tutorial, text: "The workflow step by step, with live charts and widgets."}
+    - {title: "Survival model", kind: model, tab: model, text: "Models compared by cross-validation; the winner explained with SHAP."}
+    - {title: "The voyage", kind: output, tab: extra, text: "Put anyone aboard the ship and see their chance, deck by deck."}
+  data_sources:
+    - {name: "Titanic passenger list", kind: table, origin: public, provider: "Kaggle, Titanic: Machine Learning from Disaster", url: "https://www.kaggle.com/competitions/titanic", feeds: "Every input and the label: survived.", size: "891 passengers"}
+  models:
+    - {model: main, question: "Would this passenger have survived?", used_by: "learners"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "A complete machine-learning workflow on a dataset everyone understands."}
+      - {title: "The tutorial", tab: "tutorial", show: "The first chapters: the data, then the features.", say: "Each step of building a model, with live charts."}
+      - {title: "The voyage", tab: "extra", show: "Put a passenger aboard: class, age, family; see the chance and why.", say: "The model explained on any person you imagine."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model and the data.", ask: "Why did women survive so much more often than men?"}
+
 chat:
   context: >
     A teaching scenario on the RMS Titanic passenger list (891 of the 2,224 people

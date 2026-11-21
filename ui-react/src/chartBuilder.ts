@@ -244,6 +244,17 @@ function buildScatter(
   return { data, layout: { ...sceneOrAxes, showlegend: groups.length > 1 } };
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
+
+/** Whether `col` holds ISO dates (a time series' time column), judged on the first rows that have a value. */
+export function isDateColumn(rows: DatasetRow[], col: string): boolean {
+  const seen = rows
+    .map((r) => r[col])
+    .filter((v) => v !== null && v !== undefined)
+    .slice(0, 20);
+  return seen.length > 0 && seen.every((v) => typeof v === "string" && ISO_DATE.test(v));
+}
+
 function buildLine(
   rows: DatasetRow[],
   cfg: ChartCardConfig,
@@ -252,12 +263,19 @@ function buildLine(
 ): { data: PlotlyDatum[]; layout: PlotlyLayout } {
   if (!cfg.x || !cfg.y) return { data: [], layout: {} };
   const groups = splitByColor(rows, cfg.colorBy);
+  // A time column (ISO dates) is an x axis of its own: kept as text, which Plotly reads as dates.
+  const byDate = isDateColumn(rows, cfg.x);
   const data = groups.map((g, i) => {
-    const filtered = withFiniteNumber(withFiniteNumber(g.rows, cfg.x), cfg.y).sort((a, b) => toNumber(a[cfg.x]) - toNumber(b[cfg.x]));
+    const filtered = byDate
+      ? withFiniteNumber(g.rows, cfg.y)
+          .filter((r) => typeof r[cfg.x] === "string")
+          .sort((a, b) => String(a[cfg.x]).localeCompare(String(b[cfg.x])))
+      : withFiniteNumber(withFiniteNumber(g.rows, cfg.x), cfg.y).sort((a, b) => toNumber(a[cfg.x]) - toNumber(b[cfg.x]));
     return {
       type: "scatter",
-      mode: "lines+markers",
-      x: filtered.map((r) => toNumber(r[cfg.x])),
+      // Hundreds of points per line read as a line, not a string of beads.
+      mode: filtered.length > 120 ? "lines" : "lines+markers",
+      x: filtered.map((r) => (byDate ? String(r[cfg.x]) : toNumber(r[cfg.x]))),
       y: filtered.map((r) => toNumber(r[cfg.y])),
       name: g.key || labelFor(cfg.y),
       line: { color: palette[i % palette.length] },

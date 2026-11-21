@@ -17,6 +17,32 @@ icon: "🏛️"
 
 # Grounds form-agent's system prompt (build_form_system_prompt) — the domain framing
 # only; the field catalog itself comes entirely from `form` below.
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Report a problem to the council in your own words"
+  problem: >
+    Citizens report broken streetlights, missed collections or permit requests through forms with many fields, most
+    of which depend on the kind of request. Here the citizen describes the problem; the assistant picks the request
+    type from the council's catalogue, asks only for what that type needs, and files the request.
+  audience: ["Citizens", "Council service desks"]
+  with_ai: "A conversation that fills the right form, grounded in the catalogue of request types, and a tracker for each request."
+  value:
+    - {value: "1", label: "Conversation", note: "Instead of a long form with fields that do not apply."}
+  flow:
+    - {title: "The citizen's words", kind: source, tab: assistant, text: "A description of the problem or the request."}
+    - {title: "Request catalogue", kind: rules, tab: assistant, text: "The council's request types (RAG) decide which fields are required."}
+    - {title: "Form filled", kind: assistant, tab: assistant, text: "The assistant fills the form and asks only for what is missing."}
+    - {title: "Request tracker", kind: output, tab: cases, text: "Every request filed, with its case number."}
+  data_sources:
+    - {name: "Request catalogue", kind: documents, origin: synthetic, provider: "A fictional council's catalogue of request types, written for this repository", feeds: "The request types and their required fields."}
+  models: []
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Describe the problem; the form follows."}
+      - {title: "Report it", tab: "assistant", show: "The assistant picks the request type and fills the form.", say: "Only the fields that request needs are asked.", ask: "There's a broken streetlight on Main Street, near the library."}
+      - {title: "Track it", tab: "cases", show: "The filed request and its case number.", say: "Every request is tracked per user."}
+
 chat:
   context: >
     A local government's public service request desk. Residents report issues

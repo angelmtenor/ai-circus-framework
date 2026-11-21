@@ -24,6 +24,8 @@ import {
 } from "./apiClient";
 import { config } from "./config";
 import { BarList, CHART_COLORS, StatTile } from "./charts";
+import { NumberSlider } from "./controls";
+import { seriesLines } from "./forecastLogic";
 import "./forecast.css";
 
 const CANDIDATE_LABELS: Record<string, string> = {
@@ -40,10 +42,29 @@ const candidateLabel = (name: string) => CANDIDATE_LABELS[name] ?? name;
 function timeLabel(iso: string, frequency: string): string {
   const d = new Date(iso);
   if (/min|h$/.test(frequency)) return d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: /M|Q/.test(frequency) ? "numeric" : undefined });
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: /M|Q|W|Y/.test(frequency) ? "numeric" : undefined });
 }
 
 const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1));
+
+const STEP_UNITS: [RegExp, string, string][] = [
+  [/^\d*(min|T)$/, "minute", "minutes"],
+  [/^\d*[hH]$/, "hour", "hours"],
+  [/^\d*D$/, "day", "days"],
+  [/^\d*W/, "week", "weeks"],
+  [/^\d*(M|MS|ME)$/, "month", "months"],
+  [/^\d*Q/, "quarter", "quarters"],
+];
+
+/** "180 days", "48 hours": a horizon in the forecast's own time unit rather than in "steps". */
+function stepsText(n: number, frequency: string): string {
+  const unit = STEP_UNITS.find(([re]) => re.test(frequency));
+  if (!unit) return `${n} steps`;
+  return `${n} ${n === 1 ? unit[1] : unit[2]}`;
+}
+
+/** Whether the target is a level (storage %, stock) rather than a flow (demand): a level is never summed. */
+const isLevel = (scenario: ScenarioSummary) => scenario.ui_extras?.kind === "forecast_board" && scenario.ui_extras.summary === "change";
 
 function useForecast(scenario: ScenarioSummary, accessToken: string | null) {
   const [forecast, setForecast] = useState<Forecast | null>(null);
@@ -64,6 +85,8 @@ function useForecast(scenario: ScenarioSummary, accessToken: string | null) {
 
 export type TimeLine = { key: string; label: string; ds: string[]; values: number[]; color: string; dashed?: boolean; width?: number };
 export type TimeBand = { key: string; ds: string[]; lower: number[]; upper: number[]; opacity: number; color?: string };
+// A horizontal band of values behind the lines (e.g. a plan's state between two thresholds).
+export type TimeZone = { key: string; from: number; to: number; color: string; label: string };
 
 const PAD = { left: 56, right: 16, top: 14, bottom: 34 };
 
@@ -78,10 +101,21 @@ function niceAxis(lo: number, hi: number): { lo: number; hi: number; ticks: numb
   return { lo: low, hi: high, ticks: Array.from({ length: Math.round((high - low) / step) + 1 }, (_, i) => low + i * step) };
 }
 
+/** A fixed value axis with about five round ticks inside it (0-110 % gives 0, 20, … 100). */
+function fixedAxis([lo, hi]: [number, number]): { lo: number; hi: number; ticks: number[] } {
+  const raw = (hi - lo || 1) / 5;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((u) => u * magnitude).reduce((a, b) => (Math.abs(b - raw) < Math.abs(a - raw) ? b : a));
+  const first = Math.ceil(lo / step) * step;
+  return { lo, hi, ticks: Array.from({ length: Math.floor((hi - first) / step) + 1 }, (_, i) => first + i * step) };
+}
+
 /** History, forecast and bands on one time axis, with a hover read-out of every line. */
 export function TimeChart({
   lines,
   bands = [],
+  zones = [],
+  yDomain,
   frequency,
   yLabel,
   marker,
@@ -89,6 +123,9 @@ export function TimeChart({
 }: {
   lines: TimeLine[];
   bands?: TimeBand[];
+  zones?: TimeZone[];
+  // A fixed value axis (e.g. 0-100 % for storage), instead of one fitted to the lines.
+  yDomain?: [number, number];
   frequency: string;
   yLabel: string;
   // A vertical rule (e.g. where the forecast starts).
@@ -115,7 +152,7 @@ export function TimeChart({
   }, [lines]);
   if (times.length < 2) return <div className="ts-chart" ref={boxRef} />;
   const values = [...lines.flatMap((l) => l.values), ...bands.flatMap((b) => [...b.lower, ...b.upper])].filter(Number.isFinite);
-  const { lo, hi, ticks: yTicks } = niceAxis(Math.min(...values), Math.max(...values));
+  const { lo, hi, ticks: yTicks } = yDomain ? fixedAxis(yDomain) : niceAxis(Math.min(...values), Math.max(...values));
   const t0 = times[0];
   const t1 = times[times.length - 1];
   const x = (iso: string | number) => PAD.left + ((typeof iso === "number" ? iso : Date.parse(iso)) - t0) / (t1 - t0) * (W - PAD.left - PAD.right);
@@ -144,6 +181,19 @@ export function TimeChart({
   return (
     <div className="ts-chart" ref={boxRef}>
       <svg ref={svgRef} viewBox={`0 0 ${W} ${height}`} role="img" aria-label={yLabel} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        {zones.map((z) => {
+          const top = y(Math.min(hi, Math.max(z.from, z.to)));
+          const bottom = y(Math.max(lo, Math.min(z.from, z.to)));
+          if (bottom <= top) return null;
+          return (
+            <g key={z.key} className="ts-zone">
+              <rect x={PAD.left} width={W - PAD.left - PAD.right} y={top} height={bottom - top} fill={z.color} opacity={0.09} />
+              <text x={W - PAD.right - 4} y={top + 12} className="ts-zone-label" fill={z.color} textAnchor="end">
+                {z.label}
+              </text>
+            </g>
+          );
+        })}
         {yTicks.map((v) => (
           <g key={v}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(v)} y2={y(v)} className="ts-grid" />
@@ -193,26 +243,6 @@ export function TimeChart({
       </div>
     </div>
   );
-}
-
-function seriesLines(s: ForecastSeries, levels: string[], forecastLabel: string): { lines: TimeLine[]; bands: TimeBand[] } {
-  const lastHistory = { ds: s.history.ds.slice(-1), y: s.history.y.slice(-1) };
-  return {
-    lines: [
-      { key: "history", label: "Observed", ds: s.history.ds, values: s.history.y, color: CHART_COLORS.dim, width: 1.5 },
-      // Joined to the last observation so the forecast visibly continues the series.
-      { key: "forecast", label: forecastLabel, ds: [...lastHistory.ds, ...s.forecast.ds], values: [...lastHistory.y, ...s.forecast.mean], color: CHART_COLORS.accent, width: 2.5 },
-    ],
-    bands: [...levels]
-      .sort((a, b) => Number(b) - Number(a))
-      .map((level, i) => ({
-        key: level,
-        ds: s.forecast.ds,
-        lower: s.forecast.bands[level].lower,
-        upper: s.forecast.bands[level].upper,
-        opacity: i === 0 ? 0.14 : 0.24,
-      })),
-  };
 }
 
 /** A series id as a reader sees it: the scenario's own label, else "south_valley" -> "South valley". */
@@ -272,18 +302,21 @@ function labelAt(site: ForecastMapSite, cy: number, unit: number) {
  * forecast ends against today (green up, red down). Clicking a dot selects that series; the selected series' group
  * (or the group's members, when a group is selected) is outlined. Static SVG: nothing moves.
  */
-function SeriesMap({
+export function SeriesMap({
   map,
   forecast,
   selected,
   labels,
   onSelect,
+  colorOf,
 }: {
   map: ForecastBoardMap;
   forecast: Forecast;
   selected: string;
   labels?: Record<string, string>;
   onSelect: (i: number) => void;
+  // Overrides the dot colour (default: where the forecast ends against today), e.g. a drought state.
+  colorOf?: (series: string) => string;
 }) {
   const index = new Map(forecast.series.map((s, i) => [s.label, i]));
   const unit = Math.max(map.width, map.height) / 100;
@@ -325,7 +358,7 @@ function SeriesMap({
               {(on || inGroup) && (
                 <circle cx={site.x} cy={y(site.y)} r={3.6 * unit} className="forecast-map-halo" strokeWidth={0.5 * unit} />
               )}
-              <circle cx={site.x} cy={y(site.y)} r={(on ? 2.6 : 2) * unit} fill={trend(site.series)} />
+              <circle cx={site.x} cy={y(site.y)} r={(on ? 2.6 : 2) * unit} fill={colorOf ? colorOf(site.series) : trend(site.series)} />
               <text
                 {...labelAt(site, y(site.y), unit)}
                 fontSize={3 * unit}
@@ -352,11 +385,12 @@ function targetText(scenario: ScenarioSummary) {
 export function ForecastPredictView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const { forecast, error } = useForecast(scenario, accessToken);
   const [index, setIndex] = useState(0);
+  const [showAll, setShowAll] = useState(false);
   const target = targetText(scenario);
   const series = forecast?.series[index];
 
   useCopilotReadable({
-    description: `The ${scenario.title} forecast on screen: the next ${forecast?.horizon ?? "?"} steps of ${target.label}, with prediction bands.`,
+    description: `The ${scenario.title} forecast on screen: the next ${forecast ? stepsText(forecast.horizon, forecast.frequency) : "?"} of ${target.label}, with prediction bands.`,
     value: series ? { series: series.label, forecast: series.forecast, peak: series.peak } : null,
   });
 
@@ -364,21 +398,39 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
   if (!forecast || !series) return <div className="tab-panel"><div className="panel-hint">Loading the forecast…</div></div>;
   const { lines, bands } = seriesLines(series, forecast.levels, "Forecast");
   const total = series.forecast.mean.reduce((a, b) => a + b, 0);
+  const last = series.history.y[series.history.y.length - 1];
+  const end = series.forecast.mean[series.forecast.mean.length - 1];
+  const level = isLevel(scenario);
+  const span = stepsText(forecast.horizon, forecast.frequency);
   const widest = forecast.levels.map(Number).sort((a, b) => b - a)[0];
   const exogenous = Object.keys(series.exogenous[0] ?? {});
   const schema = scenario.feature_schema ?? {};
+  const peakLabel = scenario.ui_extras?.kind === "forecast_board" ? scenario.ui_extras.peak_label : "Peak";
+  // A long horizon reads best at its key steps: the model's own horizons (or the first fortnight) and the peak.
+  const horizons = scenario.time_series?.horizons ?? [];
+  const keySteps = new Set<number>(horizons.length > 0 ? horizons.map((h) => h - 1) : [...Array(14).keys()]);
+  keySteps.add(series.forecast.ds.indexOf(series.peak.ds));
+  const rows = series.forecast.ds.map((_, i) => i).filter((i) => showAll || series.forecast.ds.length <= 31 || keySteps.has(i));
 
   return (
     <div className="tab-panel forecast">
       <div className="kpi-row">
-        <StatTile label="Peak" value={`${fmt(series.peak.value)} ${target.unit}`} sub={timeLabel(series.peak.ds, forecast.frequency)} highlight />
-        <StatTile label={`Total, next ${forecast.horizon} steps`} value={`${fmt(total)} ${target.unit}`} />
+        <StatTile label={peakLabel} value={`${fmt(series.peak.value)} ${target.unit}`} sub={timeLabel(series.peak.ds, forecast.frequency)} highlight />
+        {level ? (
+          <StatTile
+            label={`Change, next ${span}`}
+            value={`${end - last >= 0 ? "+" : ""}${fmt(end - last)} ${target.unit}`}
+            sub={`from ${fmt(last)} today to ${fmt(end)} ${target.unit}`}
+          />
+        ) : (
+          <StatTile label={`Total, next ${span}`} value={`${fmt(total)} ${target.unit}`} />
+        )}
         <StatTile label="Forecaster" value={candidateLabel(forecast.model_name)} sub="chosen by backtest (Insights)" />
       </div>
       <div className="panel-card">
         <div className="forecast-head">
           <h3>
-            {target.label}: the next {forecast.horizon} steps
+            {target.label}: the next {span}
           </h3>
           <SeriesPicker forecast={forecast} value={index} onChange={setIndex} labels={boardLabels(scenario)} />
         </div>
@@ -388,7 +440,14 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
         </p>
       </div>
       <div className="panel-card">
-        <h3>Step by step</h3>
+        <div className="forecast-head">
+          <h3>{rows.length < series.forecast.ds.length ? "Key dates" : "Step by step"}</h3>
+          {series.forecast.ds.length > 31 && (
+            <button className="btn-secondary" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "Key dates only" : `Every step (${series.forecast.ds.length})`}
+            </button>
+          )}
+        </div>
         <div className="table-scroll">
           <table className="data-table">
             <thead>
@@ -404,9 +463,14 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
               </tr>
             </thead>
             <tbody>
-              {series.forecast.ds.map((d, i) => (
+              {rows.map((i) => {
+                const d = series.forecast.ds[i];
+                return (
                 <tr key={d} className={d === series.peak.ds ? "forecast-peak-row" : undefined}>
-                  <td>{timeLabel(d, forecast.frequency)}</td>
+                  <td>
+                    {timeLabel(d, forecast.frequency)}
+                    {!showAll && rows.length < series.forecast.ds.length && <span className="panel-hint"> · in {stepsText(i + 1, forecast.frequency)}</span>}
+                  </td>
                   <td>{fmt(series.forecast.mean[i])}</td>
                   {forecast.levels.map((l) => (
                     <td key={l}>
@@ -417,7 +481,8 @@ export function ForecastPredictView({ scenario, accessToken }: { scenario: Scena
                     <td key={c}>{series.exogenous[i][c].toFixed(1)}</td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -601,12 +666,12 @@ export function ForecastBoardView({ scenario, accessToken }: { scenario: Scenari
         />
         {extras.summary === "change" ? (
           <StatTile
-            label={`Change, next ${forecast.horizon} steps`}
+            label={`Change, next ${stepsText(forecast.horizon, forecast.frequency)}`}
             value={`${signed(change(shown))} ${target.unit}`}
             sub={`${fmt(end(shown))} ${target.unit} at the end${reForecast ? ` (baseline ${fmt(end(base))})` : ""}`}
           />
         ) : (
-          <StatTile label={`Total, next ${forecast.horizon} steps`} value={`${fmt(total(shown))} ${target.unit}`} sub={reForecast ? `${delta >= 0 ? "+" : ""}${fmt(delta)} (${((delta / total(base)) * 100).toFixed(1)}%) vs baseline` : "baseline"} color={reForecast ?(delta > 0 ? CHART_COLORS.red : CHART_COLORS.green) : undefined} />
+          <StatTile label={`Total, next ${stepsText(forecast.horizon, forecast.frequency)}`} value={`${fmt(total(shown))} ${target.unit}`} sub={reForecast ? `${delta >= 0 ? "+" : ""}${fmt(delta)} (${((delta / total(base)) * 100).toFixed(1)}%) vs baseline` : "baseline"} color={reForecast ?(delta > 0 ? CHART_COLORS.red : CHART_COLORS.green) : undefined} />
         )}
       </div>
       <div className={extras.map ? "forecast-board-body with-map" : "forecast-board-body"}>
@@ -630,20 +695,19 @@ export function ForecastBoardView({ scenario, accessToken }: { scenario: Scenari
           {extras.levers.map((lever) => {
             const value = shifts[lever.feature] ?? 0;
             return (
-              <label key={lever.feature} className="forecast-lever">
-                <span>
-                  {lever.label} <b>{value > 0 ? "+" : ""}{value} {lever.unit}</b>
-                </span>
-                <input
-                  type="range"
-                  min={lever.min_shift}
-                  max={lever.max_shift}
-                  step={lever.step}
-                  value={value}
-                  disabled={!forecast.what_if}
-                  onChange={(e) => setShifts((s) => ({ ...s, [lever.feature]: Number(e.target.value) }))}
-                />
-              </label>
+              <NumberSlider
+                key={lever.feature}
+                label={lever.label}
+                min={lever.min_shift}
+                max={lever.max_shift}
+                step={lever.step}
+                value={value}
+                unit={lever.unit}
+                format={(v) => `${v > 0 ? "+" : ""}${v}`}
+                disabled={!forecast.what_if}
+                editable={false}
+                onChange={(v) => setShifts((s) => ({ ...s, [lever.feature]: v }))}
+              />
             );
           })}
           {shifted && (

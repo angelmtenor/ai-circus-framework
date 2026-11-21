@@ -23,6 +23,37 @@ role_required: "scenario:sede_electronica"
 industry: public_sector
 icon: "🧾"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Escenario en español, como su interfaz.
+story:
+  headline: "¿Y si la sede electrónica rellenara el modelo oficial por ti?"
+  problem: >
+    Hacer un trámite en una sede electrónica obliga a saber qué modelo toca, qué casillas rellenar y qué documentos
+    adjuntar. Aquí basta con contar el trámite o subir los documentos: el asistente elige el modelo oficial, lee el
+    DNI y los certificados, rellena cada casilla numerada, comprueba DNI e IBAN y presenta con justificante en PDF.
+  audience: ["Ciudadanía", "Atención ciudadana", "Administración electrónica"]
+  today: "Buscar el modelo correcto, rellenarlo casilla a casilla y equivocarse en un dato."
+  with_ai: "Una conversación que elige el modelo, rellena las casillas con su origen y valida antes de presentar."
+  value:
+    - {value: "PDF", label: "Justificante", note: "Borrador y copia presentada con su registro."}
+    - {value: "DNI · IBAN", label: "Validados", note: "Se comprueban antes de presentar."}
+  flow:
+    - {title: "Trámite o documentos", kind: source, tab: assistant, text: "La persona cuenta qué necesita o adjunta su DNI y certificados."}
+    - {title: "Modelo oficial", kind: rules, tab: assistant, text: "El asistente elige el modelo general o específico según el tipo de trámite."}
+    - {title: "Casillas rellenadas", kind: assistant, tab: assistant, text: "Cada casilla numerada se rellena desde la conversación o el documento, con su origen marcado."}
+    - {title: "Presentación", kind: output, tab: cases, text: "Validación, PDF con justificante y seguimiento en Mis trámites."}
+    - {title: "Revisa la persona", kind: person, text: "La persona revisa y presenta; nada se presenta sin su confirmación."}
+  data_sources:
+    - {name: "Modelos y ayudas de la sede", kind: documents, origin: synthetic, provider: "Modelos oficiales de estilo español y documentos de ejemplo escritos para este repositorio (Ayuntamiento ficticio de Villaclara)", feeds: "Los campos de cada modelo, la ayuda del asistente y los documentos de ejemplo."}
+  models: []
+  demo:
+    minutes: 5
+    steps:
+      - {title: "La pregunta", tab: "overview", show: "El titular y el recorrido.", say: "Un trámite contado con tus palabras se convierte en el modelo oficial relleno."}
+      - {title: "Contar el trámite", tab: "assistant", show: "El asistente elige el modelo y empieza a rellenar casillas.", say: "Cada casilla rellenada indica de dónde salió el dato.", ask: "Me he mudado a Villaclara y tengo que cambiar mi domicilio fiscal."}
+      - {title: "Subir documentos", tab: "assistant", show: "Adjunta un documento de ejemplo: se lee y se vuelca en las casillas.", say: "El DNI y los certificados rellenan el formulario; la persona solo revisa."}
+      - {title: "Presentar", tab: "cases", show: "El trámite presentado, con su justificante en PDF.", say: "Validado antes de presentar, con su registro y su seguimiento."}
+
 chat:
   context: >
     La sede electrónica (ficticia) de la Agencia Tributaria de Villaclara. Los

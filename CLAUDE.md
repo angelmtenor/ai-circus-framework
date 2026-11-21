@@ -44,6 +44,7 @@ make k3s-mcp-examples-up / -down       # OPTIONAL crm-mcp (libs/mcp-kit) in fron
 make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
 make k3s-librechat-up / k3s-librechat-down # OPTIONAL second chat UI: LibreChat (MIT) + MongoDB at librechat.localhost, same sign-in and MCP path (ADR 0026); one chat UI at a time
 make k3s-mcp-lite / -verify / -down    # OPTIONAL MCP lite profile (ADR 0027): the MCP Lite Stack alone on its own k3d cluster `mcp-lite` (~3 GB; CHAT_UI=librechat; OBS=1 adds observability); pause the framework cluster first (port 80)
+make architecture / architecture-check # architecture_catalog.yaml (libs/shared) -> docs/architecture/ map + components.md + the app's Architecture page; tests fail on drift or a missing workload
 make mcp-catalog / mcp-catalog-check   # mcp/catalog.yaml (ADR 0024) -> gateway routes, chat UI connections, kit policy.yaml, Keycloak exchange clients; CI fails on drift
 make mcp-catalog-portal                # OPTIONAL local page over the catalog (127.0.0.1:8040): tick tools per group, review diffs, publish; then make k3s-mcp-catalog-apply
 make k3s-mcp-pseudonym WHO=<user> | FIND=<pseudonym>  # audit lookup (ADR 0029): the pseudonym each API sees for a user, or who one is
@@ -179,7 +180,13 @@ hidden) — a new scene must not run its own endless `requestAnimationFrame`. `S
 out a scenario whose backend is down (`serviceAvailability.ts`: each service's `/healthz` through
 Traefik, one shared 30 s poll), and one whose model is not trained for the caller's tenant (`prediction`'s org-scoped
 `GET /models/status`; "run `make k3s-pipeline`"). Charts: ADR 0014 (Plotly only for the chart builder, chat charts, large scatters and 3-D; a
-new small chart uses `charts.tsx` or `dashboardCharts.tsx`, a new map `GeoBubbleMap`/`d3-geo`). The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
+new small chart uses `charts.tsx` or `dashboardCharts.tsx`, a new map `GeoBubbleMap`/`d3-geo`). A filter or a
+parameter uses `controls.tsx` (`RangeSlider` over a histogram of the real values, `ChoiceChips`, `NumberSlider`,
+`ChoiceSelect`), so querying data and asking a model look the same. The gallery ranks a query by words
+(`scenarioSearch.ts`, a bilingual concept list) and by meaning (platform-registry `GET /scenario-search/{org}`, scenarios
+embedded through llm-gateway's `local-embed` in a background thread, **in batches of 4 short texts**: one batch of every
+scenario OOM-killed llm-gateway). A tabular workspace has an Executive · Analyst · Engineer switch (`audience.ts`, also
+the Surf tour's depth): an executive sees the Overview and the showpiece tabs; an engineer also gets `EngineerCard.tsx`. The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
 `useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
 provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
@@ -206,7 +213,8 @@ mode talks to `agui-voice` over a plain WebSocket.
   `PYTHONUNBUFFERED=1`, `MALLOC_ARENA_MAX=2`.
 - **A new service/container** also needs: a `k8s/base` manifest (+ `kustomization.yaml`), a
   `docker-compose.yml` entry reusing the `x-*-env` anchors, `K3S_IMAGES` in the Makefile, a row in
-  `platform_status.py`, and a `scripts/k3s_generate_secrets.sh` secret spec.
+  `platform_status.py`, a `scripts/k3s_generate_secrets.sh` secret spec, and an entry in
+  `libs/shared/src/ai_circus_shared/architecture_catalog.yaml` (then `make architecture`).
 
 ## Non-obvious symptoms (details: the `k3s-deploy-verify` skill)
 

@@ -17,6 +17,7 @@ const DeepLearningView = lazy(() => import("./DeepLearningView").then((m) => ({ 
 const DataProductView = lazy(() => import("./DataProductView").then((m) => ({ default: m.DataProductView })));
 const Settings = lazy(() => import("./Settings").then((m) => ({ default: m.Settings })));
 const PlatformStatusView = lazy(() => import("./PlatformStatus").then((m) => ({ default: m.PlatformStatusView })));
+const ArchitectureView = lazy(() => import("./ArchitectureView").then((m) => ({ default: m.ArchitectureView })));
 
 // Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider / Voice sections
 // manage shared llm-gateway/agui-voice infrastructure, not a per-tenant entitlement, so
@@ -158,6 +159,7 @@ export default function App() {
   const [selected, setSelected] = useState<ScenarioSummary | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showPlatform, setShowPlatform] = useState(false);
+  const [showArchitecture, setShowArchitecture] = useState(false);
   // Owned here (not inside ScenarioPicker) so it survives ScenarioPicker unmounting
   // while a scenario is open — otherwise picking a scenario and coming back resets it.
   const [scenarioFilters, setScenarioFilters] = useState<ScenarioFilters>(DEFAULT_SCENARIO_FILTERS);
@@ -169,6 +171,7 @@ export default function App() {
     setScenarios([]);
     setShowSettings(false);
     setShowPlatform(false);
+    setShowArchitecture(false);
     if (!identity) return;
     setScenariosLoading(true);
     setScenariosError(null);
@@ -204,11 +207,12 @@ export default function App() {
               setSelected(null);
               setShowSettings(false);
               setShowPlatform(false);
+              setShowArchitecture(false);
             }}
           >
             <img src={theme.logo} alt="AI Open Framework" className="topbar-brand-icon" />
           </button>
-          {selected && !showSettings && !showPlatform && (
+          {selected && !showSettings && !showPlatform && !showArchitecture && (
             <div className="topbar-scenario">
               <button className="topbar-back" onClick={() => setSelected(null)}>
                 <Icon name="back" size={14} /> Scenarios
@@ -218,13 +222,14 @@ export default function App() {
               </span>
             </div>
           )}
-          {(showSettings || showPlatform) && (
+          {(showSettings || showPlatform || showArchitecture) && (
             <div className="topbar-scenario">
               <button
                 className="topbar-back"
                 onClick={() => {
                   setShowSettings(false);
                   setShowPlatform(false);
+                  setShowArchitecture(false);
                 }}
               >
                 <Icon name="back" size={14} /> Scenarios
@@ -232,12 +237,24 @@ export default function App() {
             </div>
           )}
           <div className="topbar-spacer" />
+          <button
+            className={`topbar-settings ${showArchitecture ? "active" : ""}`}
+            onClick={() => {
+              setShowArchitecture((a) => !a);
+              setShowPlatform(false);
+              setShowSettings(false);
+              setSelected(null);
+            }}
+          >
+            <Icon name="network" size={14} /> Architecture
+          </button>
           {isAdmin && (
             <button
               className={`topbar-settings ${showPlatform ? "active" : ""}`}
               onClick={() => {
                 setShowPlatform((p) => !p);
                 setShowSettings(false);
+                setShowArchitecture(false);
                 setSelected(null);
               }}
             >
@@ -249,6 +266,7 @@ export default function App() {
             onClick={() => {
               setShowSettings((s) => !s);
               setShowPlatform(false);
+              setShowArchitecture(false);
               setSelected(null);
             }}
           >
@@ -262,7 +280,9 @@ export default function App() {
       </div>
       <main className="app-main">
         <Suspense fallback={<div className="app-loading">Loading…</div>}>
-          {showPlatform && isAdmin ? (
+          {showArchitecture ? (
+            <ArchitectureView scenarios={scenarios} />
+          ) : showPlatform && isAdmin ? (
             <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} scenarios={scenarios} />
           ) : showSettings ? (
             <Settings
@@ -288,6 +308,7 @@ export default function App() {
                   onFiltersChange={setScenarioFilters}
                   isAdmin={isAdmin}
                   accessToken={identity.accessToken}
+                  orgId={identity.orgId}
                 />
               )}
               {!scenariosLoading && selected?.kind === "tabular_ml" && (

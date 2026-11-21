@@ -29,6 +29,34 @@ role_required: "scenario:luznova_ev_charging"
 industry: energy_utilities
 icon: "🔌"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How much energy will each charging session draw?"
+  problem: >
+    An electricity distributor plans the capacity of its charging stations. The energy a session draws depends on the
+    hour, the car's battery and how full it arrives; planning needs it per region and per station.
+  audience: ["Grid planners", "E-mobility operations"]
+  with_ai: "The energy of a session predicted from four facts, and the regions replayed to watch where demand runs ahead."
+  value:
+    - {value: "4", label: "Inputs", note: "Start hour, initial charge, charger power tier, battery size."}
+    - {value: "9,000", label: "Simulated sessions", note: "Of a fictional Spanish distributor."}
+  flow:
+    - {title: "Charging sessions", kind: source, tab: data, text: "Start hour, battery charge on arrival, charger tier, battery size and energy delivered."}
+    - {title: "Energy model", kind: model, tab: model, text: "A regression model with SHAP: the kWh of a session."}
+    - {title: "Charging regions", kind: decision, tab: extra, text: "Regions replayed session by session, against what the model expects."}
+    - {title: "Planner sizes", kind: person, text: "Sizes station capacity and grid reinforcement."}
+  data_sources:
+    - {name: "Charging sessions", kind: table, origin: synthetic, provider: "scripts/generate_luznova_ev_charging.py (fictional distributor Luznova)", feeds: "Every input and the energy delivered.", size: "9,000 sessions"}
+  models:
+    - {model: main, question: "How many kWh will this charging session deliver?", used_by: "grid planners"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Capacity planning starts with how much energy each session draws."}
+      - {title: "The regions", tab: "extra", show: "Regions replayed, measured against predicted energy.", say: "Where demand runs ahead of the model is where to look."}
+      - {title: "Try a session", tab: "model", section: "predictions", show: "Change the start hour or the initial charge and score again.", say: "Every input moves the prediction, explained."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which factors matter most for predicting energy delivered?"}
+
 chat:
   context: >
     Luznova Utilities' EV charging network demand model — predicts how much energy

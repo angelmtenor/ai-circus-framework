@@ -111,6 +111,13 @@ class Scenario(Base):
     # (see ai_circus_shared.scenario_schema.ExtraModel; auto-added by ensure_added_columns).
     extra_models: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None)
     main_model_title: Mapped[str | None] = mapped_column(String, default=None)
+    # tabular_ml only (for now) — the Overview tab's story (see scenario_schema.StoryConfig;
+    # auto-added by ensure_added_columns, like tutorial above).
+    story: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    # tabular_ml only — see scenario_schema.ScenarioDefinition.analysis_toolset (auto-added by ensure_added_columns).
+    analysis_toolset: Mapped[str | None] = mapped_column(String, default=None)
+    # Derived, not declared: ai_circus_shared.architecture.scenario_architecture (auto-added by ensure_added_columns).
+    architecture: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
 
     entitlements: Mapped[list[Entitlement]] = relationship(back_populates="scenario")
 

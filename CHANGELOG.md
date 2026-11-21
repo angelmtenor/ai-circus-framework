@@ -4,6 +4,39 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.64.0 — 2026-11-21
+
+### Added
+- **Every scenario tells its story** (`story:` in scenario.yaml, any kind): the first tab, **Overview**, gives the
+  problem and who decides, today against with this, headline figures, a flow whose boxes open the tabs that show each
+  step, where every input comes from (synthetic, public or official), the question each model answers and the limits;
+  a **guided demo** bar walks a presenter through the tabs (what to point at, what to say, a question for the
+  assistant). All 35 scenarios have one; the Spanish ones are in Spanish.
+- **The drought control room** (`water_reservoirs_drought`): each supply system's state against the plan, the basin
+  map coloured by storage band with a weekly replay since 2000, the plan's thresholds behind the forecast, a what-if
+  (rain scenario, savings, horizon) and the least restrictive package of measures, what drives the forecast, the
+  data-quality flags (readings as published next to the cleaned series) and the weekly bulletin. It reads the
+  assistant's new read-only `/drought/{slug}/…` routes over the same toolkit as the chat.
+- **One architecture catalog** (`architecture_catalog.yaml`, [guide](docs/architecture/README.md)): every component by
+  layer, its links and six request flows. It generates the README map and `docs/architecture/`, feeds the app's new
+  **Architecture** page (open to every user) and each Overview's **How it's built**, which lights the components a
+  scenario uses, derived from its YAML. Tests fail on a workload under `k8s/` missing from it (`make architecture`).
+- **Ranked scenario search**: the gallery reads a phrase in English or Spanish and ranks by words and by meaning
+  (platform-registry `GET /scenario-search/{org}`, embeddings through llm-gateway's `local-embed`).
+- **Executive · Analyst · Engineer** views of a workspace: the story and the showpiece for an executive, everything for
+  an analyst, plus the routes, model addresses and commands for an engineer.
+- Shared parameter controls: range sliders over a histogram of the real values, a date range, number sliders and
+  choice selects, the same for querying data, predicting and what-ifs.
+
+### Changed
+- Data & BI reads a forecast's target as a numeric range (it drew one chip per value) and opens a time series on its
+  line over time; the forecast tab shows the change of a level instead of a sum, in days, with key dates.
+- The README's architecture section embeds the generated map; the three hand-drawn diagrams and their generators are
+  removed.
+
+### Fixed
+- The drought toolkit is built under a lock and warmed at start-up: two first requests at once raced on its database.
+
 ## v0.63.0 — 2026-11-20
 
 ### Added

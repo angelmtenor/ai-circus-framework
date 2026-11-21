@@ -39,6 +39,33 @@ credits:
     random 10,000-row sample of the full 20,631-row FD001 training split (not
     per-engine — mirrors electric_motor's own sampling precedent).
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How many flights does each engine have left before maintenance?"
+  problem: >
+    An airline plans engine overhauls months ahead. Too early wastes life left in the engine; too late risks a
+    failure. Sensor readings show the degradation, cycle by cycle, if someone turns them into remaining life.
+  audience: ["Maintenance planners", "Reliability engineers"]
+  with_ai: "Each engine's remaining useful life in cycles, predicted from its sensors and watched across the fleet."
+  value:
+    - {value: "10,000", label: "Engine cycles", note: "NASA's C-MAPSS turbofan simulation."}
+  flow:
+    - {title: "Engine sensors", kind: source, tab: data, text: "Operating settings, temperatures, pressures and fan and core speeds, cycle by cycle."}
+    - {title: "Life model", kind: model, tab: model, text: "A regression model with SHAP: cycles left before failure."}
+    - {title: "Engine fleet", kind: decision, tab: extra, text: "Engines replayed cycle by cycle, their remaining life counting down."}
+    - {title: "Planner schedules", kind: person, text: "Schedules the overhaul before the life runs out."}
+  data_sources:
+    - {name: "C-MAPSS turbofan simulation (FD001)", kind: series, origin: public, provider: "NASA Prognostics Center of Excellence", license: "US public domain", feeds: "Every sensor input and the remaining useful life.", size: "10,000 cycles"}
+  models:
+    - {model: main, question: "How many cycles does this engine have left?", used_by: "maintenance planners"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Overhaul neither too early nor too late."}
+      - {title: "The fleet", tab: "extra", show: "Engines replayed, remaining life counting down.", say: "Degradation shows in the sensors long before failure."}
+      - {title: "Why", tab: "model", section: "insights", show: "The sensors that carry the degradation.", say: "Temperatures and pressures that drift as the engine wears."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which sensor readings contribute most to predicting remaining useful life?"}
+
 chat:
   context: >
     A jet engine prognostics-and-health-management (PHM) model — predicts an

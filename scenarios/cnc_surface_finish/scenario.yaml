@@ -33,6 +33,36 @@ role_required: "scenario:cnc_surface_finish"
 industry: manufacturing_industry
 icon: "🔧"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which cutting settings give the finish the drawing asks for?"
+  problem: >
+    A machine shop turns parts whose surface roughness must stay under the drawing's limit. Feed, speed, depth, tool
+    radius, material and tool wear all move it, and finding settings that meet the limit at the lowest cycle time is
+    trial and error on the machine.
+  audience: ["Process engineers", "Machine operators", "Quality"]
+  today: "Settings from handbooks and experience, checked by measuring scrap parts."
+  with_ai: "A predicted roughness for any settings, explained, and an optimiser that searches settings meeting the limit."
+  value:
+    - {value: "6", label: "Process inputs", note: "Feed rate, cutting speed, depth of cut, nose radius, material, tool wear."}
+    - {value: "4,000", label: "Simulated cuts", note: "From the textbook kinematic roughness formula plus designed process effects."}
+  flow:
+    - {title: "Cutting records", kind: source, tab: data, text: "Settings, material and tool wear of each cut, and its measured roughness (Ra)."}
+    - {title: "Roughness model", kind: model, tab: model, text: "A regression model with SHAP: the roughness of a cut, and which setting drives it."}
+    - {title: "Process optimiser", kind: decision, tab: extra, text: "Searches the settings that meet the roughness limit, with the trade-offs."}
+    - {title: "Engineer sets the machine", kind: person, text: "The engineer chooses the settings and validates them on a first part."}
+  data_sources:
+    - {name: "Simulated turning cuts", kind: table, origin: synthetic, provider: "scripts/generate_cnc_surface_finish.py: Ra = feed^2 / (32 x nose radius), scaled by designed effects and noise", feeds: "Every input and the target, surface roughness in micrometres.", size: "4,000 cuts"}
+  models:
+    - {model: main, question: "What surface roughness will these cutting settings give?", used_by: "process engineers"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Every drawing sets a roughness limit; the settings decide whether a part meets it."}
+      - {title: "The optimiser", tab: "extra", show: "Set the roughness limit and the material: the optimiser proposes settings and shows the trade-offs.", say: "Instead of trial cuts, the model searches the settings for you."}
+      - {title: "Why", tab: "model", section: "insights", show: "The most important settings and their effect.", say: "Feed rate dominates, as the textbook formula says; the model learned it from the data."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which process parameter matters most for surface finish?"}
+
 chat:
   context: >
     A CNC turning process-quality model — predicts a machined part's surface
