@@ -56,6 +56,7 @@ def test_seed_scenarios_loads_all_repo_scenarios(session: Session) -> None:
         "enron_fraud_network",
         "aml_money_trail",
         "aml_regulation_kg",
+        "framework_architecture",
         "global_health_shipments",
         "sede_electronica",
         "prestaciones_sociales",
@@ -264,6 +265,7 @@ def test_seed_scenarios_auto_grants_admin_org_every_scenario(session: Session) -
         "insurance_portfolio",
         "financial_crime_desk",
         "water_reservoirs_drought",
+        "framework_architecture",
     }
 
 
@@ -280,8 +282,8 @@ def test_seed_scenarios_is_idempotent(session: Session) -> None:
     seed_scenarios(session, SCENARIOS_DIR)
     seed_scenarios(session, SCENARIOS_DIR)
 
-    assert session.query(Scenario).count() == 35
-    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 35
+    assert session.query(Scenario).count() == 36
+    assert session.query(Entitlement).filter_by(org_id=ADMIN_ORG_ID).count() == 36
     assert session.query(Entitlement).filter_by(org_id=ENGINEERING_DEMO_ORG_ID).count() == 3
 
 

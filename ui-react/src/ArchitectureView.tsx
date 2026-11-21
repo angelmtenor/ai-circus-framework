@@ -9,7 +9,7 @@ import { Icon } from "./Icon";
  * a request followed step by step, and any component explained — what it does, what it is built with, what it
  * talks to, how to switch it on, its design decisions and which of the user's scenarios use it.
  */
-export function ArchitectureView({ scenarios }: { scenarios: ScenarioSummary[] }) {
+export function ArchitectureView({ scenarios = [] }: { scenarios?: ScenarioSummary[] }) {
   const [selected, setSelected] = useState<string | null>("llm-gateway");
   const [flowId, setFlowId] = useState<string | null>(null);
   const flow = CATALOG.flows.find((f) => f.id === flowId) ?? null;

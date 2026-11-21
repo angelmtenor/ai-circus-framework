@@ -41,7 +41,7 @@
 <text x="314" y="518" font-size="12" fill="#7fa3c9">SHAP</text>
 <rect x="544" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
 <text x="556" y="482" font-size="15" font-weight="700" fill="#f3fbff">assistant</text>
-<text x="556" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · AG-UI</text>
+<text x="556" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · AG-UI · MCP</text>
 <rect x="786" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
 <text x="798" y="482" font-size="15" font-weight="700" fill="#f3fbff">rag-agent</text>
 <text x="798" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · Qdrant · MCP</text>

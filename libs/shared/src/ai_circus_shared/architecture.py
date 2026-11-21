@@ -230,6 +230,8 @@ def scenario_architecture(definition: Any, catalog: Catalog | None = None) -> di
         use("llm-gateway", "Embeds questions and passages (local-embed).")
     mcp = getattr(definition, "mcp", None)
     if mcp is not None and getattr(mcp, "expose", None):
+        if kind == "tabular_ml":
+            use("assistant", "Serves the model's read-only MCP door, with the caller's own token.")
         use("llm-gateway", "The MCP gateway routes its read-only door to MCP clients.")
         use("chat-ui", "Optional: the same tools from LibreChat or Open WebUI, with the user's own token.")
     if getattr(definition, "governance", None) is not None:
@@ -388,5 +390,61 @@ def render_markdown(catalog: Catalog, adr_files: dict[int, str]) -> str:
         names = {c.id: c.name for c in catalog.components}
         for i, step in enumerate(flow.steps, start=1):
             lines.append(f"{i}. **{names[step.source]} → {names[step.to]}**: {step.label}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+# ---- the architecture tutorial's documents ----------------------------------------------------------------------
+
+TUTORIAL_MAX_CHARS = 4000  # one document of the snapshot: a handful of chunks per embedding call to llm-gateway
+
+
+def split_markdown(source: str, text: str, max_chars: int = TUTORIAL_MAX_CHARS) -> list[str]:
+    """A markdown document as pieces of at most `max_chars`, cut at `## ` sections and then at paragraphs, each
+    headed by the document's title and section and the path it came from (so a cited passage says where it is)."""
+    lines = text.splitlines()
+    title = next((line[2:].strip() for line in lines if line.startswith("# ")), source)
+    sections: list[tuple[str, list[str]]] = [("", [])]
+    for line in lines:
+        if line.startswith("## "):
+            sections.append((line[3:].strip(), []))
+        elif not line.startswith("# "):
+            sections[-1][1].append(line)
+    pieces: list[str] = []
+    for heading, body in sections:
+        paragraphs = [p.strip() for p in "\n".join(body).split("\n\n") if p.strip()]
+        if not paragraphs:
+            continue
+        head = f"# {title}{' - ' + heading if heading else ''}\n\nSource: {source} (this repository)\n\n"
+        current = ""
+        for paragraph in paragraphs:
+            if current and len(head) + len(current) + len(paragraph) + 2 > max_chars:
+                pieces.append(head + current.rstrip() + "\n")
+                current = ""
+            current += paragraph[: max_chars - len(head)] + "\n\n"
+        if current:
+            pieces.append(head + current.rstrip() + "\n")
+    return pieces
+
+
+def scenario_components_markdown(definitions: list[Any], catalog: Catalog | None = None) -> str:
+    """Which components each scenario uses and why (scenario_architecture), as one markdown document per scenario
+    section, so the tutorial's assistant can answer "which services does this scenario use?"."""
+    catalog = catalog or load_catalog()
+    names = {c.id: c for c in catalog.components}
+    flows = {f.id: f.title for f in catalog.flows}
+    lines = ["# What each scenario is built from", ""]
+    for definition in sorted(definitions, key=lambda d: d.slug):
+        view = scenario_architecture(definition, catalog)
+        lines += [
+            f"## {definition.title} ({definition.slug}, {definition.kind})",
+            "",
+            " ".join(definition.description.split()),
+            "",
+        ]
+        lines.append("Components it uses:")
+        lines += [f"- {names[c].name} ({names[c].layer}): {view['reasons'][c]}" for c in view["components"]]
+        if view["flows"]:
+            lines += ["", "Request flows it follows: " + ", ".join(flows[f] for f in view["flows"]) + "."]
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

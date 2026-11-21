@@ -181,6 +181,14 @@ def test_the_identity_script_finds_each_kit_servers_secret_by_the_same_name() ->
     assert generator.client_secret_env("crm-mcp") == "CRM_MCP_CLIENT_SECRET"  # the existing .env key
 
 
+def test_the_identity_script_entitles_the_demo_tenant_to_every_scenario_door() -> None:
+    """The chat UIs reach every scenario door, so their demo tenant must be entitled to each one (docs/adr/0031)."""
+    identity = _script("chat_ui_identity")
+    doors = tuple(s.name for s in generator.load().servers if s.kind == "scenario_door")
+    assert identity.demo_scenarios() == doors
+    assert {"ai_circus_reference", "surf_retail", "water_reservoirs_drought"} <= set(doors)
+
+
 def test_the_identity_script_generates_librechats_keys_at_the_lengths_it_needs(tmp_path: Path) -> None:
     """LibreChat refuses to start on a credential key that is not 32 bytes or an IV that is not 16 (docs/adr/0026)."""
     identity = _script("chat_ui_identity")

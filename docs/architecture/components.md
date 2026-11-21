@@ -26,7 +26,7 @@ What people use: the web app, the model and chat services one instance per scena
 |---|---|---|---|---|
 | **ui-react** | The web app: the scenario gallery, generic tabs driven by each scenario.yaml, the showpiece tabs, chat, voice, Settings and the admin Platform page. | React · Vite · CopilotKit · AG-UI | always on | — |
 | **prediction** | Serves every tabular model: predictions with SHAP, forecasts and what-ifs, recommendations, the dataset sample and the model card, per tenant. | FastAPI · scikit-learn, LightGBM, SHAP | always on | — |
-| **assistant** | The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure. | FastAPI · LangChain · AG-UI | always on | — |
+| **assistant** | The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure, and serves a scenario's model to MCP clients. | FastAPI · LangChain · AG-UI · MCP | always on | [0031](../adr/0031-mcp-doors-on-the-assistant.md) |
 | **rag-agent** | Answers questions grounded in a scenario's documents (RAG and GraphRAG), citing every passage, and serves them to MCP clients. | FastAPI · LangChain · Qdrant · MCP | always on | [0019](../adr/0019-mcp-doors-and-tool-policy.md) |
 | **form-agent** | Fills a form through conversation, validates it, prints official PDFs and tracks each submission per user. | FastAPI · LangChain · ReportLab | always on | — |
 | **agui-voice** | Voice mode: speech to text and text to speech around the same agents, over a WebSocket. | FastAPI · Pipecat · Whisper, Piper | On with make k3s-all; the lite profile scales it to zero (make k3s-full brings it back) | — |

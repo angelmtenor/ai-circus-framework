@@ -269,10 +269,11 @@ components:
     name: "assistant"
     layer: consumption
     kind: service
-    tech: "FastAPI · LangChain · AG-UI"
-    role: "The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure."
+    tech: "FastAPI · LangChain · AG-UI · MCP"
+    role: "The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure, and serves a scenario's model to MCP clients."
     profile: core
     workloads: [assistant]
+    adr: [31]
     talks_to:
       - {to: llm-gateway, label: "every model call"}
       - {to: prediction, label: "model tools"}
@@ -405,6 +406,7 @@ components:
       - {to: langfuse, label: "a trace per call"}
       - {to: rag-agent, label: "MCP door"}
       - {to: data-api, label: "MCP door"}
+      - {to: assistant, label: "MCP door"}
       - {to: crm-mcp, label: "MCP server"}
       - {to: opa, label: "policy decision"}
   - id: crm-mcp

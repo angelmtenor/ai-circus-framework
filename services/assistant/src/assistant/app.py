@@ -37,9 +37,15 @@ from assistant import get_env_config
 from assistant.api import router
 from assistant.core.drought_tools import warm_toolkits
 from assistant.core.logger import configure_logger, get_logger
+from assistant.core.mcp_door import McpDoor, build_mcp_app
 from assistant.core.prompt_cache import SystemPromptCache
 
 logger = get_logger(__name__)
+
+
+# The MCP door (docs/adr/0031): one stateless MCP app for every tabular scenario that declares `mcp:`, reached at
+# /mcp/{scenario_slug} through McpDoor's entitlement check. Its lifespan runs inside the app's.
+mcp_app = build_mcp_app()
 
 
 @asynccontextmanager
@@ -118,7 +124,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # model to use can change without a restart.
     app.state.chat_llm_clients = {}
 
-    yield
+    async with mcp_app.lifespan(mcp_app):
+        yield
 
 
 # FastAPI/Swagger UI docs are only useful for local iteration — staging/production
@@ -133,6 +140,7 @@ app = FastAPI(
     openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 app.include_router(router)
+app.mount("/mcp", McpDoor(mcp_app))
 configure_metrics(app)
 configure_tracing(app, service="assistant")
 

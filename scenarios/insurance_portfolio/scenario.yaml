@@ -121,6 +121,14 @@ story:
         show: "The answer with a chart."
         say: "The assistant answers from the model's tools: drivers, what-ifs, accuracy."
         ask: "Does a big price increase at renewal drive customers away?"
+      - title: "The same model from any chat"
+        tab: mcp
+        show: "Connect via MCP: the endpoint, its read-only tools and Run tools/list, which answers with this session's token."
+        say: "LibreChat, Open WebUI, Claude or your own agent can use this model as a tool, through the MCP gateway and with the user's own sign-in: same tenant, same permissions, nothing written. In LibreChat, try: 'How likely is a policyholder with a 15% premium rise at renewal to lapse, and why?'"
+
+# MCP door on the assistant (docs/adr/0031): read-only, with the caller's own token.
+mcp:
+  expose: [describe_model, score_record]
 
 chat:
   context: >

@@ -36,7 +36,10 @@ through `storyWorkspace.tsx`'s `useStoryDemo`; a deep-learning workspace has no 
 scenario, so model views carry none. Every Overview also has **How it's built** (`ScenarioArchitecture.tsx`): the platform
 map with the components the scenario uses lit and why, derived from its YAML by `ai_circus_shared.architecture` at seed
 time (served as `ScenarioSummary.architecture`); the catalog behind it is `architecture_catalog.yaml` (see
-`docs/architecture/`). `industry` is the
+`docs/architecture/`). The **architecture tutorial** (`framework_architecture`, a `conversational_rag` with
+`ui_extras: architecture_map`) answers from a snapshot of this repository's docs that `scripts/generate_architecture.py`
+cuts into pieces of at most 4,000 characters (each embedding call to llm-gateway stays small) together with a generated
+document of which components each scenario uses; a test fails when the snapshot is stale. `industry` is the
 scenario's *domain* (industries, `insurance` included, plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 
@@ -172,6 +175,17 @@ X-Data-View-As for platform keys) before MCP runs, and each tool is a REST route
 may run SQL. DataProductView's "Connect via MCP" tab reuses `McpConnectView` with data-api's URL, `localhost:8032` and the
 View-as headers. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
+
+A `tabular_ml` scenario opens its door on the **assistant** (docs/adr/0031): `mcp.expose` from `MCP_MODEL_TOOLS`
+(`describe_model`, `score_record`: a classifier or a regressor only) and, with `analysis_toolset: drought_watch`,
+`MCP_DROUGHT_TOOLS`. The assistant's `core/mcp_door.py` has the same `McpDoor` shape and forwards the caller's own bearer
+token to prediction (`/model/{slug}/card`, `/predict/{slug}`), which checks it again. `score_record` fills the inputs the
+caller left out from `feature_schema` defaults, names what the number means, returns the eight largest SHAP drivers and,
+with business rules, the gate, the decision and the rules that fired. The drought tools are the chat's `DroughtToolkit`
+reads. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
+tab (analyst and engineer views) reuses `McpConnectView` with the assistant's URL and `localhost:8034`. Before a tabular
+YAML declares `mcp:`, rebuild every image that validates tabular files (registry, assistant, prediction, etl-tabular,
+training, etl-vectorize, data-transform, dl-training): an older image rejects the block.
 
 **One address for every door** (docs/adr/0020): llm-gateway's LiteLLM is also the MCP gateway. `litellm_config.yaml`'s
 `mcp_servers` lists each door under its scenario slug, all `auth_type: true_passthrough`, so `/mcp/{slug},{slug}` reaches

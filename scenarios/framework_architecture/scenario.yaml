@@ -1,0 +1,109 @@
+# Seed definition for the "framework_architecture" scenario: the architecture tutorial. A conversational_rag over
+# THIS repository's own documentation (the architecture guide and component reference, the architecture details,
+# every ADR, the MCP, data-platform and governance guides, every scenario guide) plus a generated document saying
+# which components each scenario uses and why. `sample_docs/` is a snapshot cut into small pieces by
+# scripts/generate_architecture.py (`make architecture`), so the answers never drift from the docs and every
+# embedding call to llm-gateway stays small; a test fails when the snapshot is out of date.
+#
+# The Architecture tab (`ui_extras: architecture_map`) draws the same catalog the docs are generated from. The MCP
+# door lets any MCP client ask the same documents. Content-free: public repository documentation only.
+
+slug: framework_architecture
+kind: conversational_rag
+title: "How This Framework Is Built — Architecture Tutorial"
+description: >
+  Ask how the platform works and get answers from its own documentation, with every source cited: the layers from
+  the cluster to the gateways, what each microservice does, which ones a scenario uses and why, how a request
+  travels, how a scenario becomes an app, and the decisions behind it all (ADRs). Next to the chat, the
+  architecture map and its request flows.
+role_required: "scenario:framework_architecture"
+industry: tutorial
+icon: "🏗️"
+
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How is this platform built, and how would you build a scenario on it?"
+  problem: >
+    A client, a new engineer or an auditor asks the same questions: which services are there, what does each one do,
+    which ones does this demo use, how does a request travel, where is the tenant checked, how does a YAML file become
+    an app, why was it built this way. The answers are spread over a README, an architecture guide, thirty decision
+    records and a dozen scenario guides.
+  audience: ["Engineers joining the team", "Architects and auditors", "Clients asking how it works"]
+  today: "Reading the README, the guides and the decision records, and asking the people who built it."
+  with_ai: >
+    One place: the architecture map with its request flows, and an assistant that answers from the repository's own
+    documentation, citing each passage, also reachable from any MCP client.
+  value:
+    - {value: "45", label: "Components", note: "By layer, each with what it does and how to switch it on."}
+    - {value: "6", label: "Request flows", note: "A prediction, the assistant, RAG, training, a data record, MCP."}
+    - {value: "30", label: "Decision records", note: "Every ADR, searchable and cited."}
+    - {value: "36", label: "Scenarios explained", note: "Which components each one uses, and why (this one included)."}
+  flow:
+    - {title: "The repository's docs", kind: source, tab: architecture, text: "The architecture guide, the component reference, every ADR and scenario guide, cut into small pieces."}
+    - {title: "One catalog", kind: quality, tab: architecture, text: "Every component, its layer and links in one YAML, from which the map and the docs are generated."}
+    - {title: "Grounded answers", kind: assistant, tab: assistant, text: "The assistant retrieves the closest passages and answers from them, citing each one."}
+    - {title: "From any MCP client", kind: output, tab: mcp, text: "The same documents for Claude Desktop, LibreChat or any MCP client, with the same token."}
+  data_sources:
+    - name: "This repository's documentation"
+      kind: documents
+      origin: public
+      provider: "docs/ of this repository, snapshot by scripts/generate_architecture.py"
+      feeds: "Every passage the assistant searches and cites."
+      size: "About 230 pieces"
+    - name: "The architecture catalog"
+      kind: table
+      origin: public
+      provider: "libs/shared/src/ai_circus_shared/architecture_catalog.yaml"
+      feeds: "The Architecture tab, the component reference and which components each scenario uses."
+  models: []
+  demo:
+    minutes: 8
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "Everything a newcomer asks about the platform, answered from its own documentation."}
+      - {title: "The layers", tab: architecture, show: "The map: the doors at the top, then what people use, the data and the cluster; observability alongside.", say: "Read it bottom-up: the cluster, the data, the services people use, and the gateways every request passes."}
+      - {title: "Follow a request", tab: architecture, show: "Follow 'A prediction, explained', then 'The same question from an external chat (MCP)'.", say: "Every hop is numbered: the token checked, the tenant's entitlement, the model, the trace."}
+      - {title: "Which services, and why", tab: assistant, show: "The answer, citing the generated scenario document.", say: "The assistant knows which components each scenario uses, because it is generated from the scenarios themselves.", ask: "Which services does the Reservoirs & Drought Watch scenario use, and why?"}
+      - {title: "Why it is built this way", tab: assistant, show: "The answer with the decision record it comes from.", say: "Every design choice has a decision record, and the assistant cites it.", ask: "Why do MCP servers exchange the user's token for a per-API token?"}
+      - {title: "From any MCP client", tab: mcp, show: "The door's tools and a live check.", say: "The same answers from a chat app or an IDE, with the same sign-in and the same audit."}
+
+chat:
+  context: >
+    A tutorial on how the AI Open Framework is built, answered only from its own documentation: the architecture guide
+    and component reference, the architecture details, every architecture decision record (ADR), the MCP,
+    data-platform and governance guides, every scenario guide, and a generated document listing which components each
+    scenario uses and why. Cite the passages you use, by their source path. If the documents do not say, say so.
+  sample_questions:
+    - "What are the layers of the platform, from the bottom up?"
+    - "Which services does the Reservoirs & Drought Watch scenario use, and why?"
+    - "How does a prediction request travel, and where is the tenant checked?"
+    - "How does a new scenario become an app without new code?"
+    - "Why do MCP servers exchange the user's token for a per-API token?"
+    - "What runs by default with make k3s-all, and what has to be switched on?"
+
+documents:
+  bucket: "scenario-framework-architecture"
+  raw_prefix: "raw/"
+  seed_prefix: "sample_docs"
+  chunking:
+    strategy: recursive_character
+    chunk_size: 800
+    chunk_overlap: 120
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+
+vector_store:
+  backend: qdrant
+  collection_prefix: "framework_architecture"
+  top_k: 6
+
+ui_extras:
+  kind: architecture_map
+  tab_label: "Architecture"
+
+mcp:
+  expose: [list_sources, search_documents, read_document]
+  consume: [framework_architecture]
+
+services:
+  etl: etl-vectorize
+  agent: rag-agent

@@ -56,6 +56,10 @@ def test_the_generated_files_match_the_catalog() -> None:
         if p.read_text(encoding="utf-8") != text
     ]
     assert drifted == [], "run: libs/shared/.venv/bin/python scripts/generate_architecture.py"
+    generator = _generator()
+    pieces = {p for p in generator.expected(ROOT) if p.parent == generator.TUTORIAL_DOCS}
+    assert set(generator.TUTORIAL_DOCS.glob("*.md")) == pieces, "stale tutorial documents: rerun the generator"
+    assert all(len(p.read_text(encoding="utf-8")) <= 4100 for p in pieces)  # small embedding calls to llm-gateway
 
 
 def test_the_catalog_rejects_a_link_or_flow_to_nowhere() -> None:
@@ -80,6 +84,7 @@ def test_every_scenario_gets_a_subset_with_reasons_from_its_own_yaml() -> None:
         assert {"traefik", "keycloak", "platform-registry", "ui-react"} <= set(view["components"])
     water = scenario_architecture(by_slug["water_reservoirs_drought"])
     assert "drought watch" in water["reasons"]["assistant"] and "predict" in water["flows"] and "chat" in water["flows"]
+    assert "MCP door" in water["reasons"]["assistant"] and "chat-ui" in water["components"]  # docs/adr/0031
     fraud = scenario_architecture(by_slug["financial_crime_desk"])
     assert {"qdrant", "etl-vectorize"} <= set(fraud["components"]) and "3 models" in fraud["reasons"]["prediction"]
     reference = scenario_architecture(by_slug["ai_circus_reference"])
