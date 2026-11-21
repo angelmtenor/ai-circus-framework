@@ -22,6 +22,10 @@ export function useScenarioAgent(
   return useMemo(
     () =>
       new HttpAgent({
+        // The key <CopilotKit selfManagedAgents> registers it under (RagView, AssistedFormView). Without it the agent
+        // takes a random id on its first run, and the next registration throws "Agent registration mismatch",
+        // blanking the page after the first real answer.
+        agentId: scenarioSlug,
         url: `${baseUrl}/agui/${scenarioSlug}`,
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         threadId,
