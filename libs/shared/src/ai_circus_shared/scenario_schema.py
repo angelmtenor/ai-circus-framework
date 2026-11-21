@@ -2386,12 +2386,16 @@ class StoryDemo(BaseModel):
 
 
 class StoryConfig(BaseModel):
-    """The scenario told for someone with no context — rendered as its Overview tab (tabular_ml for now).
+    """The scenario told for someone with no context — rendered as its Overview tab, for every kind.
 
     Pure content, like `tutorial`: the problem and who decides, today against with this, a flow diagram whose
     boxes link to the tabs, where every input comes from, the question each model answers, and a presenter's
-    demo script. A tab is `overview`, `data`, `assistant` (opens the chat), `tutorial`, `model` / `extra` (the
-    main model and its `ui_extras` tab) or `model:<id>` / `extra:<id>` (an extra model and its tab).
+    demo script. Tabs depend on the kind (`ScenarioDefinition.story_tabs`): tabular_ml has `overview`, `data`,
+    `assistant` (opens the chat), `tutorial`, `model` / `extra` (the main model and its `ui_extras` tab) and
+    `model:<id>` / `extra:<id>`; conversational_rag `assistant` (the chat), `library`; assisted_form `assistant`
+    (the form and its chat), `cases`; deep_learning `data`, `predict`, `insights`, `extra`; data_product `tour`,
+    `data`, `flow`, `dashboards`, `explore`, `quality`, `insights`, `shop`, `assistant`; any kind with an MCP
+    door `mcp`.
     """
 
     headline: str = Field(min_length=1, max_length=120)
@@ -2467,7 +2471,7 @@ class ScenarioDefinition(BaseModel):
     analysis_toolset: Literal["drought_watch"] | None = None
     # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
     tutorial: TutorialConfig | None = None
-    # tabular_ml only (for now) — the scenario told for someone with no context: its Overview tab (StoryConfig).
+    # Any kind — the scenario told for someone with no context: its Overview tab (StoryConfig, `story_tabs`).
     story: StoryConfig | None = None
     # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
     rubric_check: RubricCheckConfig | None = None
@@ -3191,25 +3195,51 @@ class ScenarioDefinition(BaseModel):
             raise ValueError("model.text_challenger requires a `type: text` feature in dataset.feature_schema.")
         return self
 
+    def story_tabs(self) -> set[str]:
+        """The tab names a story may link to in this scenario's workspace (see StoryConfig), by kind."""
+        tabs = {"overview"}
+        if self.kind == "tabular_ml":
+            tabs |= {"data", "assistant", "model"}
+            if self.tutorial is not None:
+                tabs.add("tutorial")
+            if self.ui_extras is not None:
+                tabs.add("extra")
+            for extra in self.extra_models:
+                tabs.add(f"model:{extra.id}")
+                if extra.ui_extras is not None:
+                    tabs.add(f"extra:{extra.id}")
+        elif self.kind == "conversational_rag":
+            tabs.add("assistant")  # the chat, with its knowledge graph beside it when there is one
+            if isinstance(self.ui_extras, SourceLibraryExtra):
+                tabs.add("library")
+        elif self.kind == "assisted_form":
+            tabs.add("assistant")  # the form and the assistant filling it
+            if isinstance(self.ui_extras, CaseTrackerExtra):
+                tabs.add("cases")
+        elif self.kind == "deep_learning":
+            tabs |= {"data", "predict", "insights"}
+            if self.ui_extras is not None:
+                tabs.add("extra")
+        elif self.kind == "data_product" and self.data_product is not None:
+            tabs |= {"assistant", "tour", "data", "flow", "dashboards", "explore", "quality"}
+            if self.data_product.apps.insights is not None:
+                tabs.add("insights")
+            if self.data_product.apps.storefront is not None:
+                tabs.add("shop")
+        if self.mcp is not None and self.mcp.expose:
+            tabs.add("mcp")
+        return tabs
+
     @model_validator(mode="after")
     def _story_references_real_tabs_and_models(self) -> ScenarioDefinition:
-        """A story is tabular_ml-only for now; every tab it links to must exist in this scenario's
-        workspace, and every model it describes must be one of its models."""
+        """Every tab a story links to must exist in this scenario's workspace (its kind's tabs, see `story_tabs`),
+        a demo step's `section` only picks a tabular model tab's half, and every model it describes is one of the
+        scenario's models (`main` alone for the other kinds)."""
         story = self.story
         if story is None:
             return self
-        if self.kind != "tabular_ml":
-            raise ValueError("`story` is only available for kind='tabular_ml' scenarios (for now).")
-        extras = {m.id: m for m in self.extra_models}
-        tabs = {"overview", "data", "assistant", "model"}
-        if self.tutorial is not None:
-            tabs.add("tutorial")
-        if self.ui_extras is not None:
-            tabs.add("extra")
-        for model_id, extra in extras.items():
-            tabs.add(f"model:{model_id}")
-            if extra.ui_extras is not None:
-                tabs.add(f"extra:{model_id}")
+        extras = {m.id for m in self.extra_models}
+        tabs = self.story_tabs()
         linked = [(f"flow step {step.title!r}", step.tab) for step in story.flow if step.tab is not None]
         if story.demo is not None:
             linked += [(f"demo step {step.title!r}", step.tab) for step in story.demo.steps]
@@ -3217,7 +3247,7 @@ class ScenarioDefinition(BaseModel):
             if tab not in tabs:
                 raise ValueError(f"story {where}: tab {tab!r} is not one of this scenario's tabs {sorted(tabs)}.")
         for step in story.demo.steps if story.demo is not None else []:
-            if step.section is not None and not step.tab.startswith("model"):
+            if step.section is not None and not (self.kind == "tabular_ml" and step.tab.startswith("model")):
                 raise ValueError(f"story demo step {step.title!r}: `section` applies to a model tab only.")
         for model in story.models:
             if model.model != "main" and model.model not in extras:

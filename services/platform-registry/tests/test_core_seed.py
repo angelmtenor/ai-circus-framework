@@ -483,8 +483,8 @@ def test_seed_scenarios_serves_every_extra_model_to_the_ui(session: Session) -> 
     assert forecast["time_series"]["horizon"] == 24 and forecast["ui_extras"]["kind"] == "forecast_board"
 
 
-def test_seed_scenarios_serves_a_story_and_none_without_one(session: Session) -> None:
-    """The Overview tab's story (scenario_schema.StoryConfig) is served as-is; a scenario without one gets None."""
+def test_seed_scenarios_serves_every_kinds_story(session: Session) -> None:
+    """The Overview tab's story (scenario_schema.StoryConfig) is served as-is, for every kind."""
     seed_scenarios(session, SCENARIOS_DIR)
     water = session.get(Scenario, "water_reservoirs_drought")
     assert water is not None and water.story is not None
@@ -493,8 +493,8 @@ def test_seed_scenarios_serves_a_story_and_none_without_one(session: Session) ->
     assert "prediction" in water.architecture["components"] and "predict" in water.architecture["flows"]
     fraud = session.get(Scenario, "financial_crime_desk")
     assert fraud is not None and {m["model"] for m in fraud.story["models"]} == {"main", "payments", "mules"}
-    reference = session.get(Scenario, "ai_circus_reference")  # stories are tabular-only for now
-    assert reference is not None and reference.story is None
+    surf = session.get(Scenario, "surf_retail")  # every kind has a story, with its own tabs
+    assert surf is not None and surf.story is not None and surf.story["flow"][0]["tab"] == "tour"
 
 
 def test_seed_scenarios_moves_a_retired_scenarios_entitlements_to_its_successor(session: Session) -> None:
