@@ -4,7 +4,7 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
-## Unreleased
+## v0.65.0 — 2026-11-21
 
 ### Added
 - **How This Framework Is Built — Architecture Tutorial** (`framework_architecture`): ask how the platform works and
