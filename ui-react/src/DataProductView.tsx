@@ -201,6 +201,8 @@ function DataProductContent({
             localPort={8032}
             headers={viewAsHeaders(viewAs)}
             title="Use this data product from any MCP client"
+            owns="records"
+            emptyHint="Empty results mean the data product has not received data yet."
             lede={
               <p className="mcp-lede">
                 Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent get the governed data tools, under the

@@ -39,9 +39,11 @@ const RecommenderInsightsView = lazy(() => import("./RecommenderViews").then((m)
 const FleetHealthView = lazy(() => import("./FleetHealthView").then((m) => ({ default: m.FleetHealthView })));
 const RowTriageView = lazy(() => import("./RowTriageView").then((m) => ({ default: m.RowTriageView })));
 const MessageScreeningView = lazy(() => import("./MessageScreeningView").then((m) => ({ default: m.MessageScreeningView })));
+// The scenario's MCP door on the assistant (docs/adr/0031), when its YAML declares `mcp:`.
+const McpConnectView = lazy(() => import("./McpConnectView").then((m) => ({ default: m.McpConnectView })));
 
 // `model:<i>` / `extra:<i>`: the i-th model's tab and its ui_extras tab (see modelViews).
-type Tab = "scenario" | "tutorial" | "data" | `model:${number}` | `extra:${number}`;
+type Tab = "scenario" | "tutorial" | "data" | "mcp" | `model:${number}` | `extra:${number}`;
 type ModelSection = "predictions" | "insights";
 
 // Tab chrome per ui_extras kind — the renderer itself is picked below. Partial: the
@@ -102,6 +104,14 @@ function extraTabIcon(extras: UiExtras, fallback: IconName): IconName {
  * user looking at right now" context, independent of the scenario's static
  * chat.context grounding (see the assistant service's build_system_prompt).
  */
+/** What a tabular MCP door lets a client ask, from the tools it exposes (docs/adr/0031). */
+function mcpAbilities(exposed: string[]): string {
+  const parts = ["what it predicts and from which inputs"];
+  if (exposed.includes("score_record")) parts.push("the score of one case and what pushed it");
+  if (exposed.includes("drought_state")) parts.push("the drought state, forecasts, what-ifs, measures, plan and bulletin");
+  return parts.join("; ");
+}
+
 export function TabularView({ scenario, accessToken }: { scenario: ScenarioSummary; accessToken: string | null }) {
   const conversation = useConversation(config.assistantUrl, scenario.slug, accessToken);
   const agent = useScenarioAgent(config.assistantUrl, scenario.slug, conversation.conversationId, accessToken);
@@ -224,6 +234,7 @@ function TabularViewContent({
     (name: string): Tab | null => {
       if (name === "overview") return "scenario";
       if (name === "data") return "data";
+      if (name === "mcp") return scenario.mcp?.expose.length ? "mcp" : null;
       if (name === "tutorial") return scenario.tutorial ? "tutorial" : null;
       const [part, id] = name.split(":");
       const index = id === undefined ? 0 : views.findIndex((v) => v.slug === `${scenario.slug}~${id}`);
@@ -232,7 +243,7 @@ function TabularViewContent({
       if (part === "extra" && views[index].ui_extras && EXTRA_TABS[views[index].ui_extras!.kind]) return `extra:${index}`;
       return null;
     },
-    [scenario.slug, scenario.tutorial, views],
+    [scenario.slug, scenario.tutorial, scenario.mcp, views],
   );
   const tabLabel = useCallback(
     (name: string): string | null => {
@@ -241,6 +252,7 @@ function TabularViewContent({
       if (resolved === null) return null;
       if (resolved === "scenario") return "Overview";
       if (resolved === "data") return "Data & BI";
+      if (resolved === "mcp") return "Connect via MCP";
       if (resolved === "tutorial") return scenario.tutorial?.tab_label ?? "Tutorial";
       const index = Number(resolved.split(":")[1]);
       const view = views[index];
@@ -313,6 +325,13 @@ function TabularViewContent({
             </Fragment>
           );
         })}
+        {scenario.mcp?.expose.length ? (
+          (!executive || tab === "mcp") && (
+            <button className={tab === "mcp" ? "active" : ""} onClick={() => setTab("mcp")}>
+              <Icon name="external" /> Connect via MCP
+            </button>
+          )
+        ) : null}
         <div className="audience-switch" role="radiogroup" aria-label="Show this workspace for">
           {AUDIENCES.map((a) => (
             <button
@@ -372,6 +391,30 @@ function TabularViewContent({
         </>
       )}
       <Suspense fallback={<div className="app-loading">Loading…</div>}>
+        {tab === "mcp" && scenario.mcp?.expose.length ? (
+          <McpConnectView
+            scenarioSlug={scenario.slug}
+            exposed={scenario.mcp.expose}
+            accessToken={accessToken}
+            baseUrl={config.assistantUrl}
+            localPort={8034}
+            title="Use this scenario's model from any MCP client"
+            owns="model and data"
+            emptyHint={
+              <>
+                A "not trained" error means the model is not trained for your organisation yet: run{" "}
+                <code>make k3s-pipeline</code>.
+              </>
+            }
+            lede={
+              <p className="mcp-lede">
+                LibreChat, Open WebUI, Claude Code, Claude Desktop, VS Code, MCP Inspector or your own agent can ask this
+                scenario's model: {mcpAbilities(scenario.mcp.expose)}. Read-only and for your organisation only; the model
+                runs here, and your client's model does the reasoning around it.
+              </p>
+            }
+          />
+        ) : null}
         {tab === "tutorial" && scenario.tutorial && (
           <TutorialView scenario={scenario} accessToken={accessToken} onOpenExtra={hasMainExtra ? () => setTab("extra:0") : undefined} />
         )}
