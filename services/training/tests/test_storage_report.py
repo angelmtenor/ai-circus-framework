@@ -50,7 +50,8 @@ def test_markdown_lists_the_weak_spots_it_was_given() -> None:
     report: dict[str, Any] = {
         "generated": "2026-01-01", "data_range": ["2000-01-01", "2026-01-01"], "test_years": [2010, 2025],
         "config": {"horizons": [90], "conformal": True}, "cleaning_policy_applied": {"excluded": 1},
-        "overall": [row], "systems": [row], "reservoirs": [row], "drought_years": [2022, 2024], "drought": {"s1": [row]},
+        "overall": [row], "systems": [row], "reservoirs": [row],
+        "drought_years": [2022, 2024], "drought": {"s1": [row]},
         "acceptance": {"coverage_within_tolerance": False},
         "drought_weak_spots": ["s1, 90 days: MAE 9.1 pp vs persistence 5.2 pp"],
     }  # fmt: skip
