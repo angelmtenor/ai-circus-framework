@@ -493,8 +493,8 @@ def test_seed_scenarios_serves_a_story_and_none_without_one(session: Session) ->
     assert "prediction" in water.architecture["components"] and "predict" in water.architecture["flows"]
     fraud = session.get(Scenario, "financial_crime_desk")
     assert fraud is not None and {m["model"] for m in fraud.story["models"]} == {"main", "payments", "mules"}
-    mpm = session.get(Scenario, "mpm")
-    assert mpm is not None and mpm.story is None
+    reference = session.get(Scenario, "ai_circus_reference")  # stories are tabular-only for now
+    assert reference is not None and reference.story is None
 
 
 def test_seed_scenarios_moves_a_retired_scenarios_entitlements_to_its_successor(session: Session) -> None:

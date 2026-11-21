@@ -25,6 +25,34 @@ credits:
   url: "https://www.kaggle.com/datasets/wkirgsn/electric-motor-temperature"
   note: "ported via smart-data-science's scenario_electric_motor.py; 10,000-row random sample of the original 50,000-row dataset"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Is each motor running at the speed its readings say it should?"
+  problem: >
+    A plant runs a fleet of electric motors. A motor whose speed drifts away from what its voltage, current and
+    temperatures imply is a motor to inspect before it fails. Watching every motor by eye is impossible.
+  audience: ["Maintenance engineers", "Plant operators"]
+  today: "Alarms on fixed limits, and inspections on a calendar."
+  with_ai: "Every motor's speed predicted from its own readings, and the gap between predicted and measured watched as health."
+  value:
+    - {value: "10,000", label: "Sensor readings", note: "A sample of a real motor test bench dataset."}
+  flow:
+    - {title: "Sensor readings", kind: source, tab: data, text: "Voltages, currents and temperatures of a permanent-magnet synchronous motor."}
+    - {title: "Speed model", kind: model, tab: model, text: "A regression model with SHAP: the speed the readings imply."}
+    - {title: "Motor fleet", kind: decision, tab: extra, text: "Every motor replayed, its health the gap between measured and predicted speed."}
+    - {title: "Maintenance acts", kind: person, text: "Inspects the motors whose gap grows."}
+  data_sources:
+    - {name: "Electric motor temperature", kind: series, origin: public, provider: "Kaggle (Wilhelm Kirchgassner), from a test bench at Paderborn University", feeds: "Every sensor input and the measured speed.", size: "10,000 readings (a sample of 50,000)"}
+  models:
+    - {model: main, question: "What speed do this motor's readings imply?", used_by: "maintenance engineers"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "A motor that does not run as its readings imply is worth a look before it fails."}
+      - {title: "The fleet", tab: "extra", show: "Motors replayed row by row, coloured by the gap between measured and predicted speed.", say: "Health here is the residual: what the model expects against what the motor does."}
+      - {title: "Why", tab: "model", section: "insights", show: "The sensors that matter most.", say: "The model shows which readings carry the speed."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which sensor readings contribute most to predicting motor speed?"}
+
 chat:
   context: >
     An industrial permanent-magnet synchronous motor (PMSM) monitoring model — predicts

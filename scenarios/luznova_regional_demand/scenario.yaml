@@ -50,6 +50,35 @@ role_required: "scenario:luznova_regional_demand"
 industry: energy_utilities
 icon: "⚡"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How much electricity will each Spanish region need, today and over the next month?"
+  problem: >
+    A grid operator allocates reserves by region. Demand moves with the calendar, the weather, population and
+    industry, and planners need it both explained for a day and forecast for the month ahead.
+  audience: ["Grid planners", "Energy traders"]
+  with_ai: "Daily demand predicted per region on a live map of Spain, and a 30-day forecast per province with bands."
+  value:
+    - {value: "50", label: "Provinces", note: "Real provinces and capitals; the demand figures are simulated."}
+    - {value: "30 days", label: "Forecast ahead", note: "Per province, with prediction bands and a backtest."}
+  flow:
+    - {title: "Daily demand", kind: source, tab: data, text: "Calendar, weather, population and industrial intensity of each province, and its demand."}
+    - {title: "Demand model", kind: model, tab: model, text: "Daily demand under given conditions, explained with SHAP."}
+    - {title: "Regional map", kind: decision, tab: extra, text: "Spain by region or province, demand predicted live."}
+    - {title: "30-day forecast", kind: model, tab: "extra:forecast", text: "Each province forecast a month ahead with bands and what-ifs."}
+  data_sources:
+    - {name: "Regional demand", kind: series, origin: synthetic, provider: "scripts/generate_luznova_regional_demand.py (fictional distributor Luznova, real geography)", feeds: "Every input and the daily demand in MWh.", size: "9,150 province-days"}
+  models:
+    - {model: main, question: "How much electricity will this province need on this day?", used_by: "grid planners"}
+    - {model: forecast, question: "How much will each province need over the next 30 days?", used_by: "traders and planners"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Reserves are allocated by region, so demand is needed by region."}
+      - {title: "The map", tab: "extra", show: "Spain by Comunidad or province; change the conditions and watch the map.", say: "Every region scored live."}
+      - {title: "The month ahead", tab: "extra:forecast", show: "A province's 30-day forecast with bands.", say: "The forecast says how sure it is."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from both models.", ask: "Which factors matter most for predicting demand?"}
+
 chat:
   context: >
     Luznova Utilities' electricity demand-forecasting model, covering both of

@@ -35,6 +35,34 @@ credits:
   url: "https://www.kaggle.com/datasets/davidgauthier/glassdoor-job-reviews"
   note: "engineering reviews only, employers anonymised; the derived CSV is CC BY-SA 4.0"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Can a model read bad leadership in what engineers write about their job?"
+  problem: >
+    A few people can sour a whole team. Engineers' own reviews describe it in words; this tutorial reads 4,000 of
+    them with a model that combines the words with the facts of the job, explains every prediction word by word,
+    and adds an LLM reading a description of behaviour against a rubric. It never judges a named person.
+  audience: ["Students", "People and culture teams", "Engineering managers"]
+  value:
+    - {value: "4,000", label: "Real reviews", note: "By software, data and AI engineers; employers anonymised."}
+    - {value: "2", label: "Models compared", note: "Words as TF-IDF, and a transformer challenger on the host GPU."}
+  flow:
+    - {title: "Job reviews", kind: source, tab: data, text: "Ratings, role, tenure and the free text of each review."}
+    - {title: "The tutorial", kind: quality, tab: tutorial, text: "NLP step by step: words to features, models, explanations."}
+    - {title: "Leadership model", kind: model, tab: model, text: "LightGBM on the words and the facts, explained word by word."}
+    - {title: "The office", kind: output, tab: extra, text: "A building of teams, and a rubric check of a behaviour you describe."}
+  data_sources:
+    - {name: "Glassdoor job reviews", kind: messages, origin: public, provider: "Kaggle (David Gauthier), Glassdoor Job Reviews", url: "https://www.kaggle.com/datasets/davidgauthier/glassdoor-job-reviews", license: "CC BY-SA 4.0", feeds: "The reviews and the label: bad leadership.", size: "4,000 engineering reviews"}
+  models:
+    - {model: main, question: "Does this review describe bad leadership?", used_by: "learners"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Reading a culture problem in people's own words, explained, and never about a named person."}
+      - {title: "The tutorial", tab: "tutorial", show: "How words become features.", say: "NLP from scratch, chapter by chapter."}
+      - {title: "Words that count", tab: "model", section: "predictions", show: "Write a review and score it: each word shaded by its push.", say: "The explanation is in the words themselves."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which words most strongly signal bad leadership?"}
+
 chat:
   context: >
     A teaching scenario on 4,000 anonymous Glassdoor reviews (UK, 2008-2021) written by

@@ -64,7 +64,10 @@ Phases F0-F5 and part of F6, all deployed on the local k3s cluster and checked i
 
 Each item is independent unless it says otherwise. Update this file when one is done.
 
-### 1. Finish F6 for tabular scenarios (content only)
+### 1. Finish F6 for tabular scenarios (content only) — done
+
+All 24 tabular scenarios have a story (the last 14 were added after the first handoff, unreviewed in the browser:
+open each Overview once and run its guided demo). What follows is kept for reference.
 
 Add `story:` (with `demo:`) to the 14 tabular scenarios without one: `cnc_surface_finish`, `electric_motor`,
 `energy_building`, `luznova_ev_charging`, `luznova_gas_anomaly`, `luznova_gas_prospects`, `luznova_regional_demand`,

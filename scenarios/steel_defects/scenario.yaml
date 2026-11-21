@@ -34,6 +34,34 @@ credits:
     features used here are also a curated subset of the original dataset's 27 raw
     columns, chosen for interpretability and demo-form usability.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which steel plates need a human inspector?"
+  problem: >
+    An automated inspection line recognises six fault signatures. A plate whose defect matches none of them must go to
+    a person; every plate sent needlessly costs inspection time, every one missed ships a defect.
+  audience: ["Quality inspectors", "Line supervisors"]
+  with_ai: "Each plate's defect scored for manual review from its optical-scan features, routed by a threshold you move."
+  value:
+    - {value: "1,941", label: "Inspected plates", note: "The UCI steel plates faults dataset."}
+    - {value: "6", label: "Recognised fault types", note: "Anything else goes to a person."}
+  flow:
+    - {title: "Optical scan", kind: source, tab: data, text: "Geometry, luminosity and position features of each defect."}
+    - {title: "Triage model", kind: model, tab: model, text: "A classifier with SHAP: does this defect need manual review?"}
+    - {title: "Inspection triage", kind: decision, tab: extra, text: "Plates replayed one by one into manual review or pass, by a threshold."}
+    - {title: "Inspector decides", kind: person, text: "Reviews the routed plates."}
+  data_sources:
+    - {name: "Steel plates faults", kind: table, origin: public, provider: "UCI Machine Learning Repository, reframed: the six known faults against the rest", feeds: "Every scan feature and the label: needs manual review.", size: "1,941 plates"}
+  models:
+    - {model: main, question: "Does this plate's defect need a human inspector?", used_by: "quality inspectors"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Send to a person only the plates the line cannot recognise."}
+      - {title: "The triage", tab: "extra", show: "Plates routed by the threshold; move it and watch the workload and misses.", say: "The threshold is a trade-off between inspection time and missed defects."}
+      - {title: "Why", tab: "model", section: "insights", show: "What triggers a review.", say: "The scan features that matter most."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which factors most often trigger a manual-review flag?"}
+
 chat:
   context: >
     An automated visual-inspection triage model for steel plates — predicts whether an
