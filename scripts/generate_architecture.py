@@ -55,15 +55,20 @@ def adr_files(root: Path = ROOT) -> dict[int, str]:
     return out
 
 
-def tutorial_docs(root: Path = ROOT) -> dict[Path, str]:
-    """The architecture tutorial's documents: every source cut into small pieces, plus what each scenario uses."""
+def tutorial_docs(root: Path = ROOT, generated: dict[Path, str] | None = None) -> dict[Path, str]:
+    """The architecture tutorial's documents: every source cut into small pieces, plus what each scenario uses.
+
+    A source this script also generates (components.md) is read from `generated`, not from disk, so one run is enough.
+    """
+    generated = generated or {}
     out: dict[Path, str] = {}
     folder = root / TUTORIAL_DOCS.relative_to(ROOT)
     sources = sorted({p for pattern in TUTORIAL_SOURCES for p in root.glob(pattern) if p.name != "README.md" or "adr" not in p.parts})
     for path in sources:
         rel = path.relative_to(root).as_posix()
         stem = rel.removesuffix(".md").replace("/", "-").lower()
-        for i, piece in enumerate(split_markdown(rel, path.read_text(encoding="utf-8")), start=1):
+        text = generated[path] if path in generated else path.read_text(encoding="utf-8")
+        for i, piece in enumerate(split_markdown(rel, text), start=1):
             out[folder / f"{stem}--{i:02d}.md"] = piece
     components = scenario_components_markdown(load_all(root / "scenarios"))
     for i, piece in enumerate(split_markdown("generated from every scenario.yaml", components), start=1):
@@ -75,12 +80,12 @@ def expected(root: Path = ROOT) -> dict[Path, str]:
     """Every generated file and its content."""
     catalog = load_catalog()
     adrs = adr_files(root)
-    return {
-        **tutorial_docs(root),
+    generated = {
         root / "docs" / "architecture" / "architecture.svg": render_svg(catalog),
         root / "docs" / "architecture" / "components.md": render_markdown(catalog, adrs),
         root / "ui-react" / "src" / "generated" / "architecture.json": json.dumps(export(catalog, adrs), indent=1, ensure_ascii=False) + "\n",
     }
+    return {**tutorial_docs(root, generated), **generated}
 
 
 def main() -> int:
