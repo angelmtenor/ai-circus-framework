@@ -230,6 +230,8 @@ def scenario_architecture(definition: Any, catalog: Catalog | None = None) -> di
         use("llm-gateway", "Embeds questions and passages (local-embed).")
     mcp = getattr(definition, "mcp", None)
     if mcp is not None and getattr(mcp, "expose", None):
+        if kind == "tabular_ml":
+            use("assistant", "Serves the model's read-only MCP door, with the caller's own token.")
         use("llm-gateway", "The MCP gateway routes its read-only door to MCP clients.")
         use("chat-ui", "Optional: the same tools from LibreChat or Open WebUI, with the user's own token.")
     if getattr(definition, "governance", None) is not None:
