@@ -39,7 +39,7 @@ make k3s-embed-onnx          # OPTIONAL, off by default: local-embed on ONNX Run
 make k3s-pause / k3s-resume-lite
 make k3s-demo / k3s-demo-off  # live demo on a 16 GB laptop: scale observability + admin Platform to 0 (~2.5 GB); verify with VERIFY_SKIP="langfuse mlflow"
 make k3s-data-demo / k3s-data-demo-off  # multi-scenario demo incl. data core+analytics+bi; governance, MLflow, voice off (~8.8 of 11.7 GiB)
-make k3s-mcp-portforward              # OPTIONAL: MCP doors on localhost for clients on this machine: rag-agent :8031, data-api :8032, the MCP gateway in front of both :8033 (ADR 0019, 0020)
+make k3s-mcp-portforward              # OPTIONAL: MCP doors on localhost for clients on this machine: rag-agent :8031, data-api :8032, the MCP gateway :8033, the assistant's model doors :8034 (ADR 0019, 0020, 0031)
 make k3s-mcp-examples-up / -down       # OPTIONAL crm-mcp (libs/mcp-kit) in front of crm-api: per-API token exchange, gateway door /mcp/crm (ADR 0022)
 make k3s-chat-ui-up / k3s-chat-ui-down # OPTIONAL chat UI: Open WebUI at chat.localhost, Keycloak sign-in (lite-demo users), MCP doors via the gateway with each user's token (ADR 0021)
 make k3s-librechat-up / k3s-librechat-down # OPTIONAL second chat UI: LibreChat (MIT) + MongoDB at librechat.localhost, same sign-in and MCP path (ADR 0026); one chat UI at a time

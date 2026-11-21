@@ -4,7 +4,7 @@ Source: docs/mcp/README.md (this repository)
 
 | Piece | What it does | Where | ADR |
 |---|---|---|---|
-| Scenario doors | A scenario's own read-only MCP door: documents (`rag-agent`) or governed data (`data-api`), under the existing entitlements | `mcp:` in `scenario.yaml` | [0019](../adr/0019-mcp-doors-and-tool-policy.md) |
+| Scenario doors | A scenario's own read-only MCP door: documents (`rag-agent`), governed data (`data-api`) or a tabular scenario's model (`assistant`), under the existing entitlements | `mcp:` in `scenario.yaml` | [0019](../adr/0019-mcp-doors-and-tool-policy.md), [0031](../adr/0031-mcp-doors-on-the-assistant.md) |
 | AI gateway | `llm-gateway` is also the MCP gateway: `/mcp/<server>`, every route `true_passthrough` (the caller's token goes through, the server decides); forwards the caller's trace context, never baggage | `services/llm-gateway/litellm_config.yaml` (generated block) | [0020](../adr/0020-mcp-gateway-without-enterprise.md), [0028](../adr/0028-masked-logs-and-one-trace-through-the-mcp-hop.md) |
 | Chat UIs | Open WebUI (`chat.localhost`) and LibreChat (`librechat.localhost`, MIT): Keycloak-only sign-in, each user's token to every server | `k8s/chat-ui/`, `k8s/chat-ui-librechat/` | [0021](../adr/0021-chat-ui-with-real-keycloak-sign-in.md), [0026](../adr/0026-librechat-second-chat-ui.md) |
 | MCP server kit | `libs/mcp-kit`: token validation, the access policy, the per-API exchange, audit lines; a server's own code is its tools only. Example: `crm-mcp` in front of `crm-api` | `libs/mcp-kit/`, `services/crm-mcp/`, `services/crm-api/` | [0022](../adr/0022-mcp-server-kit-and-per-api-tokens.md) |
@@ -18,7 +18,7 @@ Source: docs/mcp/README.md (this repository)
 
 | Level | Token at the server | Token at the API | Use |
 |---|---|---|---|
-| Door | the user's own (the door is the API) | — | a scenario's documents or governed data |
+| Door | the user's own (the door is the API) | — | a scenario's documents, governed data or model |
 | 2 (default kit server) | the user's own, validated by signature | exchanged for this API only, minutes long | an MCP server in front of an existing API |
 | 3 (regulated) | the user's own, also checked live at Keycloak | exchanged, DPoP-bound, checked live; mutual TLS | banking, insurance, health |
 

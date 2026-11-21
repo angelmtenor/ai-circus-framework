@@ -16,7 +16,7 @@ make k3s-obs-up              # optional: metrics, logs, traces, Grafana at grafa
 
 Open `http://librechat.localhost`, sign in, pick **Customers CRM** under **MCP Servers** and ask for the top
 customers: the analyst's answer runs `top_customers`, the store manager's cannot. MCP clients on this machine can use
-the doors and the gateway directly with `make k3s-mcp-portforward` (`:8031`, `:8032`, gateway `:8033`).
+the doors and the gateway directly with `make k3s-mcp-portforward` (`:8031`, `:8032`, gateway `:8033`, the assistant's model doors `:8034`).
 
 **Alone, as the lite profile** (its own k3d cluster; pause the framework's first, both use port 80):
 

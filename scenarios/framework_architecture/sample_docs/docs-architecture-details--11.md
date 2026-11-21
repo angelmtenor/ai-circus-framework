@@ -2,6 +2,16 @@
 
 Source: docs/architecture-details.md (this repository)
 
+**One address for every door** (docs/adr/0020): llm-gateway's LiteLLM is also the MCP gateway. `litellm_config.yaml`'s
+`mcp_servers` lists each door under its scenario slug, all `auth_type: true_passthrough`, so `/mcp/{slug},{slug}` reaches
+several doors with the caller's own token, the tools come back prefixed (`surf_retail-query_metric`), and each door still
+decides tenant, role and tools; `extra_headers` forwards data-api's View-as pair. With several doors in the URL, LiteLLM
+withholds a request-wide `Authorization` (one token is never replayed to several upstreams) and the client sends one
+`x-mcp-{slug}-authorization` per door; a door that refuses just contributes no tools. `/mcp` without a server falls back
+to LiteLLM's own key check. `tests/test_mcp_gateway.py` pins the contract (passthrough only, no credential, in-cluster
+doors of scenarios with `mcp.expose`, LiteLLM's own gating and no fan-out). The gateway has no Traefik router; `make
+k3s-mcp-portforward` adds `localhost:8033`.
+
 **An optional chat UI with real sign-in** (docs/adr/0021): `make k3s-chat-ui-up` serves Open WebUI at `chat.localhost`
 (`k8s/chat-ui/`, compose profile `chat-ui`), Keycloak-only sign-in through the confidential `open-webui` client, models
 and embeddings through llm-gateway, and one MCP connection per door to the gateway with `auth_type: system_oauth`, so
@@ -21,14 +31,3 @@ accepts only https providers, so `oidc-allow-http.mjs` (a Node load hook, `NODE_
 `allowInsecureRequests`; delete it with an https identity provider. LibreChat keeps an MCP connection across a token
 refresh, so the first call after one gets the gateway's 403 owner mismatch, the connection reopens and the model retries;
 idle connections close after 5 minutes to keep that rare.
-
-**The MCP lite profile** (docs/adr/0027): `make k3s-mcp-lite` runs the MCP Lite Stack alone on its own k3d cluster
-(`mcp-lite`, own kubeconfig file, port 80, so the framework cluster is paused meanwhile): `k8s/mcp-lite/` lists base's
-Postgres, Keycloak, Valkey and llm-gateway (Langfuse off) plus `k8s/mcp-examples`, and `k8s/mcp-lite/open-webui|librechat`
-add one chat UI with the kit servers only (generated from the catalog; scenario doors need the full framework). Built
-with `kubectl kustomize --load-restrictor LoadRestrictionsNone`, since it lists the framework's own files. `make
-k3s-mcp-lite-verify` (`scripts/mcp_lite_check.py`) signs the demo users in through Keycloak's login pages with the chat
-UI's client and checks each kit server's tools, a granted call and a refused one, against the catalog, without a model.
-`OBS=1` adds the observability bundle on the lite cluster (never run `make k3s-obs-up` bare while it is up: it acts on
-the current context); the check then also finds the calls' metrics, audit lines and traces, and no token in any log.
-LibreChat traces through its own OpenTelemetry switch (`OBS_LIBRECHAT_ENV`), wired by `k3s-obs-up` in both profiles.

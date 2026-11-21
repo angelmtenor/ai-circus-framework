@@ -10,7 +10,7 @@ flowchart LR
   CUI -- 2 same token --> GW[AI gateway · LiteLLM<br/>/v1 models · /mcp tools]
   GW --> LLM[Model providers]
   subgraph SERVERS[MCP servers]
-    DOOR[Scenario doors<br/>documents · governed data]
+    DOOR[Scenario doors<br/>documents · governed data · models]
     KIT[Kit server · crm-mcp<br/>role → tools · audit line]
   end
   GW -- 3 --> DOOR

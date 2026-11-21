@@ -14,11 +14,12 @@ Components it uses:
 - training (data): Trains the model and picks the winner by its metric.
 - ui-react (consumption): Draws the workspace from this scenario.yaml: Overview, data, model and showpiece tabs.
 - prediction (consumption): Serves the model with SHAP explanations for every tab.
-- assistant (consumption): The chat: answers from the model's tools, never from memory. Adds the drought watch tools and the routes of its control room.
+- assistant (consumption): The chat: answers from the model's tools, never from memory. Adds the drought watch tools and the routes of its control room. Serves the model's read-only MCP door, with the caller's own token.
+- Open WebUI · LibreChat (consumption): Optional: the same tools from LibreChat or Open WebUI, with the user's own token.
 - Traefik (gateway): Routes the browser's calls to each service by hostname.
 - Keycloak (gateway): Signs the user in; the tenant is their organization.
 - platform-registry (gateway): Serves this scenario and checks the tenant's entitlement on every call. Lists it in the AI-BOM with its declared governance block.
-- llm-gateway (gateway): Every model call of the chat goes through it, with the tenant's limits and budget.
+- llm-gateway (gateway): Every model call of the chat goes through it, with the tenant's limits and budget. The MCP gateway routes its read-only door to MCP clients.
 - Langfuse (observability): A trace per LLM call, by tenant and scenario.
 - MLflow (observability): Records every training run: candidates, scores, the selected model.
 

@@ -121,14 +121,19 @@ does the water scenario use?". Plan:
   governance (AI-BOM, audit trail), "a scenario is a YAML". Each step names the `make` target it needs and greys out
   when its backend is down (`serviceAvailability.ts`).
 
-### 4. F8 — MCP doors on the assistant (tabular scenarios)
+### 4. F8 — MCP doors on the assistant (tabular scenarios) — done
 
-`MCP_TOOLS_BY_KIND` has no `tabular_ml`. Write an ADR extending 0019, then: a read-only FastMCP door on the assistant
-at `/mcp/{slug}` (same token and entitlement checks as rag-agent's and data-api's), tools listed by `mcp.expose`
-(water: `drought_state`, `forecast`, `dq_report`, `search_rulebook`, `what_if`; fraud: explain an alert, AML
-regulation search; insurance: watchlist and next best offer by pseudonymous id), a `scenario_door` entry in
-`mcp/catalog.yaml` + `make mcp-catalog`, the `McpConnectView` tab, and a demo step "the same question from
-LibreChat". Mind the observability rules (`configure_audit_output`, no content in logs).
+[ADR 0031](../adr/0031-mcp-doors-on-the-assistant.md). The assistant serves `/mcp/{slug}` for every `tabular_ml`
+scenario with `mcp.expose` (`services/assistant/src/assistant/core/mcp_door.py`): `describe_model`, `score_record`
+(classifier or regressor only; checks each value against `feature_schema`, rolls SHAP drivers back to the inputs,
+returns the business-rules gate) and, with `drought_watch`, seven drought tools over the same `DroughtToolkit`. Doors
+on `water_reservoirs_drought` (no `score_record`: its model is a forecast), `financial_crime_desk` and
+`insurance_portfolio`, each with a "The same model from any chat" demo step; `scenario_door` entries in
+`mcp/catalog.yaml` (also `framework_architecture`), a "Connect via MCP" tab in TabularView, `localhost:8034` in `make
+k3s-mcp-portforward`, the llm-gateway → assistant edge in the architecture catalog. `prediction` now answers 422
+(not 500) for a value its pipeline cannot read. Verified on k3s: tools/list per door (404 without a door, 401 without
+a token), every tool called with the admin key. Not tried: a question from LibreChat end to end (the active model had
+no credit).
 
 ### 5. F9 — a master assistant for the whole framework
 
@@ -153,6 +158,9 @@ at `useVoiceSession.ts`, `MicButton.tsx` and agui-voice's VAD settings; keep the
 - The drought assistant tools and the control room read the committed artifacts, not the forecast trained for the
   caller's tenant (water guide, "What is left" 1).
 - The guided demo's "Ask" buttons were not tried against a live LLM.
+- `storage_forecast` (and the chat's forecast tool) can return a p90 above 100 % of capacity straight from the
+  committed forecast file; the bulletin caps it at 100 %. Clip p10/p50/p90 to [0, 100] in `DroughtToolkit.forecast_of`
+  (and check the control room's chart) so every view agrees.
 - `docs/scenarios/water_reservoirs_drought_guide.md` and the README's scenario tour could show control-room
   screenshots (capture with the Playwright scripts, as in `reference-demo-decks`).
 - Release: after review, `git flow feature finish scenario-story`, then a minor release with a CHANGELOG entry.
