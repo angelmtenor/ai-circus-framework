@@ -68,10 +68,11 @@ dataset:
        info: "Mean daily precipitation of the weather stations around the series' reservoirs, in mm."}
     temp_c: {type: numeric, label: "Catchment temperature", min: -10, max: 40, default: 14, step: 0.1,
        info: "Mean daily temperature of the same stations, in °C."}
+  # The Data & BI tab opens a forecast on its line over time (filter the dates to zoom into a drought); these follow:
+  # the spread of storage per series, and how much rain each catchment gets.
   default_charts:
-    - {type: histogram, x: pct, color_by: series}
-    - {type: bar, x: series, y: pct, agg: mean}
-    - {type: scatter, x: temp_c, y: pct, color_by: series}
+    - {type: box, x: series, y: pct}
+    - {type: bar, x: series, y: precip_mm, agg: mean}
 
 model:
   task_type: forecast
@@ -106,7 +107,7 @@ time_series:
 
 ui_extras:
   kind: forecast_board
-  tab_label: "Storage forecast"
+  tab_label: "Drought control room"
   title: "Where the water is heading"
   subtitle: "Each reservoir and supply system of the fictional Riverbend basin, 180 days ahead, with the 10th-90th percentile band. Illustrative decision support on synthetic data."
   peak_label: "Highest day"
@@ -151,6 +152,124 @@ ui_extras:
       - {series: fernmere, x: 20, y: 18, group: south_valley}
 
 analysis_toolset: drought_watch
+
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from sample_data/SNAPSHOT.json and backtest_report.md.
+story:
+  headline: "How much water do we have, and where is it heading?"
+  problem: >
+    A water authority's planning team asks the same two questions every week: how full are the reservoirs, and
+    when could a supply system cross into drought? The answer decides when to propose savings measures and what to
+    tell the public. The readings arrive daily but unvalidated, and the forecast lives in a spreadsheet and in
+    experience.
+  audience: ["Water planning team", "Operations", "Communication"]
+  today: >
+    A spreadsheet of yesterday's levels, a feeling for the season, and a drought plan in a PDF. Faulty readings
+    slip in unnoticed, and nobody can say how likely a threshold crossing is.
+  with_ai: >
+    Every reservoir and supply system forecast 180 days ahead with an honest uncertainty band, checked against the
+    plan's thresholds, with the faulty readings flagged and an assistant that answers from the data and drafts the
+    weekly bulletin.
+  value:
+    - {value: "180 days", label: "Look-ahead", note: "The median and an 80 % band at 7, 30, 90 and 180 days, for 13 series."}
+    - {value: "4.2 pp", label: "Error at 30 days", note: "Against 5.6 pp for 'it stays as today', backtested year by year on 2010-2026."}
+    - {value: "6,559", label: "Readings flagged", note: "Duplicates, gaps, frozen sensors, spikes, readings above 100 %: needs review, never silently trusted."}
+    - {value: "5 states", label: "Drought plan", note: "Normal, pre-alert, alert, exceptional and emergency, with the measures of each."}
+  flow:
+    - title: "Daily feed"
+      kind: source
+      text: "Storage of nine reservoirs, and rain and temperature from 24 weather stations, published every day without validation."
+      tab: data
+    - title: "Quality checks"
+      kind: quality
+      text: "Duplicates, gaps, frozen sensors, spikes and readings above 100 % are flagged for review and cleaned before training."
+      tab: extra
+    - title: "180-day forecast"
+      kind: model
+      text: "LightGBM quantile models give the median and an 80 % band at 7, 30, 90 and 180 days for every reservoir and supply system."
+      tab: model
+    - title: "Drought plan"
+      kind: rules
+      text: "Storage is compared with the plan's thresholds: normal from 60 %, pre-alert, alert, exceptional, emergency below 15 %."
+      tab: extra
+    - title: "Questions and bulletin"
+      kind: assistant
+      text: "The assistant answers from the forecast, the plan and the data, cites the plan's articles and drafts the weekly bulletin."
+      tab: assistant
+    - title: "Planning team decides"
+      kind: person
+      text: "Measures and what to tell the public stay a human decision."
+  data_sources:
+    - name: "Reservoir storage readings"
+      kind: series
+      origin: synthetic
+      provider: "scripts/generate_water_data.py: a simulated basin (rain, soil, runoff, releases, evaporation), seeded"
+      feeds: "The forecast's target: storage as a % of capacity, per reservoir and per supply system (capacity-weighted)."
+      period: "2000-01-01 to 2026-11-20, daily"
+      size: "88,524 readings of 9 reservoirs"
+    - name: "Weather stations"
+      kind: series
+      origin: synthetic
+      provider: "The same generator: wet and dry spells, dry summers, wet autumns and the 2022-2024 drought"
+      feeds: "Past rain over 7 to 365 days and the temperature anomaly around each reservoir. The forecast never assumes future weather."
+      period: "2000-2026, daily"
+      size: "235,704 readings of 24 stations"
+    - name: "Data-quality flags"
+      kind: table
+      origin: synthetic
+      provider: "ai_circus_shared.series_quality, with the thresholds of config/quality.yaml"
+      feeds: "What is cleaned before training: 179 duplicate days dropped, 333 readings excluded, 348 days imputed."
+      size: "6,559 flags in 6 kinds"
+    - name: "Drought plan"
+      kind: documents
+      origin: synthetic
+      provider: "rulebook/rulebook.yaml (fictional), with its English and Spanish plans generated from it"
+      feeds: "The thresholds, the measures of each state and the articles the assistant cites."
+  models:
+    - model: main
+      question: "Where will each reservoir and supply system be in 7, 30, 90 and 180 days, and how sure are we?"
+      used_by: "the planning team"
+  demo:
+    minutes: 10
+    steps:
+      - title: "The question"
+        tab: overview
+        show: "The headline, then the flow from the daily feed to the planning team."
+        say: "Every week a water authority asks: how much water do we have, and where is it heading? This is the whole chain, from an unvalidated daily feed to a person who decides."
+      - title: "Today, at a glance"
+        tab: extra
+        show: "The four supply-system cards: storage, the plan's state, the last 30 days, and the median forecast's state at 30, 90 and 180 days."
+        say: "One look answers the first question: every system, its state against the drought plan, and where the forecast takes it."
+      - title: "Replay the last drought"
+        tab: extra
+        show: "Press '2022-24 drought', then Play: the map's reservoirs and the system cards change colour week by week as the plan's states change."
+        say: "This is the basin's history since 2000. Watch the long drought arrive and the plan step up from pre-alert to alert and beyond, then the recovery."
+      - title: "180 days ahead, honestly"
+        tab: extra
+        show: "Back to today. The chart: the median forecast, the shaded 80 % band, and the plan's thresholds behind it."
+        say: "We never give one number. About 80 % of real outcomes should fall inside the band, and the thresholds show what each level would mean."
+      - title: "What if it stays dry?"
+        tab: extra
+        show: "Outlook and measures: choose Dry and 180 days, move the savings slider, then ask for the least restrictive package."
+        say: "This is the planning question: how likely is each threshold, and which package of measures keeps the chance of emergency low enough. A person decides; the tool shows the trade-off."
+      - title: "Readings that need review"
+        tab: extra
+        show: "Data quality: open Lantern Lake, the readings as published next to the cleaned series, and the flags with their meaning."
+        say: "The feed is unvalidated. We flag, we never silently delete: a flag means 'needs review', and the model learns from the cleaned series."
+      - title: "Is it any good?"
+        tab: model
+        section: insights
+        show: "The backtest: forecasts made at past cut-offs against what really happened, next to the two baselines."
+        say: "Each year is forecast by a model that never saw it. At 30 and 90 days it beats 'it stays as today' and the seasonal average; in the 2022-2024 drought it is weaker than persistence at 90 and 180 days for some systems, and the report says so."
+      - title: "The weekly bulletin"
+        tab: extra
+        show: "Weekly bulletin, at the end of the control room: Preview, then the PDF, in English or Spanish."
+        say: "The bulletin is drafted from the same data, plan and forecast, with every figure traceable. A person reviews it before it is published."
+      - title: "Ask in plain words"
+        tab: assistant
+        show: "The answer: dates, probabilities and the article of the plan, each from a tool."
+        say: "The assistant answers from the same tools as the control room. It never invents a figure, and it says how sure it is."
+        ask: "At the current trend, when does the Central system enter alert? And with a dry quarter?"
 
 governance:
   ai_system_id: water_reservoirs_drought

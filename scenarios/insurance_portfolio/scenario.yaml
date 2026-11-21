@@ -24,6 +24,104 @@ credits:
   url: "https://github.com/angelmtenor/ai-circus-framework/blob/develop/scripts/generate_insurance_portfolio.py"
   note: "Invented policyholders of a fictional insurer: no real person, insurer or market behind the numbers."
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/insurance_portfolio.md.
+story:
+  headline: "Who is about to leave, and what should we offer them?"
+  problem: >
+    An insurer loses customers at every renewal, and each one lost costs more to replace than to keep. The retention
+    team can call only so many people before the renewal date, and a generic discount sent to everyone wastes margin.
+    Who should they call first, why is that customer at risk, and what offer would make sense for them?
+  audience: ["Retention team", "Agents and call centre", "Marketing"]
+  today: >
+    Renewal lists sorted by premium, the same discount for everyone, and cross-sell campaigns sent to the whole base.
+  with_ai: >
+    Every policyholder scored for lapse and for buying again, sorted into tiers with the reasons, and a next best
+    offer drawn from what similar customers hold, in the same panel the agent uses for the call.
+  value:
+    - {value: "30 %", label: "Lapse at renewal", note: "In this synthetic book of 5,000 policyholders."}
+    - {value: "0.78", label: "ROC AUC, lapse", note: "Hold-out, against 0.70 accuracy for always guessing 'renews'."}
+    - {value: "0.82", label: "ROC AUC, cross-sell", note: "Who adds a product after a campaign."}
+    - {value: "90 %", label: "Hidden products found", note: "In the recommender's top 3, when one product is hidden from a customer."}
+  flow:
+    - title: "Policy portfolio"
+      kind: source
+      text: "One row per policyholder: tenure, products held, premium and its change at renewal, claims, late payments, channel."
+      tab: data
+    - title: "Lapse risk"
+      kind: model
+      text: "Who will not renew, and why: the price change, late payments, claims, tenure, bundled policies."
+      tab: model
+    - title: "Cross-sell and affinity"
+      kind: model
+      text: "Who would buy another product, and which products customers hold together."
+      tab: "model:cross_sell"
+    - title: "Retention watchlist"
+      kind: decision
+      text: "Four tiers from Loyal to Likely to lapse, each with its action and its reasons."
+      tab: extra
+    - title: "Next best offer"
+      kind: output
+      text: "For the selected customer: what to offer, how likely they are to buy, and whether to make it part of the retention call."
+      tab: extra
+    - title: "Agent calls"
+      kind: person
+      text: "The agent decides what to say and what to offer."
+  data_sources:
+    - name: "Policyholder portfolio"
+      kind: table
+      origin: synthetic
+      provider: "scripts/generate_insurance_portfolio.py: a fictional multi-line insurer, seeded"
+      feeds: "Both classifiers: 17 features in four groups (relationship, cover held, price and service, profile)."
+      size: "5,000 policyholders · 7 product lines"
+    - name: "Product holdings"
+      kind: table
+      origin: synthetic
+      provider: "The same generator: products bundled the way a real book tends to be"
+      feeds: "The recommender: each policyholder's products as one basket."
+      size: "10,964 holdings in 5,000 baskets"
+  models:
+    - {model: main, question: "Will this policyholder lapse at renewal?", used_by: "the retention team"}
+    - {model: cross_sell, question: "Will they add a product after a campaign?", used_by: "marketing and agents"}
+    - {model: products, question: "Which products are held together, so what goes with what this customer has?", used_by: "the next best offer"}
+  demo:
+    minutes: 8
+    steps:
+      - title: "The question"
+        tab: overview
+        show: "The headline, today against with this, and the flow."
+        say: "Keeping a customer costs less than winning a new one. The question is who to call first, and what to offer them."
+      - title: "The watchlist"
+        tab: extra
+        show: "The risk landscape: the last renewal's price change against the total premium, coloured by tier."
+        say: "Every policyholder is scored and sorted into four tiers, from Loyal to Likely to lapse."
+      - title: "One customer"
+        tab: extra
+        show: "Pick a policyholder in Likely to lapse: the probability, the tier's action and the reasons in four pillars."
+        say: "The agent sees why this customer is at risk, compared with everyone else and with those who did lapse."
+      - title: "What to offer"
+        tab: extra
+        show: "The next best offer panel under the same customer: products they do not have, ranked, and the chance they buy."
+        say: "The offer comes from what customers like this one hold, and from a second model that scores the chance of buying."
+      - title: "Who will buy next"
+        tab: "extra:cross_sell"
+        show: "The cross-sell leads, from Cold to Ready to buy, with the same explanation."
+        say: "The same portfolio, a different question: marketing gets a list of who to approach, not the whole base."
+      - title: "What goes together"
+        tab: "model:products"
+        show: "Pick Home: what goes with it, by association rules and by item factors, side by side."
+        say: "Two recommenders, compared on products hidden from real baskets; the simpler one won and is shown first."
+      - title: "Is it any good?"
+        tab: model
+        section: insights
+        show: "The lapse model's held-out performance and its most important drivers."
+        say: "Scored on customers the model never saw. The numbers illustrate the method on synthetic data, not a real book."
+      - title: "Ask in plain words"
+        tab: assistant
+        show: "The answer with a chart."
+        say: "The assistant answers from the model's tools: drivers, what-ifs, accuracy."
+        ask: "Does a big price increase at renewal drive customers away?"
+
 chat:
   context: >
     The portfolio of a fictional multi-line insurer (motor, home, health, life, pet, funeral and

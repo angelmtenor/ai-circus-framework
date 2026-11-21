@@ -28,6 +28,33 @@ role_required: "scenario:luznova_gas_anomaly"
 industry: energy_utilities
 icon: "🔥"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which gas meter readings look wrong, against the customer's own history?"
+  problem: >
+    A gas distributor loses money to meter drift, tampering and other non-technical losses. A reading is only odd
+    compared with what that customer usually uses in that weather. Field teams can visit only so many meters.
+  audience: ["Revenue protection", "Field operations"]
+  with_ai: "Every reading scored against the customer's own baseline, explained, and meter routes replayed to plan the visits."
+  value:
+    - {value: "8,000", label: "Simulated readings", note: "Of a fictional Spanish distributor."}
+  flow:
+    - {title: "Meter readings", kind: source, tab: data, text: "Tariff, current against baseline consumption, weather demand, meter and building age."}
+    - {title: "Anomaly model", kind: model, tab: model, text: "A classifier with SHAP: is this reading anomalous for this customer?"}
+    - {title: "Meter routes", kind: decision, tab: extra, text: "Routes replayed reading by reading, the anomalous ones flagged."}
+    - {title: "Field team visits", kind: person, text: "A technician checks the meter; a flag is a reason to look, not proof."}
+  data_sources:
+    - {name: "Gas meter readings", kind: table, origin: synthetic, provider: "scripts/generate_luznova_gas_anomaly.py (fictional distributor Luznova)", feeds: "Every input and the label: anomalous reading.", size: "8,000 readings"}
+  models:
+    - {model: main, question: "Is this reading anomalous for this customer?", used_by: "revenue protection"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "A reading is only odd against the customer's own history."}
+      - {title: "The routes", tab: "extra", show: "Meter routes replayed, anomalies flagged.", say: "The field team gets a route of meters worth visiting."}
+      - {title: "Why", tab: "model", section: "insights", show: "What drives a flag.", say: "Consumption against baseline and weather explain most flags."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which factors matter most for flagging an anomalous reading?"}
+
 chat:
   context: >
     Luznova Utilities' gas meter anomaly-detection model — predicts the probability

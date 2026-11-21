@@ -28,6 +28,39 @@ role_required: "scenario:surf_retail"
 icon: "🏄"
 industry: retail
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "One retailer's data, from the till to the dashboard, governed and live"
+  problem: >
+    A surf retailer with 24 shops in six countries and a web shop has data arriving in every shape: tills streaming
+    receipts, an old franchise sending daily files, five years of history to migrate and an ERP that only keeps
+    tables. Managers want today's numbers they can trust, each role seeing only what it may.
+  audience: ["Data engineers", "Store and regional managers", "Data governance"]
+  today: "Spreadsheets reconciled by hand, yesterday's numbers, and everyone seeing everything or nothing."
+  with_ai: "Every source captured through contracts, transformed with tests, served through one governed door, live dashboards and an assistant that answers from the governed metrics."
+  value:
+    - {value: "6", label: "Sources", note: "Two event streams, three file feeds and the ERP by change capture."}
+    - {value: "24", label: "Shops", note: "In Spain, France, Italy, Greece, Cyprus and Malta, plus a web shop."}
+    - {value: "1", label: "Governed door", note: "data-api: tenant first, then the role's rows and masks."}
+  flow:
+    - {title: "Sources", kind: source, tab: tour, text: "Till receipts and web orders through Kafka, daily files with control totals, the ERP by CDC."}
+    - {title: "Contracts and quarantine", kind: quality, tab: flow, text: "Every record checked against its contract; what fails waits in quarantine to be fixed and replayed."}
+    - {title: "Bronze, silver, gold", kind: model, tab: quality, text: "dbt models with tests turn raw records into marts, with lineage."}
+    - {title: "Governed door", kind: rules, tab: explore, text: "Metrics, records and SQL through data-api, filtered by role."}
+    - {title: "Dashboards and assistant", kind: output, tab: dashboards, text: "Live dashboards, a web shop and an assistant answering from the governed metrics."}
+    - {title: "Managers decide", kind: person, text: "Each role sees its own shops and the figures it may see."}
+  data_sources:
+    - {name: "Angel's Surf Co. simulator", kind: stream, origin: synthetic, provider: "The scenario's own simulator plugin: it writes only through Kafka, the landing bucket and the operational database", feeds: "Every source of the platform, live and historical.", period: "Five years of history, then live"}
+  models: []
+  demo:
+    minutes: 8
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Data in every shape, made trustworthy and governed, live."}
+      - {title: "The platform", tab: "tour", show: "The guided tour's map of sources, capture, quality, tiers and doors.", say: "Each step of the platform, at the depth your audience wants."}
+      - {title: "Live flow", tab: "flow", show: "Trigger a sale: watch the record travel from the till to the marts.", say: "Real records through the same doors a real system would use."}
+      - {title: "Governed numbers", tab: "dashboards", show: "The dashboards, then View as a store manager.", say: "The same dashboard shows each role only what it may see."}
+      - {title: "Ask the data", tab: "assistant", show: "The answer, with the metric and period it used.", say: "The assistant answers from governed metrics, never from raw tables.", ask: "How are sales today versus the same weekday last week?"}
+
 chat:
   context: >
     You are the data assistant of Angel's Surf Co., a fictional chain of surf, SUP and kite

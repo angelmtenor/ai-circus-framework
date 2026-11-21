@@ -26,6 +26,40 @@ credits:
 # Supplements (doesn't replace) assistant's metadata-grounded prompt — it already
 # injects the trained model's real feature list/accuracy; this adds the human-authored
 # domain framing (see libs/shared/scenario_schema.py's ChatConfig).
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from the scenario's sample data.
+story:
+  headline: "Which customers are about to leave the bank, and what would keep them?"
+  problem: >
+    A retail bank loses a fifth of its customers every year. Keeping one costs less than winning a new one, but the
+    retention team can only call so many. Who should they call first, and what is driving each customer away?
+  audience: ["Retention team", "Branch managers", "Marketing"]
+  today: >
+    Campaigns to whole segments, and departures discovered when the account closes.
+  with_ai: >
+    Every customer scored for churn with the reasons, sorted into a retention watchlist, and what-ifs on what the bank
+    can change.
+  value:
+    - {value: "10,000", label: "Customers", note: "In France, Germany and Spain."}
+    - {value: "20 %", label: "Left the bank", note: "The base rate the model has to beat."}
+  flow:
+    - {title: "Customer records", kind: source, tab: data, text: "Credit score, age, tenure, balance, products, activity and country."}
+    - {title: "Churn model", kind: model, tab: model, text: "LightGBM with SHAP: who is likely to leave, and why."}
+    - {title: "Retention watchlist", kind: decision, tab: extra, text: "Customers in tiers with the action for each, and the real outcome revealed after."}
+    - {title: "Advisor calls", kind: person, text: "The advisor decides what to offer."}
+  data_sources:
+    - {name: "Bank customer churn", kind: table, origin: public, provider: "Kaggle (Sonali Dasgupta), Churn Prediction of Bank Customers", url: "https://www.kaggle.com/datasets/sonalidasgupta95/churn-prediction-of-bank-customers", feeds: "Every input and the label: the customer left the bank.", size: "10,000 customers"}
+  models:
+    - {model: main, question: "Will this customer leave the bank?", used_by: "the retention team"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "A fifth of the customers leave every year. Who to call first?"}
+      - {title: "The watchlist", tab: extra, show: "Customers in risk tiers, with the action for each.", say: "Every customer scored, the riskiest first."}
+      - {title: "One customer", tab: extra, show: "Open a customer at risk: the probability and the reasons.", say: "The advisor knows why before calling."}
+      - {title: "Try a change", tab: model, section: predictions, show: "Change an input, for example active membership, and score again.", say: "What would change the risk for this kind of customer."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer with a chart.", say: "The assistant answers from the model.", ask: "Does being an active member actually lower churn risk?"}
+
 chat:
   context: >
     A retail bank's customer churn model — predicts the risk that a customer closes

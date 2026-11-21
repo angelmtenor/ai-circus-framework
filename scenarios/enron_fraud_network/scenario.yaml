@@ -30,6 +30,48 @@ credits:
   url: "https://www.cs.cmu.edu/~enron/"
   note: "Persons of interest: indicted, settled with the SEC or testified for immunity (USA Today, 2005) — not a list of convictions"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/enron_fraud_network.md. Real people: a score is never an accusation.
+story:
+  headline: "Who sat where money and information met when Enron collapsed?"
+  problem: >
+    Fraud is rarely one person. Investigators at regulators and prosecutors' forensic teams work with link analysis:
+    who was paid how much, who talked to whom, which partnerships sat behind the numbers. This scenario puts that
+    workflow on the public record of the Enron collapse and asks which profiles resemble those of the persons of
+    interest, and why. A resemblance is a lead to check, never an accusation.
+  audience: ["Financial investigators", "Supervisors", "Forensic teams"]
+  today: >
+    Pay records, e-mail and partnership documents sit in separate places, and an investigator joins them by hand.
+  with_ai: >
+    Pay and position in the company's e-mail network in one score per insider, explained, on an investigation board
+    with the partnerships of the board's own report.
+  value:
+    - {value: "0.81", label: "ROC AUC, out of fold", note: "Every insider scored by a model that never saw their own outcome."}
+    - {value: "143", label: "Insiders", note: "From the bankruptcy court's pay schedule."}
+    - {value: "250,000", label: "E-mails", note: "Headers only, turned into a company-wide network."}
+    - {value: "18", label: "Persons of interest", note: "Indicted, settled or testified for immunity: not a list of convictions."}
+  flow:
+    - {title: "The public record", kind: source, tab: data, text: "Insiders' pay from the court record, e-mail headers from the FERC corpus, partnerships from the Powers Report."}
+    - {title: "Network features", kind: quality, tab: data, text: "Contacts, PageRank, betweenness, after-hours and crisis-period shares, computed once from the e-mail network."}
+    - {title: "A score per insider", kind: model, tab: model, text: "LightGBM for small tables, chosen over logistic regression, with SHAP per insider."}
+    - {title: "Investigation board", kind: decision, tab: extra, text: "The network, coloured by score and sized by pay, with the partnerships as hexagons; reveal the persons of interest."}
+    - {title: "Investigator decides", kind: person, text: "A score says where to look. Conclusions come from evidence and due process."}
+  data_sources:
+    - {name: "Insider pay (ud120)", kind: table, origin: public, provider: "Court record In re Enron Corp., via the ud120 dataset", feeds: "14 pay and stock fields and 3 pay ratios per insider.", size: "143 insiders"}
+    - {name: "Enron e-mail corpus", kind: network, origin: public, provider: "FERC / Carnegie Mellon University", url: "https://www.cs.cmu.edu/~enron/", feeds: "Who wrote to whom (headers only): 8 network features per insider.", size: "about 250,000 e-mails"}
+    - {name: "The Powers Report", kind: documents, origin: official, provider: "Report of the Special Investigative Committee of Enron's Board (2002), SEC EDGAR", feeds: "The partnerships (JEDI, Chewco, LJM, the Raptors) and the gatekeepers drawn on the board, with their relations to insiders."}
+  models:
+    - {model: main, question: "How closely does this insider's pay and network position resemble the persons of interest'?", used_by: "investigators"}
+  demo:
+    minutes: 7
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "Fraud is rarely one person. This is link analysis on the public record of a real collapse."}
+      - {title: "The board", tab: extra, show: "The e-mail network coloured by score and sized by pay; hexagons are the partnerships.", say: "Every node is a real insider, scored by a model that never saw their own label."}
+      - {title: "One profile", tab: extra, show: "Open a high-scoring insider: pay, network position and what pushed the score.", say: "The score is explained in pay and in position, and it is a lead, not an accusation."}
+      - {title: "Reveal", tab: extra, show: "Reveal the persons of interest and compare with the scores.", say: "Now we see who was indicted, settled or testified, and how well the profile pointed at them."}
+      - {title: "Is it any good?", tab: model, section: insights, show: "Cross-validation and the most important inputs.", say: "On 143 people the numbers swing; the out-of-fold score is the honest one."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer.", say: "The assistant answers from the model and the data, and says why a score is not an accusation.", ask: "Why is a high score not an accusation?"}
+
 chat:
   context: >
     A link-analysis workbench for a financial-crime investigation unit (a securities

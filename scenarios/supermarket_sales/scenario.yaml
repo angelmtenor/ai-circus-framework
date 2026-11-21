@@ -25,6 +25,32 @@ credits:
   url: "https://www.kaggle.com/datasets/yasserh/walmart-dataset"
   note: "ported via smart-data-science's scenario_supermarket_sales.py; 10,000-row random sample of the original ~420,000-row dataset"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How much will each department sell next week?"
+  problem: >
+    A supermarket chain orders stock and plans staff by department and week. Sales move with the season, holidays,
+    the local economy and the weather; ordering by last year alone leaves gaps and waste.
+  audience: ["Category managers", "Store planners"]
+  with_ai: "Weekly sales predicted per department from store size, the economy, weather and the calendar, explained."
+  value:
+    - {value: "10,000", label: "Store-department weeks", note: "A sample of the Walmart sales dataset."}
+  flow:
+    - {title: "Sales history", kind: source, tab: data, text: "Store size, CPI, unemployment, fuel price, temperature, holidays and weekly sales."}
+    - {title: "Sales model", kind: model, tab: model, text: "A regression model with SHAP: next week's sales of a department."}
+    - {title: "Planner orders", kind: person, text: "Orders stock and plans staff."}
+  data_sources:
+    - {name: "Walmart sales", kind: table, origin: public, provider: "Kaggle (Yasser H.), Walmart Dataset", feeds: "Every input and weekly sales.", size: "10,000 weeks (a sample of about 420,000)"}
+  models:
+    - {model: main, question: "How much will this department sell next week?", used_by: "category managers"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Ordering and staffing need next week's sales, per department."}
+      - {title: "The data", tab: "data", show: "Sales across stores and weeks; filter a store type or a season.", say: "This is the history the model learns from."}
+      - {title: "Try a week", tab: "model", section: "predictions", show: "Change the week, the temperature or a holiday and score again.", say: "Each factor's effect, explained."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which factors matter most for predicting weekly sales?"}
+
 chat:
   context: >
     A retail demand-forecasting model for a Walmart-style supermarket chain — predicts a

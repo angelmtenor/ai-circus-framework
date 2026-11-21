@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ai_circus_shared.architecture import scenario_architecture
 from ai_circus_shared.auth import ADMIN_ORG_ID, ENGINEERING_DEMO_ORG_ID
 from ai_circus_shared.governance import resolve_governance
 from ai_circus_shared.scenario_schema import ScenarioDefinition, load_all
@@ -160,6 +161,9 @@ def seed_scenarios(session: Session, scenarios_dir: Path) -> list[str]:
         existing.governance = resolve_governance(definition.slug, definition.governance)
         existing.time_series = definition.time_series.model_dump() if definition.time_series is not None else None
         existing.main_model_title = definition.main_model_title
+        existing.story = definition.story.model_dump() if definition.story is not None else None
+        existing.analysis_toolset = definition.analysis_toolset
+        existing.architecture = scenario_architecture(definition)
         existing.extra_models = [
             _model_view_summary(view) for view in definition.model_views().values() if view.model_id is not None
         ] or None

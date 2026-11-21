@@ -40,6 +40,34 @@ credits:
     demonstration use only. Backbone: facebook/dinov2-with-registers-small (Apache-2.0).
     Not validated for production use.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Can a camera spot a damaged screw at any angle, learning only from good ones?"
+  problem: >
+    At the end of a turned-parts line every screw is photographed lying at a random position and angle. A damaged
+    thread, a scratched head or a deformed tip must be caught, but defects are rare and varied. This is the hard
+    version of visual anomaly detection.
+  audience: ["Quality engineers", "Line supervisors"]
+  with_ai: "A model that learned only from good screws flags the odd ones, shows where, and routes them to an inspector."
+  value:
+    - {value: "0", label: "Defects needed to train", note: "Good screws only."}
+  flow:
+    - {title: "Screw photos", kind: source, tab: data, text: "Grayscale photos of good and defective screws at random angles."}
+    - {title: "Memory of good screws", kind: model, tab: insights, text: "A frozen DINOv2 encoder and a memory of good-screw patches."}
+    - {title: "One screw", kind: model, tab: predict, text: "An anomaly score, a heatmap and the nearest good screws."}
+    - {title: "Inspection line", kind: decision, tab: extra, text: "Screws routed to pass or to an inspector."}
+  data_sources:
+    - {name: "MVTec AD, Screw", kind: images, origin: public, provider: "MVTec Software GmbH (Bergmann et al., CVPR 2019)", license: "CC BY-NC-SA 4.0", feeds: "Good screws to learn from; good and defective ones to test."}
+  models:
+    - {model: main, question: "Is this screw different from the good ones, and where?", used_by: "quality engineers"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Random angles and rare, varied defects: the hard case of visual inspection."}
+      - {title: "One screw", tab: "predict", show: "A damaged screw: score, heatmap, nearest good screws.", say: "The model points at the damage, whatever the angle."}
+      - {title: "The line", tab: "extra", show: "Screws routed by the threshold.", say: "The threshold trades inspection time against misses."}
+      - {title: "Is it any good?", tab: "insights", show: "Held-out evaluation.", say: "Harder than the circuit boards, and the numbers say so."}
+
 chat:
   context: >
     A visual anomaly detector for machined screws on an inspection table that learns from

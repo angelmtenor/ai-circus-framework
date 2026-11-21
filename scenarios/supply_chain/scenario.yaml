@@ -28,6 +28,42 @@ credits:
   url: "https://catalog.us-east-1.prod.workshops.aws/workshops/80ba0ea5-7cf9-4b8c-9d3f-1cd988b6c071/en-US/1-use-cases/7-supply-chain"
   note: "ported via smart-data-science's scenario_supply_chain.py"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/logistics.md.
+story:
+  headline: "How long will this shipment take, and which carrier should we book?"
+  problem: >
+    A logistics desk promises delivery dates every day. Promise too early and the customer is let down; too late and
+    the sale is lost. The choice of carrier and service level changes the answer, and nobody can compare sixteen
+    options by hand for every order.
+  audience: ["Logistics planners", "Customer service", "Operations"]
+  today: >
+    A standard transit time per carrier from a table, and a safety margin added by experience.
+  with_ai: >
+    A predicted duration with a 90 % interval for any origin, destination, carrier and priority, every option raced
+    side by side, and the safest date to promise.
+  value:
+    - {value: "16", label: "Options compared at once", note: "Every carrier and priority to the chosen destination."}
+    - {value: "90 %", label: "Prediction interval", note: "Two quantile models give the range about 9 in 10 shipments fall in."}
+    - {value: "0.66", label: "R², hold-out", note: "On 10,000 synthetic shipments from eight hubs."}
+  flow:
+    - {title: "Past shipments", kind: source, tab: data, text: "Origin hub, distance to the destination, carrier, priority, order size and how many days each took."}
+    - {title: "Duration model", kind: model, tab: model, text: "A LightGBM regressor for the expected days, and two quantile models for the 90 % interval."}
+    - {title: "Dispatch Tower", kind: decision, tab: extra, text: "An ETA landscape around each hub and a race of every carrier and priority to a destination."}
+    - {title: "Planner promises", kind: person, text: "The planner books the option and promises the date the customer hears."}
+  data_sources:
+    - {name: "Supply-chain shipments", kind: table, origin: public, provider: "Amazon SageMaker supply-chain workshop (synthetic)", url: "https://catalog.us-east-1.prod.workshops.aws/workshops/80ba0ea5-7cf9-4b8c-9d3f-1cd988b6c071/en-US/1-use-cases/7-supply-chain", feeds: "Every input and the target: days in transit.", size: "10,000 shipments · 8 hubs"}
+  models:
+    - {model: main, question: "How many days will this shipment take, and within what range?", used_by: "planners"}
+  demo:
+    minutes: 6
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "Every order needs a promised date, and the carrier you choose changes it."}
+      - {title: "The network", tab: extra, show: "The eight hubs with real shipments streaking out, coloured by how long they took.", say: "This is the history the model learned from."}
+      - {title: "The ETA landscape", tab: extra, show: "Focus a hub: isochrones of predicted days around it for the chosen carrier and priority.", say: "Every point on this map is a live prediction."}
+      - {title: "The race", tab: extra, show: "Pin a destination: every carrier and priority race to their predicted day, with the interval behind them.", say: "Fastest option, safest promise, and what choosing well is worth in days."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer with a chart.", say: "The assistant answers from the model.", ask: "Does shipping priority actually reduce delivery time?"}
+
 chat:
   context: >
     A logistics ETA model — predicts how many days a shipment will actually take to

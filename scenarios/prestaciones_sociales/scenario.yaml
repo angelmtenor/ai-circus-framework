@@ -64,6 +64,48 @@ governance:
   known_risks:
     - Proxy bias through free-text boxes; audit-only columns feed the equity panel, not the model.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figuras de docs/scenarios/prestaciones_sociales.md. Escenario en español, como su interfaz.
+story:
+  headline: "¿Qué solicitudes de ayuda de emergencia pueden esperar, cuáles no y por qué?"
+  problem: >
+    Las ayudas de emergencia social son dinero público para quien no puede cubrir lo básico, y su valoración manual
+    tiene dos fallos conocidos: el fraude (ingresos sin declarar, la misma ayuda pedida dos veces, gastos que no son
+    básicos) y el favoritismo. Aquí cada solicitud pasa por las mismas reglas y el mismo modelo, y cada propuesta
+    llega con sus motivos casilla a casilla. Decide siempre una persona.
+  audience: ["Trabajadores sociales", "Servicios sociales municipales", "Intervención"]
+  today: >
+    Cada expediente se lee a mano, en el orden de llegada, y el criterio depende de quién lo valore.
+  with_ai: >
+    Reglas deterministas primero; después un modelo que propone conceder, revisar o denegar con sus motivos; la norma
+    a mano para el asistente; y el expediente escaneado leído y volcado en el formulario.
+  value:
+    - {value: "16", label: "Reglas antes del modelo", note: "Paran 76 de 600 solicitudes: faltan documentos o no cumplen requisitos."}
+    - {value: "0,88", label: "ROC AUC fuera de muestra", note: "Datos estructurados y los tres textos juntos (estructurados solos: 0,84)."}
+    - {value: "24", label: "Documentos de normativa", note: "15 artículos reales citados literalmente y las bases ficticias de Villaclara."}
+    - {value: "3", label: "Bandejas", note: "Propuesta de concesión, revisión manual, propuesta de denegación."}
+  flow:
+    - {title: "Solicitud", kind: source, tab: data, text: "Formulario con importes, hogar, empadronamiento y tres textos libres; también escaneado."}
+    - {title: "Reglas", kind: rules, tab: extra, text: "16 reglas deterministas en 4 familias: lo incompleto o inadmisible se para antes del modelo."}
+    - {title: "Modelo", kind: model, tab: model, text: "LightGBM sobre números, categorías y los tres textos (TF-IDF en español), con SHAP por casilla."}
+    - {title: "Propuesta", kind: decision, tab: extra, text: "Dos umbrales convierten la probabilidad en conceder, revisar o denegar."}
+    - {title: "Normativa", kind: assistant, tab: assistant, text: "El asistente busca en las leyes y las bases y cita el artículo."}
+    - {title: "Decide la persona", kind: person, text: "Una trabajadora social comprueba y resuelve; apartarse de la propuesta se motiva por escrito."}
+  data_sources:
+    - {name: "Solicitudes de ayuda", kind: table, origin: synthetic, provider: "Generadas con semilla; los textos los escribió un LLM una vez, offline, a partir de los hechos y nunca de la resolución", feeds: "Todas las entradas del modelo y su resolución.", size: "600 solicitudes"}
+    - {name: "Leyes y reglamento europeo", kind: documents, origin: official, provider: "BOE (Leyes 39/2015, 40/2015, 38/2003, 7/1985) y EUR-Lex (Reglamento (UE) 2024/1689)", url: "https://www.boe.es/buscar/act.php?id=BOE-A-2015-10565", feeds: "Los 15 artículos que el asistente cita literalmente.", size: "15 artículos"}
+    - {name: "Bases municipales", kind: documents, origin: synthetic, provider: "Bases, instrucción interna y protocolo de atención del Ayuntamiento ficticio de Villaclara", feeds: "Los requisitos que aplican las reglas y que cita el asistente.", size: "9 documentos"}
+  models:
+    - {model: main, question: "Una solicitud que ha pasado las reglas, ¿merece concederse?", used_by: "trabajadores sociales"}
+  demo:
+    minutes: 8
+    steps:
+      - {title: "La pregunta", tab: overview, show: "El titular y el recorrido.", say: "Dinero público para quien lo necesita, con las mismas reglas para todos y los motivos a la vista."}
+      - {title: "El circuito", tab: extra, show: "Las solicitudes pasan por las reglas y el modelo hasta las tres bandejas; mueve los umbrales.", say: "Las reglas paran lo incompleto; el modelo ordena el resto; las bandejas se recolocan en vivo."}
+      - {title: "Un expediente", tab: extra, show: "Abre una solicitud: la hoja oficial con el calor de cada casilla según su peso en la propuesta.", say: "Cada propuesta se justifica con el expediente, no con quién lo presenta."}
+      - {title: "Expediente escaneado", tab: extra, show: "Sube una muestra escaneada: se lee y se vuelca en las casillas, con cada dato citado.", say: "El papel también entra en el mismo circuito."}
+      - {title: "La norma", tab: assistant, show: "La respuesta con el artículo citado.", say: "El asistente responde desde las reglas, el modelo y la norma.", ask: "¿Qué reglas paran más solicitudes y en qué artículo de las bases se apoya cada una?"}
+
 chat:
   context: >
     Responde siempre en español. Eres el asistente del Área de Bienestar Social del

@@ -29,6 +29,34 @@ credits:
   url: "https://www.kaggle.com/datasets/lumierebatalong/mpm-with-f1-score-89-and-g-mean-89"
   note: "ported via mlops_templates' mpm_scenario"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which machine is about to fail, and why?"
+  problem: >
+    A production line stops when a machine fails. Sensor readings warn before it happens, if someone reads them in
+    time: temperature, speed, torque and tool wear together say more than any one alarm.
+  audience: ["Maintenance", "Plant managers"]
+  today: "Fixed alarm limits per sensor, and maintenance on a calendar."
+  with_ai: "Every machine's failure risk from all its readings together, explained, on a live plant view."
+  value:
+    - {value: "10,000", label: "Machine readings", note: "The AI4I 2020 predictive-maintenance dataset."}
+  flow:
+    - {title: "Sensor readings", kind: source, tab: data, text: "Air and process temperature, rotational speed, torque, tool wear and machine type."}
+    - {title: "Failure model", kind: model, tab: model, text: "A classifier with SHAP: the risk of failure and the readings behind it."}
+    - {title: "Live plant", kind: decision, tab: extra, text: "Machines on a plant floor, coloured by risk as readings arrive."}
+    - {title: "Maintenance acts", kind: person, text: "Stops and services the machine before it fails."}
+  data_sources:
+    - {name: "AI4I 2020 Predictive Maintenance", kind: table, origin: public, provider: "Kaggle / UCI (AI4I 2020)", feeds: "Every sensor input and the label: machine failure.", size: "10,000 readings"}
+  models:
+    - {model: main, question: "Is this machine about to fail?", used_by: "maintenance"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "A failure warned is a stop avoided."}
+      - {title: "The plant", tab: "extra", show: "Machines on the floor, coloured by risk.", say: "Every reading updates every machine's risk."}
+      - {title: "One machine", tab: "model", section: "predictions", show: "Raise tool wear or torque and score again.", say: "The explanation shows which reading pushes the risk."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which sensor readings contribute most to a high failure risk?"}
+
 chat:
   context: >
     An industrial machine predictive-maintenance model — predicts failure risk from

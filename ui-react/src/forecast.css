@@ -201,3 +201,10 @@
   width: 100%;
   accent-color: var(--accent);
 }
+
+.ts-zone-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}

@@ -49,6 +49,34 @@ role_required: "scenario:luznova_gas_prospects"
 industry: energy_utilities
 icon: "🏘️"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Where will households sign up for gas, and what revenue is at stake?"
+  problem: >
+    A distributor extending its gas network has to choose where to sell first. Sign-up chances and consumption differ
+    by area, climate and economics, and the sales team needs a map of where the revenue is.
+  audience: ["Sales and marketing", "Network expansion"]
+  with_ai: "The chance of each household signing and its revenue potential, on a map of the expansion areas."
+  value:
+    - {value: "2", label: "Municipalities", note: "Real Spanish municipalities with very different climate and economics; the areas and data are simulated."}
+    - {value: "2,928", label: "Simulated observations", note: "Day by day, per census-tract-like area."}
+  flow:
+    - {title: "Prospect areas", kind: source, tab: data, text: "Area, household profile, climate demand and economics of each prospect."}
+    - {title: "Sign-up model", kind: model, tab: model, text: "A classifier with SHAP: the chance a household signs a gas contract."}
+    - {title: "Regional map", kind: decision, tab: extra, text: "Areas on a map by sign-up chance and revenue potential."}
+    - {title: "Sales plans", kind: person, text: "Chooses the areas and the order of the campaigns."}
+  data_sources:
+    - {name: "Gas prospects", kind: table, origin: synthetic, provider: "scripts/generate_luznova_gas_prospects.py (fictional distributor Luznova, real municipality locations)", feeds: "Every input and the label: signed a contract.", size: "2,928 observations"}
+  models:
+    - {model: main, question: "Will this household sign a gas supply contract?", used_by: "sales"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Where to sell first in a new gas network."}
+      - {title: "The map", tab: "extra", show: "Areas coloured by sign-up chance, with the revenue at stake.", say: "The campaign starts where chance and revenue meet."}
+      - {title: "Why", tab: "model", section: "insights", show: "What drives a sign-up.", say: "Climate and household economics explain most of it."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from the model.", ask: "Which factors matter most for predicting a signup?"}
+
 chat:
   context: >
     Luznova Utilities' gas-signup CRM model for a network expansion campaign, covering

@@ -1,4 +1,5 @@
 import type { FeatureSpec, ScenarioSummary } from "./apiClient";
+import { ChoiceSelect, NumberSlider } from "./controls";
 import { InfoButton } from "./InfoButton";
 
 export type Record_ = Record<string, number | string>;
@@ -26,9 +27,9 @@ export function initialRecord(featureColumns: string[], featureSchema: Record<st
   return initial;
 }
 
-/** One feature's editable input — a slider+number pair for numeric features, a
- * dropdown for categorical ones, a textarea for free text. Shared by the single-record
- * prediction form and every what-if form.
+/** One feature's editable input — the shared controls (controls.tsx): a slider with its value for numeric
+ * features, segmented buttons or a dropdown for categorical ones, a textarea for free text. Shared by the
+ * single-record prediction form and every what-if form, and styled like the Data & BI filters.
  */
 export function FeatureInput({
   feature,
@@ -64,36 +65,25 @@ export function FeatureInput({
   }
   if (spec.type === "numeric") {
     return (
-      <label className="feature-input">
-        <span className="feature-input-label">
-          {label} {spec.info && <InfoButton text={spec.info} />} <span className="feature-input-range">{spec.min}–{spec.max}</span>
-        </span>
-        <input type="range" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-        <input
-          type="number"
-          className="feature-input-number"
-          min={spec.min}
-          max={spec.max}
-          step={spec.step ?? 1}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-        />
-      </label>
+      <NumberSlider
+        label={label}
+        info={spec.info ? <InfoButton text={spec.info} /> : undefined}
+        min={spec.min}
+        max={spec.max}
+        step={spec.step ?? 1}
+        value={Number(value)}
+        onChange={onChange}
+      />
     );
   }
   return (
-    <label className="feature-input">
-      <span className="feature-input-label">
-        {label} {spec.info && <InfoButton text={spec.info} />}
-      </span>
-      <select value={value as string} onChange={(e) => onChange(e.target.value)}>
-        {spec.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
+    <ChoiceSelect
+      label={label}
+      info={spec.info ? <InfoButton text={spec.info} /> : undefined}
+      options={spec.options}
+      value={String(value)}
+      onChange={onChange}
+    />
   );
 }
 

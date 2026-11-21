@@ -28,6 +28,35 @@ credits:
     10-minute data, also averaged per hour for the forecast (scripts/prepare_energy_building_hourly.py):
     3,289 hours from January to May 2016, 40 of them interpolated.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "How much energy will this home use, hour by hour, tomorrow?"
+  problem: >
+    Energy use in a building follows the weather, the season and the time of day. A facility manager or an energy
+    retailer wants to know tomorrow's load hour by hour, and what changes it.
+  audience: ["Facility managers", "Energy retailers"]
+  with_ai: "Two models: one explains the use under any conditions, the other forecasts the next 24 hours with bands and a backtest."
+  value:
+    - {value: "24 h", label: "Forecast ahead", note: "Hour by hour, with prediction bands."}
+    - {value: "2", label: "Models", note: "Energy use under given conditions, and the 24-hour forecast."}
+  flow:
+    - {title: "Sensor history", kind: source, tab: data, text: "Indoor temperatures and humidity per room, outdoor weather and appliance use."}
+    - {title: "Energy use model", kind: model, tab: model, text: "Appliance use under given conditions, explained with SHAP."}
+    - {title: "24-hour forecast", kind: model, tab: "model:forecast", text: "Candidates backtested on past days; the best one forecasts the next 24 hours."}
+    - {title: "Forecast board", kind: decision, tab: "extra:forecast", text: "Tomorrow's load with bands, and what-ifs on the weather."}
+  data_sources:
+    - {name: "Appliances energy prediction", kind: series, origin: public, provider: "UCI Machine Learning Repository", url: "https://archive.ics.uci.edu/ml/datasets/Appliances+energy+prediction", feeds: "Room sensors, weather and the appliances' energy use.", size: "10,000 readings"}
+  models:
+    - {model: main, question: "How much energy will the appliances use under these conditions?", used_by: "facility managers"}
+    - {model: forecast, question: "How much energy will the home use in each of the next 24 hours?", used_by: "energy retailers"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Tomorrow's load, hour by hour, and what moves it."}
+      - {title: "Tomorrow", tab: "extra:forecast", show: "The 24-hour forecast with its bands; move the weather levers.", say: "A what-if on the weather re-forecasts the day."}
+      - {title: "Is it any good?", tab: "model:forecast", section: "insights", show: "The backtest of every candidate on past days.", say: "Each candidate forecast days it never saw; the best one is used."}
+      - {title: "Ask in plain words", tab: "assistant", show: "The answer.", say: "The assistant answers from both models.", ask: "Which factors matter most for predicting appliance energy use?"}
+
 chat:
   context: >
     Appliance electricity use of one home, with two models. The main one predicts the use (Wh) from

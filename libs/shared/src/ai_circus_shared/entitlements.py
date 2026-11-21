@@ -187,6 +187,15 @@ class ScenarioSummary(BaseModel):
     # `slug`, and its own copy of the model fields above. ui-react renders each as a scenario.
     extra_models: list[dict[str, Any]] | None = None
     main_model_title: str | None = None
+    # tabular_ml only (for now) — the scenario told for someone with no context, rendered as its
+    # Overview tab (see scenario_schema.StoryConfig); a plain dict like `form`.
+    story: dict[str, Any] | None = None
+    # tabular_ml only — the closed analysis toolset the assistant adds (scenario_schema.ScenarioDefinition), which
+    # also gives the forecast board its control room (`drought_watch`).
+    analysis_toolset: str | None = None
+    # The components the scenario uses and why, and the request flows inside them (ai_circus_shared.architecture,
+    # derived from the scenario.yaml at seed time): the Overview tab's "How it's built".
+    architecture: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

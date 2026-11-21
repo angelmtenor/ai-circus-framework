@@ -27,6 +27,55 @@ credits:
   url: "https://arxiv.org/abs/2306.16424"
   note: "Synthetic data, CDLA-Sharing-1.0 — every person, company and bank is simulated"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/aml_money_trail.md.
+story:
+  headline: "Which account holders does laundering run through, and where does the money go?"
+  problem: >
+    Money laundering hides in the shape of payments: a burst of payees, a stack of pass-through accounts, money that
+    comes back to where it started. A single bank sees only its own side. A monitoring utility shared by 13 member
+    banks can see the whole path, if it can rank thousands of account holders and explain why each one stands out.
+  audience: ["AML investigators", "Transaction monitoring", "Bank consortia"]
+  today: >
+    Each bank runs threshold rules on its own payments. Flows that cross banks and countries stay invisible, and an
+    alert arrives without the picture around it.
+  with_ai: >
+    Every holder scored from how it moved money over ten days, with the reasons, and the payments replayed hour by
+    hour on a world map and on a link-analysis graph.
+  value:
+    - {value: "0.84", label: "ROC AUC, out of fold", note: "Every holder scored by a model that never saw its own outcome."}
+    - {value: "54 %", label: "Involved in the priority tier", note: "Of the 167 holders scored above 30 %, against 3.7 % overall."}
+    - {value: "13", label: "Member banks", note: "Payments across 33 countries over ten days."}
+    - {value: "28", label: "Behaviour features", note: "Pass-through, dwell time, fan-in and fan-out, return cycles, PageRank."}
+  flow:
+    - {title: "Ten days of payments", kind: source, tab: data, text: "Transfers between people and companies holding accounts at 13 member banks, in a synthetic world where every transfer is labelled."}
+    - {title: "How each holder behaves", kind: quality, tab: data, text: "28 numbers per holder computed from the payment network: money in and out, pass-through, dwell time, payees, return cycles."}
+    - {title: "A score per holder", kind: model, tab: model, text: "LightGBM, chosen over logistic regression, says how closely a holder resembles the ones laundering ran through."}
+    - {title: "Follow the money", kind: decision, tab: extra, text: "Risk tiers on a world map with the payments replayed hour by hour, and the same network as a graph."}
+    - {title: "Investigator decides", kind: person, text: "Involvement is not guilt: a receiver can be an unwitting mule. A person opens the case."}
+  data_sources:
+    - name: "IBM AMLworld (HI-Small)"
+      kind: network
+      origin: public
+      provider: "IBM, Altman et al., NeurIPS 2023: a synthetic world of people, companies and banks"
+      url: "https://arxiv.org/abs/2306.16424"
+      license: "CDLA-Sharing-1.0"
+      feeds: "The payments, the holders and the label: involved in at least one laundering transfer the consortium can see."
+      period: "Ten days, hour by hour"
+      size: "12,253 holders · 448 involved (3.7 %)"
+  models:
+    - {model: main, question: "Does this holder move money like the holders laundering ran through?", used_by: "AML investigators"}
+  demo:
+    minutes: 8
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "Laundering hides in the shape of payments, and one bank only sees its own side. Here 13 banks share the picture."}
+      - {title: "The world map", tab: extra, show: "Each country's holders around their member bank, coloured by risk tier; arcs are the biggest payments.", say: "Every mark is an account holder, scored by a model that never saw its own outcome."}
+      - {title: "Replay the money", tab: extra, show: "Play the hourly timeline: payments hop between banks and countries.", say: "This is how the money actually moved, hour by hour, across the consortium."}
+      - {title: "One holder", tab: extra, show: "Open a holder in the priority tier: its score, what pushed it, its payments.", say: "The investigator sees why: a burst of payees, money that barely stays, flows that come back."}
+      - {title: "The network view", tab: extra, show: "Switch to Network graph: the same holders as a link-analysis board.", say: "The same scored network, as investigators draw it on a whiteboard."}
+      - {title: "Is it any good?", tab: model, section: insights, show: "The held-out performance and the most important behaviours.", say: "About eight times better than chance at finding the involved holders, on synthetic data where the truth is known."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer, from the model's tools.", say: "The assistant explains the model in words, with figures it computed, not invented.", ask: "What separates the laundering holders from everyone else?"}
+
 chat:
   context: >
     A transaction-monitoring workbench for a consortium of 13 member banks (one per
