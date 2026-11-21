@@ -36,7 +36,7 @@ PAGE = gen.REPO / "mcp" / "portal.html"
 MAX_BODY = 256 * 1024
 MAX_DIFF_LINES = 400
 # The service that serves a scenario kind's MCP door (docs/adr/0019), to pre-fill a new door's address.
-DOOR_SERVICE_BY_KIND = {"conversational_rag": "rag-agent", "data_product": "data-api"}
+DOOR_SERVICE_BY_KIND = {"conversational_rag": "rag-agent", "data_product": "data-api", "tabular_ml": "assistant"}
 DOOR_PORT = 8000
 
 

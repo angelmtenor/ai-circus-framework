@@ -106,8 +106,7 @@ DEMO_USERS = (
         "stores": ["S012"],
     },
 )
-# Scenarios the chat UI's MCP connections reach (llm-gateway's mcp_servers, docs/adr/0020).
-DEMO_SCENARIOS = ("ai_circus_reference", "surf_retail")
+CATALOG = REPO / "mcp" / "catalog.yaml"
 STORES_ATTRIBUTE = {
     "name": "stores",
     "displayName": "Stores",
@@ -372,9 +371,28 @@ def sync_demo_tenant(kc: Kcadm, password: str) -> str:
     return org_id
 
 
+def demo_scenarios(catalog: Path = CATALOG) -> tuple[str, ...]:
+    """The scenarios the chat UIs' MCP connections reach: every `scenario_door` of mcp/catalog.yaml (docs/adr/0024).
+
+    Read from the catalog's canonical layout (`make mcp-catalog` always writes it), since this script runs on the
+    system Python without PyYAML: a server is `  <name>:` under `servers:`, its kind `    kind: scenario_door`.
+    """
+    doors: list[str] = []
+    in_servers, server = False, None
+    for line in catalog.read_text().splitlines():
+        if line and not line.startswith(" "):
+            in_servers, server = line.startswith("servers:"), None
+        elif in_servers and line.startswith("  ") and not line.startswith("   ") and line.rstrip().endswith(":"):
+            server = line.strip().rstrip(":")
+        elif in_servers and server and line.strip() == "kind: scenario_door":
+            doors.append(server)
+    return tuple(doors)
+
+
 def grant_entitlements(org_id: str, admin_key: str, registry: str) -> None:
-    """Entitle the demo tenant to the chat UI's scenarios (idempotent PUTs, admin key)."""
-    for slug in DEMO_SCENARIOS:
+    """Entitle the demo tenant to the chat UIs' scenarios (idempotent PUTs, admin key)."""
+    scenarios = demo_scenarios()
+    for slug in scenarios:
         request = urllib.request.Request(
             f"{registry}/entitlements/{org_id}/{slug}",
             method="PUT",
@@ -387,7 +405,7 @@ def grant_entitlements(org_id: str, admin_key: str, registry: str) -> None:
             sys.exit(
                 f"❌ entitlement {slug}: {exc} — is the platform-registry port-forward up (make k3s-portforward)?"
             )
-    print(f"✓ {ORG['alias']} entitled to {', '.join(DEMO_SCENARIOS)}")
+    print(f"✓ {ORG['alias']} entitled to {', '.join(scenarios)}")
 
 
 def main() -> None:

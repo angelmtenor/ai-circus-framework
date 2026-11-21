@@ -270,6 +270,14 @@ story:
         show: "The answer: dates, probabilities and the article of the plan, each from a tool."
         say: "The assistant answers from the same tools as the control room. It never invents a figure, and it says how sure it is."
         ask: "At the current trend, when does the Central system enter alert? And with a dry quarter?"
+      - title: "The same model from any chat"
+        tab: mcp
+        show: "Connect via MCP: the endpoint, its read-only tools and Run tools/list, which answers with this session's token."
+        say: "LibreChat, Open WebUI, Claude or your own agent can use this model as a tool, through the MCP gateway and with the user's own sign-in: same tenant, same permissions, nothing written. In LibreChat, try: 'When does the Central system enter alert, and which measures would avoid emergency?'"
+
+# MCP door on the assistant (docs/adr/0031): read-only, with the caller's own token.
+mcp:
+  expose: [describe_model, drought_state, storage_forecast, what_if, least_restrictive_measures, search_drought_plan, data_quality, weekly_bulletin]
 
 governance:
   ai_system_id: water_reservoirs_drought
