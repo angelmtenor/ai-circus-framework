@@ -15,6 +15,33 @@ icon: "📚"
 # Grounds rag-agent's system prompt AND its judgment of whether a question is
 # in-domain enough to call the retrieve_docs tool at all — chitchat/off-topic
 # questions are answered directly, without retrieval (see libs/shared/scenario_schema).
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Ask the project's own reference notes, and get every answer with its source"
+  problem: >
+    A team building with this framework keeps notes on tooling, engineering practice, machine learning and
+    generative AI. Finding the right note when a question comes up is slow. A grounded assistant answers from those
+    notes only and cites each passage, and the same notes are open to any MCP client.
+  audience: ["Engineers", "Data scientists", "New team members"]
+  with_ai: "Questions answered from the indexed notes with every passage cited, a library to read them, and an MCP door."
+  value:
+    - {value: "100 %", label: "Answers with sources", note: "Every reply cites the passages it used."}
+    - {value: "3", label: "MCP tools", note: "List sources, search documents, read a document."}
+  flow:
+    - {title: "Reference notes", kind: source, tab: library, text: "The notes, chunked and indexed per tenant."}
+    - {title: "Grounded assistant", kind: assistant, tab: assistant, text: "Retrieves the closest passages and answers from them, citing each one."}
+    - {title: "MCP door", kind: output, tab: mcp, text: "The same search and reading tools for any MCP client."}
+  data_sources:
+    - {name: "ai-circus reference notes", kind: documents, origin: public, provider: "The ai-circus repository's reference folder (GitHub), with a vendored fallback", feeds: "Every passage the assistant searches and cites."}
+  models: []
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "An assistant that answers only from your notes, and shows them."}
+      - {title: "Ask", tab: "assistant", show: "The answer and its cited passages.", say: "Every claim points at a passage.", ask: "What does SHAP actually tell you about a model's predictions?"}
+      - {title: "The library", tab: "library", show: "The indexed documents and their passages, in order.", say: "What the assistant can read, open to anyone."}
+      - {title: "From any MCP client", tab: "mcp", show: "The door's tools and a live check.", say: "The same notes from Claude Desktop, LibreChat or any MCP client, with the same token."}
+
 chat:
   context: >
     A learning/reference guide for building the ai-circus project itself: dev

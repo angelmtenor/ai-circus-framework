@@ -23,13 +23,16 @@ rule (threshold, N frames, `early_grace_seconds`) and `control_margin_seconds` f
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab. A `story:` block (tabular_ml for now,
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab. A `story:` block (any kind,
 `StoryConfig`) is the scenario told for someone with no context, rendered by the first tab, **Overview**
 (`ScenarioOverview.tsx`): the problem and who decides, today against with this, a flow whose boxes open the tabs that show
 each step, where every input comes from (`origin: synthetic | public | official`, never hidden), the question each model
 answers, and the declared limits; `story.demo` is a presenter's script that `StoryDemoBar.tsx` walks tab by tab (what to
-point at, what to say, a question for the assistant). Tabs are named `overview`, `data`, `assistant`, `tutorial`,
-`model`/`extra` or `model:<id>`/`extra:<id>`, and the schema rejects a tab the scenario does not have. A story belongs to the
+point at, what to say, a question for the assistant). Tab names depend on the kind (`ScenarioDefinition.story_tabs`:
+tabular `data`, `model`/`extra`, `model:<id>`/`extra:<id>`, `tutorial`; RAG `library`; forms `cases`; deep learning
+`data`/`predict`/`insights`/`extra`; data products `tour`, `data`, `flow`, `dashboards`, …; `assistant` and `mcp` where the
+workspace has them), and the schema rejects a tab the scenario does not have. The other kinds' workspaces wire the demo
+through `storyWorkspace.tsx`'s `useStoryDemo`; a deep-learning workspace has no chat, so its story never asks. A story belongs to the
 scenario, so model views carry none. Every Overview also has **How it's built** (`ScenarioArchitecture.tsx`): the platform
 map with the components the scenario uses lit and why, derived from its YAML by `ai_circus_shared.architecture` at seed
 time (served as `ScenarioSummary.architecture`); the catalog behind it is `architecture_catalog.yaml` (see

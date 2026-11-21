@@ -76,7 +76,12 @@ Take every figure from the scenario's YAML, its `docs/scenarios/` guide or its s
 `public` / `official` honestly; validate with `ScenarioDefinition.load`; restart platform-registry (no rebuild).
 Tutorials (`titanic`, `toxic_leadership`) open on their Tutorial tab: their story's demo can point at `tutorial`.
 
-### 2. An Overview for the other kinds
+### 2. An Overview for the other kinds — done
+
+Every scenario of every kind has a story; RAG, form, deep-learning and data-product workspaces open on the Overview
+(`storyWorkspace.tsx`). Checked in the browser for RAG (with and without a knowledge graph), forms and the data
+product; the deep-learning Overview is checked by type and build only (dl-inference was off: start it with
+`make k3s-dl-up` and open a DL scenario once). What follows is kept for reference.
 
 `story` is tabular-only today (`_story_references_real_tabs_and_models` rejects other kinds). To extend it:
 

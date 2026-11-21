@@ -46,6 +46,34 @@ governance:
   limitations:
     - Knowledge graph extracted offline by an LLM; may omit or misstate provisions.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "What must a bank do when something looks suspicious, and which article says so?"
+  problem: >
+    Anti-money-laundering rules are spread over dozens of articles that refer to each other: who must act, what
+    triggers an obligation, which authority to tell, how fast, which records to keep. Answering a compliance question
+    means following those links. A knowledge graph of the regulation, every relation quoted from the text, lets an
+    assistant follow them and show the path.
+  audience: ["Compliance officers", "AML analysts", "Legal"]
+  with_ai: "Answers that follow the regulation's own links, with the path lit on the graph and a verbatim quote on every step."
+  value:
+    - {value: "18", label: "Articles", note: "Of the EU AML Regulation 2024/1624, unmodified."}
+    - {value: "1", label: "Quote per relation", note: "Every edge of the graph cites its article and quotes it."}
+  flow:
+    - {title: "The regulation", kind: source, tab: assistant, text: "18 articles of Regulation (EU) 2024/1624, quoted unmodified."}
+    - {title: "Knowledge graph", kind: quality, tab: assistant, text: "Entities, obligations, triggers, authorities, records and limits, extracted once and checked for verbatim quotes."}
+    - {title: "GraphRAG answer", kind: assistant, tab: assistant, text: "The assistant walks the graph from the question and answers with the path and its quotes."}
+    - {title: "Officer decides", kind: person, text: "Not legal advice: a compliance officer reads the articles and decides."}
+  data_sources:
+    - {name: "EU AML Regulation (EU) 2024/1624", kind: documents, origin: official, provider: "EUR-Lex", url: "https://eur-lex.europa.eu/eli/reg/2024/1624/oj", license: "© European Union, reuse authorised", feeds: "The articles, the graph extracted from them and every quote.", size: "18 of 90 articles"}
+  models: []
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Compliance questions mean following links between articles."}
+      - {title: "Ask", tab: "assistant", show: "The answer, and the path lit on the graph beside it.", say: "Every step of the answer is an edge of the graph with its quote.", ask: "A customer's transfers look like laundering. What must the bank do, towards whom, and how fast?"}
+      - {title: "Another path", tab: "assistant", show: "A second question lights a different path.", say: "The graph shows why the answer is what it is.", ask: "When does a bank have to apply enhanced due diligence?"}
+
 chat:
   context: >
     The EU Anti-Money Laundering Regulation (EU) 2024/1624 ("AMLR") as it applies to banks

@@ -41,6 +41,33 @@ credits:
     Base model: facebook/convnextv2-nano-22k-224 (Apache-2.0). Not validated for
     production use.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which solar cells are cracked, before the module ships?"
+  problem: >
+    In an electroluminescence test a solar module is powered in the dark and photographed in near-infrared: healthy
+    silicon glows, cracks and broken fingers stay dark. Grading every cell by eye is slow and inconsistent.
+  audience: ["Quality engineers", "PV manufacturing"]
+  with_ai: "Every cell graded by a fine-tuned network, explained with a heatmap, and routed on a grading line."
+  value:
+    - {value: "44", label: "Real modules", note: "Mono- and polycrystalline, expert-graded cells."}
+  flow:
+    - {title: "EL images", kind: source, tab: data, text: "Electroluminescence images of single cells, graded by experts."}
+    - {title: "Fine-tuned network", kind: model, tab: insights, text: "A ConvNeXt V2 network fine-tuned to tell defective cells from good ones."}
+    - {title: "One cell", kind: model, tab: predict, text: "A probability, a heatmap of the dark areas and similar cells."}
+    - {title: "Grading line", kind: decision, tab: extra, text: "Cells routed to pass, review or reject."}
+  data_sources:
+    - {name: "ELPV", kind: images, origin: public, provider: "ZAE Bayern (Buerhop-Lutz et al., 2018; Deitsch et al.)", license: "CC BY-NC-SA 4.0", feeds: "The cells and their expert grades."}
+  models:
+    - {model: main, question: "Is this solar cell defective?", used_by: "quality engineers"}
+  demo:
+    minutes: 4
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Cracks are invisible in daylight and obvious in electroluminescence."}
+      - {title: "One cell", tab: "predict", show: "A cracked cell: probability and heatmap.", say: "The dark areas the model weighs are the cracks an expert would point at."}
+      - {title: "The grading line", tab: "extra", show: "Cells flowing to pass, review or reject.", say: "Grading becomes consistent, and people review the borderline ones."}
+      - {title: "Is it any good?", tab: "insights", show: "Held-out evaluation and calibration.", say: "Measured on cells it never saw."}
+
 chat:
   context: >
     A solar-cell electroluminescence classifier that grades each cell as functional or

@@ -31,6 +31,37 @@ credits:
     BrachioLab/visa Parquet mirror at a pinned commit. Backbone:
     facebook/dinov2-with-registers-small (Apache-2.0). Not validated for production use.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which circuit boards leave the line with a defect nobody has seen before?"
+  problem: >
+    On an electronics line, defects are rare and never the same twice: a scratch, a bent pin, a melted component.
+    There are too few examples of each to train a classifier, but thousands of photos of good boards. The question is
+    whether a board looks different from the good ones, and where.
+  audience: ["Quality engineers", "Line supervisors"]
+  today: "Rule-based optical inspection tuned per defect, and people checking what it flags."
+  with_ai: "A model that learned only from good boards flags anything unusual, with a heatmap of where and the closest good boards."
+  value:
+    - {value: "0", label: "Defects needed to train", note: "It learns from photos of good boards only."}
+    - {value: "1", label: "Heatmap per board", note: "Where the board differs from the good ones."}
+  flow:
+    - {title: "Board photos", kind: source, tab: data, text: "Photos of good and defective boards from a public anomaly dataset."}
+    - {title: "Memory of good boards", kind: model, tab: insights, text: "A frozen DINOv2 encoder and a memory of good-board patches: anything far from it is unusual."}
+    - {title: "One board", kind: model, tab: predict, text: "An anomaly score, a heatmap and the nearest good boards."}
+    - {title: "Inspection line", kind: decision, tab: extra, text: "Boards routed to pass or to an inspector by a threshold."}
+    - {title: "Inspector decides", kind: person, text: "Checks the flagged boards."}
+  data_sources:
+    - {name: "VisA, PCB1 subset", kind: images, origin: public, provider: "Amazon Science (Zou et al., ECCV 2022)", license: "CC BY 4.0", feeds: "Good boards to learn from; good and defective ones to test."}
+  models:
+    - {model: main, question: "Does this board look different from the good ones, and where?", used_by: "quality engineers"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "Defects are rare and never the same twice, so the model learns what good looks like."}
+      - {title: "One board", tab: "predict", show: "A defective board: the score, the heatmap on the defect and the nearest good boards.", say: "The heatmap points at the defect without ever having seen one."}
+      - {title: "The line", tab: "extra", show: "Boards flowing past, routed by the threshold.", say: "Move the threshold and see inspection workload against missed defects."}
+      - {title: "Is it any good?", tab: "insights", show: "How well it separates good from defective boards it never saw.", say: "Measured on held-out boards of both kinds."}
+
 chat:
   context: >
     A visual anomaly detector for printed circuit boards that learns from good boards

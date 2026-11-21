@@ -28,6 +28,38 @@ credits:
     facebook/convnextv2-nano-22k-224 (Apache-2.0, ImageNet-22k pre-trained). Not
     clinically validated — outputs are illustrative only.
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+story:
+  headline: "Which chest X-rays should a radiologist read first?"
+  problem: >
+    A paediatric department reads chest X-rays in the order they arrive, while the sickest children wait in the same
+    queue. A model that flags likely pneumonia, shows where it looked and finds similar past studies can reorder the
+    worklist so the urgent ones are read first. It is a demonstration, not a medical device; a radiologist reads every
+    study.
+  audience: ["Radiologists", "Clinical operations", "Health IT"]
+  today: "First come, first read, whatever the image shows."
+  with_ai: "Every study scored on arrival, with a heatmap and the most similar prior studies, and the worklist reordered by urgency."
+  value:
+    - {value: "5,856", label: "Expert-labelled X-rays", note: "Paediatric chest X-rays from a public dataset."}
+    - {value: "1", label: "Heatmap per read", note: "The lung regions that drove the decision."}
+  flow:
+    - {title: "Chest X-rays", kind: source, tab: data, text: "Public paediatric X-rays, labelled normal or pneumonia by experts."}
+    - {title: "Fine-tuned network", kind: model, tab: insights, text: "A ConvNeXt V2 network fine-tuned on them, calibrated, evaluated on held-out studies."}
+    - {title: "One read, explained", kind: model, tab: predict, text: "A probability, a heatmap and the most similar prior studies."}
+    - {title: "Reading room", kind: decision, tab: extra, text: "A simulated worklist where the likely cases are read first."}
+    - {title: "Radiologist reads", kind: person, text: "Every study is read and reported by a radiologist."}
+  data_sources:
+    - {name: "PneumoniaMNIST (MedMNIST v2)", kind: images, origin: public, provider: "Kermany et al., Cell 2018, prepared by MedMNIST (Yang et al., 2023)", license: "CC BY 4.0", feeds: "Training, calibration and the held-out test of the network.", size: "5,856 X-rays at 224 x 224"}
+  models:
+    - {model: main, question: "Does this chest X-ray show signs of pneumonia?", used_by: "radiologists"}
+  demo:
+    minutes: 5
+    steps:
+      - {title: "The question", tab: "overview", show: "The headline and the flow.", say: "The sickest children should not wait in the same queue as everyone else."}
+      - {title: "One study", tab: "predict", show: "Pick an X-ray: the probability, the heatmap and the similar prior studies.", say: "The model shows where it looked and which past cases it resembles."}
+      - {title: "The reading room", tab: "extra", show: "The worklist reordered by urgency against arrival order.", say: "The likely cases reach the radiologist first; nobody is skipped."}
+      - {title: "Is it any good?", tab: "insights", show: "Held-out evaluation, calibration and selective prediction.", say: "Evaluated on studies it never saw, and calibrated so a probability means what it says."}
+
 chat:
   context: >
     A chest X-ray screening model that flags likely pneumonia, with occlusion heatmaps
