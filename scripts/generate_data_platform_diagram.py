@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate docs/screenshots/architecture-data-platform.svg.
 
-Pure-stdlib, deterministic; same visual language as generate_architecture_diagrams.py.
+Pure-stdlib, deterministic. The platform-wide map is generated from the architecture catalog instead
+(scripts/generate_architecture.py); this one zooms into the data tiers.
 Run from the repo root after the data tiers (k8s/data-platform/*) or the governance
 contracts change:
 

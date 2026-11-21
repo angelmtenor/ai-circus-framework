@@ -23,7 +23,17 @@ rule (threshold, N frames, `early_grace_seconds`) and `control_margin_seconds` f
 mirrors this: `ScenarioPicker` renders whatever the entitlements API returns; `TabularView`/
 `RagView`/`AssistedFormView`/`DeepLearningView` are generic renderers driven by each scenario's
 `ScenarioSummary`; an optional 5th tab comes from `ui_extras` (`region_map`, `live_plant`,
-`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab; `industry` is the
+`process_optimizer`, `risk_watchlist`, `network_explorer`, `dispatch_tower`, `shipment_globe`, `money_trail`, `camera_wall`, …). A `tutorial:` block (tabular_ml) adds a guided Tutorial tab. A `story:` block (tabular_ml for now,
+`StoryConfig`) is the scenario told for someone with no context, rendered by the first tab, **Overview**
+(`ScenarioOverview.tsx`): the problem and who decides, today against with this, a flow whose boxes open the tabs that show
+each step, where every input comes from (`origin: synthetic | public | official`, never hidden), the question each model
+answers, and the declared limits; `story.demo` is a presenter's script that `StoryDemoBar.tsx` walks tab by tab (what to
+point at, what to say, a question for the assistant). Tabs are named `overview`, `data`, `assistant`, `tutorial`,
+`model`/`extra` or `model:<id>`/`extra:<id>`, and the schema rejects a tab the scenario does not have. A story belongs to the
+scenario, so model views carry none. Every Overview also has **How it's built** (`ScenarioArchitecture.tsx`): the platform
+map with the components the scenario uses lit and why, derived from its YAML by `ai_circus_shared.architecture` at seed
+time (served as `ScenarioSummary.architecture`); the catalog behind it is `architecture_catalog.yaml` (see
+`docs/architecture/`). `industry` is the
 scenario's *domain* (industries, `insurance` included, plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 

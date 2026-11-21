@@ -950,62 +950,46 @@ Runs on a local Kubernetes (k3s/k3d) cluster, namespace `ai-circus` — the reco
 [Getting started](#getting-started) — and identically via `docker compose up`: the same stateless,
 env-configured microservices either way, just a different orchestrator.
 
-The platform is organised in **three layers**, read left to right, on top of the cluster's shared observability stack:
+The platform is built in **layers**, read bottom-up — infrastructure, data, consumption (AI, BI and GenAI), and the
+gateways and governance every request passes — with observability alongside. The diagram, the
+[architecture guide](docs/architecture/README.md) (a tutorial: the layers, one request end to end, how a YAML file becomes
+an app), the [component reference](docs/architecture/components.md) and the app's **Architecture** page are all generated
+from one catalog, [`architecture_catalog.yaml`](libs/shared/src/ai_circus_shared/architecture_catalog.yaml); a test fails
+when a workload under `k8s/` is missing from it. Each scenario's Overview shows the same map with the part it uses lit,
+derived from its scenario.yaml.
 
 <p align="center">
-  <img src="docs/screenshots/architecture-layers.svg" alt="The three layers as columns, left to right: 1 Consumption (AI, interactive dashboards, GenAI), 2 Data platform, 3 AI gateway and governance — with the services that belong to each — above a platform observability band (collector, metrics store, Loki, Tempo, Grafana, GPU metrics) that every service reports to" width="1100">
+  <img src="docs/architecture/architecture.svg" alt="The platform by layer: gateways and governance at the top, then consumption (AI, BI and GenAI), data and infrastructure, with observability alongside; optional components dashed" width="1100">
 </p>
 
-1. **Consumption — AI, interactive dashboards and GenAI.** What people use: `ui-react` (the scenario gallery,
-   the generic tabs, the showpiece dashboards and the data-product workspace), tabular ML predictions with SHAP
-   (`prediction`), the chat copilots — the data and ML `assistant`, `rag-agent` (RAG and GraphRAG), `form-agent`
-   (assisted forms) and `agui-voice` — deep-learning inference (`dl-inference`) and the optional Superset dashboards.
-   A scenario is a YAML file; one service instance per kind serves every scenario of that kind.
-2. **Data platform — capture, store, transform, serve.** Kafka (a topic per tenant), CDC and file landing, `data-ingest`
-   (contracts, quarantine, bronze), the Iceberg lake, `data-transform` (dbt, Dagster), the marts on Postgres and
-   ClickHouse and `data-api`, the governed door to all of it — plus the batch jobs that clean datasets, train models and
-   index documents, and the stores underneath (SeaweedFS, Postgres, Qdrant, Valkey). The streaming part is optional, in
-   four tiers ([Data products](#data-products--an-open-source-data-platform-optional-tiers)).
-3. **AI gateway & governance.** What every request and every model call passes through: Traefik, Keycloak (a tenant is
+1. **Infrastructure.** One Kubernetes cluster (k3s, or k3d on a laptop) runs every workload; an optional GPU node serves
+   local models (vLLM) and deep-learning training; the LLM providers are outside the cluster.
+2. **Data — capture, store, transform, serve.** SeaweedFS, Postgres, Qdrant, Valkey and ClickHouse; the batch jobs that
+   clean datasets, train models and index documents; and the optional streaming data platform in four tiers: Kafka,
+   `data-ingest` (contracts, quarantine, bronze), the Iceberg lake, `data-transform` (dbt, Dagster), `data-api` (the
+   governed door) and OpenMetadata ([Data products](#data-products--an-open-source-data-platform-optional-tiers)).
+3. **Consumption — AI, interactive dashboards and GenAI.** What people use: `ui-react` (the scenario gallery, the generic
+   tabs, the showpiece dashboards and the data-product workspace), tabular ML predictions with SHAP (`prediction`), the
+   chat copilots — the data and ML `assistant`, `rag-agent` (RAG and GraphRAG), `form-agent` (assisted forms) and
+   `agui-voice` — deep-learning inference (`dl-inference`), Superset and the optional chat apps. A scenario is a YAML
+   file; one service instance per kind serves every scenario of that kind.
+4. **Gateways and governance.** What every request and every model call passes through: Traefik, Keycloak (a tenant is
    a Keycloak Organization), `platform-registry` (entitlements, audit trail, AI-BOM), `llm-gateway` (routing, rate
-   limits, per-tenant budgets, the policy decision point), the Langfuse and MLflow monitors, the admin **Platform**
-   page (`data-platform-manager`) and the opt-in [governance-ready](#governance-ready-by-standards) contracts.
+   limits, per-tenant budgets, the policy decision point, the MCP gateway), the MCP server kit, and the admin
+   **Platform** page (`data-platform-manager`) with the opt-in [governance-ready](#governance-ready-by-standards) contracts.
 
-Layers 1 and 2 only ever talk to each other through layer 3's checks: every service validates the caller's token and
-re-checks the entitlement with `platform-registry` — never trusting what the UI already filtered — and every LLM call
-goes through the gateway. Underneath all three, **platform observability** — an OpenTelemetry collector, a
-Prometheus-compatible metrics store, Loki, Tempo and Grafana — is a prerequisite the cluster provides, not part of the
-framework ([ADR 0015](docs/adr/0015-observability-platform-contract.md)): every service exposes `/metrics`, exports
-content-free traces over OTLP once `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and logs JSON lines carrying the trace id.
-The framework ships only the AI-specific pieces ([`observability/`](observability/README.md)): Grafana dashboards for
-the LLM gateway (calls, tokens, cost, latency), GPUs and model drift, alert rules and a collector config — plus an
-optional lab bundle for clusters with no stack (`make k3s-obs-up`, off by default, ~1 GiB).
-The capability roadmap below groups the same services as Data, AI / BI / ML and Governance
-(it lists the gateway's routing under AI / BI / ML and its limits and budgets under Governance).
+Consumption and data only ever talk to each other through the gateways' checks: every service validates the caller's
+token and re-checks the entitlement with `platform-registry` — never trusting what the UI already filtered — and every
+LLM call goes through the gateway. Alongside all of them, **observability**: Langfuse (a trace per LLM call) and MLflow
+(every training run) ship with the framework; the metrics/logs/traces stack — an OpenTelemetry collector, a
+Prometheus-compatible metrics store, Loki, Tempo and Grafana — is a prerequisite the cluster provides
+([ADR 0015](docs/adr/0015-observability-platform-contract.md)): every service exposes `/metrics`, exports content-free
+traces over OTLP once `OTEL_EXPORTER_OTLP_ENDPOINT` is set, and logs JSON lines carrying the trace id. The framework ships
+only the AI-specific pieces ([`observability/`](observability/README.md)) plus an optional lab bundle for clusters with
+no stack (`make k3s-obs-up`, off by default, ~1 GiB).
 
-`data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live,
-machine-readable version of this split (see `core/roadmap.py`) — which capabilities are live,
-partial, or still planned, grouped exactly this way. The diagrams below are generated by
-`scripts/generate_architecture_diagrams.py` — rerun it whenever a service, store or monitor is
-added, so they never drift from `docker-compose.yml`/`k8s/base`.
-
-<p align="center">
-  <img src="docs/screenshots/architecture-detailed.svg" alt="AI Open Framework architecture diagram — realistic, fully detailed view" width="1100">
-</p>
-
-Solid arrows are primary request/data paths; dotted arrows are cross-cutting auth/admin/monitoring
-calls or traffic leaving the cluster. Every scenario service independently validates the caller's
-token against Keycloak and re-checks the entitlement with `platform-registry` — never just trusting
-what the UI already filtered. The right-hand column is the admin-only side of the platform —
-`data-platform-manager` (the control plane behind the **Platform** page) and the two monitors,
-Langfuse and MLflow, which reuse the existing Postgres/Valkey/SeaweedFS and add only ClickHouse.
-
-<details>
-<summary>Simplified view — grouped data flow</summary>
-<p align="center">
-  <img src="docs/screenshots/architecture-simplified.svg" alt="AI Open Framework architecture diagram — simplified view" width="900">
-</p>
-</details>
+`data-platform-manager`'s **Platform → Capabilities → Capability roadmap** is the live, machine-readable list of which
+capabilities are live, partial or still planned (see `core/roadmap.py`).
 
 A tenant (Keycloak **Organization**, or the shared admin credential) only sees the scenarios its
 members have been granted the matching `scenario:<slug>` role for — enforced both in the UI (what's
