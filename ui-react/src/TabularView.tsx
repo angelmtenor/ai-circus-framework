@@ -1,10 +1,12 @@
-import { Fragment, lazy, Suspense, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { modelViews, type ChatModel, type ScenarioSummary, type UiExtras } from "./apiClient";
 import { config } from "./config";
 import { ChatPanel } from "./ChatPanel";
 import { ConversationSidebar } from "./ConversationSidebar";
-import { ScenarioView } from "./ScenarioView";
+import { ScenarioOverview } from "./ScenarioOverview";
+import { StoryDemoBar } from "./StoryDemoBar";
+import { AUDIENCES, useAudience } from "./audience";
 import { DataView } from "./DataView";
 import { MlPredictionsView } from "./MlPredictionsView";
 import { ExploreModelView } from "./ExploreModelView";
@@ -30,6 +32,8 @@ const TutorialView = lazy(() => import("./TutorialView").then((m) => ({ default:
 const ForecastPredictView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastPredictView })));
 const ForecastInsightsView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastInsightsView })));
 const ForecastBoardView = lazy(() => import("./ForecastViews").then((m) => ({ default: m.ForecastBoardView })));
+// A forecast board whose scenario declares the drought-watch toolset is its control room (docs/adr/0030).
+const DroughtControlRoom = lazy(() => import("./DroughtControlRoom").then((m) => ({ default: m.DroughtControlRoom })));
 const RecommenderPredictView = lazy(() => import("./RecommenderViews").then((m) => ({ default: m.RecommenderPredictView })));
 const RecommenderInsightsView = lazy(() => import("./RecommenderViews").then((m) => ({ default: m.RecommenderInsightsView })));
 const FleetHealthView = lazy(() => import("./FleetHealthView").then((m) => ({ default: m.FleetHealthView })));
@@ -173,7 +177,7 @@ function ExtraTab({ scenario, accessToken }: { scenario: ScenarioSummary; access
     case "case_desk":
       return <CaseDeskView {...props} />;
     case "forecast_board":
-      return <ForecastBoardView {...props} />;
+      return scenario.analysis_toolset === "drought_watch" ? <DroughtControlRoom {...props} /> : <ForecastBoardView {...props} />;
     case "fleet_health":
       return <FleetHealthView {...props} />;
     case "row_triage":
@@ -207,28 +211,99 @@ function TabularViewContent({
   const [chatMaximized, setChatMaximized] = useState(false);
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+  // A question sent to the chat from outside it (the Overview, the guided demo) — see ChatPanel's `prompt`.
+  const [chatPrompt, setChatPrompt] = useState<{ id: number; text: string } | null>(null);
+  const [demoIndex, setDemoIndex] = useState<number | null>(null);
+  const demo = scenario.story?.demo ?? null;
+  // An executive sees the story and the showpiece tabs; the data and model tabs stay one click away for the demo.
+  const [audience, setAudience] = useAudience();
+  const executive = audience === "executive";
+
+  // A story's tab names (see scenario_schema.StoryConfig) resolved against this workspace.
+  const resolveTab = useCallback(
+    (name: string): Tab | null => {
+      if (name === "overview") return "scenario";
+      if (name === "data") return "data";
+      if (name === "tutorial") return scenario.tutorial ? "tutorial" : null;
+      const [part, id] = name.split(":");
+      const index = id === undefined ? 0 : views.findIndex((v) => v.slug === `${scenario.slug}~${id}`);
+      if (index < 0) return null;
+      if (part === "model") return `model:${index}`;
+      if (part === "extra" && views[index].ui_extras && EXTRA_TABS[views[index].ui_extras!.kind]) return `extra:${index}`;
+      return null;
+    },
+    [scenario.slug, scenario.tutorial, views],
+  );
+  const tabLabel = useCallback(
+    (name: string): string | null => {
+      if (name === "assistant") return "Assistant";
+      const resolved = resolveTab(name);
+      if (resolved === null) return null;
+      if (resolved === "scenario") return "Overview";
+      if (resolved === "data") return "Data & BI";
+      if (resolved === "tutorial") return scenario.tutorial?.tab_label ?? "Tutorial";
+      const index = Number(resolved.split(":")[1]);
+      const view = views[index];
+      if (resolved.startsWith("model:")) return index === 0 ? (scenario.main_model_title ?? "ML model") : view.title;
+      return view.ui_extras ? (extraTabLabel(view.ui_extras) ?? null) : null;
+    },
+    [resolveTab, scenario.tutorial, scenario.main_model_title, views],
+  );
+  function openStoryTab(name: string) {
+    if (name === "assistant") {
+      setChatOpen(true);
+      return;
+    }
+    const resolved = resolveTab(name);
+    if (resolved === null) return;
+    if (resolved.startsWith("model:")) setSection("predictions");
+    setTab(resolved);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  // Closing the dock drops a question sent from outside, so reopening it never sends that question again.
+  function closeChat() {
+    setChatOpen(false);
+    setChatPrompt(null);
+  }
+  function ask(question: string) {
+    setChatOpen(true);
+    setChatPrompt({ id: Date.now(), text: question });
+  }
+  function goToDemoStep(index: number) {
+    if (!demo) return;
+    const step = demo.steps[Math.max(0, Math.min(index, demo.steps.length - 1))];
+    setDemoIndex(demo.steps.indexOf(step));
+    // The chat is an overlay: it opens on an assistant step and gets out of the way elsewhere.
+    if (step.tab !== "assistant") closeChat();
+    openStoryTab(step.tab);
+    if (step.section) setSection(step.section);
+  }
 
   return (
-    <div className="workspace">
+    <div className={`workspace${demoIndex !== null ? " workspace--demo" : ""}`}>
       <div className="workspace-tabs">
         <button className={tab === "scenario" ? "active" : ""} onClick={() => setTab("scenario")}>
-          <Icon name="book" /> Scenario
+          <Icon name="book" /> Overview
         </button>
         {scenario.tutorial && (
           <button className={tab === "tutorial" ? "active" : ""} onClick={() => setTab("tutorial")}>
             <Icon name="cap" /> {scenario.tutorial.tab_label}
           </button>
         )}
-        <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>
-          <Icon name="data" /> Data & BI
-        </button>
+        {(!executive || tab === "data") && (
+          <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}>
+            <Icon name="data" /> Data & BI
+          </button>
+        )}
         {views.map((view, index) => {
           const extraTab = view.ui_extras ? EXTRA_TABS[view.ui_extras.kind] : undefined;
           return (
             <Fragment key={view.slug}>
-              <button className={tab === `model:${index}` ? "active" : ""} onClick={() => setTab(`model:${index}`)}>
-                <Icon name="target" /> {index === 0 ? (scenario.main_model_title ?? "ML model") : view.title}
-              </button>
+              {(!executive || tab === `model:${index}`) && (
+                <button className={tab === `model:${index}` ? "active" : ""} onClick={() => setTab(`model:${index}`)}>
+                  <Icon name="target" /> {index === 0 ? (scenario.main_model_title ?? "ML model") : view.title}
+                </button>
+              )}
               {extraTab && (
                 <button className={tab === `extra:${index}` ? "active" : ""} onClick={() => setTab(`extra:${index}`)}>
                   <Icon name={extraTabIcon(view.ui_extras!, extraTab.icon)} />
@@ -238,13 +313,50 @@ function TabularViewContent({
             </Fragment>
           );
         })}
+        <div className="audience-switch" role="radiogroup" aria-label="Show this workspace for">
+          {AUDIENCES.map((a) => (
+            <button
+              key={a.id}
+              role="radio"
+              aria-checked={audience === a.id}
+              className={audience === a.id ? "active" : ""}
+              title={a.hint}
+              onClick={() => {
+                setAudience(a.id);
+                if (a.id === "executive" && (tab === "data" || tab.startsWith("model:"))) setTab("scenario");
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <button className="chat-dock-toggle" onClick={() => setChatOpen((o) => !o)}>
+      <button className="chat-dock-toggle" onClick={() => (chatOpen ? closeChat() : setChatOpen(true))}>
         <Icon name="chat" /> Assistant
       </button>
 
-      {tab === "scenario" && <ScenarioView scenario={scenario} />}
+      {tab === "scenario" && (
+        <ScenarioOverview
+          scenario={scenario}
+          audience={audience}
+          tabLabel={tabLabel}
+          onOpen={openStoryTab}
+          onAsk={ask}
+          onStartDemo={demo ? () => goToDemoStep(0) : undefined}
+        />
+      )}
+      {demo && demoIndex !== null && (
+        <StoryDemoBar
+          steps={demo.steps}
+          index={demoIndex}
+          onIndex={goToDemoStep}
+          onExit={() => setDemoIndex(null)}
+          onAsk={ask}
+          tabLabel={tabLabel}
+          besideChat={chatOpen}
+        />
+      )}
       {tab === "data" && (
         <>
           {views.length > 1 && (
@@ -274,7 +386,7 @@ function TabularViewContent({
       </Suspense>
 
       {chatOpen && (
-        <div className="chat-dock-overlay" onClick={() => setChatOpen(false)}>
+        <div className="chat-dock-overlay" onClick={closeChat}>
           <div className={`chat-dock-panel${chatMaximized ? " chat-dock-panel--maximized" : ""}`} onClick={(e) => e.stopPropagation()}>
             <div className="chat-dock-header">
               <span>
@@ -294,7 +406,7 @@ function TabularViewContent({
                 >
                   <Icon name={chatMaximized ? "restore" : "maximize"} size={14} />
                 </button>
-                <button className="chat-dock-close" onClick={() => setChatOpen(false)}>
+                <button className="chat-dock-close" onClick={closeChat}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -323,6 +435,7 @@ function TabularViewContent({
                 conversationReady={conversation.ready}
                 onRunFinished={() => setSidebarRefreshKey((k) => k + 1)}
                 documentTool={scenario.document_tool}
+                prompt={chatPrompt}
                 locale={scenario.ui_extras && "locale" in scenario.ui_extras ? (scenario.ui_extras.locale ?? "en") : "en"}
               />
             </div>

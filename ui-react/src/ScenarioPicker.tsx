@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
-import { setComponentRunning, type ScenarioSummary } from "./apiClient";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { searchScenarios, setComponentRunning, type ScenarioSummary } from "./apiClient";
+import { blend, rankByWords, relevant, searchFields, type Ranked } from "./scenarioSearch";
 import { config } from "./config";
 import {
   missingServices,
@@ -142,24 +143,18 @@ const TECHNIQUES: Technique[] = [
   { key: "custom_tab", label: "With a showcase tab", match: (s) => !!s.ui_extras || !!s.tutorial || s.kind === "data_product" },
 ];
 
-// Case- and accent-insensitive ("prestacion" finds "prestación").
-function normalize(text: string): string {
-  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+/** What a scenario is besides its own words: its domain, gallery section, model subtype and techniques. */
+function searchExtras(scenario: ScenarioSummary): string[] {
+  return [
+    domainLabel(scenario.industry),
+    // "Machine Learning" names most of the gallery: as a search word it would match nearly every card.
+    categoryFor(scenario).label === "Machine Learning" ? "" : categoryFor(scenario).label,
+    mlSubtype(scenario) ?? "",
+    ...TECHNIQUES.filter((t) => t.match(scenario)).map((t) => t.label),
+  ];
 }
 
-function searchText(scenario: ScenarioSummary): string {
-  return normalize(
-    [
-      scenario.title,
-      scenario.description,
-      scenario.slug.replaceAll("_", " "),
-      domainLabel(scenario.industry),
-      categoryFor(scenario).label,
-      mlSubtype(scenario) ?? "",
-      ...TECHNIQUES.filter((t) => t.match(scenario)).map((t) => t.label),
-    ].join(" "),
-  );
-}
+const SEARCH_DEBOUNCE_MS = 450;
 
 // The picker's filters — owned by App.tsx (not local state) so they survive this
 // component unmounting when the user opens a scenario and comes back.
@@ -173,7 +168,10 @@ export function ScenarioPicker({
   onFiltersChange,
   isAdmin = false,
   accessToken = null,
+  orgId = null,
 }: {
+  // The tenant, for platform-registry's semantic ranking (GET /scenario-search/{org}); without it, words only.
+  orgId?: string | null;
   scenarios: ScenarioSummary[];
   onSelect: (scenario: ScenarioSummary) => void;
   filters: ScenarioFilters;
@@ -212,7 +210,23 @@ export function ScenarioPicker({
       TECHNIQUES.map((t) => ({ ...t, count: scenarios.filter(t.match).length })).filter((t) => t.count > 0),
     [scenarios],
   );
-  const haystacks = useMemo(() => new Map(scenarios.map((s) => [s.slug, searchText(s)])), [scenarios]);
+  const docs = useMemo(() => scenarios.map((s) => searchFields(s, searchExtras(s))), [scenarios]);
+  // The semantic ranking for the current query, once platform-registry answers (null: words only).
+  const [semantic, setSemantic] = useState<{ query: string; results: { slug: string; score: number }[] } | null>(null);
+  useEffect(() => {
+    const q = query.trim();
+    if (!orgId || q.length < 3) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      searchScenarios(config.platformRegistryUrl, orgId, q, accessToken)
+        .then((r) => live && setSemantic(r.semantic ? { query: q, results: r.results } : null))
+        .catch(() => live && setSemantic(null)); // words still rank
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, orgId, accessToken]);
 
   if (scenarios.length === 0) {
     return (
@@ -225,20 +239,29 @@ export function ScenarioPicker({
 
   const setFilter = (patch: Partial<ScenarioFilters>) => onFiltersChange({ ...filters, ...patch });
   const activeTechnique = TECHNIQUES.find((t) => t.key === technique);
-  // Every word must appear somewhere (title, description, domain, technique…).
-  const words = normalize(query).split(/\s+/).filter(Boolean);
+  // A query ranks every scenario by relevance — words, and meaning when platform-registry has it — instead of
+  // demanding every word: "a bank that wants to catch money mules" is a description, not a filter.
+  const searching = query.trim().length > 0;
+  const meaning = semantic && semantic.query === query.trim() ? semantic.results : null;
+  const ranked: Ranked[] = searching ? relevant(blend(rankByWords(query, docs), meaning)) : [];
+  const rank = new Map(ranked.map((r, i) => [r.slug, { ...r, position: i }]));
   const filteredScenarios = scenarios.filter(
-    (s) =>
-      (industry === "all" || s.industry === industry) &&
-      (!activeTechnique || activeTechnique.match(s)) &&
-      words.every((word) => haystacks.get(s.slug)?.includes(word)),
+    (s) => (industry === "all" || s.industry === industry) && (!activeTechnique || activeTechnique.match(s)) && (!searching || rank.has(s.slug)),
   );
-  const filtering = industry !== "all" || !!activeTechnique || words.length > 0;
+  const filtering = industry !== "all" || !!activeTechnique || searching;
 
-  const groups = CATEGORIES.map((category) => ({
-    ...category,
-    scenarios: filteredScenarios.filter(category.match).sort(galleryOrder),
-  })).filter((group) => group.scenarios.length > 0);
+  const groups = searching
+    ? [
+        {
+          key: "matches",
+          label: `Best matches${meaning ? ", by meaning and words" : ", by words"}`,
+          scenarios: [...filteredScenarios].sort((a, b) => rank.get(a.slug)!.position - rank.get(b.slug)!.position),
+        },
+      ].filter((group) => group.scenarios.length > 0)
+    : CATEGORIES.map((category) => ({
+        ...category,
+        scenarios: filteredScenarios.filter(category.match).sort(galleryOrder),
+      })).filter((group) => group.scenarios.length > 0);
 
   return (
     <div className="scenario-groups">
@@ -250,7 +273,7 @@ export function ScenarioPicker({
           <input
             ref={searchRef}
             type="search"
-            placeholder="Find a scenario…"
+            placeholder="Describe a problem or search… e.g. a bank wants to catch money mules"
             aria-label="Find a scenario"
             value={query}
             onChange={(e) => setFilter({ query: e.target.value })}
@@ -340,6 +363,14 @@ export function ScenarioPicker({
                   <div className="scenario-card-body">
                     <div className="scenario-card-kind">{categoryFor(scenario).label}</div>
                     <h3>{scenario.title}</h3>
+                    {rank.has(scenario.slug) && (
+                      <div className="scenario-card-match" title="How well it matches the search">
+                        <span className="scenario-card-match-bar">
+                          <i style={{ width: `${Math.round(rank.get(scenario.slug)!.score * 100)}%` }} />
+                        </span>
+                        {rank.get(scenario.slug)!.matched.length > 0 && <span>matches {rank.get(scenario.slug)!.matched.join(", ")}</span>}
+                      </div>
+                    )}
                     <p>{scenario.description}</p>
                   </div>
                 </>

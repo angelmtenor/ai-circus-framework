@@ -3610,3 +3610,30 @@ select:focus {
   font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
+
+/* The gallery's ranked search: how well a card matches the query, and which words did. */
+.scenario-card-match {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 4px;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.scenario-card-match-bar {
+  flex: none;
+  width: 64px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.scenario-card-match-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: var(--glow-accent-soft);
+}

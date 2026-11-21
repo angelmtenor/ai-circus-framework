@@ -3,6 +3,7 @@ import { config } from "./config";
 import { formatMetric, optionLabel, type MetricResult, type PipelineEvent } from "./dataApi";
 import type { DataProductProps } from "./DataProductView";
 import { CAPABILITIES, DEPTH_LABELS, TOUR, type MapNode, type TourAction, type TourDepth, type TourStep } from "./dataTour";
+import { useAudience } from "./audience";
 import { Icon } from "./Icon";
 
 /* ── the platform map ───────────────────────────────────────────────────────────── */
@@ -213,7 +214,10 @@ export function DataTourView(props: DataProductProps) {
   const { scenario, client, overview, refresh, navigate, onViewAs, openChat } = props;
   const dp = scenario.data_product!;
   const [index, setIndex] = useState(0);
-  const [depth, setDepth] = useState<TourDepth>(() => (localStorage.getItem("dp-tour-depth") as TourDepth) || "simple");
+  // The tour's three depths are the workspace's three audiences (audience.ts): one choice for the whole app.
+  const [audience, setAudience] = useAudience();
+  const depth: TourDepth = audience === "executive" ? "simple" : audience === "engineer" ? "engineer" : "detailed";
+  const setDepth = (d: TourDepth) => setAudience(d === "simple" ? "executive" : d === "engineer" ? "engineer" : "analyst");
   const [playing, setPlaying] = useState(false);
   const [bursts, setBursts] = useState<Burst[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -222,13 +226,6 @@ export function DataTourView(props: DataProductProps) {
   const counter = useRef(0);
   const step = TOUR[index];
 
-  useEffect(() => {
-    try {
-      localStorage.setItem("dp-tour-depth", depth);
-    } catch {
-      /* private mode: the default depth is fine */
-    }
-  }, [depth]);
 
   // Real pipeline events become bursts on the map.
   const onEvent = useCallback((event: PipelineEvent) => {

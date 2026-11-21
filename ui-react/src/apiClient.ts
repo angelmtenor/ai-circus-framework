@@ -739,6 +739,53 @@ export type ScenarioSummary = {
   // `slug` is its address (`slug~id`), which is all prediction's routes need. See modelViews().
   extra_models?: (Partial<ScenarioSummary> & { id: string; title: string; slug: string })[] | null;
   main_model_title?: string | null;
+  // tabular_ml only (for now) — the scenario told for someone with no context: the Overview tab.
+  story?: ScenarioStory | null;
+  // tabular_ml only — the assistant's closed analysis toolset; "drought_watch" also turns the forecast board into
+  // the drought control room (DroughtControlRoom.tsx).
+  analysis_toolset?: string | null;
+  // The components this scenario uses and why, and the request flows inside them (ai_circus_shared.architecture).
+  architecture?: { components: string[]; reasons: Record<string, string>; flows: string[] } | null;
+};
+
+// Mirrors scenario_schema.StoryConfig. A tab is "overview" | "data" | "assistant" | "tutorial" | "model" |
+// "extra" | `model:<id>` | `extra:<id>` (an extra model and its ui_extras tab).
+export type StoryFlowStep = {
+  title: string;
+  text: string;
+  kind: "source" | "quality" | "rules" | "model" | "decision" | "person" | "output" | "assistant";
+  tab?: string | null;
+};
+export type StoryDataSource = {
+  name: string;
+  kind: "table" | "series" | "stream" | "messages" | "network" | "documents" | "images";
+  origin: "synthetic" | "public" | "official";
+  provider: string;
+  feeds: string;
+  url?: string | null;
+  license?: string | null;
+  period?: string | null;
+  size?: string | null;
+};
+export type StoryDemoStep = {
+  title: string;
+  tab: string;
+  section?: "predictions" | "insights" | null;
+  show: string;
+  say: string;
+  ask?: string | null;
+};
+export type ScenarioStory = {
+  headline: string;
+  problem: string;
+  audience: string[];
+  today?: string | null;
+  with_ai?: string | null;
+  value: { label: string; value: string; note?: string | null }[];
+  flow: StoryFlowStep[];
+  data_sources: StoryDataSource[];
+  models: { model: string; question: string; used_by?: string | null }[];
+  demo?: { minutes: number; steps: StoryDemoStep[] } | null;
 };
 
 export type TimeSeriesConfig = {
@@ -746,6 +793,8 @@ export type TimeSeriesConfig = {
   series_id_columns: string[];
   frequency: string;
   horizon: number;
+  // The horizons a direct multi-horizon model is trained at (e.g. 7/30/90/180 days), when it has them.
+  horizons?: number[] | null;
   season_length: number | null;
   static_features: string[];
   exogenous_features: string[];
@@ -2129,4 +2178,154 @@ export async function listMcpTools(
   const body = await asJson<{ result?: { tools: McpTool[] }; error?: { message: string } }>(response);
   if (!body.result) throw new Error(body.error?.message ?? "Unexpected MCP response.");
   return body.result.tools;
+}
+
+// ── The drought control room (assistant's /drought/{slug}/… routes, analysis_toolset: drought_watch) ──────────────
+
+export type DroughtStateSpec = {
+  id: string;
+  label: string;
+  min_pct: number | null;
+  savings_pct: number;
+  measures: { agriculture_pct: number; industry_pct: number; urban_cap_lpd: number | null; actions: Record<string, string[]> };
+};
+export type DroughtCrossing = {
+  state_below: string;
+  threshold_pct: number;
+  optimistic: number | null;
+  median: number | null;
+  pessimistic: number | null;
+};
+export type DroughtSystem = {
+  id: string;
+  name: string;
+  members: string[];
+  current_pct: number;
+  state: string;
+  days_in_state: number;
+  change_7d_pp: number;
+  change_30d_pp: number;
+  forecast_states: Record<string, Record<"p10" | "p50" | "p90", string>>;
+  crossings: DroughtCrossing[];
+  recent_transitions: { day: string; from: string; to: string }[];
+};
+export type DroughtReservoir = { id: string; name: string; system: string; current_pct: number; state: string; flags_30d: number };
+export type DroughtControlRoom = {
+  as_of: string;
+  plan_title: string;
+  hysteresis_days: number;
+  states: DroughtStateSpec[];
+  systems: DroughtSystem[];
+  reservoirs: DroughtReservoir[];
+  drivers: Record<string, Record<string, Record<string, number>>>;
+  attribution: string[];
+  note: string;
+};
+export type DroughtHistory = {
+  dates: string[];
+  step_days: number;
+  series: Record<string, (number | null)[]>;
+  states: Record<string, (string | null)[]>;
+  note: string;
+};
+export type DroughtQualityOverview = {
+  as_of: string;
+  reservoirs: { id: string; name: string; score_pct: number | null; flags_by_code: Record<string, number>; flags_by_year: Record<string, number> }[];
+  cleaning_applied: Record<string, number>;
+  meaning: Record<string, string>;
+  note: string;
+};
+export type DroughtQualitySeries = {
+  reservoir: string;
+  name: string;
+  period: [string, string];
+  days_flagged: number;
+  missing_days: number;
+  score_pct: number;
+  flags_by_code: Record<string, number>;
+  flags: { day: string; code: string; detail: string }[];
+  meaning: Record<string, string>;
+  published: { day: string; pct: number | null }[];
+  cleaned: { day: string; pct: number }[];
+};
+export type DroughtScenario = "dry" | "normal" | "wet";
+export type DroughtWhatIf = {
+  system: string;
+  current_pct: number;
+  current_state: string;
+  scenario: DroughtScenario;
+  savings_pct: number;
+  horizon_days: number;
+  end_of_horizon_pct: Record<"p10" | "p50" | "p90", number>;
+  end_of_horizon_state: Record<"p10" | "p50" | "p90", string>;
+  thresholds: {
+    state_below: string;
+    threshold_pct: number;
+    days_pessimistic_p10: number | null;
+    days_median_p50: number | null;
+    days_optimistic_p90: number | null;
+    probability_below_within_horizon: number;
+  }[];
+  method: string;
+};
+export type DroughtOptimise = {
+  system: string;
+  scenario: DroughtScenario;
+  horizon_days: number;
+  emergency_threshold_pct: number;
+  target_probability_pct: number;
+  meets_target: boolean;
+  least_restrictive_package: string | null;
+  packages: { package: string; label: string; savings_pct: number; probability_below_pct: number }[];
+  note: string;
+};
+
+async function droughtGet<T>(baseUrl: string, slug: string, path: string, accessToken: string | null): Promise<T> {
+  const response = await fetch(`${baseUrl}/drought/${slug}/${path}`, { headers: headers(accessToken) });
+  return asJson<T>(response);
+}
+
+async function droughtPost<T>(baseUrl: string, slug: string, path: string, body: unknown, accessToken: string | null): Promise<T> {
+  const response = await fetch(`${baseUrl}/drought/${slug}/${path}`, {
+    method: "POST",
+    headers: { ...headers(accessToken), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return asJson<T>(response);
+}
+
+export const droughtControlRoom = (baseUrl: string, slug: string, token: string | null) =>
+  droughtGet<DroughtControlRoom>(baseUrl, slug, "control-room", token);
+export const droughtHistory = (baseUrl: string, slug: string, token: string | null) => droughtGet<DroughtHistory>(baseUrl, slug, "history", token);
+export const droughtQuality = (baseUrl: string, slug: string, token: string | null) =>
+  droughtGet<DroughtQualityOverview>(baseUrl, slug, "quality", token);
+export const droughtQualitySeries = (baseUrl: string, slug: string, reservoir: string, code: string | null, token: string | null) =>
+  droughtGet<DroughtQualitySeries>(baseUrl, slug, `quality/${encodeURIComponent(reservoir)}${code ? `?code=${encodeURIComponent(code)}` : ""}`, token);
+export const droughtBulletin = (baseUrl: string, slug: string, lang: string, token: string | null) =>
+  droughtGet<{ week_of: string; language: string; markdown: string }>(baseUrl, slug, `bulletin?lang=${encodeURIComponent(lang)}`, token);
+export const droughtWhatIf = (
+  baseUrl: string,
+  slug: string,
+  body: { system: string; scenario: DroughtScenario; savings_pct: number; horizon: number },
+  token: string | null,
+) => droughtPost<DroughtWhatIf>(baseUrl, slug, "what-if", body, token);
+export const droughtOptimise = (
+  baseUrl: string,
+  slug: string,
+  body: { system: string; target_probability_pct: number; horizon: number; scenario: DroughtScenario },
+  token: string | null,
+) => droughtPost<DroughtOptimise>(baseUrl, slug, "optimise", body, token);
+
+// platform-registry's semantic ranking of the tenant's scenarios (core/scenario_search.py); `semantic` is false while
+// its index is not ready, and the gallery then ranks by words alone.
+export async function searchScenarios(
+  baseUrl: string,
+  orgId: string,
+  query: string,
+  accessToken: string | null,
+): Promise<{ semantic: boolean; results: { slug: string; score: number }[] }> {
+  const response = await fetch(`${baseUrl}/scenario-search/${encodeURIComponent(orgId)}?q=${encodeURIComponent(query)}`, {
+    headers: headers(accessToken),
+  });
+  return asJson(response);
 }

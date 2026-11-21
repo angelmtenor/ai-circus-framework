@@ -1,0 +1,223 @@
+/* The shared parameter controls (controls.tsx): range sliders over a histogram, option chips. */
+
+.range-control,
+.choice-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.55rem 0.7rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+
+.range-control--active,
+.choice-control--active {
+  border-color: var(--accent-border);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.range-control-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+}
+
+.range-control-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.range-control-values {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.range-control-bounds {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.range-control-reset {
+  font-size: 0.68rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.range-control-reset:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.range-control-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.range-histogram {
+  width: 100%;
+  height: 28px;
+  display: block;
+}
+
+.range-histogram rect.in {
+  fill: var(--accent);
+  opacity: 0.75;
+}
+
+.range-histogram rect.out {
+  fill: var(--dim);
+  opacity: 0.25;
+}
+
+/* Two native range inputs stacked on one track: only their thumbs take the pointer. */
+.range-slider {
+  position: relative;
+  height: 18px;
+}
+
+.range-slider-track,
+.range-slider-fill {
+  position: absolute;
+  top: 6px;
+  height: 6px;
+  border-radius: 999px;
+}
+
+.range-slider-track {
+  left: 0;
+  right: 0;
+  background: var(--panel-3);
+}
+
+.range-slider-fill {
+  background: var(--accent);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.range-slider input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.range-slider input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.range-slider input[type="range"]::-moz-range-track {
+  background: transparent;
+}
+
+.range-slider input[type="range"]::-webkit-slider-thumb {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.range-slider input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  cursor: grab;
+}
+
+/* The filter panel's grid of controls. */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.6rem;
+}
+
+.filter-grid .choice-control--wide {
+  grid-column: 1 / -1;
+}
+
+.filter-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.filter-summary strong {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* One number (NumberSlider): the slider fills up to its value. */
+.number-control-slider {
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--panel-3) var(--fill, 0%)) !important;
+}
+
+.number-control-slider::-webkit-slider-runnable-track {
+  background: transparent !important;
+}
+
+.number-control-slider::-moz-range-track {
+  background: transparent !important;
+}
+
+.number-control--disabled {
+  opacity: 0.55;
+}
+
+.number-control-input {
+  width: 6.5rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* One option (ChoiceSelect). */
+.choice-select select {
+  width: 100%;
+}
+
+.choice-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.choice-segmented button {
+  padding: 0.3rem 0.75rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.choice-segmented button:last-child {
+  border-right: none;
+}
+
+.choice-segmented button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}

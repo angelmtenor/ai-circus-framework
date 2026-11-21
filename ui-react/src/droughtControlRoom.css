@@ -1,0 +1,445 @@
+/* The drought control room (DroughtControlRoom.tsx). `--state` carries a plan state's colour. Static: no loops. */
+
+.drought-room {
+  gap: 14px;
+}
+
+.drought-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px 20px;
+}
+
+.drought-head h2 {
+  margin: 0 0 2px;
+}
+
+.drought-asof {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drought-asof-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.drought-asof-date {
+  font-family: var(--heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The four supply systems ──────────────────────────────────────────────── */
+
+.drought-systems {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 10px;
+}
+
+.drought-system {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--state);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--state) 10%, var(--panel)) 0%, var(--panel) 70%);
+}
+
+.drought-system--on {
+  border-color: var(--state);
+  box-shadow: 0 0 0 1px var(--state), 0 0 18px color-mix(in srgb, var(--state) 35%, transparent);
+}
+
+.drought-system-name {
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.drought-system-value {
+  font-family: var(--heading);
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.drought-system-meta {
+  font-size: 0.74rem;
+  color: var(--dim);
+}
+
+.drought-system-ahead {
+  display: flex;
+  gap: 10px;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.drought-system-ahead span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.drought-system-ahead i,
+.drought-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--state);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--state) 70%, transparent);
+}
+
+.drought-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  color: var(--state);
+  border: 1px solid var(--state);
+  background: color-mix(in srgb, var(--state) 12%, transparent);
+  white-space: nowrap;
+}
+
+/* ── Map, legend and replay ───────────────────────────────────────────────── */
+
+.drought-map-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drought-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.76rem;
+}
+
+.drought-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.drought-legend small {
+  color: var(--dim);
+}
+
+.drought-replay {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.drought-replay-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.drought-replay-buttons {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.drought-replay-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+}
+
+.drought-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.drought-segmented button {
+  padding: 0.3rem 0.75rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.drought-segmented button:last-child {
+  border-right: none;
+}
+
+.drought-segmented button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+/* ── Outlook and measures ─────────────────────────────────────────────────── */
+
+.drought-outlook-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.drought-outlook-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--dim);
+}
+
+.drought-savings {
+  min-width: 14rem;
+}
+
+.drought-savings b {
+  color: var(--accent);
+}
+
+.drought-cases {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.drought-case {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--state);
+  background: var(--panel-2);
+}
+
+.drought-case--main {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--state) 25%, transparent);
+}
+
+.drought-case-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.drought-case-value {
+  font-family: var(--heading);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.drought-thresholds {
+  margin-top: 6px;
+}
+
+.drought-prob {
+  display: inline-block;
+  vertical-align: middle;
+  width: 6rem;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+
+.drought-prob span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+.drought-prob--wide {
+  width: 100%;
+}
+
+.drought-optimise {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.drought-optimise > button {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drought-packages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drought-package {
+  display: grid;
+  grid-template-columns: 8.5rem 7rem 1fr 11rem;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+}
+
+.drought-package--chosen {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  box-shadow: var(--glow-accent-soft);
+}
+
+.drought-package-savings,
+.drought-package-p {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Data quality, bulletin ───────────────────────────────────────────────── */
+
+.drought-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.drought-row--on td {
+  background: var(--accent-bg);
+}
+
+.drought-quality-window {
+  margin-top: 12px;
+}
+
+.drought-quality-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.drought-quality-kinds button {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--dim);
+  cursor: pointer;
+}
+
+.drought-quality-kinds button.active {
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+}
+
+.drought-quality-kinds small {
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.drought-quality-window h4 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.drought-flags {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.drought-bulletin-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.drought-bulletin-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.drought-bulletin {
+  margin-top: 10px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  max-height: 32rem;
+  overflow: auto;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 760px) {
+  .drought-cases {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .drought-package {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.drought-bulletin h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.4rem;
+  text-shadow: none;
+}
+
+.drought-bulletin h2 {
+  font-size: 1.05rem;
+  margin: 1rem 0 0.4rem;
+}
+
+.drought-bulletin h3 {
+  font-size: 0.95rem;
+}
