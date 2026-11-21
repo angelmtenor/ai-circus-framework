@@ -25,6 +25,42 @@ credits:
   url: "https://catalog.data.gov/dataset/supply-chain-shipment-pricing-data"
   note: "PEPFAR/SCMS line items 2006-2015; fetched from pinned mirrors of the data.usaid.gov export (dataset a3rc-nmf6), SHA-256 verified"
 
+# The scenario told for someone with no context: the Overview tab and its guided demo (scenario_schema.StoryConfig).
+# Figures come from docs/scenarios/logistics.md.
+story:
+  headline: "Which shipments of HIV medicines will arrive late, and what would get them there on time?"
+  problem: >
+    A global health supply chain moves medicines and test kits to clinics in dozens of countries. A late delivery
+    means stock-outs where treatment cannot wait. Planners need to know, before shipping, which line items are at
+    risk, and which change (mode, route, planning earlier) would reduce that risk.
+  audience: ["Supply-chain planners", "Programme managers", "Procurement"]
+  today: >
+    Lead times from contracts and experience; delays are discovered when the client reports them.
+  with_ai: >
+    A late-delivery risk for every planned line item, explained, on a globe of the real routes, with what-ifs on the
+    choices a planner controls.
+  value:
+    - {value: "0.92", label: "ROC AUC, hold-out", note: "LightGBM, chosen over logistic regression (0.80) by cross-validation."}
+    - {value: "11.9 %", label: "Delivered late", note: "Median 12 days late, in the real history."}
+    - {value: "42", label: "Countries", note: "Real PEPFAR deliveries, 2006-2015."}
+  flow:
+    - {title: "Delivery history", kind: source, tab: data, text: "Real line items of USAID's PEPFAR supply chain: product, vendor, mode, origin, destination, dates."}
+    - {title: "Late-delivery model", kind: model, tab: model, text: "LightGBM with SHAP: which line items will reach the client after the scheduled date."}
+    - {title: "Lifeline Globe", kind: decision, tab: extra, text: "The routes on a globe, each shipment scored, with what-ifs on mode and planning."}
+    - {title: "Planner acts", kind: person, text: "Changes the mode, the route or the planning date for the items at risk."}
+  data_sources:
+    - {name: "USAID Supply Chain Shipment Pricing Data", kind: table, origin: public, provider: "USAID SCMS delivery history (data.gov)", url: "https://catalog.data.gov/dataset/supply-chain-shipment-pricing-data", license: "US public domain", feeds: "Every input and the label: delivered after the scheduled date.", period: "2006-2015", size: "9,949 line items"}
+  models:
+    - {model: main, question: "Will this planned shipment reach the country late?", used_by: "supply-chain planners"}
+  demo:
+    minutes: 6
+    steps:
+      - {title: "The question", tab: overview, show: "The headline and the flow.", say: "Late medicine means stock-outs. The question is which shipments, and what to change."}
+      - {title: "The globe", tab: extra, show: "Real routes from origin to destination, each shipment scored for late delivery.", say: "These are real deliveries of a global health programme, scored by a model that never saw them."}
+      - {title: "What would help", tab: extra, show: "Pick a risky shipment and change the mode or plan earlier: the risk moves live.", say: "The planner sees which lever actually reduces the risk."}
+      - {title: "Is it any good?", tab: model, section: insights, show: "Hold-out performance and the strongest drivers.", say: "Good separation on real data, and the drivers make operational sense."}
+      - {title: "Ask in plain words", tab: assistant, show: "The answer.", say: "The assistant answers from the model and the data.", ask: "How much does planning earlier reduce the risk of a late delivery?"}
+
 chat:
   context: >
     A late-delivery risk model for a global health supply chain: USAID's PEPFAR Supply
