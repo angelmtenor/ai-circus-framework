@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640 1442" width="1640" height="1442" font-family="Inter, 'Segoe UI', Arial, Helvetica, sans-serif" role="img" aria-label="AI Open Framework architecture, by layer">
+<rect width="1640" height="1442" fill="#050b16"/>
+<text x="40" y="44" font-size="24" font-weight="800" fill="#f3fbff">AI Open Framework: architecture</text>
+<text x="40" y="70" font-size="14" fill="#9fb7cc">Generated from libs/shared/src/ai_circus_shared/architecture_catalog.yaml · dashed = optional, switched on with its make target</text>
+<text x="658.0" y="100" font-size="13" fill="#dcecf7" text-anchor="middle">People in a browser · chat apps and MCP clients · model providers outside the cluster</text>
+<path d="M 658.0 106 L 658.0 118" stroke="#7d8fa3" stroke-width="2"/>
+<rect x="40" y="120" width="1236" height="266" rx="14" fill="#aa3bff" fill-opacity="0.05" stroke="#aa3bff" stroke-opacity="0.45"/>
+<text x="60" y="150" font-size="17" font-weight="700" fill="#aa3bff" letter-spacing="1.5">GATEWAYS AND GOVERNANCE</text>
+<rect x="60" y="168" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="192" font-size="15" font-weight="700" fill="#f3fbff">Traefik</text>
+<text x="72" y="212" font-size="12" fill="#7fa3c9">Traefik ingress</text>
+<rect x="302" y="168" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="314" y="192" font-size="15" font-weight="700" fill="#f3fbff">Keycloak</text>
+<text x="314" y="212" font-size="12" fill="#7fa3c9">Keycloak, OIDC</text>
+<rect x="544" y="168" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="556" y="192" font-size="15" font-weight="700" fill="#f3fbff">platform-registry</text>
+<text x="556" y="212" font-size="12" fill="#7fa3c9">FastAPI · SQLAlchemy</text>
+<rect x="786" y="168" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="798" y="192" font-size="15" font-weight="700" fill="#f3fbff">llm-gateway</text>
+<text x="798" y="212" font-size="12" fill="#7fa3c9">LiteLLM proxy · sentence-</text>
+<text x="798" y="228" font-size="12" fill="#7fa3c9">transformers</text>
+<rect x="1028" y="168" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1040" y="192" font-size="15" font-weight="700" fill="#f3fbff">MCP server kit (crm-mcp)</text>
+<text x="1040" y="212" font-size="12" fill="#7fa3c9">libs/mcp-kit · FastMCP</text>
+<text x="1246" y="247" font-size="10" fill="#aa3bff" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="60" y="270" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="72" y="294" font-size="15" font-weight="700" fill="#f3fbff">Open Policy Agent</text>
+<text x="72" y="314" font-size="12" fill="#7fa3c9">OPA, Rego</text>
+<text x="278" y="349" font-size="10" fill="#aa3bff" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="302" y="270" width="228" height="88" rx="10" fill="#0b1224" stroke="#aa3bff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="314" y="294" font-size="15" font-weight="700" fill="#f3fbff">data-platform-manager</text>
+<text x="314" y="314" font-size="12" fill="#7fa3c9">FastAPI · Kubernetes API</text>
+<rect x="40" y="410" width="1236" height="266" rx="14" fill="#33c7ff" fill-opacity="0.05" stroke="#33c7ff" stroke-opacity="0.45"/>
+<text x="60" y="440" font-size="17" font-weight="700" fill="#33c7ff" letter-spacing="1.5">CONSUMPTION: AI, BI AND GENAI</text>
+<rect x="60" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="482" font-size="15" font-weight="700" fill="#f3fbff">ui-react</text>
+<text x="72" y="502" font-size="12" fill="#7fa3c9">React · Vite · CopilotKit · AG-UI</text>
+<rect x="302" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="314" y="482" font-size="15" font-weight="700" fill="#f3fbff">prediction</text>
+<text x="314" y="502" font-size="12" fill="#7fa3c9">FastAPI · scikit-learn, LightGBM,</text>
+<text x="314" y="518" font-size="12" fill="#7fa3c9">SHAP</text>
+<rect x="544" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="556" y="482" font-size="15" font-weight="700" fill="#f3fbff">assistant</text>
+<text x="556" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · AG-UI</text>
+<rect x="786" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="798" y="482" font-size="15" font-weight="700" fill="#f3fbff">rag-agent</text>
+<text x="798" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · Qdrant · MCP</text>
+<rect x="1028" y="458" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="1040" y="482" font-size="15" font-weight="700" fill="#f3fbff">form-agent</text>
+<text x="1040" y="502" font-size="12" fill="#7fa3c9">FastAPI · LangChain · ReportLab</text>
+<rect x="60" y="560" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="584" font-size="15" font-weight="700" fill="#f3fbff">agui-voice</text>
+<text x="72" y="604" font-size="12" fill="#7fa3c9">FastAPI · Pipecat · Whisper, Piper</text>
+<rect x="302" y="560" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="314" y="584" font-size="15" font-weight="700" fill="#f3fbff">dl-inference</text>
+<text x="314" y="604" font-size="12" fill="#7fa3c9">FastAPI · ONNX Runtime</text>
+<text x="520" y="639" font-size="10" fill="#33c7ff" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="544" y="560" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="556" y="584" font-size="15" font-weight="700" fill="#f3fbff">Superset</text>
+<text x="556" y="604" font-size="12" fill="#7fa3c9">Apache Superset, dashboards as</text>
+<text x="556" y="620" font-size="12" fill="#7fa3c9">code</text>
+<text x="762" y="639" font-size="10" fill="#33c7ff" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="786" y="560" width="228" height="88" rx="10" fill="#0b1224" stroke="#33c7ff" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="798" y="584" font-size="15" font-weight="700" fill="#f3fbff">Open WebUI · LibreChat</text>
+<text x="798" y="604" font-size="12" fill="#7fa3c9">Open WebUI · LibreChat (MongoDB)</text>
+<text x="1004" y="639" font-size="10" fill="#33c7ff" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="40" y="700" width="1236" height="470" rx="14" fill="#22d3c8" fill-opacity="0.05" stroke="#22d3c8" stroke-opacity="0.45"/>
+<text x="60" y="730" font-size="17" font-weight="700" fill="#22d3c8" letter-spacing="1.5">DATA</text>
+<rect x="60" y="748" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="772" font-size="15" font-weight="700" fill="#f3fbff">SeaweedFS</text>
+<text x="72" y="792" font-size="12" fill="#7fa3c9">S3-compatible object storage</text>
+<rect x="302" y="748" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="314" y="772" font-size="15" font-weight="700" fill="#f3fbff">PostgreSQL</text>
+<text x="314" y="792" font-size="12" fill="#7fa3c9">PostgreSQL</text>
+<rect x="544" y="748" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="556" y="772" font-size="15" font-weight="700" fill="#f3fbff">Valkey</text>
+<text x="556" y="792" font-size="12" fill="#7fa3c9">Valkey (Redis protocol)</text>
+<rect x="786" y="748" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="798" y="772" font-size="15" font-weight="700" fill="#f3fbff">Qdrant</text>
+<text x="798" y="792" font-size="12" fill="#7fa3c9">Qdrant vector database</text>
+<rect x="1028" y="748" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="1040" y="772" font-size="15" font-weight="700" fill="#f3fbff">ClickHouse</text>
+<text x="1040" y="792" font-size="12" fill="#7fa3c9">ClickHouse</text>
+<rect x="60" y="850" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="874" font-size="15" font-weight="700" fill="#f3fbff">etl-tabular</text>
+<text x="72" y="894" font-size="12" fill="#7fa3c9">k8s Job · pandas, pyarrow</text>
+<rect x="302" y="850" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="314" y="874" font-size="15" font-weight="700" fill="#f3fbff">training</text>
+<text x="314" y="894" font-size="12" fill="#7fa3c9">k8s Job · scikit-learn, LightGBM,</text>
+<text x="314" y="910" font-size="12" fill="#7fa3c9">SHAP</text>
+<rect x="544" y="850" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="556" y="874" font-size="15" font-weight="700" fill="#f3fbff">etl-vectorize</text>
+<text x="556" y="894" font-size="12" fill="#7fa3c9">k8s Job · chunking, embeddings</text>
+<rect x="786" y="850" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="798" y="874" font-size="15" font-weight="700" fill="#f3fbff">dl-training</text>
+<text x="798" y="894" font-size="12" fill="#7fa3c9">k8s Job or host GPU · PyTorch,</text>
+<text x="798" y="910" font-size="12" fill="#7fa3c9">exported to ONNX</text>
+<text x="1004" y="929" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1028" y="850" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1040" y="874" font-size="15" font-weight="700" fill="#f3fbff">Kafka</text>
+<text x="1040" y="894" font-size="12" fill="#7fa3c9">Kafka 3.9 KRaft</text>
+<text x="1246" y="929" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="60" y="952" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="72" y="976" font-size="15" font-weight="700" fill="#f3fbff">data-ingest</text>
+<text x="72" y="996" font-size="12" fill="#7fa3c9">FastAPI · consumers</text>
+<text x="278" y="1031" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="302" y="952" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="314" y="976" font-size="15" font-weight="700" fill="#f3fbff">data-transform</text>
+<text x="314" y="996" font-size="12" fill="#7fa3c9">dbt · CronJob</text>
+<text x="520" y="1031" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="544" y="952" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="556" y="976" font-size="15" font-weight="700" fill="#f3fbff">Dagster</text>
+<text x="556" y="996" font-size="12" fill="#7fa3c9">Dagster</text>
+<text x="762" y="1031" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="786" y="952" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="798" y="976" font-size="15" font-weight="700" fill="#f3fbff">data-api</text>
+<text x="798" y="996" font-size="12" fill="#7fa3c9">FastAPI · REST, SSE, MCP</text>
+<text x="1004" y="1031" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1028" y="952" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1040" y="976" font-size="15" font-weight="700" fill="#f3fbff">OpenMetadata</text>
+<text x="1040" y="996" font-size="12" fill="#7fa3c9">OpenMetadata · Elasticsearch</text>
+<text x="1246" y="1031" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="60" y="1054" width="228" height="88" rx="10" fill="#0b1224" stroke="#22d3c8" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="72" y="1078" font-size="15" font-weight="700" fill="#f3fbff">crm-api</text>
+<text x="72" y="1098" font-size="12" fill="#7fa3c9">FastAPI</text>
+<text x="278" y="1133" font-size="10" fill="#22d3c8" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="40" y="1194" width="1236" height="164" rx="14" fill="#ffcf4d" fill-opacity="0.05" stroke="#ffcf4d" stroke-opacity="0.45"/>
+<text x="60" y="1224" font-size="17" font-weight="700" fill="#ffcf4d" letter-spacing="1.5">INFRASTRUCTURE</text>
+<rect x="60" y="1242" width="228" height="88" rx="10" fill="#0b1224" stroke="#ffcf4d" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="72" y="1266" font-size="15" font-weight="700" fill="#f3fbff">Kubernetes (k3s)</text>
+<text x="72" y="1286" font-size="12" fill="#7fa3c9">k3s · k3d on Docker for a laptop</text>
+<rect x="302" y="1242" width="228" height="88" rx="10" fill="#0b1224" stroke="#ffcf4d" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="314" y="1266" font-size="15" font-weight="700" fill="#f3fbff">GPU node</text>
+<text x="314" y="1286" font-size="12" fill="#7fa3c9">NVIDIA device plugin, host GPU</text>
+<text x="520" y="1321" font-size="10" fill="#ffcf4d" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="544" y="1242" width="228" height="88" rx="10" fill="#0b1224" stroke="#ffcf4d" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="556" y="1266" font-size="15" font-weight="700" fill="#f3fbff">vLLM</text>
+<text x="556" y="1286" font-size="12" fill="#7fa3c9">vLLM, OpenAI-compatible</text>
+<text x="762" y="1321" font-size="10" fill="#ffcf4d" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="786" y="1242" width="228" height="88" rx="10" fill="#0b1224" stroke="#ffcf4d" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="798" y="1266" font-size="15" font-weight="700" fill="#f3fbff">LLM providers</text>
+<text x="798" y="1286" font-size="12" fill="#7fa3c9">OpenAI · Anthropic · Google · Groq</text>
+<text x="798" y="1302" font-size="12" fill="#7fa3c9">· DeepSeek · Ollama</text>
+<text x="1004" y="1321" font-size="10" fill="#ffcf4d" text-anchor="end" letter-spacing="0.8">OUTSIDE THE CLUSTER</text>
+<rect x="1300" y="120" width="300" height="1238" rx="14" fill="#ff8fd6" fill-opacity="0.05" stroke="#ff8fd6" stroke-opacity="0.45"/>
+<text x="1320" y="150" font-size="17" font-weight="700" fill="#ff8fd6" letter-spacing="1.5">OBSERVABILITY</text>
+<rect x="1320" y="168" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="1332" y="192" font-size="15" font-weight="700" fill="#f3fbff">Langfuse</text>
+<text x="1332" y="212" font-size="12" fill="#7fa3c9">Langfuse v4 (web, worker)</text>
+<rect x="1320" y="270" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4"/>
+<text x="1332" y="294" font-size="15" font-weight="700" fill="#f3fbff">MLflow</text>
+<text x="1332" y="314" font-size="12" fill="#7fa3c9">MLflow</text>
+<rect x="1320" y="372" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1332" y="396" font-size="15" font-weight="700" fill="#f3fbff">OpenTelemetry collector</text>
+<text x="1332" y="416" font-size="12" fill="#7fa3c9">OpenTelemetry collector</text>
+<text x="1570" y="451" font-size="10" fill="#ff8fd6" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1320" y="474" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1332" y="498" font-size="15" font-weight="700" fill="#f3fbff">VictoriaMetrics</text>
+<text x="1332" y="518" font-size="12" fill="#7fa3c9">VictoriaMetrics · vmalert</text>
+<text x="1570" y="553" font-size="10" fill="#ff8fd6" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1320" y="576" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1332" y="600" font-size="15" font-weight="700" fill="#f3fbff">Loki</text>
+<text x="1332" y="620" font-size="12" fill="#7fa3c9">Grafana Loki</text>
+<text x="1570" y="655" font-size="10" fill="#ff8fd6" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1320" y="678" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1332" y="702" font-size="15" font-weight="700" fill="#f3fbff">Tempo</text>
+<text x="1332" y="722" font-size="12" fill="#7fa3c9">Grafana Tempo</text>
+<text x="1570" y="757" font-size="10" fill="#ff8fd6" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<rect x="1320" y="780" width="260" height="88" rx="10" fill="#0b1224" stroke="#ff8fd6" stroke-opacity="0.75" stroke-width="1.4" stroke-dasharray="6 4"/>
+<text x="1332" y="804" font-size="15" font-weight="700" fill="#f3fbff">Grafana</text>
+<text x="1332" y="824" font-size="12" fill="#7fa3c9">Grafana</text>
+<text x="1570" y="859" font-size="10" fill="#ff8fd6" text-anchor="end" letter-spacing="0.8">OPTIONAL</text>
+<text x="40" y="1416" font-size="12" fill="#7fa3c9">Read bottom-up: the cluster, the data, what people use, and the doors every request passes. Every service checks the caller's token and the tenant's entitlement itself; every model call goes through llm-gateway.</text>
+</svg>

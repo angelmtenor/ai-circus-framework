@@ -911,6 +911,67 @@ def test_tutorial_is_tabular_ml_only() -> None:
         _with(titanic, kind="conversational_rag", ui_extras=None)  # a tabular tab fails first otherwise
 
 
+# --- story: the scenario told for someone with no context (Overview tab) ---
+
+
+def _story(**changes: object) -> dict:  # type: ignore[type-arg]
+    story = {
+        "headline": "Who would have survived?",
+        "problem": "A historian asks which passengers had a chance.",
+        "flow": [
+            {"title": "Passenger list", "text": "One row per passenger.", "kind": "source", "tab": "data"},
+            {"title": "Model", "text": "Scores each passenger.", "kind": "model", "tab": "model"},
+            {"title": "Reader", "text": "Reads the explanation.", "kind": "person"},
+        ],
+        "data_sources": [
+            {
+                "name": "Passenger list",
+                "kind": "table",
+                "origin": "public",
+                "provider": "Kaggle",
+                "feeds": "Every feature.",
+            }
+        ],
+        "models": [{"model": "main", "question": "Did this passenger survive?"}],
+        "demo": {
+            "minutes": 5,
+            "steps": [
+                {"title": "Start", "tab": "overview", "show": "The flow.", "say": "This is the story."},
+                {"title": "The ship", "tab": "extra", "show": "The deck.", "say": "Where they slept.", "ask": "Why?"},
+                {"title": "Tutorial", "tab": "tutorial", "show": "Step one.", "say": "How it was built."},
+            ],
+        },
+    }
+    return {**story, **changes}
+
+
+def test_a_story_links_only_to_tabs_and_models_the_scenario_has() -> None:
+    titanic = _titanic()
+    story = _with(titanic, story=_story()).story
+    assert story is not None and story.demo is not None and story.demo.steps[1].ask == "Why?"
+    bad_step = {"title": "Payments", "tab": "extra:payments", "show": "x", "say": "y"}
+    with pytest.raises(ValidationError, match="not one of this scenario's tabs"):
+        _with(titanic, story=_story(demo={"minutes": 5, "steps": [bad_step, bad_step]}))
+    with pytest.raises(ValidationError, match="not one of this scenario's tabs"):
+        _with(titanic, tutorial=None, story=_story())  # the demo opens the tutorial
+    on_data = {"title": "Insights", "tab": "data", "section": "insights", "show": "x", "say": "y"}
+    with pytest.raises(ValidationError, match="applies to a model tab only"):
+        _with(titanic, story=_story(demo={"minutes": 5, "steps": [on_data, on_data]}))
+    with pytest.raises(ValidationError, match="neither 'main' nor an extra_models id"):
+        _with(titanic, story=_story(models=[{"model": "mules", "question": "Is this a mule?"}]))
+
+
+def test_a_story_is_tabular_ml_only_and_bounded() -> None:
+    titanic = _titanic()
+    with pytest.raises(ValidationError, match="only available for kind='tabular_ml'"):
+        _with(titanic, kind="conversational_rag", ui_extras=None, tutorial=None, story=_story())
+    with pytest.raises(ValidationError):
+        _with(titanic, story=_story(flow=_story()["flow"][:2]))  # a flow has at least three boxes
+    source = {**_story()["data_sources"][0], "origin": "leaked"}
+    with pytest.raises(ValidationError):
+        _with(titanic, story=_story(data_sources=[source]))
+
+
 # --- free-text features (toxic_leadership) ---
 
 

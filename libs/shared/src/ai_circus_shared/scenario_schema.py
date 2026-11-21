@@ -2322,6 +2322,90 @@ def base_scenario_slug(address: str) -> str:
     return address.split(MODEL_ADDRESS_SEPARATOR, 1)[0]
 
 
+class StoryFlowStep(BaseModel):
+    """One box of a scenario story's flow diagram, read left to right: where the data comes from, what
+    checks it, what the model does, what is decided and by whom. `tab` (see `StoryConfig`) makes the box a
+    link to the workspace tab that shows that step."""
+
+    title: str = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=300)
+    kind: Literal["source", "quality", "rules", "model", "decision", "person", "output", "assistant"]
+    tab: str | None = None
+
+
+class StoryDataSource(BaseModel):
+    """Where one input of the scenario comes from, shown on its Overview so provenance is never hidden.
+
+    `origin`: `synthetic` (generated for this repository; `provider` names the generator), `public` (a published
+    dataset; `url` and `license` say whose), `official` (official texts such as a regulation)."""
+
+    name: str = Field(min_length=1, max_length=60)
+    kind: Literal["table", "series", "stream", "messages", "network", "documents", "images"]
+    origin: Literal["synthetic", "public", "official"]
+    provider: str = Field(min_length=1, max_length=200)
+    feeds: str = Field(min_length=1, max_length=300)
+    url: str | None = None
+    license: str | None = Field(default=None, max_length=120)
+    period: str | None = Field(default=None, max_length=60)
+    size: str | None = Field(default=None, max_length=80)
+
+
+class StoryValue(BaseModel):
+    """One headline figure of what the scenario changes (`value` short, e.g. "180 days")."""
+
+    label: str = Field(min_length=1, max_length=60)
+    value: str = Field(min_length=1, max_length=24)
+    note: str | None = Field(default=None, max_length=160)
+
+
+class StoryModel(BaseModel):
+    """The business question one model of the scenario answers: `model` is `main` or an `extra_models` id."""
+
+    model: str
+    question: str = Field(min_length=1, max_length=200)
+    used_by: str | None = Field(default=None, max_length=120)
+
+
+class StoryDemoStep(BaseModel):
+    """One step of the presenter's script: the tab to open (on a model tab, `section` picks Predictions or
+    Insights), what to point at, what to say, and optionally a question to ask the assistant there."""
+
+    title: str = Field(min_length=1, max_length=60)
+    tab: str
+    section: Literal["predictions", "insights"] | None = None
+    show: str = Field(min_length=1, max_length=400)
+    say: str = Field(min_length=1, max_length=500)
+    ask: str | None = Field(default=None, max_length=200)
+
+
+class StoryDemo(BaseModel):
+    """A guided demo of the scenario, run from its Overview: a stepper walks the tabs in this order."""
+
+    minutes: int = Field(ge=1, le=60)
+    steps: list[StoryDemoStep] = Field(min_length=2, max_length=12)
+
+
+class StoryConfig(BaseModel):
+    """The scenario told for someone with no context — rendered as its Overview tab (tabular_ml for now).
+
+    Pure content, like `tutorial`: the problem and who decides, today against with this, a flow diagram whose
+    boxes link to the tabs, where every input comes from, the question each model answers, and a presenter's
+    demo script. A tab is `overview`, `data`, `assistant` (opens the chat), `tutorial`, `model` / `extra` (the
+    main model and its `ui_extras` tab) or `model:<id>` / `extra:<id>` (an extra model and its tab).
+    """
+
+    headline: str = Field(min_length=1, max_length=120)
+    problem: str = Field(min_length=1, max_length=600)
+    audience: list[str] = Field(default=[], max_length=4)
+    today: str | None = Field(default=None, max_length=400)
+    with_ai: str | None = Field(default=None, max_length=400)
+    value: list[StoryValue] = Field(default=[], max_length=4)
+    flow: list[StoryFlowStep] = Field(min_length=3, max_length=7)
+    data_sources: list[StoryDataSource] = Field(min_length=1, max_length=8)
+    models: list[StoryModel] = Field(default=[], max_length=6)
+    demo: StoryDemo | None = None
+
+
 class ExtraModel(BaseModel):
     """One more model of a `tabular_ml` scenario, next to its main `model:` (docs/adr/0018).
 
@@ -2383,6 +2467,8 @@ class ScenarioDefinition(BaseModel):
     analysis_toolset: Literal["drought_watch"] | None = None
     # tabular_ml only — adds a guided "Tutorial" tab (see TutorialConfig).
     tutorial: TutorialConfig | None = None
+    # tabular_ml only (for now) — the scenario told for someone with no context: its Overview tab (StoryConfig).
+    story: StoryConfig | None = None
     # tabular_ml with a text feature only — an LLM rubric check (see RubricCheckConfig).
     rubric_check: RubricCheckConfig | None = None
     # conversational_rag only — its MCP door and the doors its chat may use (see McpConfig).
@@ -2550,7 +2636,7 @@ class ScenarioDefinition(BaseModel):
     def model_views(self) -> dict[str, ScenarioDefinition]:
         """Every model of this scenario by address, as a complete definition: the main model is the
         scenario itself, an extra one the scenario with that model's blocks in place of the main ones.
-        Tutorials, rubric checks and documents belong to the scenario, so a view has none.
+        Tutorials, stories, rubric checks and documents belong to the scenario, so a view has none.
         """
         views: dict[str, ScenarioDefinition] = {self.slug: self}
         fields = {name: getattr(self, name) for name in type(self).model_fields}
@@ -2569,6 +2655,7 @@ class ScenarioDefinition(BaseModel):
                     "ui_extras": extra.ui_extras,
                     "extra_models": [],
                     "tutorial": None,
+                    "story": None,
                     "rubric_check": None,
                     "documents": None,
                     "vector_store": None,
@@ -3102,6 +3189,39 @@ class ScenarioDefinition(BaseModel):
             return self
         if self.dataset is None or not self.dataset.text_columns():
             raise ValueError("model.text_challenger requires a `type: text` feature in dataset.feature_schema.")
+        return self
+
+    @model_validator(mode="after")
+    def _story_references_real_tabs_and_models(self) -> ScenarioDefinition:
+        """A story is tabular_ml-only for now; every tab it links to must exist in this scenario's
+        workspace, and every model it describes must be one of its models."""
+        story = self.story
+        if story is None:
+            return self
+        if self.kind != "tabular_ml":
+            raise ValueError("`story` is only available for kind='tabular_ml' scenarios (for now).")
+        extras = {m.id: m for m in self.extra_models}
+        tabs = {"overview", "data", "assistant", "model"}
+        if self.tutorial is not None:
+            tabs.add("tutorial")
+        if self.ui_extras is not None:
+            tabs.add("extra")
+        for model_id, extra in extras.items():
+            tabs.add(f"model:{model_id}")
+            if extra.ui_extras is not None:
+                tabs.add(f"extra:{model_id}")
+        linked = [(f"flow step {step.title!r}", step.tab) for step in story.flow if step.tab is not None]
+        if story.demo is not None:
+            linked += [(f"demo step {step.title!r}", step.tab) for step in story.demo.steps]
+        for where, tab in linked:
+            if tab not in tabs:
+                raise ValueError(f"story {where}: tab {tab!r} is not one of this scenario's tabs {sorted(tabs)}.")
+        for step in story.demo.steps if story.demo is not None else []:
+            if step.section is not None and not step.tab.startswith("model"):
+                raise ValueError(f"story demo step {step.title!r}: `section` applies to a model tab only.")
+        for model in story.models:
+            if model.model != "main" and model.model not in extras:
+                raise ValueError(f"story model {model.model!r} is neither 'main' nor an extra_models id.")
         return self
 
     @model_validator(mode="after")

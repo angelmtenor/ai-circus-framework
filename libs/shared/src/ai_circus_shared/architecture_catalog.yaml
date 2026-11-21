@@ -1,0 +1,584 @@
+# The architecture catalog: every component of the framework, the layer it belongs to, what it does, what it talks to,
+# and how a request travels through them. ONE source (ai_circus_shared.architecture):
+#   - scripts/generate_architecture.py draws docs/architecture/architecture.svg and writes ui-react's copy
+#     (ui-react/src/generated/architecture.json) for the app's Architecture page;
+#   - platform-registry derives each scenario's subset from its scenario.yaml (`scenario_components`) and serves it;
+#   - a test fails when a workload under k8s/ or observability/bundle/ is missing here, or a generated file drifted.
+#
+# Layers, read bottom-up like the platform is built: infrastructure, data, consumption (AI, BI, GenAI), then the
+# gateways and governance every request passes through; observability runs alongside all of them.
+# `profile`: core (always on with `make k3s-all`) or optional (`enable` says how). `workloads`: the k8s names.
+
+layers:
+  - id: gateway
+    title: "Gateways and governance"
+    text: "Every door into the platform and every check on the way: the ingress, sign-in, entitlements, the gateway every model and agent call passes, and the admin control plane."
+  - id: consumption
+    title: "Consumption: AI, BI and GenAI"
+    text: "What people use: the web app, the model and chat services one instance per scenario kind, dashboards and chat UIs."
+  - id: data
+    title: "Data"
+    text: "Where data lives and how it gets there: object storage, databases and vectors, the jobs that clean data, train models and index documents, and the optional streaming data platform."
+  - id: infra
+    title: "Infrastructure"
+    text: "The cluster everything runs on: Kubernetes (k3s, or k3d on a laptop), its volumes, and an optional GPU node for local models."
+  - id: observability
+    title: "Observability"
+    text: "Metrics, logs and traces of every service, plus the AI-specific monitors: a trace per LLM call and a record per training run."
+
+components:
+  # ── Infrastructure ────────────────────────────────────────────────────────────────────────────────────────────
+  - id: k3s
+    name: "Kubernetes (k3s)"
+    layer: infra
+    kind: platform
+    tech: "k3s · k3d on Docker for a laptop"
+    role: "Runs every workload as a pod in the ai-circus namespace, with requests, limits, probes and non-root containers."
+    profile: core
+    source: "k8s/"
+  - id: gpu
+    name: "GPU node"
+    layer: infra
+    kind: platform
+    tech: "NVIDIA device plugin, host GPU"
+    role: "Lends the host GPU to deep-learning training, local models (vLLM) and GPU telemetry."
+    profile: optional
+    enable: "make k3s-cluster K3S_GPU=1 · make k3s-gpu-telemetry"
+    source: "infra/k3s-gpu/"
+  - id: vllm
+    name: "vLLM"
+    layer: infra
+    kind: model
+    tech: "vLLM, OpenAI-compatible"
+    role: "Serves an open-weights LLM on the GPU behind llm-gateway, so a model can run without a cloud provider."
+    profile: optional
+    enable: "make k3s-vllm-up"
+    workloads: [vllm]
+    adr: [17]
+    talks_to:
+      - {to: gpu, label: "runs on"}
+  - id: llm-providers
+    name: "LLM providers"
+    layer: infra
+    kind: external
+    tech: "OpenAI · Anthropic · Google · Groq · DeepSeek · Ollama"
+    role: "The models themselves, outside the cluster. Only llm-gateway ever calls them."
+    profile: external
+
+  # ── Data ──────────────────────────────────────────────────────────────────────────────────────────────────────
+  - id: seaweedfs
+    name: "SeaweedFS"
+    layer: data
+    kind: store
+    tech: "S3-compatible object storage"
+    role: "Datasets, trained models, documents, MLflow artifacts, the data platform's landing zone and Iceberg lake, every key prefixed by tenant."
+    profile: core
+    workloads: [seaweedfs]
+  - id: postgres
+    name: "PostgreSQL"
+    layer: data
+    kind: store
+    tech: "PostgreSQL"
+    role: "Keycloak, tenants and entitlements, chat history, form submissions, Langfuse and MLflow metadata, and the data platform's bronze and marts."
+    profile: core
+    workloads: [postgres]
+  - id: valkey
+    name: "Valkey"
+    layer: data
+    kind: store
+    tech: "Valkey (Redis protocol)"
+    role: "Cache: sessions, rate-limit and budget counters of llm-gateway, Langfuse's queue."
+    profile: core
+    workloads: [valkey]
+  - id: qdrant
+    name: "Qdrant"
+    layer: data
+    kind: store
+    tech: "Qdrant vector database"
+    role: "One vector collection per scenario and tenant: the passages RAG and form assistants search."
+    profile: core
+    workloads: [qdrant]
+  - id: clickhouse
+    name: "ClickHouse"
+    layer: data
+    kind: store
+    tech: "ClickHouse"
+    role: "Langfuse's trace store, and the data platform's analytical marts on the analytics tier."
+    profile: core
+    workloads: [clickhouse]
+  - id: etl-tabular
+    name: "etl-tabular"
+    layer: data
+    kind: job
+    tech: "k8s Job · pandas, pyarrow"
+    role: "Cleans each tabular scenario's dataset, applies its business rules and data-quality policy, and writes the processed copy."
+    profile: core
+    enable: "make k3s-pipeline"
+    workloads: [etl-tabular]
+    talks_to:
+      - {to: seaweedfs, label: "reads raw, writes processed"}
+  - id: training
+    name: "training"
+    layer: data
+    kind: job
+    tech: "k8s Job · scikit-learn, LightGBM, SHAP"
+    role: "Trains every candidate, picks the model by its metric (simpler wins within a margin), writes the model, its card and out-of-fold scores."
+    profile: core
+    enable: "make k3s-pipeline"
+    workloads: [training]
+    talks_to:
+      - {to: seaweedfs, label: "reads data, writes the model"}
+      - {to: mlflow, label: "logs the run"}
+      - {to: llm-gateway, label: "text embeddings (challenger)"}
+  - id: etl-vectorize
+    name: "etl-vectorize"
+    layer: data
+    kind: job
+    tech: "k8s Job · chunking, embeddings"
+    role: "Chunks each scenario's documents, embeds them through llm-gateway and writes them to the tenant's Qdrant collection."
+    profile: core
+    enable: "make k3s-vectorize"
+    workloads: [etl-vectorize]
+    talks_to:
+      - {to: seaweedfs, label: "reads documents"}
+      - {to: llm-gateway, label: "embeddings"}
+      - {to: qdrant, label: "writes vectors"}
+  - id: dl-training
+    name: "dl-training"
+    layer: data
+    kind: job
+    tech: "k8s Job or host GPU · PyTorch, exported to ONNX"
+    role: "Fine-tunes the deep-learning scenarios (NLP, computer vision, anomaly detection) and exports ONNX models."
+    profile: optional
+    enable: "make k3s-dl-train SCENARIO=<slug>"
+    workloads: [__JOB_NAME__]
+    talks_to:
+      - {to: seaweedfs, label: "images and models"}
+      - {to: gpu, label: "trains on"}
+  - id: kafka
+    name: "Kafka"
+    layer: data
+    kind: store
+    tech: "Kafka 3.9 KRaft"
+    role: "The event backbone of a data product: a topic per contract and tenant, fed by its simulator and by change capture."
+    profile: optional
+    enable: "make k3s-data-core-up"
+    workloads: [kafka]
+    adr: [3]
+  - id: data-ingest
+    name: "data-ingest"
+    layer: data
+    kind: service
+    tech: "FastAPI · consumers"
+    role: "Validates every record against its contract, upserts it idempotently into bronze, quarantines what fails, archives to the Iceberg lake and keeps the live aggregates."
+    profile: optional
+    enable: "make k3s-data-core-up"
+    workloads: [data-ingest]
+    adr: [4, 12]
+    talks_to:
+      - {to: kafka, label: "consumes"}
+      - {to: postgres, label: "bronze"}
+      - {to: seaweedfs, label: "landing files, Iceberg lake"}
+  - id: data-transform
+    name: "data-transform"
+    layer: data
+    kind: job
+    tech: "dbt · CronJob"
+    role: "Builds silver and gold from bronze with tested dbt models; the marts the dashboards and the API read."
+    profile: optional
+    enable: "make k3s-data-core-up"
+    workloads: [data-transform]
+    adr: [6]
+    talks_to:
+      - {to: postgres, label: "bronze to marts"}
+      - {to: clickhouse, label: "analytical marts"}
+  - id: dagster
+    name: "Dagster"
+    layer: data
+    kind: service
+    tech: "Dagster"
+    role: "Orchestrates the transformations with sensors, lineage and checks on the analytics tier."
+    profile: optional
+    enable: "make k3s-data-analytics-up"
+    workloads: [dagster]
+    adr: [6]
+    talks_to:
+      - {to: data-transform, label: "runs"}
+  - id: data-api
+    name: "data-api"
+    layer: data
+    kind: service
+    tech: "FastAPI · REST, SSE, MCP"
+    role: "The governed door to a data product: records, search, metrics, read-only SQL and live events, filtered by tenant first, then the role's rows and masks."
+    profile: optional
+    enable: "make k3s-data-core-up"
+    workloads: [data-api]
+    adr: [7, 8, 19]
+    talks_to:
+      - {to: postgres, label: "bronze and marts"}
+      - {to: clickhouse, label: "analytical marts"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: openmetadata
+    name: "OpenMetadata"
+    layer: data
+    kind: service
+    tech: "OpenMetadata · Elasticsearch"
+    role: "The data catalogue: owners, lineage and tests of every dataset, kept in sync by a Job."
+    profile: optional
+    enable: "make k3s-data-governance-up"
+    workloads: [openmetadata, om-search, catalog-sync]
+    adr: [10]
+    talks_to:
+      - {to: postgres, label: "reads metadata"}
+      - {to: kafka, label: "reads topics"}
+  - id: crm-api
+    name: "crm-api"
+    layer: data
+    kind: service
+    tech: "FastAPI"
+    role: "An example business API (customers of the shops) that an MCP server is put in front of, with its own token audience."
+    profile: optional
+    enable: "make k3s-mcp-examples-up"
+    workloads: [crm-api]
+    adr: [22]
+
+  # ── Consumption: AI, BI and GenAI ─────────────────────────────────────────────────────────────────────────────
+  - id: ui-react
+    name: "ui-react"
+    layer: consumption
+    kind: ui
+    tech: "React · Vite · CopilotKit · AG-UI"
+    role: "The web app: the scenario gallery, generic tabs driven by each scenario.yaml, the showpiece tabs, chat, voice, Settings and the admin Platform page."
+    profile: core
+    workloads: [ui-react]
+    talks_to:
+      - {to: traefik, label: "every call"}
+      - {to: keycloak, label: "sign-in (OIDC, PKCE)"}
+  - id: prediction
+    name: "prediction"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · scikit-learn, LightGBM, SHAP"
+    role: "Serves every tabular model: predictions with SHAP, forecasts and what-ifs, recommendations, the dataset sample and the model card, per tenant."
+    profile: core
+    workloads: [prediction]
+    talks_to:
+      - {to: seaweedfs, label: "loads models at start-up"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: assistant
+    name: "assistant"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · LangChain · AG-UI"
+    role: "The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure."
+    profile: core
+    workloads: [assistant]
+    talks_to:
+      - {to: llm-gateway, label: "every model call"}
+      - {to: prediction, label: "model tools"}
+      - {to: qdrant, label: "document search"}
+      - {to: data-api, label: "data tools"}
+      - {to: postgres, label: "chat history"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: rag-agent
+    name: "rag-agent"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · LangChain · Qdrant · MCP"
+    role: "Answers questions grounded in a scenario's documents (RAG and GraphRAG), citing every passage, and serves them to MCP clients."
+    profile: core
+    workloads: [rag-agent]
+    adr: [19]
+    talks_to:
+      - {to: qdrant, label: "retrieves passages"}
+      - {to: llm-gateway, label: "model calls, query embeddings"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: form-agent
+    name: "form-agent"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · LangChain · ReportLab"
+    role: "Fills a form through conversation, validates it, prints official PDFs and tracks each submission per user."
+    profile: core
+    workloads: [form-agent]
+    talks_to:
+      - {to: llm-gateway, label: "model calls"}
+      - {to: qdrant, label: "guidance documents"}
+      - {to: seaweedfs, label: "submissions"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: agui-voice
+    name: "agui-voice"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · Pipecat · Whisper, Piper"
+    role: "Voice mode: speech to text and text to speech around the same agents, over a WebSocket."
+    profile: core
+    enable: "On with make k3s-all; the lite profile scales it to zero (make k3s-full brings it back)"
+    workloads: [agui-voice]
+    talks_to:
+      - {to: assistant, label: "the same chat"}
+      - {to: rag-agent, label: "the same chat"}
+      - {to: form-agent, label: "the same chat"}
+  - id: dl-inference
+    name: "dl-inference"
+    layer: consumption
+    kind: service
+    tech: "FastAPI · ONNX Runtime"
+    role: "Serves the deep-learning models (images, text, camera frames) on CPU with ONNX Runtime."
+    profile: optional
+    enable: "make k3s-dl-up"
+    workloads: [dl-inference]
+    talks_to:
+      - {to: seaweedfs, label: "loads ONNX models"}
+      - {to: platform-registry, label: "entitlement"}
+  - id: superset
+    name: "Superset"
+    layer: consumption
+    kind: ui
+    tech: "Apache Superset, dashboards as code"
+    role: "BI dashboards over a data product's marts, imported from the scenario's YAML."
+    profile: optional
+    enable: "make k3s-data-bi-up"
+    workloads: [superset, superset-bi-sync]
+    adr: [9]
+    talks_to:
+      - {to: postgres, label: "marts"}
+      - {to: clickhouse, label: "analytical marts"}
+  - id: chat-ui
+    name: "Open WebUI · LibreChat"
+    layer: consumption
+    kind: ui
+    tech: "Open WebUI · LibreChat (MongoDB)"
+    role: "Off-the-shelf chat apps with Keycloak sign-in that reach the platform's tools only through the MCP gateway, with each user's token."
+    profile: optional
+    enable: "make k3s-chat-ui-up · make k3s-librechat-up"
+    workloads: [open-webui, librechat, librechat-mongodb]
+    adr: [21, 26]
+    talks_to:
+      - {to: keycloak, label: "sign-in"}
+      - {to: llm-gateway, label: "models and MCP tools"}
+
+  # ── Gateways and governance ───────────────────────────────────────────────────────────────────────────────────
+  - id: traefik
+    name: "Traefik"
+    layer: gateway
+    kind: gateway
+    tech: "Traefik ingress"
+    role: "The only way in from a browser: *.localhost hostnames to each service. The registry, gateway, Qdrant and Valkey are never exposed."
+    profile: core
+  - id: keycloak
+    name: "Keycloak"
+    layer: gateway
+    kind: gateway
+    tech: "Keycloak, OIDC"
+    role: "Sign-in and tenants: a tenant is a Keycloak Organization, a scenario is a realm role; per-API token exchange for MCP servers."
+    profile: core
+    workloads: [keycloak]
+    adr: [21, 22]
+    talks_to:
+      - {to: postgres, label: "realm data"}
+  - id: platform-registry
+    name: "platform-registry"
+    layer: gateway
+    kind: gateway
+    tech: "FastAPI · SQLAlchemy"
+    role: "Tenants, scenarios and entitlements, checked by every service before it answers; the audit trail and the AI-BOM."
+    profile: core
+    workloads: [platform-registry]
+    adr: [8, 11]
+    talks_to:
+      - {to: postgres, label: "tenants, scenarios, audit"}
+      - {to: llm-gateway, label: "active model settings"}
+  - id: llm-gateway
+    name: "llm-gateway"
+    layer: gateway
+    kind: gateway
+    tech: "LiteLLM proxy · sentence-transformers"
+    role: "Every model call and every MCP tool call: routing, rate limits, per-tenant budgets, the policy decision point, the local embedding model and the MCP gateway."
+    profile: core
+    workloads: [llm-gateway]
+    adr: [17, 20, 24]
+    talks_to:
+      - {to: llm-providers, label: "model calls"}
+      - {to: vllm, label: "local model"}
+      - {to: valkey, label: "limits, budgets"}
+      - {to: langfuse, label: "a trace per call"}
+      - {to: rag-agent, label: "MCP door"}
+      - {to: data-api, label: "MCP door"}
+      - {to: crm-mcp, label: "MCP server"}
+      - {to: opa, label: "policy decision"}
+  - id: crm-mcp
+    name: "MCP server kit (crm-mcp)"
+    layer: gateway
+    kind: gateway
+    tech: "libs/mcp-kit · FastMCP"
+    role: "An MCP server in front of an existing API: validates the token, applies the tool policy, exchanges the token for the API's own, writes an audit line per call."
+    profile: optional
+    enable: "make k3s-mcp-examples-up"
+    workloads: [crm-mcp]
+    adr: [22, 23, 25, 29]
+    talks_to:
+      - {to: keycloak, label: "token exchange"}
+      - {to: crm-api, label: "per-API token (mTLS at level 3)"}
+  - id: opa
+    name: "Open Policy Agent"
+    layer: gateway
+    kind: gateway
+    tech: "OPA, Rego"
+    role: "An optional policy decision point the gateway can ask before a model call, with the policy as code."
+    profile: optional
+    enable: "make k3s-governance-opa-up"
+    workloads: [opa]
+    adr: [11]
+  - id: data-platform-manager
+    name: "data-platform-manager"
+    layer: gateway
+    kind: service
+    tech: "FastAPI · Kubernetes API"
+    role: "The admin control plane behind the Platform page: health, resources, start and stop of optional workloads, the capability roadmap and governance switches."
+    profile: core
+    workloads: [data-platform-manager]
+    talks_to:
+      - {to: k3s, label: "workload status, scale"}
+      - {to: platform-registry, label: "governance overview"}
+
+  # ── Observability ─────────────────────────────────────────────────────────────────────────────────────────────
+  - id: langfuse
+    name: "Langfuse"
+    layer: observability
+    kind: monitor
+    tech: "Langfuse v4 (web, worker)"
+    role: "A trace per LLM call by tenant, scenario and conversation, fed only by llm-gateway."
+    profile: core
+    workloads: [langfuse-web, langfuse-worker]
+    talks_to:
+      - {to: clickhouse, label: "traces"}
+      - {to: postgres, label: "metadata"}
+  - id: mlflow
+    name: "MLflow"
+    layer: observability
+    kind: monitor
+    tech: "MLflow"
+    role: "Every training run's candidates, scores and the selected model; never allowed to fail a training job."
+    profile: core
+    workloads: [mlflow]
+    talks_to:
+      - {to: postgres, label: "runs"}
+      - {to: seaweedfs, label: "artifacts"}
+  - id: otel-collector
+    name: "OpenTelemetry collector"
+    layer: observability
+    kind: monitor
+    tech: "OpenTelemetry collector"
+    role: "Receives every service's traces and logs over OTLP, masks tokens and emails in log lines, forwards them."
+    profile: optional
+    enable: "make k3s-obs-up"
+    workloads: [otel-collector]
+    adr: [15, 28]
+    talks_to:
+      - {to: tempo, label: "traces"}
+      - {to: loki, label: "logs"}
+  - id: victoriametrics
+    name: "VictoriaMetrics"
+    layer: observability
+    kind: monitor
+    tech: "VictoriaMetrics · vmalert"
+    role: "Scrapes every service's /metrics and evaluates the alert rules."
+    profile: optional
+    enable: "make k3s-obs-up"
+    workloads: [victoriametrics, vmalert]
+    adr: [15]
+  - id: loki
+    name: "Loki"
+    layer: observability
+    kind: monitor
+    tech: "Grafana Loki"
+    role: "Stores the JSON log lines, each with its trace id."
+    profile: optional
+    enable: "make k3s-obs-up"
+    workloads: [loki]
+  - id: tempo
+    name: "Tempo"
+    layer: observability
+    kind: monitor
+    tech: "Grafana Tempo"
+    role: "Stores the content-free traces, including one trace across the MCP hop."
+    profile: optional
+    enable: "make k3s-obs-up"
+    workloads: [tempo]
+    adr: [28]
+  - id: grafana
+    name: "Grafana"
+    layer: observability
+    kind: monitor
+    tech: "Grafana"
+    role: "Dashboards for the LLM gateway (calls, tokens, cost, latency), GPUs, model drift and the MCP path."
+    profile: optional
+    enable: "make k3s-obs-up"
+    workloads: [grafana]
+    talks_to:
+      - {to: victoriametrics, label: "metrics"}
+      - {to: loki, label: "logs"}
+      - {to: tempo, label: "traces"}
+
+# How a request travels, step by step. Each step is an edge between two components; a scenario's view shows the
+# flows whose every component it uses.
+flows:
+  - id: predict
+    title: "A prediction, explained"
+    text: "A user scores one record in a model tab."
+    steps:
+      - {from: ui-react, to: traefik, label: "POST /predict/{scenario} with the user's token"}
+      - {from: traefik, to: prediction, label: "routed by hostname"}
+      - {from: prediction, to: keycloak, label: "token checked (signature, organization)"}
+      - {from: prediction, to: platform-registry, label: "is this tenant entitled to this scenario?"}
+      - {from: prediction, to: seaweedfs, label: "the tenant's model, already loaded at start-up"}
+      - {from: prediction, to: ui-react, label: "probability and SHAP contributions"}
+  - id: chat
+    title: "A question to the assistant"
+    text: "A user asks a tabular scenario's assistant something about the data or the model."
+    steps:
+      - {from: ui-react, to: traefik, label: "AG-UI run, streamed"}
+      - {from: traefik, to: assistant, label: "routed by hostname"}
+      - {from: assistant, to: platform-registry, label: "entitlement"}
+      - {from: assistant, to: llm-gateway, label: "the model decides which tool to call"}
+      - {from: llm-gateway, to: llm-providers, label: "the active model (rate limit and budget checked)"}
+      - {from: assistant, to: prediction, label: "the tool's call: predict, explain, forecast"}
+      - {from: llm-gateway, to: langfuse, label: "one trace per model call"}
+      - {from: assistant, to: ui-react, label: "the answer, a chart, the tools it used"}
+  - id: rag
+    title: "A question answered from documents"
+    text: "A user asks something the scenario's documents answer."
+    steps:
+      - {from: ui-react, to: rag-agent, label: "the question, through Traefik"}
+      - {from: rag-agent, to: llm-gateway, label: "embed the question (local-embed)"}
+      - {from: rag-agent, to: qdrant, label: "the tenant's collection: nearest passages"}
+      - {from: rag-agent, to: llm-gateway, label: "answer from those passages only"}
+      - {from: rag-agent, to: ui-react, label: "the answer with every passage cited"}
+  - id: train
+    title: "From raw data to a served model"
+    text: "The pipeline every tabular scenario runs once (make k3s-pipeline)."
+    steps:
+      - {from: etl-tabular, to: seaweedfs, label: "raw dataset in, cleaned dataset out"}
+      - {from: training, to: seaweedfs, label: "reads the cleaned data, writes model, card, out-of-fold scores"}
+      - {from: training, to: mlflow, label: "every candidate and its score"}
+      - {from: prediction, to: seaweedfs, label: "loads the new model on restart"}
+  - id: data-product
+    title: "A record through the data platform"
+    text: "A sale happens in a shop of a data-product scenario."
+    steps:
+      - {from: kafka, to: data-ingest, label: "the event, on its contract's topic"}
+      - {from: data-ingest, to: postgres, label: "validated, upserted into bronze (or quarantined)"}
+      - {from: data-transform, to: postgres, label: "dbt builds silver and gold"}
+      - {from: data-api, to: postgres, label: "metrics and records, filtered by role"}
+      - {from: data-api, to: ui-react, label: "the live dashboard and the governed doors"}
+  - id: mcp
+    title: "The same question from an external chat (MCP)"
+    text: "A user asks in LibreChat or Open WebUI; the answer needs a tool of the platform."
+    steps:
+      - {from: chat-ui, to: keycloak, label: "the user signs in"}
+      - {from: chat-ui, to: llm-gateway, label: "the MCP gateway, with the user's token"}
+      - {from: llm-gateway, to: crm-mcp, label: "the tool call, if the user's group may run it"}
+      - {from: crm-mcp, to: keycloak, label: "exchanges the token for one valid only for crm-api"}
+      - {from: crm-mcp, to: crm-api, label: "the call, as a pseudonym, over mutual TLS at level 3"}
+      - {from: crm-mcp, to: otel-collector, label: "an audit line and one trace across the hop"}
