@@ -12,7 +12,7 @@
 # Elsewhere (no user systemd, or K3S_PORTFORWARD_SERVICE=0) it falls back to a plain
 # background process + PID file, which dies with the machine.
 #
-# The same machinery serves the optional MCP forwards: rag-agent's and data-api's MCP doors, and the
+# The same machinery serves the optional MCP forwards: rag-agent's, data-api's and the assistant's MCP doors, and the
 # MCP gateway in front of them on llm-gateway, for MCP clients on this machine (`make
 # k3s-mcp-portforward`, docs/adr/0019 and 0020), since *.localhost does not resolve for every
 # client. Each service gets its own unit; platform-registry keeps its original name.
@@ -24,7 +24,7 @@ ACTION="${1:?usage: $0 start|stop|uninstall|status <cluster> [port] [service]}"
 CLUSTER="${2:?cluster name required}"
 PORT="${3:-8010}"
 SERVICE="${4:-platform-registry}"
-case "$SERVICE" in platform-registry|rag-agent|data-api) TARGET_PORT=8000 ;; llm-gateway) TARGET_PORT=4000 ;; *) echo "❌ unsupported service '$SERVICE'" >&2; exit 1 ;; esac
+case "$SERVICE" in platform-registry|rag-agent|data-api|assistant) TARGET_PORT=8000 ;; llm-gateway) TARGET_PORT=4000 ;; *) echo "❌ unsupported service '$SERVICE'" >&2; exit 1 ;; esac
 SUFFIX="$([ "$SERVICE" = platform-registry ] || echo "-${SERVICE}")"
 UNIT="ai-circus-portforward-${CLUSTER}${SUFFIX}.service"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"

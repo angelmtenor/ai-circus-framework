@@ -511,15 +511,17 @@
    "name": "assistant",
    "layer": "consumption",
    "kind": "service",
-   "tech": "FastAPI · LangChain · AG-UI",
-   "role": "The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure.",
+   "tech": "FastAPI · LangChain · AG-UI · MCP",
+   "role": "The chat copilot of tabular and data scenarios: answers from tools (model, data, documents, analysis toolsets), never invents a figure, and serves a scenario's model to MCP clients.",
    "profile": "core",
    "enable": null,
    "source": null,
    "workloads": [
     "assistant"
    ],
-   "adr": [],
+   "adr": [
+    31
+   ],
    "talks_to": [
     {
      "to": "llm-gateway",
@@ -830,6 +832,10 @@
     },
     {
      "to": "data-api",
+     "label": "MCP door"
+    },
+    {
+     "to": "assistant",
      "label": "MCP door"
     },
     {
@@ -1312,6 +1318,7 @@
   "25": "0025-level-3-regulated-mcp-servers.md",
   "26": "0026-librechat-second-chat-ui.md",
   "28": "0028-masked-logs-and-one-trace-through-the-mcp-hop.md",
-  "29": "0029-pseudonymous-users-at-the-apis.md"
+  "29": "0029-pseudonymous-users-at-the-apis.md",
+  "31": "0031-mcp-doors-on-the-assistant.md"
  }
 }

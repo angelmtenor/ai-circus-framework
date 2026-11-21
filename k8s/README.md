@@ -211,11 +211,12 @@ after a reboot there.
 
 Optional MCP forwards, `make k3s-mcp-portforward`, do the same for rag-agent on `localhost:8031`
 (`RAG_AGENT_MCP_PORT`) and, when the Data Platform is up, data-api on `localhost:8032`
-(`DATA_API_MCP_PORT`): MCP clients on this machine (Claude Code, MCP Inspector…) reach a scenario's
+(`DATA_API_MCP_PORT`), and the assistant's model doors on `localhost:8034` (`ASSISTANT_MCP_PORT`,
+docs/adr/0031): MCP clients on this machine (Claude Code, MCP Inspector…) reach a scenario's
 `/mcp/{slug}` door there, since `*.localhost` resolves in browsers and curl but not for every client
 (docs/adr/0019). The same target forwards the MCP gateway in front of both doors, llm-gateway's
 `/mcp/{slug},{slug}`, on `localhost:8033` (`MCP_GATEWAY_PORT`, docs/adr/0020). Their services are
-`ai-circus-portforward-<cluster>-rag-agent`, `…-data-api` and `…-llm-gateway`;
+`ai-circus-portforward-<cluster>-rag-agent`, `…-data-api`, `…-assistant` and `…-llm-gateway`;
 `make k3s-mcp-portforward-uninstall` removes them. They are never started automatically.
 
 The optional chat UI, `make k3s-chat-ui-up` (docs/adr/0021), serves Open WebUI at `http://chat.localhost`.

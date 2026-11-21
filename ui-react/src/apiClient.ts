@@ -268,6 +268,8 @@ export type NextBestOffer = {
 };
 // Mirrors scenario_schema.SourceLibraryExtra — see SourceLibraryView.tsx.
 export type SourceLibraryExtra = { kind: "source_library"; chat_tab_label: string; tab_label: string; title: string };
+// Mirrors scenario_schema.ArchitectureMapExtra — the architecture tutorial's map tab (ArchitectureView in RagView).
+export type ArchitectureMapExtra = { kind: "architecture_map"; tab_label: string };
 // Mirrors scenario_schema.CaseTrackerExtra — see CaseTrackerView.tsx.
 export type CaseTrackerExtra = {
   kind: "case_tracker";
@@ -528,6 +530,7 @@ export type KnowledgeGraphExtra = {
 export type KnowledgeGraphTrace = { seeds: string[]; nodes: string[]; edges: [string, string, string][] };
 
 export type UiExtras =
+  | ArchitectureMapExtra
   | RegionMapExtra
   | LivePlantExtra
   | ProcessOptimizerExtra

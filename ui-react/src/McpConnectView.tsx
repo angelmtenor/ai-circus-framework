@@ -1,5 +1,5 @@
-// "Connect via MCP" (docs/adr/0019): how to reach a scenario's MCP door from any MCP client — a
-// document scenario's on rag-agent, a data product's on data-api — plus a live check that runs the
+// "Connect via MCP" (docs/adr/0019, 0031): how to reach a scenario's MCP door from any MCP client — a
+// document scenario's on rag-agent, a data product's on data-api, a tabular model's on the assistant — plus a live check that runs the
 // same tools/list an MCP client would, with the caller's token and headers.
 // Static DOM only: nothing animates, so the tab stays quiet when idle.
 import { useState, type ReactNode } from "react";
@@ -17,6 +17,15 @@ const TOOL_HELP: Record<string, string> = {
   get_record: "One record with its processing trail.",
   data_health: "Freshness vs SLO, the last transform, ops health and your role.",
   run_sql: "Read-only SQL over the curated datasets (SQL roles only).",
+  describe_model: "What the model predicts, from which inputs, how well, and what it is for.",
+  score_record: "Score one record and explain it: the prediction and what pushed it.",
+  drought_state: "A supply system's state against the drought plan: now, on a past date, or ahead.",
+  storage_forecast: "The storage forecast (p10, p50, p90) of a system or a reservoir, and its drivers.",
+  what_if: "Storage under a rainfall scenario and demand savings, with the days to each threshold.",
+  least_restrictive_measures: "The least restrictive package of measures that keeps emergency unlikely.",
+  search_drought_plan: "The drought plan's paragraphs for a question, each with its article.",
+  data_quality: "Readings of a reservoir that need review, with what each flag means.",
+  weekly_bulletin: "This week's drought bulletin, as markdown.",
 };
 
 type Check = { state: "idle" | "checking" } | { state: "ok"; tools: McpTool[] } | { state: "error"; message: string };
@@ -54,18 +63,28 @@ export function McpConnectView({
   headers = {},
   title = "Use these documents from any MCP client",
   lede,
+  owns = "documents",
+  emptyHint = (
+    <>
+      Empty results mean nothing is indexed yet: run <code>make k3s-vectorize</code>.
+    </>
+  ),
 }: {
   scenarioSlug: string;
   exposed: string[];
   accessToken: string | null;
   /** The service serving the door (rag-agent by default, data-api for a data product). */
   baseUrl?: string;
-  /** `make k3s-mcp-portforward`'s localhost port for that service (8031 rag-agent, 8032 data-api). */
+  /** `make k3s-mcp-portforward`'s localhost port for that service (8031 rag-agent, 8032 data-api, 8034 assistant). */
   localPort?: number;
   /** Extra headers every request carries (a data product's X-Data-View-As). */
   headers?: Record<string, string>;
   title?: string;
   lede?: ReactNode;
+  /** What each organisation sees only its own of, in the footnote. */
+  owns?: string;
+  /** The footnote's last sentence: what an empty or failed result usually means. */
+  emptyHint?: ReactNode;
 }) {
   const [check, setCheck] = useState<Check>({ state: "idle" });
   const url = `${baseUrl}/mcp/${scenarioSlug}`;
@@ -151,8 +170,8 @@ export function McpConnectView({
           <CopyBlock label="mcp.json (Claude Desktop, VS Code, …)" text={json} />
           <p className="mcp-note">
             <code>AI_CIRCUS_TOKEN</code> is the same bearer token the app uses: a demo tenant's API key, or a Keycloak access
-            token (it expires within minutes). The tenant comes from the token, so each organisation sees only its own
-            documents. Empty results mean nothing is indexed yet: run <code>make k3s-vectorize</code>.
+            token (it expires within minutes). The tenant comes from the token, so each organisation sees only its own{" "}
+            {owns}. {emptyHint}
           </p>
         </section>
       </div>

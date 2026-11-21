@@ -284,6 +284,30 @@ mcp_servers:
     auth_type: true_passthrough
     extra_headers: [X-Data-View-As, X-Data-View-As-Values, traceparent, tracestate]
     description: "Governed sales metrics and records of Angel's Surf Co., filtered by your role (read-only)"
+  framework_architecture:
+    url: http://rag-agent:8000/mcp/framework_architecture
+    transport: http
+    auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
+    description: "Search and read this framework's architecture guides, ADRs and component map (read-only)"
+  water_reservoirs_drought:
+    url: http://assistant:8000/mcp/water_reservoirs_drought
+    transport: http
+    auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
+    description: "Drought state, storage forecasts, what-if, measures and the drought plan of a water utility (read-only)"
+  financial_crime_desk:
+    url: http://assistant:8000/mcp/financial_crime_desk
+    transport: http
+    auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
+    description: "The transfer screening model: what it is for, and how likely one transfer is to be escalated, and why (read-only)"
+  insurance_portfolio:
+    url: http://assistant:8000/mcp/insurance_portfolio
+    transport: http
+    auth_type: true_passthrough
+    extra_headers: [traceparent, tracestate]
+    description: "The policy lapse model: what it is for, and the lapse risk and reasons of one policy (read-only)"
   crm:
     url: http://crm-mcp:8000/mcp/
     transport: http

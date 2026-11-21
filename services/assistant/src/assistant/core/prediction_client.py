@@ -110,6 +110,16 @@ class PredictionServiceClient:
         response.raise_for_status()
         return response.json()
 
+    def model_card(self, *, scenario_slug: str, authorization: str | None) -> dict[str, Any]:
+        """The deployed model's card (task, metrics, features, use) — `GET /model/{scenario_slug}/card`."""
+        response = httpx.get(
+            f"{self.base_url}/model/{scenario_slug}/card",
+            headers=self._headers(authorization),
+            timeout=self.timeout_seconds,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def predict(
         self, *, scenario_slug: str, authorization: str | None, records: list[dict[str, Any]]
     ) -> dict[str, Any]:

@@ -75,6 +75,38 @@ mcpServers:
     headers:
       Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
     requiresOAuth: false
+  framework_architecture:
+    type: streamable-http
+    url: http://llm-gateway:4000/mcp/framework_architecture
+    title: "AI Circus Framework architecture"
+    description: "Search and read this framework's architecture guides, ADRs and component map (read-only)"
+    headers:
+      Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+    requiresOAuth: false
+  water_reservoirs_drought:
+    type: streamable-http
+    url: http://llm-gateway:4000/mcp/water_reservoirs_drought
+    title: "Reservoirs drought watch"
+    description: "Drought state, storage forecasts, what-if, measures and the drought plan of a water utility (read-only)"
+    headers:
+      Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+    requiresOAuth: false
+  financial_crime_desk:
+    type: streamable-http
+    url: http://llm-gateway:4000/mcp/financial_crime_desk
+    title: "Financial crime transfer screening"
+    description: "The transfer screening model: what it is for, and how likely one transfer is to be escalated, and why (read-only)"
+    headers:
+      Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+    requiresOAuth: false
+  insurance_portfolio:
+    type: streamable-http
+    url: http://llm-gateway:4000/mcp/insurance_portfolio
+    title: "Insurance retention"
+    description: "The policy lapse model: what it is for, and the lapse risk and reasons of one policy (read-only)"
+    headers:
+      Authorization: "Bearer {{LIBRECHAT_OPENID_ACCESS_TOKEN}}"
+    requiresOAuth: false
   crm:
     type: streamable-http
     url: http://llm-gateway:4000/mcp/crm

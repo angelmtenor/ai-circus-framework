@@ -4,6 +4,26 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.65.0 — 2026-11-21
+
+### Added
+- **How This Framework Is Built — Architecture Tutorial** (`framework_architecture`): ask how the platform works and
+  get answers from its own documentation, every passage cited — the architecture guide and component reference, every
+  ADR and scenario guide, and which components each scenario uses. A new `architecture_map` tab draws the platform map
+  and its request flows next to the chat, and an MCP door serves the same documents.
+- **A tabular scenario's model from any MCP client** ([ADR 0031](docs/adr/0031-mcp-doors-on-the-assistant.md)): the
+  assistant opens a read-only MCP door on `water_reservoirs_drought` (drought state, storage forecast, what-if, the
+  least restrictive measures, the drought plan, data quality, the weekly bulletin), `financial_crime_desk` and
+  `insurance_portfolio` (what the model is for, and one record scored and explained, with any business rule that
+  decides instead). Each door is in the MCP catalog, so LibreChat and Open WebUI reach it through the MCP gateway with
+  the user's own token; the workspace gains a **Connect via MCP** tab, and `make k3s-mcp-portforward` adds
+  `localhost:8034`.
+
+### Fixed
+- `prediction` answers **422** naming the field, instead of a 500 from inside the model pipeline, for a value it cannot
+  read: a word or an infinite number in a numeric feature, or a list or an object anywhere. Nulls, numbers written as
+  text, unknown categories and numbers outside a slider's range are still scored as before.
+
 ## v0.64.0 — 2026-11-21
 
 ### Added

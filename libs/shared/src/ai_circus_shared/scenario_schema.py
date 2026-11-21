@@ -1529,6 +1529,15 @@ class ForecastBoardExtra(BaseModel):
     map: ForecastBoardMap | None = None  # sites to click instead of (as well as) the series list
 
 
+class ArchitectureMapExtra(BaseModel):
+    """conversational_rag only: a tab with the platform's architecture map, drawn from the architecture catalog
+    (ai_circus_shared.architecture) — every component by layer, what each does and the request flows — next to a
+    chat that answers from the repository's own documentation. Used by the architecture tutorial."""
+
+    kind: Literal["architecture_map"]
+    tab_label: str = Field(default="Architecture", max_length=40)
+
+
 UiExtras = Annotated[
     RegionMapExtra
     | ForecastBoardExtra
@@ -1549,7 +1558,8 @@ UiExtras = Annotated[
     | TriageBoardExtra
     | ReadingRoomExtra
     | CameraWallExtra
-    | KnowledgeGraphExtra,
+    | KnowledgeGraphExtra
+    | ArchitectureMapExtra,
     Field(discriminator="kind"),
 ]
 
@@ -1574,7 +1584,7 @@ _TABULAR_UI_EXTRAS = (
 # A forecast scenario has no single-row model to drive the row-based tabs.
 _FORECAST_UI_EXTRAS = (ForecastBoardExtra,)
 _DEEP_LEARNING_UI_EXTRAS = (TriageBoardExtra, ReadingRoomExtra, CameraWallExtra)
-_RAG_UI_EXTRAS = (KnowledgeGraphExtra, SourceLibraryExtra)
+_RAG_UI_EXTRAS = (KnowledgeGraphExtra, SourceLibraryExtra, ArchitectureMapExtra)
 _FORM_UI_EXTRAS = (CaseTrackerExtra,)
 
 
@@ -2020,9 +2030,22 @@ class VectorStoreConfig(BaseModel):
 # and data-api's governed data tools (the same operations as its REST routes and the assistant's).
 MCP_DOCUMENT_TOOLS = ("list_sources", "search_documents", "read_document")
 MCP_DATA_TOOLS = ("list_metrics", "query_metric", "search_records", "get_record", "data_health", "run_sql")
+# tabular_ml (docs/adr/0031): the assistant's door. The model tools fit any tabular scenario (score_record: a classifier
+# or a regressor, not a forecast or a recommender); the drought tools need `analysis_toolset: drought_watch`.
+MCP_MODEL_TOOLS = ("describe_model", "score_record")
+MCP_DROUGHT_TOOLS = (
+    "drought_state",
+    "storage_forecast",
+    "what_if",
+    "least_restrictive_measures",
+    "search_drought_plan",
+    "data_quality",
+    "weekly_bulletin",
+)
 MCP_TOOLS_BY_KIND: dict[str, tuple[str, ...]] = {
     "conversational_rag": MCP_DOCUMENT_TOOLS,
     "data_product": MCP_DATA_TOOLS,
+    "tabular_ml": MCP_MODEL_TOOLS + MCP_DROUGHT_TOOLS,
 }
 
 
@@ -2030,8 +2053,9 @@ class McpConfig(BaseModel):
     """Opts a scenario into MCP (docs/adr/0019):
 
     - `expose`: the tools its kind's door serves at `/mcp/{scenario_slug}` (`MCP_TOOLS_BY_KIND`):
-      rag-agent's read-only document tools over the caller's own tenant's indexed documents, or
-      data-api's governed data tools under the data product's access policy.
+      rag-agent's read-only document tools over the caller's own tenant's indexed documents,
+      data-api's governed data tools under the data product's access policy, or the assistant's
+      model and drought tools for a tabular scenario (docs/adr/0031).
     - `consume` (conversational_rag only): scenarios whose MCP doors this scenario's chat may use
       when the user picks "via MCP". Only doors on the same rag-agent instance, so this list is the
       allow-list.
@@ -2039,7 +2063,7 @@ class McpConfig(BaseModel):
     Absent = no MCP; the scenario behaves as before.
     """
 
-    expose: list[str] = Field(default=[], max_length=len(MCP_DATA_TOOLS))
+    expose: list[str] = Field(default=[], max_length=len(MCP_MODEL_TOOLS) + len(MCP_DROUGHT_TOOLS))
     consume: list[str] = Field(default=[], max_length=5)
 
     @model_validator(mode="after")
@@ -2392,10 +2416,10 @@ class StoryConfig(BaseModel):
     boxes link to the tabs, where every input comes from, the question each model answers, and a presenter's
     demo script. Tabs depend on the kind (`ScenarioDefinition.story_tabs`): tabular_ml has `overview`, `data`,
     `assistant` (opens the chat), `tutorial`, `model` / `extra` (the main model and its `ui_extras` tab) and
-    `model:<id>` / `extra:<id>`; conversational_rag `assistant` (the chat), `library`; assisted_form `assistant`
-    (the form and its chat), `cases`; deep_learning `data`, `predict`, `insights`, `extra`; data_product `tour`,
-    `data`, `flow`, `dashboards`, `explore`, `quality`, `insights`, `shop`, `assistant`; any kind with an MCP
-    door `mcp`.
+    `model:<id>` / `extra:<id>`; conversational_rag `assistant` (the chat), `library`, `architecture`;
+    assisted_form `assistant` (the form and its chat), `cases`; deep_learning `data`, `predict`, `insights`,
+    `extra`; data_product `tour`, `data`, `flow`, `dashboards`, `explore`, `quality`, `insights`, `shop`,
+    `assistant`; any kind with an MCP door `mcp`.
     """
 
     headline: str = Field(min_length=1, max_length=120)
@@ -2640,7 +2664,7 @@ class ScenarioDefinition(BaseModel):
     def model_views(self) -> dict[str, ScenarioDefinition]:
         """Every model of this scenario by address, as a complete definition: the main model is the
         scenario itself, an extra one the scenario with that model's blocks in place of the main ones.
-        Tutorials, stories, rubric checks and documents belong to the scenario, so a view has none.
+        Tutorials, stories, MCP doors, rubric checks and documents belong to the scenario, so a view has none.
         """
         views: dict[str, ScenarioDefinition] = {self.slug: self}
         fields = {name: getattr(self, name) for name in type(self).model_fields}
@@ -2660,6 +2684,7 @@ class ScenarioDefinition(BaseModel):
                     "extra_models": [],
                     "tutorial": None,
                     "story": None,
+                    "mcp": None,
                     "rubric_check": None,
                     "documents": None,
                     "vector_store": None,
@@ -3212,6 +3237,8 @@ class ScenarioDefinition(BaseModel):
             tabs.add("assistant")  # the chat, with its knowledge graph beside it when there is one
             if isinstance(self.ui_extras, SourceLibraryExtra):
                 tabs.add("library")
+            if isinstance(self.ui_extras, ArchitectureMapExtra):
+                tabs.add("architecture")
         elif self.kind == "assisted_form":
             tabs.add("assistant")  # the form and the assistant filling it
             if isinstance(self.ui_extras, CaseTrackerExtra):
@@ -3328,6 +3355,13 @@ class ScenarioDefinition(BaseModel):
             raise ValueError("mcp.consume is only available for kind='conversational_rag' scenarios.")
         if self.kind == "conversational_rag" and self.mcp.expose and self.vector_store is None:
             raise ValueError("mcp needs a vector_store: its tools read the scenario's indexed documents.")
+        if self.kind == "tabular_ml":
+            drought = [tool for tool in self.mcp.expose if tool in MCP_DROUGHT_TOOLS]
+            if drought and self.analysis_toolset != "drought_watch":
+                raise ValueError(f"mcp.expose: {drought} need analysis_toolset: drought_watch.")
+            task = self.model.task_type if self.model is not None else None
+            if "score_record" in self.mcp.expose and task not in ("classification", "regression"):
+                raise ValueError("mcp.expose: score_record scores one record, for a classifier or a regressor only.")
         return self
 
     @classmethod

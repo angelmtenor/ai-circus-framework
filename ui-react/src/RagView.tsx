@@ -15,6 +15,7 @@ import { useScenarioAgent } from "./useScenarioAgent";
 const KnowledgeGraphView = lazy(() => import("./KnowledgeGraphView"));
 const McpConnectView = lazy(() => import("./McpConnectView").then((m) => ({ default: m.McpConnectView })));
 const SourceLibraryView = lazy(() => import("./SourceLibraryView").then((m) => ({ default: m.SourceLibraryView })));
+const ArchitectureView = lazy(() => import("./ArchitectureView").then((m) => ({ default: m.ArchitectureView })));
 
 // The chat | graph split: the chat's share of the width, dragged on the divider and
 // remembered per browser.
@@ -82,14 +83,15 @@ function RagViewContent({
   const graphExtras = scenario.ui_extras?.kind === "knowledge_graph" ? scenario.ui_extras : null;
   const libraryExtras = scenario.ui_extras?.kind === "source_library" ? scenario.ui_extras : null;
   const mcpTools = scenario.mcp?.expose.length ? scenario.mcp.expose : null;
+  const architectureExtras = scenario.ui_extras?.kind === "architecture_map" ? scenario.ui_extras : null;
   const story = scenario.story ?? null;
-  const hasTabs = Boolean(story || libraryExtras || mcpTools);
+  const hasTabs = Boolean(story || libraryExtras || mcpTools || architectureExtras);
   // A scenario with a story opens on its Overview.
-  const [tab, setTabState] = useState<"overview" | "chat" | "library" | "mcp">(story ? "overview" : "chat");
+  const [tab, setTabState] = useState<"overview" | "chat" | "library" | "mcp" | "architecture">(story ? "overview" : "chat");
   // A question sent to the chat from the Overview or the guided demo (ChatPanel's `prompt`), dropped when the
   // chat is left so coming back never sends it twice.
   const [prompt, setPrompt] = useState<{ id: number; text: string } | null>(null);
-  const setTab = useCallback((next: "overview" | "chat" | "library" | "mcp") => {
+  const setTab = useCallback((next: "overview" | "chat" | "library" | "mcp" | "architecture") => {
     setTabState(next);
     if (next !== "chat") setPrompt(null);
   }, []);
@@ -97,9 +99,10 @@ function RagViewContent({
     const tabs: Record<string, string> = { overview: "Overview", assistant: libraryExtras?.chat_tab_label ?? "Chat" };
     if (libraryExtras) tabs.library = libraryExtras.tab_label;
     if (mcpTools) tabs.mcp = "Connect via MCP";
+    if (architectureExtras) tabs.architecture = architectureExtras.tab_label;
     return tabs;
-  }, [libraryExtras, mcpTools]);
-  const openStoryTab = (t: string) => setTab(t === "assistant" ? "chat" : (t as "overview" | "library" | "mcp"));
+  }, [libraryExtras, mcpTools, architectureExtras]);
+  const openStoryTab = (t: string) => setTab(t === "assistant" ? "chat" : (t as "overview" | "library" | "mcp" | "architecture"));
   const ask = (text: string) => {
     setTab("chat");
     setPrompt({ id: Date.now(), text });
@@ -214,6 +217,11 @@ function RagViewContent({
                 <Icon name="book" /> {libraryExtras.tab_label}
               </button>
             )}
+            {architectureExtras && (
+              <button className={tab === "architecture" ? "active" : ""} onClick={() => setTab("architecture")}>
+                <Icon name="network" /> {architectureExtras.tab_label}
+              </button>
+            )}
             {mcpTools && (
               <button className={tab === "mcp" ? "active" : ""} onClick={() => setTab("mcp")}>
                 <Icon name="external" /> Connect via MCP
@@ -223,6 +231,11 @@ function RagViewContent({
         )}
         {story && tab === "overview" && <ScenarioOverview scenario={scenario} tabLabel={tabLabel} onOpen={openStoryTab} onAsk={ask} onStartDemo={startDemo} />}
         {demoBar}
+        {architectureExtras && tab === "architecture" && (
+          <Suspense fallback={<div className="app-loading">Loading…</div>}>
+            <ArchitectureView />
+          </Suspense>
+        )}
         {mcpTools && tab === "mcp" && (
           <Suspense fallback={<div className="app-loading">Loading…</div>}>
             <McpConnectView scenarioSlug={scenario.slug} exposed={mcpTools} accessToken={accessToken} />

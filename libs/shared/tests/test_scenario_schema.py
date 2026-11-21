@@ -1913,8 +1913,8 @@ def test_the_reference_guide_opens_the_mcp_door_on_its_documents() -> None:
     assert tuple(guide.mcp.expose) == MCP_DOCUMENT_TOOLS
 
 
-def test_mcp_is_not_available_for_tabular_scenarios_yet() -> None:
-    with pytest.raises(ValidationError, match="not available for kind='tabular_ml'"):
+def test_a_tabular_door_never_serves_another_kinds_tools() -> None:
+    with pytest.raises(ValidationError, match="are not tabular_ml tools"):
         _with(_titanic(), mcp={"expose": ["search_documents"]})
 
 
@@ -2028,3 +2028,28 @@ def test_next_best_offer_propensity_model_must_read_the_same_features() -> None:
     }
     with pytest.raises(ValidationError, match="same feature_columns"):
         _with(portfolio, extra_models=extra_models)
+
+
+# --- the assistant's MCP door on tabular scenarios (docs/adr/0031) ---
+
+
+def test_a_tabular_door_exposes_model_tools_and_drought_tools_only_with_the_toolset() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).parents[3] / "scenarios"
+    churn = ScenarioDefinition.load(root / "churn/scenario.yaml")
+    assert _with(churn, mcp={"expose": ["describe_model", "score_record"]}).mcp is not None
+    with pytest.raises(ValidationError, match="need analysis_toolset: drought_watch"):
+        _with(churn, mcp={"expose": ["describe_model", "drought_state"]})
+    with pytest.raises(ValidationError, match="not tabular_ml tools"):
+        _with(churn, mcp={"expose": ["search_documents"]})
+    water = ScenarioDefinition.load(root / "water_reservoirs_drought/scenario.yaml")
+    assert _with(water, mcp={"expose": ["describe_model", "drought_state", "weekly_bulletin"]}).mcp is not None
+    with pytest.raises(ValidationError, match="classifier or a regressor only"):
+        _with(water, mcp={"expose": ["score_record"]})  # a forecast scores no single record
+    insurance = _with(
+        ScenarioDefinition.load(root / "insurance_portfolio/scenario.yaml"), mcp={"expose": ["score_record"]}
+    )
+    assert all(
+        view.mcp is None for slug, view in insurance.model_views().items() if "~" in slug
+    )  # the door is the scenario's
