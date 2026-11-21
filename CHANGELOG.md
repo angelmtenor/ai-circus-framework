@@ -4,6 +4,14 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## Unreleased
+
+### Added
+- **How This Framework Is Built — Architecture Tutorial** (`framework_architecture`): ask how the platform works and
+  get answers from its own documentation, every passage cited — the architecture guide and component reference, every
+  ADR and scenario guide, and which components each scenario uses. A new `architecture_map` tab draws the platform map
+  and its request flows next to the chat, and an MCP door serves the same documents.
+
 ## v0.64.0 — 2026-11-21
 
 ### Added

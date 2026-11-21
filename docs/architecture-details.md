@@ -36,7 +36,10 @@ through `storyWorkspace.tsx`'s `useStoryDemo`; a deep-learning workspace has no 
 scenario, so model views carry none. Every Overview also has **How it's built** (`ScenarioArchitecture.tsx`): the platform
 map with the components the scenario uses lit and why, derived from its YAML by `ai_circus_shared.architecture` at seed
 time (served as `ScenarioSummary.architecture`); the catalog behind it is `architecture_catalog.yaml` (see
-`docs/architecture/`). `industry` is the
+`docs/architecture/`). The **architecture tutorial** (`framework_architecture`, a `conversational_rag` with
+`ui_extras: architecture_map`) answers from a snapshot of this repository's docs that `scripts/generate_architecture.py`
+cuts into pieces of at most 4,000 characters (each embedding call to llm-gateway stays small) together with a generated
+document of which components each scenario uses; a test fails when the snapshot is stale. `industry` is the
 scenario's *domain* (industries, `insurance` included, plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 
