@@ -36,7 +36,7 @@ story:
   value:
     - {value: "45", label: "Components", note: "By layer, each with what it does and how to switch it on."}
     - {value: "6", label: "Request flows", note: "A prediction, the assistant, RAG, training, a data record, MCP."}
-    - {value: "30", label: "Decision records", note: "Every ADR, searchable and cited."}
+    - {value: "32", label: "Decision records", note: "Every ADR, searchable and cited."}
     - {value: "36", label: "Scenarios explained", note: "Which components each one uses, and why (this one included)."}
   flow:
     - {title: "The repository's docs", kind: source, tab: architecture, text: "The architecture guide, the component reference, every ADR and scenario guide, cut into small pieces."}

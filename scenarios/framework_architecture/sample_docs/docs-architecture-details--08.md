@@ -1,19 +1,20 @@
-# Architecture details - Business rules, decision policy, case desk
+# Architecture details - Networks, out-of-fold scores, money trail
 
 Source: docs/architecture-details.md (this repository)
 
-A tabular scenario whose rows are *applications* (`prestaciones_sociales`) may gate each one through
-**deterministic business rules before the model** (`dataset.business_rules`, `rule_columns`,
-`ai_circus_shared.business_rules`: families of rules `missing/equals/in/lt/gt/contains_any…` with
-outcomes `reject`/`request_info` (blocking) or `review`) and turn the binary model's probability into
-a proposal with `model.decision_policy` (approve ≥ `approve_at`, deny ≤ `deny_at`, else manual review):
-etl-tabular evaluates the rules before `dropna()` and keeps blocked rows for analytics, training never
-fits on them (`rules_excluded_rows`), prediction's `/predict` returns `rules`/`gate`/`decision` (the
-rules are server-side only — the thresholds are mirrored client-side because they are sliders).
-`text_language: es` swaps TF-IDF's stop words (negations kept) and the challenger embeds every text
-column. `ui_extras: case_desk` («Mesa de valoración», `CaseDeskView.tsx`): the rules → model → trays
-circuit, an official paper sheet with per-box SHAP heat, and scanned-document intake — the browser OCRs
-the file (platform-registry `/documents/extract`), assistant's `POST /extract-record/{slug}` maps the
-text onto the boxes with strictly validated, quote-verified JSON, and `GET /intake-samples/{slug}/{file}`
-serves the listed sample scans. Audit-only columns (`audit_columns`, e.g. sex, nationality) are kept out
-of the model and only feed the equity panel.
+A tabular scenario may ship a network next to its rows (`dataset.graph`, contract
+`ai_circus_shared.network_graph.NetworkGraph`: `row`/`entity`/`context` nodes, typed edges with
+per-period `series`): etl-tabular validates it and restricts it to the cleaned rows
+(`processed/graph.json`), prediction serves it at `GET /graph/{slug}` (same entitlement,
+fallback-org and TTL cache as the dataset sample) and the `network_explorer` tab draws it
+(canvas + d3-force, `networkScene.ts`; `NetworkTab.tsx` adds a person-centred *Investigate* workspace —
+ego stage, routes to targets, live-scored hypothetical individuals via `ui_extras.tie_features`). Graph position reaches the model only as ordinary
+numeric features computed offline. `model.out_of_fold_scores` (classification only)
+makes training cross-fit every row's probability + SHAP with the selected model — served at
+`GET /model/{slug}/out-of-fold` (per-row SHAP up to 5,000 rows, probabilities only above) — because
+the deployed model is refit on every row and its own scores of them are optimistic; `network_explorer`,
+`shipment_globe` and `money_trail` require it (they reveal real outcomes). `money_trail`
+(`aml_money_trail`, IBM AMLworld) reads a graph whose entities are banks, holders are
+rows/context and flow edges carry an *hourly* `series` (`YYYY-MM-DDTHH` periods): a world map
+replaying the payments hour by hour, with a per-typology reveal — plus a second, *Network graph* view
+that feeds the same network to `network_explorer`'s renderer (`networkExplorerExtras()`).

@@ -4,6 +4,7 @@ import { useIdentity } from "./useIdentity";
 import { useTheme } from "./useTheme";
 import { listEntitledScenarios, type ScenarioSummary } from "./apiClient";
 import { DEFAULT_SCENARIO_FILTERS, ScenarioPicker, type ScenarioFilters } from "./ScenarioPicker";
+import { requestWorkspace, type GuideAction, type GuidePage } from "./guideBridge";
 import { Icon } from "./Icon";
 import "./App.css";
 
@@ -18,6 +19,8 @@ const DataProductView = lazy(() => import("./DataProductView").then((m) => ({ de
 const Settings = lazy(() => import("./Settings").then((m) => ({ default: m.Settings })));
 const PlatformStatusView = lazy(() => import("./PlatformStatus").then((m) => ({ default: m.PlatformStatusView })));
 const ArchitectureView = lazy(() => import("./ArchitectureView").then((m) => ({ default: m.ArchitectureView })));
+// The app's guide (docs/adr/0032): fetched the first time it is opened, then kept mounted so the conversation survives.
+const GuidePanel = lazy(() => import("./GuidePanel").then((m) => ({ default: m.GuidePanel })));
 
 // Must match useIdentity.ts's ADMIN_ORG_ID — Settings' LLM Provider / Voice sections
 // manage shared llm-gateway/agui-voice infrastructure, not a per-tenant entitlement, so
@@ -165,6 +168,11 @@ export default function App() {
   const [scenarioFilters, setScenarioFilters] = useState<ScenarioFilters>(DEFAULT_SCENARIO_FILTERS);
   const [scenariosLoading, setScenariosLoading] = useState(false);
   const [scenariosError, setScenariosError] = useState<string | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  // Mounted on first open, then only hidden: closing the guide keeps its conversation.
+  const [guideMounted, setGuideMounted] = useState(false);
+  // The guide opened the Architecture page on a component or a flow; the id remounts the page for each request.
+  const [architectureFocus, setArchitectureFocus] = useState<{ id: number; component: string | null; flow: string | null } | null>(null);
 
   useEffect(() => {
     setSelected(null);
@@ -172,6 +180,8 @@ export default function App() {
     setShowSettings(false);
     setShowPlatform(false);
     setShowArchitecture(false);
+    setGuideOpen(false);
+    setGuideMounted(false);
     if (!identity) return;
     setScenariosLoading(true);
     setScenariosError(null);
@@ -195,9 +205,49 @@ export default function App() {
     );
 
   const isAdmin = identity.orgId === ADMIN_ORG_ID;
+  // The guide shows only to a tenant entitled to the scenario it answers from.
+  const guideScenario = scenarios.find((s) => s.slug === config.guideScenarioSlug) ?? null;
+  const guidePage: GuidePage = showArchitecture
+    ? { kind: "architecture" }
+    : showPlatform && isAdmin
+      ? { kind: "platform" }
+      : showSettings
+        ? { kind: "settings" }
+        : selected
+          ? { kind: "scenario", slug: selected.slug }
+          : { kind: "gallery", query: scenarioFilters.query };
+
+  function toggleGuide() {
+    setGuideMounted(true);
+    setGuideOpen((open) => !open);
+  }
+
+  // What the guide asked for, checked once more against this user's own gallery before anything opens.
+  function handleGuideAction(action: GuideAction) {
+    if (action.kind === "architecture") {
+      setSelected(null);
+      setShowSettings(false);
+      setShowPlatform(false);
+      setShowArchitecture(true);
+      setArchitectureFocus({ id: Date.now(), component: action.component, flow: action.flow });
+      return;
+    }
+    setShowSettings(false);
+    setShowPlatform(false);
+    setShowArchitecture(false);
+    if (action.kind === "search") {
+      setSelected(null);
+      setScenarioFilters({ ...DEFAULT_SCENARIO_FILTERS, query: action.query });
+      return;
+    }
+    const scenario = scenarios.find((s) => s.slug === action.slug);
+    if (!scenario) return;
+    setSelected(scenario);
+    if (action.tab || action.demo) requestWorkspace({ slug: scenario.slug, tab: action.tab, demo: action.demo });
+  }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${guideOpen ? " app-shell--guide" : ""}`}>
       <div className="app-header-group">
         <AiDisclosureBanner />
         <header className="topbar">
@@ -237,10 +287,21 @@ export default function App() {
             </div>
           )}
           <div className="topbar-spacer" />
+          {guideScenario && (
+            <button
+              className={`topbar-settings ${guideOpen ? "active" : ""}`}
+              onClick={toggleGuide}
+              aria-expanded={guideOpen}
+              title="Ask the framework's guide: how it is built, and which scenario to open"
+            >
+              <Icon name="compass" size={14} /> Guide
+            </button>
+          )}
           <button
             className={`topbar-settings ${showArchitecture ? "active" : ""}`}
             onClick={() => {
               setShowArchitecture((a) => !a);
+              setArchitectureFocus(null);
               setShowPlatform(false);
               setShowSettings(false);
               setSelected(null);
@@ -281,7 +342,12 @@ export default function App() {
       <main className="app-main">
         <Suspense fallback={<div className="app-loading">Loading…</div>}>
           {showArchitecture ? (
-            <ArchitectureView scenarios={scenarios} />
+            <ArchitectureView
+              key={architectureFocus?.id ?? 0}
+              scenarios={scenarios}
+              initialComponent={architectureFocus?.component}
+              initialFlow={architectureFocus?.flow}
+            />
           ) : showPlatform && isAdmin ? (
             <PlatformStatusView baseUrl={config.dataPlatformManagerUrl} accessToken={identity.accessToken} scenarios={scenarios} />
           ) : showSettings ? (
@@ -337,6 +403,19 @@ export default function App() {
           )}
         </Suspense>
       </main>
+      {guideScenario && guideMounted && (
+        <Suspense fallback={guideOpen ? <aside className="guide-panel app-loading">Loading the guide…</aside> : null}>
+          <GuidePanel
+            scenario={guideScenario}
+            scenarios={scenarios}
+            page={guidePage}
+            accessToken={identity.accessToken}
+            hidden={!guideOpen}
+            onAction={handleGuideAction}
+            onClose={() => setGuideOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

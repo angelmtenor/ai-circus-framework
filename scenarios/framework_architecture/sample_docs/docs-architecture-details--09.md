@@ -1,13 +1,19 @@
-# Architecture details - A document search as an assistant tool
+# Architecture details - Business rules, decision policy, case desk
 
 Source: docs/architecture-details.md (this repository)
 
-A `tabular_ml` scenario may also give its assistant a **document search as one more tool**
-(`documents` + `documents.tool` {name, label, description, sample_questions} + `vector_store`, e.g.
-`prestaciones_sociales`' `consultar_normativa` over real BOE/EUR-Lex articles + fictional local rules,
-fetched by `scripts/prepare_prestaciones_normativa.py`): etl-vectorize indexes it like a RAG scenario,
-assistant builds the tool per request (`ai_circus_shared.retrieval` — the one `retrieve`/`format_retrieved`
-rag-agent and form-agent share), serves `GET /documents/{slug}`, and honours AG-UI `forwardedProps.scope:
-"documents"` by building **that tool alone**. ChatPanel labels every reply with the sources its tool
-calls really used (`chatProvenance.ts`); case_desk adds a reading room (`NormativaDesk.tsx`, «📖 Ver norma»
-on a fired rule's `legal_basis` — a libs/shared test checks each one resolves to a shipped document).
+A tabular scenario whose rows are *applications* (`prestaciones_sociales`) may gate each one through
+**deterministic business rules before the model** (`dataset.business_rules`, `rule_columns`,
+`ai_circus_shared.business_rules`: families of rules `missing/equals/in/lt/gt/contains_any…` with
+outcomes `reject`/`request_info` (blocking) or `review`) and turn the binary model's probability into
+a proposal with `model.decision_policy` (approve ≥ `approve_at`, deny ≤ `deny_at`, else manual review):
+etl-tabular evaluates the rules before `dropna()` and keeps blocked rows for analytics, training never
+fits on them (`rules_excluded_rows`), prediction's `/predict` returns `rules`/`gate`/`decision` (the
+rules are server-side only — the thresholds are mirrored client-side because they are sliders).
+`text_language: es` swaps TF-IDF's stop words (negations kept) and the challenger embeds every text
+column. `ui_extras: case_desk` («Mesa de valoración», `CaseDeskView.tsx`): the rules → model → trays
+circuit, an official paper sheet with per-box SHAP heat, and scanned-document intake — the browser OCRs
+the file (platform-registry `/documents/extract`), assistant's `POST /extract-record/{slug}` maps the
+text onto the boxes with strictly validated, quote-verified JSON, and `GET /intake-samples/{slug}/{file}`
+serves the listed sample scans. Audit-only columns (`audit_columns`, e.g. sex, nationality) are kept out
+of the model and only feed the equity panel.

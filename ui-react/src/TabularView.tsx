@@ -15,6 +15,7 @@ import { LivePlantView } from "./LivePlantView";
 import { ProcessOptimizerView } from "./ProcessOptimizerView";
 import { Icon, type IconName } from "./Icon";
 import { useChatGenerativeUiActions } from "./chatGenerativeUi";
+import { useWorkspaceGuide } from "./guideBridge";
 import { useConversation } from "./useConversation";
 import { useScenarioAgent } from "./useScenarioAgent";
 
@@ -290,6 +291,27 @@ function TabularViewContent({
     openStoryTab(step.tab);
     if (step.section) setSection(step.section);
   }
+  // The tabs this workspace offers the app's guide (guideBridge.ts), by story tab name: every one this scenario has.
+  const guideTabMap = useMemo(() => {
+    const names = [
+      "overview",
+      "assistant",
+      "tutorial",
+      "data",
+      "mcp",
+      ...views.flatMap((view, index) => {
+        const id = index === 0 ? null : view.slug.split("~")[1];
+        return id ? [`model:${id}`, `extra:${id}`] : ["model", "extra"];
+      }),
+    ];
+    return Object.fromEntries(
+      names.flatMap((name) => {
+        const label = tabLabel(name);
+        return label ? [[name, label]] : [];
+      }),
+    );
+  }, [views, tabLabel]);
+  useWorkspaceGuide(scenario.slug, guideTabMap, openStoryTab, demo ? () => goToDemoStep(0) : undefined);
 
   return (
     <div className={`workspace${demoIndex !== null ? " workspace--demo" : ""}`}>

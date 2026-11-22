@@ -1954,6 +1954,179 @@ select:focus {
   color: var(--dim);
 }
 
+/* ── The app's guide (GuidePanel.tsx) ─────────────────────────────────────────
+   A side panel, not a modal: the user watches what the guide opens. On a wide screen the page makes room for it
+   (and the fixed controls move with the page); on a narrow one it lies over the page. Static: nothing animates. */
+
+.app-shell {
+  --guide-width: min(26rem, 100vw);
+}
+
+.guide-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--guide-width);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.guide-panel[hidden] {
+  display: none;
+}
+
+.guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.guide-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.guide-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.guide-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--dim);
+  font-size: 0.78rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.guide-new:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--accent-2);
+}
+
+.guide-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--dim);
+  line-height: 1.4;
+}
+
+.guide-panel .chat-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.guide-panel .chat-history {
+  flex: 1;
+  min-height: 0;
+}
+
+.guide-action {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--accent-border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.guide-action em {
+  color: var(--dim);
+  font-style: normal;
+}
+
+.guide-action--refused {
+  border-color: var(--border);
+  background: none;
+  color: var(--dim);
+}
+
+@media (min-width: 1100px) {
+  .app-shell--guide {
+    padding-right: var(--guide-width);
+  }
+
+  .guide-panel {
+    box-shadow: none;
+  }
+
+  .app-shell--guide .chat-dock-toggle {
+    right: calc(var(--guide-width) + 1.5rem);
+  }
+
+  .app-shell--guide .demo-bar {
+    left: calc((100vw - var(--guide-width)) / 2);
+    width: min(60rem, calc(100vw - var(--guide-width) - 2rem));
+  }
+
+  /* The scenario's own chat dock covers the page (and the guide): the bar keeps its place beside it. */
+  .app-shell--guide .demo-bar.demo-bar--beside-chat {
+    left: 1rem;
+    width: min(44rem, calc(100vw - 37rem));
+  }
+
+  /* Beside the guide the page is ~26rem narrower, so the top bar wraps instead of running under the panel. */
+  .app-shell--guide .topbar {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .app-shell--guide .topbar-scenario {
+    min-width: 0;
+  }
+
+  .app-shell--guide .topbar-scenario-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+/* With room for both, the scenario's own chat dock opens beside the guide instead of over it. */
+@media (min-width: 1400px) {
+  .app-shell--guide .chat-dock-overlay {
+    right: var(--guide-width);
+  }
+
+  .app-shell--guide .chat-dock-panel--maximized {
+    width: min(72rem, 100%);
+  }
+
+  .app-shell--guide .demo-bar.demo-bar--beside-chat {
+    width: min(44rem, calc(100vw - var(--guide-width) - 37rem));
+  }
+}
+
+@media (max-width: 1099px) {
+  .app-shell--guide .chat-dock-toggle {
+    display: none;
+  }
+}
+
 /* ── Chat dock (overlay) ───────────────────────────────────────────────────── */
 
 .chat-dock-toggle {

@@ -135,13 +135,25 @@ k3s-mcp-portforward`, the llm-gateway → assistant edge in the architecture cat
 a token), every tool called with the admin key. Not tried: a question from LibreChat end to end (the active model had
 no credit).
 
-### 5. F9 — a master assistant for the whole framework
+### 5. F9 — a master assistant for the whole framework — done
 
-A chat available from the gallery (not tied to one scenario) that answers from the architecture tutorial's RAG (step
-3) and acts through frontend actions (`useCopilotAction`): search scenarios (the ranked search), open one, switch tab,
-start the guided demo, open the Architecture page. Bounded by the user's entitlements (it can only open what the
-gallery shows). Decide whether it is a `conversational_rag` scenario with `consume` doors or a small agent in
-rag-agent; keep every model call through llm-gateway.
+Branch `feature/master-assistant` (from `develop` after v0.65.0). [ADR 0032](../adr/0032-the-apps-guide.md): neither a
+new scenario nor a new agent — the top bar's **Guide** (`GuidePanel.tsx`) is the architecture tutorial's own rag-agent
+chat (same documents, citations, entitlement and history, titled "🧭 Framework guide") with `forwardedProps.guide`
+(extra instructions only, `rag_agent.core.agent.system_prompt`) and four frontend tools: `search_scenarios` (ranks the
+gallery), `open_scenario` (a scenario, optionally on a tab; also switches tab), `start_guided_demo`,
+`open_architecture` (on a component or a request flow). Its context is the user's own gallery, where they are and the
+open workspace's tabs, published by every workspace through `guideBridge.ts` (`useStoryDemo`; TabularView directly).
+App checks every slug against the entitled list; a workspace opens only a tab it published. A side panel, lazy, kept
+mounted while hidden; on a wide screen the page makes room for it (the top bar wraps) and, from 1,400 px, a scenario's
+own chat dock opens beside it. A scenario whose service is off or whose model is untrained for the tenant is marked
+unavailable in the context and refused with the reason. Verified on k3s with gemini-flash: a documents answer with
+sources, search, open + guided demo, tab switch, Architecture flow, the same request again from another page, the
+scenario dock beside the guide, close/reopen keeps the conversation, idle 0 frames/s with the guide open, no overflow
+at phone width; `make k3s-idle-check` on Reservoirs and Insurance stays quiet.
+
+Not done yet: asking a scenario's own assistant from the guide, and the guide's answers about ADR 0032 itself (needs an
+`etl-vectorize` run after `make architecture`).
 
 ### 6. F10 — voice, push to talk (separate session)
 
@@ -154,6 +166,9 @@ at `useVoiceSession.ts`, `MicButton.tsx` and agui-voice's VAD settings; keep the
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
   profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).
   Drop that profile default (as for the governance flags) to index one scenario at a time.
+- `split_markdown` (`ai_circus_shared/architecture.py`, the tutorial's snapshot) cuts a paragraph longer than 4,000
+  characters and drops its tail without a warning (found in F9: the first section of `architecture-details.md` lost
+  its last sentences until it was split). Chunk long paragraphs at sentence boundaries instead, or fail the check.
 
 - The drought assistant tools and the control room read the committed artifacts, not the forecast trained for the
   caller's tenant (water guide, "What is left" 1).

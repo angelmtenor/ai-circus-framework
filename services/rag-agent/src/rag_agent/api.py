@@ -466,8 +466,15 @@ async def agui_endpoint(
             },
         }
     )
+    # The web app's guide (docs/adr/0032): its actions arrive as frontend tools; this only says how to use them.
+    guide = props.get("guide") is True
     graph = build_agui_agent(
-        llm_for_request, tools, definition.chat.context, knowledge_graph=trace is not None, via_mcp=bool(mcp_servers)
+        llm_for_request,
+        tools,
+        definition.chat.context,
+        knowledge_graph=trace is not None,
+        via_mcp=bool(mcp_servers),
+        guide=guide,
     )
     model_usage = ModelUsageCallback()
     run_config: dict[str, Any] = {"callbacks": [model_usage]}

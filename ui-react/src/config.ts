@@ -36,6 +36,9 @@ export const config = {
   dagsterUrl: import.meta.env.VITE_DAGSTER_URL ?? "http://dagster.localhost",
   supersetUrl: import.meta.env.VITE_SUPERSET_URL ?? "http://superset.localhost",
   openMetadataUrl: import.meta.env.VITE_OPENMETADATA_URL ?? "http://openmetadata.localhost",
+  // The app's guide (docs/adr/0032) answers from this conversational_rag scenario's documents and acts in the app; it
+  // shows only to a tenant entitled to that scenario.
+  guideScenarioSlug: import.meta.env.VITE_GUIDE_SCENARIO ?? "framework_architecture",
   keycloakIssuer: import.meta.env.VITE_KEYCLOAK_ISSUER ?? "http://keycloak.localhost/realms/ai-circus",
   keycloakClientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "",
   keycloakAudience: import.meta.env.VITE_KEYCLOAK_AUDIENCE ?? "https://api.ai-circus-framework.local",

@@ -11,6 +11,7 @@ function zodToJsonSchema(schema: unknown, options?: { $refStrategy?: string }): 
 import { AttachButton } from "./AttachButton";
 import { chatModel, extractDocument, type ChatModel, type DocumentTool, type SampleUpload } from "./apiClient";
 import {
+  APP_ACTIONS,
   CHAT_WORDS,
   FRONTEND_TOOL_ANSWER,
   mcpToolParts,
@@ -232,6 +233,10 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   graph_path: "Tracing a path through the knowledge graph…",
   render_chart: "Drawing chart…",
   render_table: "Building table…",
+  [APP_ACTIONS.search]: "Searching the gallery…",
+  [APP_ACTIONS.open]: "Opening…",
+  [APP_ACTIONS.demo]: "Starting the guided demo…",
+  [APP_ACTIONS.architecture]: "Opening the Architecture page…",
 };
 
 function toolActivityLabel(name: string, documentTool: DocumentTool | null | undefined, locale: ChatLocale): string {
