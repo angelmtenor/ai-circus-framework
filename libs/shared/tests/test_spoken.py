@@ -27,4 +27,6 @@ def test_the_instructions_ask_for_a_short_plain_answer_and_keep_the_tools() -> N
     assert "60 words" in text
     assert "no lists, tables" in text
     assert "tools exactly as you would" in text
-    assert "on screen" in text
+    # The chat's screen actions reach a spoken turn too (agui-voice relays them): use them, and say what they did.
+    assert "act on the screen included" in text
+    assert "what is now on screen" in text

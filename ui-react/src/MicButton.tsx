@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HttpAgent } from "@ag-ui/client";
 import { voiceProviders, type VoiceProviderGroup, type VoiceProviders } from "./apiClient";
-import { isVoiceConnected, useVoiceSession, type VoiceSessionState } from "./useVoiceSession";
+import { isVoiceConnected, useVoiceSession, type VoiceSessionState, type VoiceTurnBridge } from "./useVoiceSession";
 
 const LABELS: Record<VoiceSessionState, string> = {
   idle: "Talk: press to start, press again to send. Once voice is on, you can also hold the space bar",
@@ -70,7 +70,8 @@ function spaceBelongsElsewhere(target: EventTarget | null, mic: HTMLElement | nu
  * talking with pulsing rings, waiting, answering); only talking animates, so a
  * connected but idle session leaves the page still. A small ✕ ends voice mode (it
  * also hangs up by itself after a few idle minutes). A voice turn renders in the
- * same transcript as a typed one, so no separate UI is needed for it here.
+ * same transcript as a typed one, and acts on the screen as one does (`turn`), so no
+ * separate UI is needed for it here.
  *
  * Also fetches and shows which STT/TTS provider is actually in effect (the admin
  * Settings page's live choice, resolved server-side — see api/providers.py) as a
@@ -83,6 +84,7 @@ export function MicButton({
   scenarioSlug,
   accessToken,
   disabled = false,
+  turn,
 }: {
   agent: HttpAgent;
   voiceUrl: string;
@@ -90,8 +92,10 @@ export function MicButton({
   accessToken: string | null;
   /** Until the chat's conversation exists: a voice turn needs one to land in. */
   disabled?: boolean;
+  /** The chat's tools, screen and transcript for each spoken turn, and who runs its screen actions. */
+  turn?: VoiceTurnBridge;
 }) {
-  const { state, press, release, end } = useVoiceSession(agent, voiceUrl, scenarioSlug, accessToken);
+  const { state, press, release, end } = useVoiceSession(agent, voiceUrl, scenarioSlug, accessToken, turn);
   const connected = isVoiceConnected(state);
   const active = connected || state === "connecting";
   const [providers, setProviders] = useState<VoiceProviders | null>(null);

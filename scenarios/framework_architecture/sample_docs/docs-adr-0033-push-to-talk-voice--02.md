@@ -33,6 +33,9 @@ Source: docs/adr/0033-push-to-talk-voice.md (this repository)
   cannot read one): the browser learns of it from RTVI's `bot-interrupted`.
 - **A spoken turn is answered for the ear.** The bridge sends each run with `forwardedProps: {"spoken": true}`, and
   assistant, rag-agent and form-agent then end their system prompt with `ai_circus_shared.spoken`'s instructions: two
-  to four plain sentences, no lists or tables, and an offer to show the detail on screen. The tools, data and checks
+  to four plain sentences, no lists or tables, and the detail shown on screen (or offered). The tools, data and checks
   are those of a typed turn. Without it the first insurance answer (SHAP factors, then offers) took about two minutes
   to say.
+- **A spoken turn acts on the screen as a typed one does.** The bridge used to run the agent with no tools and no
+  context, so by voice the form was never filled, no chart was drawn and the guide could not open anything, while the
+  form agent said it had done so. Now each press sends a `client-message` of type `voice-turn`

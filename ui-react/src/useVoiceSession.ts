@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { randomUUID, type HttpAgent } from "@ag-ui/client";
+import type { Context as AguiContext, InputContent, Message as AguiMessage, Tool as AguiTool } from "@ag-ui/core";
 import { RTVIMessage } from "@pipecat-ai/client-js";
 import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
 
@@ -37,6 +38,12 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * ChatPanel's existing `onMessagesChanged` subscription renders it identically —
  * no separate voice transcript state, no CopilotKit changes.
  *
+ * It also runs as a typed turn would: each press sends a `voice-turn` message with what
+ * the chat sends a typed run (its tools, readable context, forwarded props and
+ * transcript, from `turn.input()`), and a call the agent makes to one of those tools (a
+ * screen action) comes back as a `frontend-tool-call` server message for `turn.onToolCall`
+ * to carry out exactly as after a typed turn.
+ *
  * Only one live session is allowed app-wide at a time: `activeSession` is a
  * module-level singleton (not per-hook-instance state), so starting a session from
  * anywhere first tears down whatever was already running.
@@ -69,6 +76,55 @@ const RTVI_PROTOCOL_VERSION = "2.1.0";
 
 /** The RTVI `client-message` type agui-voice's core/push_to_talk.py listens for. */
 export const PUSH_TO_TALK = "push-to-talk";
+/** The RTVI `client-message` carrying a turn's tools, context, props and transcript (core/agent_bridge.py). */
+export const VOICE_TURN = "voice-turn";
+/** The RTVI `server-message` handing one of the chat's own tool calls back to run here (core/agent_bridge.py). */
+export const FRONTEND_TOOL_CALL = "frontend-tool-call";
+// The transcript a voice turn carries: its latest messages, text only (agent_bridge.py refuses more than 100, or
+// over 512 KB in all, and the turn then runs without the chat's tools).
+const VOICE_TRANSCRIPT_MESSAGES = 40;
+
+/** What a spoken turn sends from the chat it is in: what a typed run of that chat sends. */
+export interface VoiceTurnInput {
+  tools: AguiTool[];
+  context: AguiContext[];
+  forwardedProps: Record<string, unknown>;
+  messages: AguiMessage[];
+}
+
+/** A call the agent made, by voice, to one of the chat's own tools. */
+export interface VoiceToolCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+/** How a voice session takes part in its chat: what it sends with each turn, and who runs a screen action. */
+export interface VoiceTurnBridge {
+  input: () => VoiceTurnInput;
+  onToolCall: (call: VoiceToolCall) => void;
+}
+
+/**
+ * The chat's transcript as a voice turn carries it: user, assistant and tool messages only, a user message's
+ * attachments reduced to its text (an image is seen in the typed turn it came with), and only the latest ones,
+ * starting at a user message so no tool result is left without its call.
+ */
+export function transcriptForVoice(messages: readonly AguiMessage[]): AguiMessage[] {
+  const kept = messages
+    .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool")
+    .map((m) => {
+      if (m.role !== "user" || typeof m.content === "string") return m;
+      const text = (m.content as InputContent[])
+        .filter((c): c is InputContent & { type: "text" } => c.type === "text")
+        .map((c) => c.text)
+        .join("\n");
+      return { ...m, content: text };
+    })
+    .slice(-VOICE_TRANSCRIPT_MESSAGES);
+  const start = kept.findIndex((m) => m.role === "user");
+  return start < 0 ? [] : kept.slice(start);
+}
 // The server ends a turn itself past 60 s of audio (DEFAULT_MAX_TURN_SECS); the client stops at the same point.
 const MAX_TURN_MS = 60_000;
 // Keep streaming this long after the release: the capture buffer (4096 samples at
@@ -122,8 +178,14 @@ export function useVoiceSession(
   voiceUrl: string,
   scenarioSlug: string,
   accessToken: string | null,
+  turn?: VoiceTurnBridge,
 ) {
   const [state, setStateValue] = useState<VoiceSessionState>("idle");
+  // Read when a turn starts or a screen action arrives: the chat's latest tools, screen and handlers.
+  const turnRef = useRef(turn);
+  useEffect(() => {
+    turnRef.current = turn;
+  });
   // The callbacks below run from socket and key events: they read the state from here, not from a stale render.
   const stateRef = useRef<VoiceSessionState>("idle");
   const sessionRef = useRef<VoiceSession | null>(null);
@@ -276,6 +338,20 @@ export function useVoiceSession(
       const message = new RTVIMessage("client-message", { t: PUSH_TO_TALK, d: { talking } });
       ws.send(serializer.serializeMessage(message) as unknown as ArrayBuffer);
     };
+    // What a typed run of this chat would send, taken as the user starts talking: the same tools, screen and transcript.
+    const sendTurnInput = () => {
+      const bridge = turnRef.current;
+      if (!bridge || ws.readyState !== WebSocket.OPEN) return;
+      let input: VoiceTurnInput;
+      try {
+        input = bridge.input();
+      } catch (err) {
+        console.error("Voice session: could not read the chat's tools and context:", err);
+        return;
+      }
+      const message = new RTVIMessage("client-message", { t: VOICE_TURN, d: input });
+      ws.send(serializer.serializeMessage(message) as unknown as ArrayBuffer);
+    };
     // A press during the previous release's tail closes that turn first, at once.
     const flushTail = () => {
       if (!timers.tail) return;
@@ -305,6 +381,7 @@ export function useVoiceSession(
         clearTimer("max");
         clearScheduledPlayback(); // barge-in, heard at once; the server interrupts the reply too
         sendTalking(true);
+        sendTurnInput();
         sendingAudio = true;
         setState("talking");
         timers.max = setTimeout(() => controls.end(), MAX_TURN_MS);
@@ -381,14 +458,22 @@ export function useVoiceSession(
           }
           break;
         case "server-message": {
-          // The server ended an over-long turn itself (core/push_to_talk.py's limit).
-          const data = message.data as { type?: string; talking?: boolean } | undefined;
+          const data = message.data as ({ type?: string; talking?: boolean } & Partial<VoiceToolCall>) | undefined;
           if (data?.type === PUSH_TO_TALK && data.talking === false && stateRef.current === "talking") {
+            // The server ended an over-long turn itself (core/push_to_talk.py's limit).
             clearTimer("max");
             clearTimer("tail");
             sendingAudio = false;
             setState("thinking");
             waitForReply(THINKING_TIMEOUT_MS);
+          } else if (
+            data?.type === FRONTEND_TOOL_CALL &&
+            typeof data.id === "string" &&
+            typeof data.name === "string" &&
+            typeof data.arguments === "string"
+          ) {
+            // A screen action the agent took by voice: the chat carries it out as after a typed turn.
+            turnRef.current?.onToolCall({ id: data.id, name: data.name, arguments: data.arguments });
           }
           break;
         }

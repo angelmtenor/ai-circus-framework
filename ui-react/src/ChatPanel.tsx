@@ -27,6 +27,7 @@ import { config } from "./config";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
 import { SpeakerButton } from "./SpeakerButton";
+import { transcriptForVoice, type VoiceTurnBridge } from "./useVoiceSession";
 
 /** Read `file` as base64 (no `data:...;base64,` prefix) — the shape AG-UI's
  * `InputContentDataSource.value` expects (see ag_ui_langgraph.utils._media_source_to_url,
@@ -457,6 +458,39 @@ export function ChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent, documentTool, locale]);
 
+  /** What every run of this chat sends besides its messages — a spoken turn (MicButton) sends the same. */
+  function runInput() {
+    const props: Record<string, unknown> = {
+      ...(documentTool ? { scope } : {}),
+      ...(canUseMcp && route === "mcp" ? { route } : {}),
+      ...(forwardedProps ?? {}),
+    };
+    return {
+      tools: toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]),
+      context: contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>),
+      forwardedProps: props,
+    };
+  }
+
+  /** The tools this chat carries out itself when the agent calls them (they draw in the chat, or act on the page). */
+  function frontendToolNames(): Set<string> {
+    return new Set((copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name));
+  }
+
+  // A spoken turn runs as a typed one (docs/adr/0033): the same tools, screen and transcript go with it, and a
+  // screen action it takes lands in the transcript and is carried out exactly as after a typed turn.
+  const voiceTurn: VoiceTurnBridge = {
+    input: () => ({ ...runInput(), messages: transcriptForVoice(agent.messages) }),
+    onToolCall: (call) => {
+      agent.addMessage({
+        id: randomUUID(),
+        role: "assistant",
+        toolCalls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }],
+      });
+      answerUnansweredFrontendToolCalls(agent, frontendToolNames(), onFrontendToolCall);
+    },
+  };
+
   async function send(text: string) {
     const trimmed = text.trim();
     if ((!trimmed && pendingFiles.length === 0) || sending || !conversationReady) return;
@@ -469,18 +503,9 @@ export function ChatPanel({
       const content =
         files.length > 0 ? await buildMessageContent(trimmed, files, vision, config.platformRegistryUrl, accessToken) : trimmed;
       agent.addMessage({ id: randomUUID(), role: "user", content });
-      const tools = toolsFromCore(copilotkit.tools as CopilotKitCoreTool[]);
-      const context = contextFromCore(copilotkit.context as Record<string, { description: string; value: string }>);
-      const props = {
-        ...(documentTool ? { scope } : {}),
-        ...(canUseMcp && route === "mcp" ? { route } : {}),
-        ...(forwardedProps ?? {}),
-      };
+      const { tools, context, forwardedProps: props } = runInput();
       await agent.runAgent({ tools, context, ...(Object.keys(props).length ? { forwardedProps: props } : {}) });
-      const frontendToolNames = new Set(
-        (copilotkit.tools as CopilotKitCoreTool[]).filter((t) => t.render).map((t) => t.name),
-      );
-      answerUnansweredFrontendToolCalls(agent, frontendToolNames, onFrontendToolCall);
+      answerUnansweredFrontendToolCalls(agent, frontendToolNames(), onFrontendToolCall);
       // Next turn's history must keep each tool result after its call (see messageOrder.ts).
       const ordered = toolResultsAfterTheirCalls(agent.messages);
       if (!sameOrder(ordered, agent.messages)) agent.setMessages(ordered);
@@ -720,6 +745,7 @@ export function ChatPanel({
           scenarioSlug={scenarioSlug}
           accessToken={accessToken}
           disabled={!conversationReady}
+          turn={voiceTurn}
         />
         <AttachButton onAttach={handleAttach} disabled={sending || pendingFiles.length >= MAX_ATTACHMENTS} />
         <input

@@ -4,6 +4,20 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.67.0 — 2026-11-22
+
+### Added
+- **A spoken question acts on the screen as a typed one does** ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)): by
+  voice the form agent fills the form, a scenario chat draws its chart or table, and the guide opens scenarios, tabs and
+  guided demos, then the agent says in a sentence what is now on screen. Each press sends agui-voice the chat's tools,
+  readable context, forwarded props and transcript (a `voice-turn` message, checked and capped at 512 KB); a call to
+  one of the chat's tools comes back as a `frontend-tool-call` that the chat carries out, and the agent runs once more
+  to say what it did (at most three runs per spoken turn). This lifts v0.66.0's known limit.
+
+### Changed
+- The spoken instructions (`ai_circus_shared.spoken`) ask the agent to use its screen tools as for a typed question and
+  to say what is on screen instead of reading it out.
+
 ## v0.66.0 — 2026-11-22
 
 ### Added
