@@ -474,7 +474,8 @@ prose — using the exact same Plotly/table components as the Data tab.
 Every chat panel has a **mic** button (a live voice conversation, push to talk: press to
 start talking, press again — or hold and release the space bar — to send; pressing while the
 assistant speaks cuts it off) and a **speaker** icon on each reply (one-shot text-to-speech).
-There is no automatic end-of-speech detection: a pause to think never ends your turn
+There is no automatic end-of-speech detection: a pause to think never ends your turn, and a
+spoken question gets a short spoken answer, with the details offered on screen
 ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)). Both are served by `agui-voice`, a Pipecat pipeline that uses the *existing*
 `assistant`/`rag-agent`/`form-agent` `/agui/{scenario_slug}` endpoint as its LLM stage — so a
 spoken turn lands in the same transcript, with the same tools and generative UI, as a typed one,

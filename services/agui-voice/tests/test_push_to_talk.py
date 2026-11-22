@@ -27,6 +27,7 @@ class Recorder:
     """What the processor pushed (forwarded or its own) and broadcast, in order."""
 
     def __init__(self) -> None:
+        """Start with nothing pushed or broadcast."""
         self.pushed: list[Frame] = []
         self.events: list[str] = []
 
@@ -87,7 +88,8 @@ def test_requested_talking(frame: RTVIClientMessageFrame, expected: bool | None)
 
 async def test_a_press_interrupts_the_bot_then_opens_the_turn(recorder: Recorder) -> None:
     """Pressing is the barge-in: the interruption goes out before the segment opens, so nothing it resets can drop
-    the start of the new turn; the message itself is still forwarded."""
+    the start of the new turn; the message itself is still forwarded.
+    """
     processor = _processor(recorder)
     press = _ptt({"talking": True})
 
@@ -189,7 +191,8 @@ async def test_each_turn_gets_its_own_limit(recorder: Recorder) -> None:
 
 def test_the_frames_it_replaces_the_vad_with_are_the_ones_whisper_segments_on() -> None:
     """Whisper (a SegmentedSTTService) buffers between exactly these two frames; if Pipecat renames them, this
-    processor silently stops bounding turns."""
+    processor silently stops bounding turns.
+    """
     from pipecat.services.stt_service import SegmentedSTTService
 
     source = SegmentedSTTService.process_frame.__code__.co_names

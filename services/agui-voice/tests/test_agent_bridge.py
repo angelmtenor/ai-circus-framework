@@ -106,7 +106,10 @@ async def test_run_agent_posts_to_the_chats_conversation(
     seen: list[str] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:  # ruff: ignore[unused-async]
-        seen.append(json.loads(request.content)["threadId"])
+        body = json.loads(request.content)
+        seen.append(body["threadId"])
+        # Marked as spoken, so the agent answers in a few sentences for the ear (ai_circus_shared.spoken).
+        assert body["forwardedProps"] == {"spoken": True}
         return httpx.Response(200, content=b"", headers={"content-type": "text/event-stream"})
 
     voice = AgentBridgeProcessor(

@@ -608,7 +608,14 @@ async def test_agui_endpoint_emits_the_knowledge_graph_trace_before_run_finished
         yield RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="t", run_id="r")
 
     def _fake_build_agui_agent(
-        _llm: object, tools: list, _context: str, *, knowledge_graph: bool, via_mcp: bool = False, guide: bool = False
+        _llm: object,
+        tools: list,
+        _context: str,
+        *,
+        knowledge_graph: bool,
+        via_mcp: bool = False,
+        guide: bool = False,
+        spoken: bool = False,
     ) -> str:
         built.update(tools=tools, knowledge_graph=knowledge_graph)
         assert via_mcp is False  # a knowledge-graph scenario answers through its graph
@@ -682,9 +689,18 @@ async def _run_chat(
         yield RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id="t", run_id="r")
 
     def _fake_build_agui_agent(
-        _llm: object, tools: list, _context: str, *, knowledge_graph: bool, via_mcp: bool = False, guide: bool = False
+        _llm: object,
+        tools: list,
+        _context: str,
+        *,
+        knowledge_graph: bool,
+        via_mcp: bool = False,
+        guide: bool = False,
+        spoken: bool = False,
     ) -> str:
-        built.update(tools=[t if isinstance(t, str) else t.name for t in tools], via_mcp=via_mcp, guide=guide)
+        built.update(
+            tools=[t if isinstance(t, str) else t.name for t in tools], via_mcp=via_mcp, guide=guide, spoken=spoken
+        )
         return "fake-graph"
 
     async def _fake_load_mcp_tools(  # ruff: ignore[unused-async]
@@ -751,6 +767,18 @@ async def test_the_guide_flag_adds_the_app_instructions_only_when_exactly_true(
     """The web app's guide (docs/adr/0032) keeps the same document tools; only the prompt changes."""
     built = await _run_chat(monkeypatch, mcp=None, forwarded=forwarded)
     assert built["guide"] is guide
+    assert built["tools"] == ["retrieve_docs", "list_sources", "read_document"]
+
+
+@pytest.mark.parametrize(
+    ("forwarded", "spoken"), [({"spoken": True}, True), ({"spoken": 1}, False), ({"guide": True}, False), ({}, False)]
+)
+async def test_a_spoken_turn_asks_for_a_short_answer_with_the_same_tools(
+    monkeypatch: pytest.MonkeyPatch, forwarded: dict, spoken: bool
+) -> None:
+    """agui-voice's turns (ai_circus_shared.spoken) change only the prompt, never the documents the chat can read."""
+    built = await _run_chat(monkeypatch, mcp=None, forwarded=forwarded)
+    assert built["spoken"] is spoken
     assert built["tools"] == ["retrieve_docs", "list_sources", "read_document"]
 
 

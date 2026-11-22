@@ -162,8 +162,8 @@ space bar) to send; no end-of-speech detection. agui-voice's pipeline swaps the 
 (`services/agui-voice/src/agui_voice/core/push_to_talk.py`), which turns the client's `push-to-talk` RTVI message into
 the frames that bound Whisper's segment, interrupts the bot on a press and caps a turn at 60 s; the `silero` extra is
 gone and start-up still warms STT and TTS. `useVoiceSession.ts` sends audio only while talking (plus a 320 ms tail),
-drops the queued reply on a barge-in, gives the button back after 30 s without an answer and hangs up after 3
-minutes unused; `MicButton.tsx`
+drops the queued reply on a barge-in, gives the button back after 30 s if the agent never starts (2 minutes once it
+has) and hangs up after 3 minutes unused; `MicButton.tsx`
 shows talking (red) / thinking / speaking, takes the space bar once voice is on (never inside a field), and has a ✕ to
 end voice mode. Fixed on the way: the voice bridge ran the agent on `thread_id=<slug>`, which every agent has refused
 with 404 since conversation history arrived (no spoken turn got an answer); the browser now passes the open
@@ -175,9 +175,17 @@ questions are in the conversation's history; every insurance tab passes the idle
 
 ### Smaller follow-ups
 
-- A spoken reply is as long as a typed one: the insurance chat's first voice answer (SHAP factors, then offers) took
-  about two minutes to say. Tell the agent the turn is spoken (a `forwarded_props` flag from `AgentBridgeProcessor`)
-  so it answers in a few sentences, without lists or tables, and offers the details on screen.
+- Done: a spoken reply was as long as a typed one (the insurance chat's first voice answer took about two minutes to
+  say). agui-voice now sends `forwardedProps: {"spoken": true}` and every agent ends its prompt with
+  `ai_circus_shared.spoken`'s instructions. Measured on k3s with a fake microphone: insurance 61 words said in 20 s,
+  the architecture tutorial 64 words in 22 s, the service request form 51 words in 13 s. On the way, the browser's
+  30 s wait now applies only until the agent starts; one insurance answer took 60 s (two Gemini calls and a tool) and
+  would otherwise have been dropped.
+- A spoken turn has none of the browser's tools: `AgentBridgeProcessor` sends `tools=[]` and `context=[]`, so by voice
+  the form is never filled, no chart is drawn and the guide cannot act, although the README says a spoken turn has
+  "the same tools and generative UI". Worse, the form agent then says "I have started your request" with every field
+  still empty. Either pass the chat's frontend tools and readable context over the voice socket and relay the tool
+  calls back to the browser to run, or tell the agent (in `ai_circus_shared.spoken`) it has no screen actions by voice.
 
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
   profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).

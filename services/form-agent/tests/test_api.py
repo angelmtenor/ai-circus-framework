@@ -550,6 +550,46 @@ async def test_agui_endpoint_binds_the_callers_org_id_onto_the_llm(monkeypatch: 
     assert any(tag.startswith("scenario:") for tag in metadata["tags"])
 
 
+@pytest.mark.parametrize(("props", "spoken"), [({"spoken": True}, True), ({"spoken": "true"}, False), ({}, False)])
+async def test_a_spoken_turn_asks_for_a_short_answer(
+    monkeypatch: pytest.MonkeyPatch, props: dict[str, object], spoken: bool
+) -> None:
+    """agui-voice's turns (forwardedProps.spoken exactly true) end the form prompt with the spoken-reply text."""
+    from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS
+
+    prompts: list[str] = []
+
+    def fake_build_agui_agent(_llm: object, system_prompt: str, _tools: list[object]) -> str:
+        prompts.append(system_prompt)
+        return "fake-graph"
+
+    monkeypatch.setattr(api_module, "build_agui_agent", fake_build_agui_agent)
+    monkeypatch.setattr(
+        api_module,
+        "LangGraphAGUIAgent",
+        lambda *, name, graph, config=None: SimpleNamespace(run=lambda _input: iter(())),
+    )
+    definition = _fake_definition(classification=False)
+
+    await agui_endpoint(
+        scenario_slug="service_request",
+        input_data=RunAgentInput(
+            threadId="t", runId="r", messages=[], tools=[], context=[], state={}, forwardedProps=props
+        ),
+        request=_fake_http_request(),
+        identity=Identity(subject="user-1", org_id="org-1", roles=frozenset({"scenario:service_request"})),
+        definition=definition,
+        qdrant=SimpleNamespace(),
+        embedder=SimpleNamespace(),
+        llm=SimpleNamespace(model_kwargs={}, extra_body=None, model_copy=lambda **_kw: SimpleNamespace()),
+        model_name="gemini-flash",
+        store=_seeded_conversation_store(),
+    )
+
+    typed = api_module.build_form_system_prompt(definition)
+    assert prompts == [typed + SPOKEN_REPLY_INSTRUCTIONS if spoken else typed]
+
+
 async def test_agui_endpoint_persists_the_user_message_and_assistant_reply(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

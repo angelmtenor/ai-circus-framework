@@ -22,6 +22,7 @@ from uuid import uuid4
 
 import httpx
 from ag_ui.core import AssistantMessage, Message, RunAgentInput, UserMessage
+from ai_circus_shared.spoken import spoken_props
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
@@ -119,7 +120,8 @@ class AgentBridgeProcessor(FrameProcessor):
             messages=self._messages,
             tools=[],
             context=[],
-            forwarded_props=None,
+            # The agent answers for the ear: a few spoken sentences, no lists or tables (ai_circus_shared.spoken).
+            forwarded_props=spoken_props(),
         )
         reply = ""
         await self.push_frame(LLMFullResponseStartFrame())

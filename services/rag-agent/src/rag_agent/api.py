@@ -20,6 +20,7 @@ from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.network_graph import GraphEdge, GraphNode, NetworkGraph
 from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition, kg_collection_name, qdrant_collection_name
+from ai_circus_shared.spoken import is_spoken
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
@@ -475,6 +476,7 @@ async def agui_endpoint(
         knowledge_graph=trace is not None,
         via_mcp=bool(mcp_servers),
         guide=guide,
+        spoken=is_spoken(props),
     )
     model_usage = ModelUsageCallback()
     run_config: dict[str, Any] = {"callbacks": [model_usage]}

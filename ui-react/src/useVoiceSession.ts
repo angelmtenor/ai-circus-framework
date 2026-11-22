@@ -74,8 +74,11 @@ const MAX_TURN_MS = 60_000;
 // Keep streaming this long after the release: the capture buffer (4096 samples at
 // 16 kHz = 256 ms) still holds the last word, and the stop must not overtake it.
 const RELEASE_TAIL_MS = 320;
-// No transcript or reply after a turn (silence, or a failed run): give the button back.
+// No agent run after a turn (silence, nothing transcribed): give the button back.
 const THINKING_TIMEOUT_MS = 30_000;
+// The agent has started (bot-llm-started) but not answered yet: a cold prompt cache plus a slow model took 30 s once,
+// and giving the button back then made the answer arrive later, unannounced. Still bounded, for a run that hangs.
+const AGENT_RUN_TIMEOUT_MS = 120_000;
 // The reply's text is done but no audio started (TTS failed or had nothing to say).
 const AFTER_REPLY_MS = 4_000;
 // Connected but unused this long: hang up, which frees the server's pipeline and the microphone.
@@ -402,6 +405,8 @@ export function useVoiceSession(
         // typed turn's streamed reply collapses to once `agent.messages` settles.
         case "bot-llm-started":
           botTextRef.current = "";
+          // The turn was heard and the agent is working on it: wait for its answer, not for the 30 s first step.
+          if (stateRef.current === "thinking") waitForReply(AGENT_RUN_TIMEOUT_MS);
           break;
         case "bot-llm-text": {
           const data = message.data as { text?: string } | undefined;

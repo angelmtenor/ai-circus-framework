@@ -164,8 +164,11 @@ def test_score_record_refuses_a_value_of_the_wrong_kind_before_the_model(
 
 
 def test_score_record_takes_a_number_written_as_text(client: TestClient) -> None:
-    assert _call(client, "insurance_portfolio", "score_record", {"record": {"PremiumChangePct": "12.5"}})["isError"] is False
-    assert FakePrediction.calls[-1]["records"][0]["PremiumChangePct"] == 12.5
+    assert (
+        _call(client, "insurance_portfolio", "score_record", {"record": {"PremiumChangePct": "12.5"}})["isError"]
+        is False
+    )
+    assert FakePrediction.calls[-1]["records"][0]["PremiumChangePct"] == pytest.approx(12.5)
 
 
 def test_drought_tools_read_the_same_toolkit_as_the_chat(client: TestClient) -> None:

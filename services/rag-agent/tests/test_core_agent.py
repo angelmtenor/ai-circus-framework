@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from ai_circus_shared.retrieval import RetrievedChunk
 from ai_circus_shared.scenario_schema import VectorStoreConfig
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -102,3 +103,15 @@ def test_the_guide_instructions_appear_only_for_the_guide() -> None:
     assert guide.startswith(shared_start)
     assert guide.index("retrieve_docs") < guide.index("App action")
     assert guide.endswith(plain[len(shared_start) :])
+
+
+@pytest.mark.parametrize("guide", [False, True])
+def test_a_spoken_turn_adds_the_short_answer_instructions_last(guide: bool) -> None:
+    """A voice turn keeps the whole prompt (the guide's too) and ends with how to answer aloud."""
+    from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS
+
+    typed = system_prompt("the framework", guide=guide)
+    spoken = system_prompt("the framework", guide=guide, spoken=True)
+
+    assert spoken == typed + SPOKEN_REPLY_INSTRUCTIONS
+    assert "This turn is spoken" not in typed

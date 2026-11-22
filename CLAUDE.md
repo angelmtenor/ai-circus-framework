@@ -127,6 +127,7 @@ re-implementing:
 - `telemetry` — `configure_tracing` (OTLP, off without an endpoint), `install_json_sink`, `redact_attributes`
 - `drift` — model-drift reference profiles and PSI (pure Python; `training` builds, `prediction` observes)
 - `embeddings`, `cache` (Valkey), `events` (Kafka), `cdc`, `form_validation`, `tabular_ml`, `deployment_guard`
+- `spoken` — agui-voice marks its runs `forwardedProps.spoken`; every agent then adds the short spoken-reply instructions
 
 `libs/mcp-kit` (`mcp_kit`, ADR 0022) is separate on purpose: an MCP server in front of an existing API gets token
 validation, the access policy, the per-API token exchange and audit lines from it, and its own code is its tools only.

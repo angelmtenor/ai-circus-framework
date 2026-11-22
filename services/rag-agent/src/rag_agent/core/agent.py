@@ -17,6 +17,7 @@ from typing import Any
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.retrieval import format_retrieved, retrieve, wrap_untrusted
 from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig, qdrant_collection_name
+from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
 from langchain_core.callbacks import BaseCallbackHandler
@@ -265,14 +266,22 @@ def build_graph_tools(
 
 
 def system_prompt(
-    chat_context: str, *, knowledge_graph: bool = False, via_mcp: bool = False, guide: bool = False
+    chat_context: str,
+    *,
+    knowledge_graph: bool = False,
+    via_mcp: bool = False,
+    guide: bool = False,
+    spoken: bool = False,
 ) -> str:
-    """The chat's system prompt: its domain, how to reach its documents and (`guide`) how to act in the app."""
-    return SYSTEM_PROMPT_TEMPLATE.format(
+    """The chat's system prompt: its domain, how to reach its documents, (`guide`) how to act in the app and
+    (`spoken`, a voice turn from agui-voice) how to answer for the ear.
+    """
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(
         context=chat_context.strip(),
         retrieval=_MCP_INSTRUCTIONS if via_mcp else _GRAPH_INSTRUCTIONS if knowledge_graph else _RETRIEVAL_INSTRUCTIONS,
         guide=_GUIDE_INSTRUCTIONS if guide else "",
     )
+    return prompt + SPOKEN_REPLY_INSTRUCTIONS if spoken else prompt
 
 
 def build_agui_agent(
@@ -283,6 +292,7 @@ def build_agui_agent(
     knowledge_graph: bool = False,
     via_mcp: bool = False,
     guide: bool = False,
+    spoken: bool = False,
 ) -> CompiledStateGraph:
     """Build the graph backing the AG-UI endpoint (see api.py's `agui_endpoint`).
 
@@ -301,11 +311,14 @@ def build_agui_agent(
     a corner cut.
 
     `guide` (docs/adr/0032) adds how to use the app's own actions, which arrive as frontend tools like the charts.
+    `spoken` (a voice turn, ai_circus_shared.spoken) asks for a short answer that reads well aloud.
     """
     return create_agent(
         llm,
         tools=tools,
-        system_prompt=system_prompt(chat_context, knowledge_graph=knowledge_graph, via_mcp=via_mcp, guide=guide),
+        system_prompt=system_prompt(
+            chat_context, knowledge_graph=knowledge_graph, via_mcp=via_mcp, guide=guide, spoken=spoken
+        ),
         middleware=[CopilotKitMiddleware()],
         # pyrefly: ignore [bad-argument-type]
         state_schema=CopilotKitState,
