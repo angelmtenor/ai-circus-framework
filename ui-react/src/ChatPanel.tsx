@@ -709,7 +709,13 @@ export function ChatPanel({
         </div>
       )}
       <div className="chat-input-row">
-        <MicButton agent={agent} voiceUrl={config.voiceUrl} scenarioSlug={scenarioSlug} accessToken={accessToken} />
+        <MicButton
+          agent={agent}
+          voiceUrl={config.voiceUrl}
+          scenarioSlug={scenarioSlug}
+          accessToken={accessToken}
+          disabled={!conversationReady}
+        />
         <AttachButton onAttach={handleAttach} disabled={sending || pendingFiles.length >= MAX_ATTACHMENTS} />
         <input
           value={message}

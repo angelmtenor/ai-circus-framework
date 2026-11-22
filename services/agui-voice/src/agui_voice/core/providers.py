@@ -10,7 +10,7 @@ ElevenLabs, Cartesia), used identically by both the live WebSocket pipeline
 (`api/ws.py`) and the one-shot `/tts` endpoint (`api/tts.py`).
 
 The cloud providers' SDKs are deliberately NOT in this service's default dependency
-set (`pipecat-ai[whisper,piper,silero,websocket]` — see pyproject.toml) since most
+set (`pipecat-ai[whisper,piper,websocket]` — see pyproject.toml) since most
 deployments never opt into them; each cloud branch below imports its pipecat service
 lazily so the module still loads without e.g. the `deepgram` package installed, and
 raises a clear error only if an operator actually selects that provider without
@@ -31,7 +31,6 @@ import pipecat.services.piper.tts as _piper_tts_module
 import pipecat.services.whisper.stt as _whisper_stt_module
 from ai_circus_shared.entitlements import PlatformRegistryClient
 from loguru import logger
-from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.service_switcher import ServiceSwitcher, ServiceSwitcherStrategyManual
 from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.piper.tts import PiperTTSService
@@ -268,13 +267,6 @@ def build_tts_service(
             )
         case other:
             raise ValueError(f"Unknown TTS_PROVIDER {other!r}: expected 'piper', 'elevenlabs', or 'cartesia'.")
-
-
-def build_vad_analyzer() -> SileroVADAnalyzer:
-    """Voice-activity detection for the live pipeline's turn-taking/barge-in — always
-    local regardless of the STT/TTS provider choice.
-    """
-    return SileroVADAnalyzer()
 
 
 @dataclass(frozen=True)

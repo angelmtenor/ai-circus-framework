@@ -1744,6 +1744,11 @@ select:focus {
   justify-content: center;
 }
 
+.chat-mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .chat-voice-providers {
   font-size: 0.7rem;
   color: var(--dim);
@@ -1798,24 +1803,50 @@ select:focus {
   }
 }
 
-/* Listening: the mic is live, waiting for the caller to speak. */
-.chat-mic--listening {
+/* Push to talk (docs/adr/0033). Ready: voice is on, waiting for a press (or the
+   space bar) — still, so a connected but idle session leaves the page quiet. */
+.chat-mic--ready {
   border-color: var(--accent-border);
   color: var(--accent-2);
   box-shadow: var(--glow-accent-soft);
 }
 
-/* Speaking: the bot is talking — a distinct, warmer color from "listening" so the
-   two states read differently at a glance, not just by icon. Clicking stops the
-   call outright; talking over it interrupts the bot via server-side VAD instead. */
+/* Talking: the mic is open and streaming — the only state with pulsing rings, and
+   red like a recording light, so it is never mistaken for "ready". */
+.chat-mic--talking {
+  border-color: #e05a5a;
+  color: #e05a5a;
+  box-shadow: 0 0 0 1px rgba(224, 90, 90, 0.3), 0 0 16px rgba(224, 90, 90, 0.35);
+}
+
+/* Speaking: the bot is answering — a warmer color than "ready". Pressing (or
+   holding the space bar) interrupts it and starts the next turn. */
 .chat-mic--speaking {
   border-color: #f0a63a;
   color: #f0a63a;
   box-shadow: 0 0 0 1px rgba(240, 166, 58, 0.25), 0 0 16px rgba(240, 166, 58, 0.35);
 }
 
-.chat-mic--connecting .chat-mic-icon {
+.chat-mic--connecting .chat-mic-icon,
+.chat-mic--thinking .chat-mic-icon {
   animation: chat-mic-spin 0.8s linear infinite;
+}
+
+.chat-mic-end {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.25rem;
+  flex-shrink: 0;
+}
+
+.chat-mic-end:hover {
+  color: #e05a5a;
+}
+
+.chat-mic-end--hidden {
+  visibility: hidden;
 }
 
 @keyframes chat-mic-spin {

@@ -2,21 +2,25 @@
 - Title:    Live voice WebSocket endpoint
 - Author:   Angel Martinez-Tenor
 
-One Pipecat pipeline per connection: browser mic audio -> VAD -> STT ->
+One Pipecat pipeline per connection: browser mic audio -> push-to-talk -> STT ->
 `AgentBridgeProcessor` (calls the existing `/agui/{scenario_slug}` agent for this
-scenario's kind) -> TTS -> browser playback. Barge-in comes from Pipecat's own
-turn-tracking (`PipelineWorker(enable_turn_tracking=True)`, the default) reacting to
-the VAD stage — no bespoke interruption logic needed beyond what `AgentBridgeProcessor`
-does to cancel its own in-flight upstream call (see core/agent_bridge.py).
+scenario's kind) -> TTS -> browser playback. The user's press and release bound each
+turn, not a voice-activity detector (core/push_to_talk.py, docs/adr/0033); a press while
+the bot speaks is the barge-in, and `AgentBridgeProcessor` cancels its own in-flight
+upstream call on that interruption (see core/agent_bridge.py).
 
 Auth: browsers can't set a WebSocket `Authorization` header, so the caller's bearer
 token travels as a `?token=` query parameter instead — the same pattern
 `@pipecat-ai/client-js`'s own `connect({wsUrl})` step uses for non-Daily transports.
 The handshake is accepted first, authenticated second, and closed with a 4401/4403/4404
-policy-violation code on failure, before any pipeline is built.
+policy-violation code on failure, before any pipeline is built. `?thread_id=` names the
+chat's open conversation (4400 if malformed); the upstream agent checks it belongs to the
+caller, and stores the spoken turns in it.
 """
 
 from __future__ import annotations
+
+import re
 
 import httpx
 from ai_circus_shared.auth import TokenValidationError
@@ -24,9 +28,9 @@ from ai_circus_shared.entitlements import EntitlementDeniedError, PlatformRegist
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from loguru import logger
+from pipecat.frames.frames import Frame, InterruptionFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
-from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 from pipecat.workers.runner import WorkerRunner
@@ -38,9 +42,9 @@ from agui_voice.core.identity import resolve_identity_from_token
 from agui_voice.core.providers import (
     build_stt_service,
     build_tts_service,
-    build_vad_analyzer,
     resolve_active_providers,
 )
+from agui_voice.core.push_to_talk import PushToTalkProcessor
 
 rtvi_debug.install()  # TEMPORARY — see core/rtvi_debug.py's module docstring.
 
@@ -54,11 +58,32 @@ _UPSTREAM_ENV_BY_KIND = {
     "assisted_form": "FORM_AGENT_SERVICE_URL",
 }
 
+# A conversation id as the agents mint them (a UUID), bounded before it goes anywhere.
+_THREAD_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+class BrowserFrameSerializer(ProtobufFrameSerializer):
+    """Protobuf frames, minus the interruption: the browser's serializer
+    (`@pipecat-ai/websocket-transport`) reads only audio and messages, and learns of a
+    barge-in from RTVI's `bot-interrupted` message instead.
+    """
+
+    async def serialize(self, frame: Frame) -> str | bytes | None:
+        """Skip `InterruptionFrame`; serialize everything else as usual."""
+        if isinstance(frame, InterruptionFrame):
+            return None
+        return await super().serialize(frame)
+
 
 @router.websocket("/ws/{scenario_slug}")
-async def voice_ws(websocket: WebSocket, scenario_slug: str, token: str | None = None) -> None:
+async def voice_ws(
+    websocket: WebSocket, scenario_slug: str, token: str | None = None, thread_id: str | None = None
+) -> None:
     """Accept, authenticate, then run one live voice session for `scenario_slug`."""
     await websocket.accept()
+    if thread_id is not None and not _THREAD_ID.fullmatch(thread_id):
+        await websocket.close(code=4400, reason="bad thread id")
+        return
     config = get_env_config()
     authorization = f"Bearer {token}" if token else None
 
@@ -106,7 +131,7 @@ async def voice_ws(websocket: WebSocket, scenario_slug: str, token: str | None =
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
-            serializer=ProtobufFrameSerializer(),
+            serializer=BrowserFrameSerializer(),
         ),
     )
 
@@ -121,7 +146,6 @@ async def voice_ws(websocket: WebSocket, scenario_slug: str, token: str | None =
         # falling back to this instance's static STT_PROVIDER/TTS_PROVIDER — see
         # resolve_active_providers' docstring.
         stt_provider, tts_provider = await run_in_threadpool(resolve_active_providers, config)
-        vad_analyzer = await run_in_threadpool(build_vad_analyzer)
         stt_service = await run_in_threadpool(build_stt_service, config, provider=stt_provider)
         tts_service, tts_language_switch = await run_in_threadpool(build_tts_service, config, provider=tts_provider)
         bridge = AgentBridgeProcessor(
@@ -130,10 +154,11 @@ async def voice_ws(websocket: WebSocket, scenario_slug: str, token: str | None =
             authorization=authorization or "",
             http_client=http_client,
             tts_language_switch=tts_language_switch,
+            thread_id=thread_id,
         )
         pipeline = Pipeline([
             transport.input(),
-            VADProcessor(vad_analyzer=vad_analyzer),
+            PushToTalkProcessor(),
             stt_service,
             bridge,
             tts_service,
