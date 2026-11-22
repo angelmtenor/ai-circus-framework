@@ -4,9 +4,19 @@ import { RTVIMessage } from "@pipecat-ai/client-js";
 import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
 
 /**
- * Live mic conversation (Grok/ChatGPT-style voice mode) for one scenario, talking
- * directly to agui-voice's `GET /ws/{scenarioSlug}` Pipecat pipeline (see
+ * Push-to-talk voice conversation for one scenario (docs/adr/0033), talking directly
+ * to agui-voice's `GET /ws/{scenarioSlug}` Pipecat pipeline (see
  * `services/agui-voice/src/agui_voice/api/ws.py`) over a plain WebSocket.
+ *
+ * The user, not a voice-activity detector, bounds each turn: `press()` starts talking
+ * (connecting first if needed) and `press()` again — or `release()`, when the space bar
+ * is let go — sends it. Each edge is an RTVI `client-message` of type `push-to-talk`
+ * (`{talking: true|false}`) that agui-voice's `PushToTalkProcessor` turns into the
+ * frames that bound Whisper's segment. Mic audio is streamed only while talking (plus a
+ * short tail after the release, so the last word is not cut), so a pause mid-sentence
+ * never ends the turn and nothing is heard between turns. Pressing while the bot speaks
+ * is the barge-in: its queued audio stops here at once and the server interrupts the
+ * reply. A connected session that nobody uses hangs up by itself.
  *
  * This does NOT use `@pipecat-ai/client-js`'s `PipecatClient` — its bundled
  * `WavRecorder`/`WavMediaManager` audio-device layer was found to hang silently
@@ -20,11 +30,6 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * only the browser-side mic capture/playback (a few dozen lines of plain Web Audio
  * API) is hand-rolled instead of going through the SDK's device manager.
  *
- * Turn-taking/barge-in is entirely server-side (Pipecat's own VAD-driven
- * turn-tracking, see agui-voice's `PipelineWorker`) — this client only has to
- * stream mic audio continuously once ready, and stop scheduled playback audio when
- * the server reports an interruption.
- *
  * A voice turn lands in the *same* `agent.messages` transcript a typed turn would —
  * `user-transcription`/`bot-llm-started`/`bot-llm-text`/`bot-llm-stopped` map 1:1
  * onto the server's `AgentBridgeProcessor` frame sequence (TranscriptionFrame ->
@@ -36,7 +41,12 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * module-level singleton (not per-hook-instance state), so starting a session from
  * anywhere first tears down whatever was already running.
  */
-export type VoiceSessionState = "idle" | "connecting" | "listening" | "speaking" | "error";
+export type VoiceSessionState = "idle" | "connecting" | "ready" | "talking" | "thinking" | "speaking" | "error";
+
+/** Connected states: the session is open and the space bar talks. */
+export function isVoiceConnected(state: VoiceSessionState): boolean {
+  return state === "ready" || state === "talking" || state === "thinking" || state === "speaking";
+}
 
 // If the server never answers "ready" (a crashed pipeline, a network issue, a
 // protocol mismatch — see console for errors either way), don't spin on
@@ -47,21 +57,45 @@ const CONNECT_TIMEOUT_MS = 20_000;
 // — the wire protocol doesn't carry the playback sample rate (see
 // ProtobufFrameSerializer.deserialize upstream, which discards it the same way).
 const PLAYBACK_SAMPLE_RATE = 24_000;
-// Must match the server pipeline's fixed VAD/STT rate (Silero VAD + Whisper both
-// expect 16kHz) — the transport never resamples incoming audio, it trusts whatever
-// rate each frame claims (see BaseInputTransport.push_audio_frame in pipecat), so
-// sending the mic's native device rate (44.1/48kHz) here silently breaks VAD/STT
-// without any error. Requesting this rate on the AudioContext makes the browser
-// resample the mic stream itself before onaudioprocess ever sees it.
+// Must match the server pipeline's fixed STT rate (Whisper expects 16kHz) — the
+// transport never resamples incoming audio, it trusts whatever rate each frame
+// claims (see BaseInputTransport.push_audio_frame in pipecat), so sending the mic's
+// native device rate (44.1/48kHz) here silently breaks STT without any error.
+// Requesting this rate on the AudioContext makes the browser resample the mic
+// stream itself before onaudioprocess ever sees it.
 const CAPTURE_SAMPLE_RATE = 16_000;
 const CAPTURE_BUFFER_SIZE = 4096;
 const RTVI_PROTOCOL_VERSION = "2.1.0";
+
+/** The RTVI `client-message` type agui-voice's core/push_to_talk.py listens for. */
+export const PUSH_TO_TALK = "push-to-talk";
+// The server ends a turn itself past 60 s of audio (DEFAULT_MAX_TURN_SECS); the client stops at the same point.
+const MAX_TURN_MS = 60_000;
+// Keep streaming this long after the release: the capture buffer (4096 samples at
+// 16 kHz = 256 ms) still holds the last word, and the stop must not overtake it.
+const RELEASE_TAIL_MS = 320;
+// No agent run after a turn (silence, nothing transcribed): give the button back.
+const THINKING_TIMEOUT_MS = 30_000;
+// The agent has started (bot-llm-started) but not answered yet: a cold prompt cache plus a slow model took 30 s once,
+// and giving the button back then made the answer arrive later, unannounced. Still bounded, for a run that hangs.
+const AGENT_RUN_TIMEOUT_MS = 120_000;
+// The reply's text is done but no audio started (TTS failed or had nothing to say).
+const AFTER_REPLY_MS = 4_000;
+// Connected but unused this long: hang up, which frees the server's pipeline and the microphone.
+const IDLE_HANGUP_MS = 180_000;
 
 interface VoiceSession {
   ws: WebSocket;
   audioContext: AudioContext;
   playbackContext: AudioContext;
   mediaStream: MediaStream;
+}
+
+/** The current session's turn controls; they close over its socket, timers and audio. */
+interface TalkControls {
+  begin: () => void;
+  end: () => void;
+  dispose: () => void;
 }
 
 let activeSession: VoiceSession | null = null;
@@ -71,7 +105,8 @@ function stopSession(session: VoiceSession): void {
   session.audioContext.close().catch(() => {});
   session.playbackContext.close().catch(() => {});
   if (session.ws.readyState === WebSocket.OPEN || session.ws.readyState === WebSocket.CONNECTING) {
-    session.ws.close();
+    // 1000: a normal close, so the owner's onclose reads it as "ended", not as a failure.
+    session.ws.close(1000, "voice mode ended");
   }
 }
 
@@ -88,23 +123,40 @@ export function useVoiceSession(
   scenarioSlug: string,
   accessToken: string | null,
 ) {
-  const [state, setState] = useState<VoiceSessionState>("idle");
+  const [state, setStateValue] = useState<VoiceSessionState>("idle");
+  // The callbacks below run from socket and key events: they read the state from here, not from a stale render.
+  const stateRef = useRef<VoiceSessionState>("idle");
   const sessionRef = useRef<VoiceSession | null>(null);
+  const talkRef = useRef<TalkControls | null>(null);
+  // A press while connecting means "talk as soon as it is ready"; a second press takes that back.
+  const talkOnReadyRef = useRef(false);
   const botTextRef = useRef("");
   const nextPlaybackTimeRef = useRef(0);
   const scheduledSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
-  const stop = useCallback(() => {
-    const session = sessionRef.current;
-    sessionRef.current = null;
-    if (activeSession === session && session) {
-      stopSession(session);
-      activeSession = null;
-    }
-    setState("idle");
+  const setState = useCallback((next: VoiceSessionState) => {
+    stateRef.current = next;
+    setStateValue(next);
   }, []);
 
-  const start = useCallback(async () => {
+  /** End voice mode: close the socket, release the mic, forget the turn. */
+  const hangUp = useCallback(
+    (next: VoiceSessionState = "idle") => {
+      talkRef.current?.dispose();
+      talkRef.current = null;
+      talkOnReadyRef.current = false;
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      if (session) {
+        if (activeSession === session) activeSession = null;
+        stopSession(session);
+      }
+      setState(next);
+    },
+    [setState],
+  );
+
+  const connect = useCallback(async () => {
     if (sessionRef.current) return;
     disconnectActiveSession(); // only one live voice session app-wide
     setState("connecting");
@@ -115,13 +167,21 @@ export function useVoiceSession(
     const wsUrl = new URL(`/ws/${scenarioSlug}`, voiceUrl);
     wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
     if (accessToken) wsUrl.searchParams.set("token", accessToken);
+    // The open conversation: the agent serves a run only for one the caller owns, and keeps the spoken turns in it.
+    wsUrl.searchParams.set("thread_id", agent.threadId);
 
     let mediaStream: MediaStream;
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
       console.error("Voice session: microphone access denied or unavailable:", err);
+      talkOnReadyRef.current = false;
       setState("error");
+      return;
+    }
+    // Hung up (or another chat took the voice session) while the mic prompt was open.
+    if (stateRef.current !== "connecting") {
+      mediaStream.getTracks().forEach((track) => track.stop());
       return;
     }
 
@@ -171,6 +231,7 @@ export function useVoiceSession(
       };
     };
 
+    // Mic audio goes out only while this is true: between a press and the end of its release tail.
     let sendingAudio = false;
     const sourceNode = audioContext.createMediaStreamSource(mediaStream);
     // ScriptProcessorNode is deprecated in favor of AudioWorklet, but it needs no
@@ -198,10 +259,78 @@ export function useVoiceSession(
     processor.connect(silentSink);
     silentSink.connect(audioContext.destination);
 
+    // ── The turn: press, release, and the timers that keep every state bounded ──
+    const timers: Record<"tail" | "max" | "thinking" | "idle", ReturnType<typeof setTimeout> | null> = {
+      tail: null,
+      max: null,
+      thinking: null,
+      idle: null,
+    };
+    const clearTimer = (name: keyof typeof timers) => {
+      const timer = timers[name];
+      if (timer) clearTimeout(timer);
+      timers[name] = null;
+    };
+    const sendTalking = (talking: boolean) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const message = new RTVIMessage("client-message", { t: PUSH_TO_TALK, d: { talking } });
+      ws.send(serializer.serializeMessage(message) as unknown as ArrayBuffer);
+    };
+    // A press during the previous release's tail closes that turn first, at once.
+    const flushTail = () => {
+      if (!timers.tail) return;
+      clearTimer("tail");
+      sendingAudio = false;
+      sendTalking(false);
+    };
+    const waitForReply = (ms: number) => {
+      clearTimer("thinking");
+      timers.thinking = setTimeout(() => {
+        if (stateRef.current === "thinking") becomeReady();
+      }, ms);
+    };
+    const becomeReady = () => {
+      clearTimer("thinking");
+      clearTimer("idle");
+      setState("ready");
+      timers.idle = setTimeout(() => {
+        if (stateRef.current === "ready") hangUp();
+      }, IDLE_HANGUP_MS);
+    };
+    const controls: TalkControls = {
+      begin() {
+        flushTail();
+        clearTimer("thinking");
+        clearTimer("idle");
+        clearTimer("max");
+        clearScheduledPlayback(); // barge-in, heard at once; the server interrupts the reply too
+        sendTalking(true);
+        sendingAudio = true;
+        setState("talking");
+        timers.max = setTimeout(() => controls.end(), MAX_TURN_MS);
+      },
+      end() {
+        if (stateRef.current !== "talking") return;
+        clearTimer("max");
+        setState("thinking");
+        timers.tail = setTimeout(() => {
+          timers.tail = null;
+          sendingAudio = false;
+          sendTalking(false);
+        }, RELEASE_TAIL_MS);
+        waitForReply(THINKING_TIMEOUT_MS);
+      },
+      dispose() {
+        for (const name of Object.keys(timers) as (keyof typeof timers)[]) clearTimer(name);
+        sendingAudio = false;
+      },
+    };
+    talkRef.current = controls;
+
     ws.onopen = () => {
       const clientReady = new RTVIMessage("client-ready", {
         version: RTVI_PROTOCOL_VERSION,
-        about: { library: "ai-circus-custom-voice-client", library_version: "1.0.0" },
+        about: { library: "ai-circus-custom-voice-client", library_version: "2.0.0" },
       });
       ws.send(serializer.serializeMessage(clientReady) as unknown as ArrayBuffer);
     };
@@ -212,10 +341,15 @@ export function useVoiceSession(
 
     ws.onclose = (event) => {
       if (readyTimer) clearTimeout(readyTimer);
+      controls.dispose();
       const wasActive = sessionRef.current === session;
-      sessionRef.current = null;
       if (activeSession === session) activeSession = null;
       if (wasActive) {
+        sessionRef.current = null;
+        talkRef.current = null;
+        talkOnReadyRef.current = false;
+        // The server closed it (or the network did): release the mic and the audio contexts too.
+        stopSession(session);
         if (event.code !== 1000) console.error(`Voice session: connection closed (code ${event.code}) ${event.reason}`);
         setState(event.code === 1000 ? "idle" : "error");
       }
@@ -231,16 +365,33 @@ export function useVoiceSession(
         return;
       }
       if (parsed.type === "audio") {
-        playAudioChunk(parsed.audio);
+        // While the user talks, the old reply is over: drop its audio still in flight.
+        if (stateRef.current !== "talking") playAudioChunk(parsed.audio);
         return;
       }
       const message = parsed.message as { type?: string; data?: Record<string, unknown> };
       switch (message.type) {
         case "bot-ready":
           if (readyTimer) clearTimeout(readyTimer);
-          sendingAudio = true;
-          setState("listening");
+          if (talkOnReadyRef.current) {
+            talkOnReadyRef.current = false;
+            controls.begin();
+          } else {
+            becomeReady();
+          }
           break;
+        case "server-message": {
+          // The server ended an over-long turn itself (core/push_to_talk.py's limit).
+          const data = message.data as { type?: string; talking?: boolean } | undefined;
+          if (data?.type === PUSH_TO_TALK && data.talking === false && stateRef.current === "talking") {
+            clearTimer("max");
+            clearTimer("tail");
+            sendingAudio = false;
+            setState("thinking");
+            waitForReply(THINKING_TIMEOUT_MS);
+          }
+          break;
+        }
         case "user-transcription": {
           const data = message.data as { text?: string; final?: boolean } | undefined;
           if (data?.final && data.text?.trim()) {
@@ -254,6 +405,8 @@ export function useVoiceSession(
         // typed turn's streamed reply collapses to once `agent.messages` settles.
         case "bot-llm-started":
           botTextRef.current = "";
+          // The turn was heard and the agent is working on it: wait for its answer, not for the 30 s first step.
+          if (stateRef.current === "thinking") waitForReply(AGENT_RUN_TIMEOUT_MS);
           break;
         case "bot-llm-text": {
           const data = message.data as { text?: string } | undefined;
@@ -265,12 +418,17 @@ export function useVoiceSession(
             agent.addMessage({ id: randomUUID(), role: "assistant", content: botTextRef.current });
           }
           botTextRef.current = "";
+          if (stateRef.current === "thinking") waitForReply(AFTER_REPLY_MS);
           break;
         case "bot-started-speaking":
-          setState("speaking");
+          if (stateRef.current === "thinking" || stateRef.current === "ready") {
+            clearTimer("thinking");
+            clearTimer("idle");
+            setState("speaking");
+          }
           break;
         case "bot-stopped-speaking":
-          setState("listening");
+          if (stateRef.current === "speaking") becomeReady();
           break;
         case "bot-interrupted":
           clearScheduledPlayback();
@@ -282,23 +440,41 @@ export function useVoiceSession(
 
     readyTimer = setTimeout(() => {
       console.error(`Voice session: no "ready" response from the server within ${CONNECT_TIMEOUT_MS / 1000}s — giving up.`);
-      stop();
+      hangUp("error");
     }, CONNECT_TIMEOUT_MS);
-  }, [agent, voiceUrl, scenarioSlug, accessToken, stop]);
+  }, [agent, voiceUrl, scenarioSlug, accessToken, hangUp, setState]);
 
-  // Leaving this conversation — switching scenarios (new scenarioSlug) or unmounting
+  /** The mic button, or the space bar going down: connect and talk, send the turn, or interrupt and talk. */
+  const press = useCallback(() => {
+    switch (stateRef.current) {
+      case "idle":
+      case "error":
+        talkOnReadyRef.current = true;
+        void connect();
+        break;
+      case "connecting":
+        talkOnReadyRef.current = !talkOnReadyRef.current;
+        break;
+      case "talking":
+        talkRef.current?.end();
+        break;
+      default: // ready, thinking, speaking
+        talkRef.current?.begin();
+    }
+  }, [connect]);
+
+  /** The space bar coming up: send the turn it held open. */
+  const release = useCallback(() => {
+    if (stateRef.current === "talking") talkRef.current?.end();
+    else if (stateRef.current === "connecting") talkOnReadyRef.current = false;
+  }, []);
+
+  const end = useCallback(() => hangUp(), [hangUp]);
+
+  // Leaving this conversation — switching scenarios (new scenarioSlug), opening another
+  // conversation (new threadId: the session is bound to the old one) or unmounting
   // entirely — must stop any live mic/audio, not leave it running in the background.
-  useEffect(() => {
-    return () => {
-      const session = sessionRef.current;
-      sessionRef.current = null;
-      if (session) {
-        if (activeSession === session) activeSession = null;
-        stopSession(session);
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scenarioSlug]);
+  useEffect(() => () => hangUp(), [scenarioSlug, agent.threadId, hangUp]);
 
-  return { state, start, stop };
+  return { state, press, release, end };
 }

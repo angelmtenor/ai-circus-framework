@@ -592,6 +592,19 @@ async def test_agui_documents_scope_gives_the_document_tool_alone(monkeypatch: p
     assert "DOCUMENTS-ONLY MODE" in captured["system_prompt"]
 
 
+@pytest.mark.parametrize(("props", "spoken"), [({"spoken": True}, True), ({"spoken": "yes"}, False), ({}, False)])
+async def test_a_spoken_turn_asks_for_a_short_answer_and_keeps_every_tool(
+    monkeypatch: pytest.MonkeyPatch, props: dict[str, Any], spoken: bool
+) -> None:
+    """agui-voice's turns (forwardedProps.spoken exactly true) get the spoken-reply text; nothing else changes."""
+    from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS
+
+    captured = await _run_agui_with_documents(monkeypatch, props)
+
+    assert captured["tools"] == ["prediction-tool", "document-tool:org-1"]
+    assert captured["system_prompt"] == "system prompt" + (SPOKEN_REPLY_INSTRUCTIONS if spoken else "")
+
+
 def test_chat_scope_ignores_documents_mode_for_a_scenario_without_a_document_tool() -> None:
     from tests.test_core_chat import DEFINITION
 

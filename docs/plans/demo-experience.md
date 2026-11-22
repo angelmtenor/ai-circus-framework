@@ -3,8 +3,9 @@
 The handoff for anyone (a person or a new agent session) picking this work up. It says what was asked, what is built
 and where, the rules learned on the way, and every pending step with enough detail to start it cold.
 
-Branch: `feature/scenario-story` (from `develop` after v0.63.0). Nothing is pushed or released; finishing the feature
-and cutting a release are the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
+Each step was built on its own `feature/*` branch from `develop` and is released: F6 in v0.64.0, F7 and F8 in
+v0.65.0, F9, F10 and the spoken replies in v0.66.0. Nothing is pushed; finishing a feature and cutting a release are
+the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
 
 ## Contents
 
@@ -135,25 +136,63 @@ k3s-mcp-portforward`, the llm-gateway → assistant edge in the architecture cat
 a token), every tool called with the admin key. Not tried: a question from LibreChat end to end (the active model had
 no credit).
 
-### 5. F9 — a master assistant for the whole framework
+### 5. F9 — a master assistant for the whole framework — done
 
-A chat available from the gallery (not tied to one scenario) that answers from the architecture tutorial's RAG (step
-3) and acts through frontend actions (`useCopilotAction`): search scenarios (the ranked search), open one, switch tab,
-start the guided demo, open the Architecture page. Bounded by the user's entitlements (it can only open what the
-gallery shows). Decide whether it is a `conversational_rag` scenario with `consume` doors or a small agent in
-rag-agent; keep every model call through llm-gateway.
+Branch `feature/master-assistant` (from `develop` after v0.65.0). [ADR 0032](../adr/0032-the-apps-guide.md): neither a
+new scenario nor a new agent — the top bar's **Guide** (`GuidePanel.tsx`) is the architecture tutorial's own rag-agent
+chat (same documents, citations, entitlement and history, titled "🧭 Framework guide") with `forwardedProps.guide`
+(extra instructions only, `rag_agent.core.agent.system_prompt`) and four frontend tools: `search_scenarios` (ranks the
+gallery), `open_scenario` (a scenario, optionally on a tab; also switches tab), `start_guided_demo`,
+`open_architecture` (on a component or a request flow). Its context is the user's own gallery, where they are and the
+open workspace's tabs, published by every workspace through `guideBridge.ts` (`useStoryDemo`; TabularView directly).
+App checks every slug against the entitled list; a workspace opens only a tab it published. A side panel, lazy, kept
+mounted while hidden; on a wide screen the page makes room for it (the top bar wraps) and, from 1,400 px, a scenario's
+own chat dock opens beside it. A scenario whose service is off or whose model is untrained for the tenant is marked
+unavailable in the context and refused with the reason. Verified on k3s with gemini-flash: a documents answer with
+sources, search, open + guided demo, tab switch, Architecture flow, the same request again from another page, the
+scenario dock beside the guide, close/reopen keeps the conversation, idle 0 frames/s with the guide open, no overflow
+at phone width; `make k3s-idle-check` on Reservoirs and Insurance stays quiet.
 
-### 6. F10 — voice, push to talk (separate session)
+Not done yet: asking a scenario's own assistant from the guide, and the guide's answers about ADR 0032 itself (needs an
+`etl-vectorize` run after `make architecture`).
 
-Voice mode exists (`agui-voice`, off in the lite profile). Change the interaction to the one of Claude's app: press to
-start talking, press again (or hold/release the space bar) to stop — **no automatic end-of-speech detection**. Look
-at `useVoiceSession.ts`, `MicButton.tsx` and agui-voice's VAD settings; keep the models warm at start-up.
+### 6. F10 — voice, push to talk — done
+
+[ADR 0033](../adr/0033-push-to-talk-voice.md). Press the mic to start talking, press again (or hold and release the
+space bar) to send; no end-of-speech detection. agui-voice's pipeline swaps the Silero VAD for `PushToTalkProcessor`
+(`services/agui-voice/src/agui_voice/core/push_to_talk.py`), which turns the client's `push-to-talk` RTVI message into
+the frames that bound Whisper's segment, interrupts the bot on a press and caps a turn at 60 s; the `silero` extra is
+gone and start-up still warms STT and TTS. `useVoiceSession.ts` sends audio only while talking (plus a 320 ms tail),
+drops the queued reply on a barge-in, gives the button back after 30 s if the agent never starts (2 minutes once it
+has) and hangs up after 3 minutes unused; `MicButton.tsx`
+shows talking (red) / thinking / speaking, takes the space bar once voice is on (never inside a field), and has a ✕ to
+end voice mode. Fixed on the way: the voice bridge ran the agent on `thread_id=<slug>`, which every agent has refused
+with 404 since conversation history arrived (no spoken turn got an answer); the browser now passes the open
+conversation (`?thread_id=`), so spoken turns are answered and stored with the typed ones. Verified on k3s with a fake
+microphone (two questions with a 2 s pause, looped) in the insurance chat: one press gives one turn with both
+questions and one spoken answer; nothing is sent between turns; a connected idle session draws 0 frames/s; holding
+the space bar talks; a press while it answers is back to talking in 0.2 s; the ✕ hangs up; after a reload the spoken
+questions are in the conversation's history; every insurance tab passes the idle check.
 
 ### Smaller follow-ups
+
+- Done: a spoken reply was as long as a typed one (the insurance chat's first voice answer took about two minutes to
+  say). agui-voice now sends `forwardedProps: {"spoken": true}` and every agent ends its prompt with
+  `ai_circus_shared.spoken`'s instructions. Measured on k3s with a fake microphone: insurance 61 words said in 20 s,
+  the architecture tutorial 64 words in 22 s, the service request form 51 words in 13 s. On the way, the browser's
+  30 s wait now applies only until the agent starts; one insurance answer took 60 s (two Gemini calls and a tool) and
+  would otherwise have been dropped.
+- A spoken turn has none of the browser's tools: `AgentBridgeProcessor` sends `tools=[]` and `context=[]`, so by voice
+  the form is never filled, no chart is drawn and the guide cannot act (the README and v0.66.0's notes say so). Worse,
+  the form agent then says "I have started your request" with every field still empty. Either pass the chat's frontend tools and readable context over the voice socket and relay the tool
+  calls back to the browser to run, or tell the agent (in `ai_circus_shared.spoken`) it has no screen actions by voice.
 
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
   profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).
   Drop that profile default (as for the governance flags) to index one scenario at a time.
+- `split_markdown` (`ai_circus_shared/architecture.py`, the tutorial's snapshot) cuts a paragraph longer than 4,000
+  characters and drops its tail without a warning (found in F9: the first section of `architecture-details.md` lost
+  its last sentences until it was split). Chunk long paragraphs at sentence boundaries instead, or fail the check.
 
 - The drought assistant tools and the control room read the committed artifacts, not the forecast trained for the
   caller's tenant (water guide, "What is left" 1).
@@ -163,7 +202,6 @@ at `useVoiceSession.ts`, `MicButton.tsx` and agui-voice's VAD settings; keep the
   (and check the control room's chart) so every view agrees.
 - `docs/scenarios/water_reservoirs_drought_guide.md` and the README's scenario tour could show control-room
   screenshots (capture with the Playwright scripts, as in `reference-demo-decks`).
-- Release: after review, `git flow feature finish scenario-story`, then a minor release with a CHANGELOG entry.
 
 ## How to verify a step
 

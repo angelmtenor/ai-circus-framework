@@ -20,6 +20,7 @@ from ai_circus_shared.entitlements import PlatformRegistryClient
 from ai_circus_shared.governance import ai_system_id_of
 from ai_circus_shared.observability import langfuse_request_metadata
 from ai_circus_shared.scenario_schema import ScenarioDefinition
+from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS, is_spoken
 from ai_circus_shared.storage import ObjectStore
 from copilotkit import LangGraphAGUIAgent
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -344,6 +345,8 @@ async def agui_endpoint(
         tools.append(build_catalog_retrieve_tool(qdrant, embedder, definition.vector_store, identity.org_id))
 
     system_prompt = build_form_system_prompt(definition)
+    if is_spoken(input_data.forwarded_props):
+        system_prompt += SPOKEN_REPLY_INSTRUCTIONS  # a voice turn (agui-voice): a short answer, said aloud
     # model_copy(): a new ChatOpenAI wrapping the shared, model-name-keyed cached
     # client (see _llm) without mutating it — per-request only, so concurrent
     # calls from other orgs through the same cached client never see this one's

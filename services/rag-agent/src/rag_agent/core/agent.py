@@ -17,6 +17,7 @@ from typing import Any
 from ai_circus_shared.embeddings import EmbeddingProvider
 from ai_circus_shared.retrieval import format_retrieved, retrieve, wrap_untrusted
 from ai_circus_shared.scenario_schema import DocumentsConfig, VectorStoreConfig, qdrant_collection_name
+from ai_circus_shared.spoken import SPOKEN_REPLY_INSTRUCTIONS
 from copilotkit import CopilotKitMiddleware, CopilotKitState
 from langchain.agents import create_agent
 from langchain_core.callbacks import BaseCallbackHandler
@@ -96,9 +97,26 @@ _GRAPH_INSTRUCTIONS = (
     "graph has nothing relevant, say so plainly rather than guessing.\n\n"
 )
 
+# The app's guide (docs/adr/0032): the same documents, plus actions the web app itself declares as frontend tools
+# (open a scenario, switch a tab, start a guided demo, open the Architecture page). The app lists what the user may
+# open in the App Context, so the model never names a scenario the user is not entitled to; each workspace's own
+# backend checks the entitlement again when it loads.
+_GUIDE_INSTRUCTIONS = (
+    "You are also the user's guide to this web app. The App Context lists the scenarios this user can open and "
+    "where they are now. Tools whose description starts with 'App action' act on the user's screen: call one when "
+    "the user asks to find, open, show, switch to or start something, using only slugs, tab names and ids listed "
+    "in the App Context - never invent one, and if nothing listed fits, say so. Where the user is comes only from "
+    "the App Context, never from earlier turns: they may have moved since, so act on a request even if you did the "
+    "same thing before. Call at most one app action per reply, and first write one short sentence saying what you "
+    "are opening. To recommend scenarios, use their titles and headlines in the App Context; for how the platform "
+    "or a scenario is built, search the documents and cite them as usual. Keep every answer short: this chat is a "
+    "side panel.\n\n"
+)
+
 SYSTEM_PROMPT_TEMPLATE = (
     "You are a helpful assistant. Your domain: {context}\n\n"
     "{retrieval}"
+    "{guide}"
     "If a render_chart or render_table tool is available and the question calls for "
     "showing a plot or tabular data, call it instead of describing the data in prose. "
     "Always pass x_label and y_label describing what each axis represents — never omit "
@@ -247,6 +265,25 @@ def build_graph_tools(
     return [search, path], captured, trace
 
 
+def system_prompt(
+    chat_context: str,
+    *,
+    knowledge_graph: bool = False,
+    via_mcp: bool = False,
+    guide: bool = False,
+    spoken: bool = False,
+) -> str:
+    """The chat's system prompt: its domain, how to reach its documents, (`guide`) how to act in the app and
+    (`spoken`, a voice turn from agui-voice) how to answer for the ear.
+    """
+    prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        context=chat_context.strip(),
+        retrieval=_MCP_INSTRUCTIONS if via_mcp else _GRAPH_INSTRUCTIONS if knowledge_graph else _RETRIEVAL_INSTRUCTIONS,
+        guide=_GUIDE_INSTRUCTIONS if guide else "",
+    )
+    return prompt + SPOKEN_REPLY_INSTRUCTIONS if spoken else prompt
+
+
 def build_agui_agent(
     llm: BaseChatModel,
     tools: list[BaseTool],
@@ -254,6 +291,8 @@ def build_agui_agent(
     *,
     knowledge_graph: bool = False,
     via_mcp: bool = False,
+    guide: bool = False,
+    spoken: bool = False,
 ) -> CompiledStateGraph:
     """Build the graph backing the AG-UI endpoint (see api.py's `agui_endpoint`).
 
@@ -270,15 +309,15 @@ def build_agui_agent(
     single run, not for cross-request memory: the AG-UI client resends the full message
     history on every run, so a fresh in-memory checkpointer per request is correct, not
     a corner cut.
+
+    `guide` (docs/adr/0032) adds how to use the app's own actions, which arrive as frontend tools like the charts.
+    `spoken` (a voice turn, ai_circus_shared.spoken) asks for a short answer that reads well aloud.
     """
     return create_agent(
         llm,
         tools=tools,
-        system_prompt=SYSTEM_PROMPT_TEMPLATE.format(
-            context=chat_context.strip(),
-            retrieval=(
-                _MCP_INSTRUCTIONS if via_mcp else _GRAPH_INSTRUCTIONS if knowledge_graph else _RETRIEVAL_INSTRUCTIONS
-            ),
+        system_prompt=system_prompt(
+            chat_context, knowledge_graph=knowledge_graph, via_mcp=via_mcp, guide=guide, spoken=spoken
         ),
         middleware=[CopilotKitMiddleware()],
         # pyrefly: ignore [bad-argument-type]

@@ -127,6 +127,7 @@ re-implementing:
 - `telemetry` — `configure_tracing` (OTLP, off without an endpoint), `install_json_sink`, `redact_attributes`
 - `drift` — model-drift reference profiles and PSI (pure Python; `training` builds, `prediction` observes)
 - `embeddings`, `cache` (Valkey), `events` (Kafka), `cdc`, `form_validation`, `tabular_ml`, `deployment_guard`
+- `spoken` — agui-voice marks its runs `forwardedProps.spoken`; every agent then adds the short spoken-reply instructions
 
 `libs/mcp-kit` (`mcp_kit`, ADR 0022) is separate on purpose: an MCP server in front of an existing API gets token
 validation, the access policy, the per-API token exchange and audit lines from it, and its own code is its tools only.
@@ -188,7 +189,9 @@ embedded through llm-gateway's `local-embed` in a background thread, **in batche
 scenario OOM-killed llm-gateway). A tabular workspace has an Executive · Analyst · Engineer switch (`audience.ts`, also
 the Surf tour's depth): an executive sees the Overview and the showpiece tabs; an engineer also gets `EngineerCard.tsx`. The chat (`ChatPanel.tsx`) speaks AG-UI to each service's
 `/agui/{scenario_slug}` via `@ag-ui/client`'s `HttpAgent`; CopilotKit is used only for
-`useCopilotAction`/`useCopilotReadable` generative UI. **Settings** = preferences (appearance, LLM
+`useCopilotAction`/`useCopilotReadable` generative UI. The top bar's **Guide** (ADR 0032) is the architecture tutorial's
+chat plus frontend tools that open scenarios, tabs and guided demos: a new workspace publishes its story tabs through
+`useStoryDemo` (or `useWorkspaceGuide`) so the guide can reach them. **Settings** = preferences (appearance, LLM
 provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
 Deep Learning). Voice
 mode talks to `agui-voice` over a plain WebSocket.

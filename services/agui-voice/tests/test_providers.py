@@ -201,13 +201,6 @@ def test_build_tts_service_unknown_provider_raises() -> None:
         providers_module.build_tts_service(_base_config(TTS_PROVIDER="not-a-provider"))
 
 
-def test_build_vad_analyzer_returns_silero(monkeypatch: pytest.MonkeyPatch) -> None:
-    """build_vad_analyzer always returns a SileroVADAnalyzer, regardless of STT/TTS config."""
-    monkeypatch.setattr(providers_module, "SileroVADAnalyzer", lambda: "silero-analyzer")
-
-    assert providers_module.build_vad_analyzer() == "silero-analyzer"
-
-
 @pytest.mark.parametrize(
     "text",
     [

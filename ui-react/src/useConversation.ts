@@ -9,8 +9,11 @@ import { createConversation, getConversationMessages, listConversations, type Co
  * deleted from under it — see `onDeleteActive`), resumes the most-recently-updated
  * conversation if one exists, or starts a fresh one, mirroring
  * ConversationSidebar.tsx's own "+ New conversation" default.
+ *
+ * `title` keeps a chat to its own conversations among the scenario's (the app's guide, docs/adr/0032): it resumes
+ * the newest one with that title and starts new ones under it (a set title is never replaced by the first message).
  */
-export function useConversation(baseUrl: string, scenarioSlug: string, accessToken: string | null) {
+export function useConversation(baseUrl: string, scenarioSlug: string, accessToken: string | null, title: string | null = null) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<AguiMessage[]>([]);
   const [bootstrapKey, setBootstrapKey] = useState(0);
@@ -23,11 +26,12 @@ export function useConversation(baseUrl: string, scenarioSlug: string, accessTok
       listConversations(baseUrl, scenarioSlug, accessToken)
         .then((list) => {
           if (cancelled) return undefined;
-          if (list.length > 0) {
-            setConversationId(list[0].id);
+          const resumable = title === null ? list : list.filter((c) => c.title === title);
+          if (resumable.length > 0) {
+            setConversationId(resumable[0].id);
             return undefined;
           }
-          return createConversation(baseUrl, scenarioSlug, null, accessToken).then((created) => {
+          return createConversation(baseUrl, scenarioSlug, title, accessToken).then((created) => {
             if (!cancelled) setConversationId(created.id);
           });
         })
@@ -48,7 +52,7 @@ export function useConversation(baseUrl: string, scenarioSlug: string, accessTok
       if (retryTimeout) clearTimeout(retryTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseUrl, scenarioSlug, accessToken, bootstrapKey]);
+  }, [baseUrl, scenarioSlug, accessToken, title, bootstrapKey]);
 
   useEffect(() => {
     if (!conversationId) {

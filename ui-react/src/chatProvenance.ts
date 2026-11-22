@@ -25,6 +25,7 @@ export type ProvenanceKey =
   | "chart"
   | "table"
   | "mcp"
+  | "app"
   | "none";
 // `mcpServers`: the MCP servers whose tools the reply used (rag-agent names them mcp__<server>__<tool>).
 export type Provenance = { keys: ProvenanceKey[]; sources: string[]; documentsEmpty: boolean; mcpServers: string[] };
@@ -61,6 +62,7 @@ export const CHAT_WORDS = {
     chart: "Gráfico",
     table: "Tabla",
     mcp: "MCP",
+    app: "Acción en la app",
     none: "Sin herramientas: contexto del escenario",
     noDocuments: "sin resultados",
     allSources: "Todas las fuentes",
@@ -80,6 +82,7 @@ export const CHAT_WORDS = {
     chart: "Chart",
     table: "Table",
     mcp: "MCP",
+    app: "An action in the app",
     none: "No tools: scenario context only",
     noDocuments: "nothing found",
     allSources: "All sources",
@@ -100,6 +103,7 @@ export const PROVENANCE_ICONS: Record<ProvenanceKey, string> = {
   chart: "📈",
   table: "📋",
   mcp: "🔌",
+  app: "🧭",
   none: "💬",
 };
 
@@ -112,8 +116,17 @@ function sourcesIn(content: string): string[] {
   return [...content.matchAll(SOURCE_TAG)].map((m) => (m[1] ?? m[2]).trim());
 }
 
-// A frontend tool that draws the reply in the chat (useCopilotAction's render_chart/render_table).
-const DRAWING_TOOLS = new Set(["render_chart", "render_table"]);
+// The app's guide (GuidePanel.tsx, docs/adr/0032): frontend tools that act on the screen and show what they did.
+export const APP_ACTIONS = {
+  search: "search_scenarios",
+  open: "open_scenario",
+  demo: "start_guided_demo",
+  architecture: "open_architecture",
+} as const;
+const APP_ACTION_NAMES = new Set<string>(Object.values(APP_ACTIONS));
+
+// A frontend tool that draws the reply in the chat (useCopilotAction's render_chart/render_table, or an app action).
+const DRAWING_TOOLS = new Set(["render_chart", "render_table", ...APP_ACTION_NAMES]);
 
 /**
  * Provenance of every reply, keyed by the id of the last assistant message in each
@@ -177,9 +190,10 @@ function provenanceOf(
     else if (RECORD_TOOLS.has(name)) keys.add("data");
     else if (name === "render_chart") keys.add("chart");
     else if (name === "render_table") keys.add("table");
+    else if (APP_ACTION_NAMES.has(name)) keys.add("app");
   }
   if (keys.size === 0) keys.add("none");
-  const order: ProvenanceKey[] = ["mcp", "documents", "rules", "model", "evaluation", "metrics", "health", "data", "chart", "table", "none"];
+  const order: ProvenanceKey[] = ["mcp", "documents", "rules", "model", "evaluation", "metrics", "health", "data", "chart", "table", "app", "none"];
   return {
     keys: order.filter((k) => keys.has(k)),
     sources: [...sources],

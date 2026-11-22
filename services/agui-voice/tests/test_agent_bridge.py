@@ -8,6 +8,7 @@ bookkeeping without a real Pipecat pipeline/transport.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Awaitable, Callable
 
 import httpx
@@ -95,6 +96,35 @@ async def test_run_agent_streams_text_deltas_and_records_assistant_reply(
     assert [f.text for f, _ in pushed_frames if isinstance(f, LLMTextFrame)] == ["Hello", " world"]
     assert bridge._messages[-1].role == "assistant"
     assert bridge._messages[-1].content == "Hello world"
+
+
+@pytest.mark.parametrize(("thread_id", "expected"), [("conv-42", "conv-42"), (None, "churn")])
+async def test_run_agent_posts_to_the_chats_conversation(
+    bridge: AgentBridgeProcessor, thread_id: str | None, expected: str
+) -> None:
+    """The run names the chat's open conversation (the agents refuse any other), else the scenario slug."""
+    seen: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:  # ruff: ignore[unused-async]
+        body = json.loads(request.content)
+        seen.append(body["threadId"])
+        # Marked as spoken, so the agent answers in a few sentences for the ear (ai_circus_shared.spoken).
+        assert body["forwardedProps"] == {"spoken": True}
+        return httpx.Response(200, content=b"", headers={"content-type": "text/event-stream"})
+
+    voice = AgentBridgeProcessor(
+        upstream_url="http://assistant:8000/agui/churn",
+        scenario_slug="churn",
+        authorization="Bearer test-token",
+        http_client=_sse_response(handler),
+        thread_id=thread_id,
+    )
+    voice.push_frame = bridge.push_frame
+    voice._messages.append(UserMessage(id="u1", content="hi"))
+
+    await voice._run_agent()
+
+    assert seen == [expected]
 
 
 async def test_run_agent_handles_run_error_without_crashing(

@@ -1,17 +1,29 @@
 import { useMemo, useState } from "react";
 import type { ScenarioSummary } from "./apiClient";
 import { ArchitectureMap, ComponentDetail, FlowSteps } from "./ArchitectureMap";
-import { CATALOG, REPO_DOCS } from "./architectureCatalog";
+import { CATALOG, COMPONENTS, REPO_DOCS } from "./architectureCatalog";
 import { Icon } from "./Icon";
 
 /**
  * The Architecture page, open to every signed-in user: the whole platform by layer from the architecture catalog,
  * a request followed step by step, and any component explained — what it does, what it is built with, what it
- * talks to, how to switch it on, its design decisions and which of the user's scenarios use it.
+ * talks to, how to switch it on, its design decisions and which of the user's scenarios use it. The app's guide can
+ * open it on a component or a request flow (`initialComponent`, `initialFlow`; App remounts it for each request).
  */
-export function ArchitectureView({ scenarios = [] }: { scenarios?: ScenarioSummary[] }) {
-  const [selected, setSelected] = useState<string | null>("llm-gateway");
-  const [flowId, setFlowId] = useState<string | null>(null);
+export function ArchitectureView({
+  scenarios = [],
+  initialComponent = null,
+  initialFlow = null,
+}: {
+  scenarios?: ScenarioSummary[];
+  initialComponent?: string | null;
+  initialFlow?: string | null;
+}) {
+  const startFlow = CATALOG.flows.find((f) => f.id === initialFlow) ?? null;
+  const [selected, setSelected] = useState<string | null>(
+    (initialComponent && COMPONENTS.has(initialComponent) ? initialComponent : null) ?? startFlow?.steps[0]?.from ?? "llm-gateway",
+  );
+  const [flowId, setFlowId] = useState<string | null>(startFlow?.id ?? null);
   const flow = CATALOG.flows.find((f) => f.id === flowId) ?? null;
   const usedBy = useMemo(() => {
     if (!selected) return [];

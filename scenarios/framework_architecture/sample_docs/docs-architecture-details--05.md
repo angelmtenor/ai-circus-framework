@@ -1,18 +1,22 @@
-# Architecture details - Fleet health, row triage, case tracker, source library
+# Architecture details - Forecasts (`task_type: forecast`)
 
 Source: docs/architecture-details.md (this repository)
 
-`ui_extras: fleet_health` (`FleetHealthView.tsx`, DOM and CSS only, no frame loop) replays real dataset rows unit by unit,
-scoring each unit's current row at every tick; health is the model's score, or actual minus predicted when the target is
-not itself a health measure (`health.value: residual`). Its thresholds should come from the real distribution.
-`ui_extras: row_triage` (`RowTriageView.tsx`) routes rows by a threshold over the precomputed out-of-fold scores, so a tick
-calls nothing. `ui_extras: message_screening` (`MessageScreeningView.tsx`, first user `financial_crime_desk`) is its reading-room twin
-for rows that are *messages* with a free-text field: an inbox by out-of-fold score, the open message drawn field by field (each tinted by
-its out-of-fold SHAP push), the words shaded live by the deployed model, the text challenger and, with a scenario `rubric_check`,
-the LLM reading the message as text (never the score or outcome; `rubric_check.reviewer_role` replaces the leadership coach's
-prompt opening). A scenario with `documents` and `extra_models` keeps the documents (and `vector_store`) on the main model. **A new tab must leave the page quiet**: prefer DOM/SVG over canvas, cap what it draws, and measure it idle.
-An `assisted_form` may add `ui_extras: case_tracker` (`CaseTrackerView.tsx`; form-agent `GET /submissions/{slug}`, scoped by
-tenant *and* user, reading each object because the owner lives inside it, hence the scan cap). A `conversational_rag` may add
-`ui_extras: source_library` (`SourceLibraryView.tsx`; rag-agent `GET /documents/{slug}` and `/passages`, reading the tenant's
-Qdrant collection, since rag-agent has no object store; etl-vectorize stores each chunk's `chunk` position, so a collection
-indexed earlier shows passages unordered until re-indexed).
+A tabular scenario can be a **forecast** (`model.task_type: forecast` + `time_series:`, ADR 0016, first user
+`energy_building`): etl-tabular's `clean_series` fails on gaps instead of dropping rows; training backtests
+`seasonal_naive`/`auto_ets`/`lightgbm_lags` by MASE (features in `ai_circus_shared.forecasting`, shared with prediction so
+they cannot skew; no Nixtla libraries, they pin `pandas<3`); prediction serves `GET /forecast/{slug}`, `POST
+/forecast/{slug}/what-if` and `GET /model/{slug}/backtest`, and row-scoring routes answer 409; the assistant gets
+`get_forecast`/`get_forecast_backtest`; `ForecastViews.tsx` replaces the model tab's Predictions/Insights and adds `ui_extras: forecast_board`.
+
+**Several models in one scenario** (`extra_models:`, ADR 0018): each model is a validated view of the scenario, addressed as
+`slug~id` (bare slug = main model), with its own dataset and bucket. etl-tabular, training and prediction loop over the views;
+entitlement is to the scenario; the assistant gets every model's tools (an extra model's with `_<id>` appended); the UI has one
+tab per model with a Predictions/Insights switch. A `risk_watchlist` can name two of its scenario's extra models in
+`next_best_offer` (first user `insurance_portfolio`): `NextBestOfferPanel.tsx` scores the selected entity with the classifier
+`propensity_model` (same feature columns, the schema checks it) and asks the recommender what goes with each product the
+entity holds (`holdings`: 0/1 feature → item id), leaving out what it has. Both are calls the caller is already entitled to.
+
+**Recommenders** (`model.task_type: recommendation` + `recommender:`, first user `surf_ml~recommender`): baskets in, no customers.
+`training/core/recommender.py` scores `association_rules` and `item_factors` (truncated SVD) on items hidden from held-out
+baskets, next to a popularity baseline (both rank by share of an item's baskets; ranking by lift or cosine found half as many hidden items); every candidate is served side by side by `GET /recommend/{slug}` and `/items`.

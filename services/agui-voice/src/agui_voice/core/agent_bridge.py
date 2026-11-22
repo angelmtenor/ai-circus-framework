@@ -22,6 +22,7 @@ from uuid import uuid4
 
 import httpx
 from ag_ui.core import AssistantMessage, Message, RunAgentInput, UserMessage
+from ai_circus_shared.spoken import spoken_props
 from loguru import logger
 from pipecat.frames.frames import (
     Frame,
@@ -53,9 +54,14 @@ class AgentBridgeProcessor(FrameProcessor):
         authorization: str,
         http_client: httpx.AsyncClient,
         tts_language_switch: Mapping[str, FrameProcessor] | None = None,
+        thread_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         """Bind this processor to one upstream agent endpoint and caller identity for the life of the session.
+
+        `thread_id` is the chat's open conversation: the upstream agents serve a run only
+        for a conversation the caller owns, and store the spoken turn in it next to the
+        typed ones. It falls back to the scenario slug, which they refuse.
 
         `tts_language_switch` maps a detected STT language code (e.g. "es") to the
         already-loaded `FrameProcessor` in a downstream `ServiceSwitcher` that speaks
@@ -65,6 +71,7 @@ class AgentBridgeProcessor(FrameProcessor):
         super().__init__(**kwargs)
         self._upstream_url = upstream_url
         self._scenario_slug = scenario_slug
+        self._thread_id = thread_id or scenario_slug
         self._authorization = authorization
         self._client = http_client
         self._tts_language_switch = tts_language_switch or {}
@@ -107,13 +114,14 @@ class AgentBridgeProcessor(FrameProcessor):
     async def _run_agent(self) -> None:
         """POST the growing transcript upstream, streaming the SSE reply back downstream as TTS input."""
         payload = RunAgentInput(
-            thread_id=self._scenario_slug,
+            thread_id=self._thread_id,
             run_id=str(uuid4()),
             state=None,
             messages=self._messages,
             tools=[],
             context=[],
-            forwarded_props=None,
+            # The agent answers for the ear: a few spoken sentences, no lists or tables (ai_circus_shared.spoken).
+            forwarded_props=spoken_props(),
         )
         reply = ""
         await self.push_frame(LLMFullResponseStartFrame())
