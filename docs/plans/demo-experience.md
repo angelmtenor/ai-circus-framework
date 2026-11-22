@@ -3,8 +3,9 @@
 The handoff for anyone (a person or a new agent session) picking this work up. It says what was asked, what is built
 and where, the rules learned on the way, and every pending step with enough detail to start it cold.
 
-Branch: `feature/scenario-story` (from `develop` after v0.63.0). Nothing is pushed or released; finishing the feature
-and cutting a release are the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
+Each step was built on its own `feature/*` branch from `develop` and is released: F6 in v0.64.0, F7 and F8 in
+v0.65.0, F9, F10 and the spoken replies in v0.66.0. Nothing is pushed; finishing a feature and cutting a release are
+the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
 
 ## Contents
 
@@ -182,9 +183,8 @@ questions are in the conversation's history; every insurance tab passes the idle
   30 s wait now applies only until the agent starts; one insurance answer took 60 s (two Gemini calls and a tool) and
   would otherwise have been dropped.
 - A spoken turn has none of the browser's tools: `AgentBridgeProcessor` sends `tools=[]` and `context=[]`, so by voice
-  the form is never filled, no chart is drawn and the guide cannot act, although the README says a spoken turn has
-  "the same tools and generative UI". Worse, the form agent then says "I have started your request" with every field
-  still empty. Either pass the chat's frontend tools and readable context over the voice socket and relay the tool
+  the form is never filled, no chart is drawn and the guide cannot act (the README and v0.66.0's notes say so). Worse,
+  the form agent then says "I have started your request" with every field still empty. Either pass the chat's frontend tools and readable context over the voice socket and relay the tool
   calls back to the browser to run, or tell the agent (in `ai_circus_shared.spoken`) it has no screen actions by voice.
 
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
@@ -202,7 +202,6 @@ questions are in the conversation's history; every insurance tab passes the idle
   (and check the control room's chart) so every view agrees.
 - `docs/scenarios/water_reservoirs_drought_guide.md` and the README's scenario tour could show control-room
   screenshots (capture with the Playwright scripts, as in `reference-demo-decks`).
-- Release: after review, `git flow feature finish scenario-story`, then a minor release with a CHANGELOG entry.
 
 ## How to verify a step
 
