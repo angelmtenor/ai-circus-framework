@@ -4,8 +4,8 @@ The handoff for anyone (a person or a new agent session) picking this work up. I
 and where, the rules learned on the way, and every pending step with enough detail to start it cold.
 
 Each step was built on its own `feature/*` branch from `develop` and is released: F6 in v0.64.0, F7 and F8 in
-v0.65.0, F9, F10 and the spoken replies in v0.66.0. Nothing is pushed; finishing a feature and cutting a release are
-the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
+v0.65.0, F9, F10 and the spoken replies in v0.66.0, the spoken screen actions in v0.67.0. Finishing a feature,
+cutting a release and pushing are the maintainer's calls (`AGENTS.md` §5, the `git-flow-finish` skill).
 
 ## Contents
 
