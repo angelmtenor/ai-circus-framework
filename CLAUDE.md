@@ -194,7 +194,8 @@ chat plus frontend tools that open scenarios, tabs and guided demos: a new works
 `useStoryDemo` (or `useWorkspaceGuide`) so the guide can reach them. **Settings** = preferences (appearance, LLM
 provider, voice engine); **Platform** (admin) = operations/monitoring (Health, Monitor, Capabilities,
 Deep Learning). Voice
-mode talks to `agui-voice` over a plain WebSocket.
+mode talks to `agui-voice` over a plain WebSocket; each press sends the chat's tools, context, props and transcript, and
+a screen action comes back for the chat to run (ADR 0033), so a new frontend tool works by voice with no voice code.
 
 ## Conventions for new or changed code
 

@@ -478,9 +478,9 @@ There is no automatic end-of-speech detection: a pause to think never ends your 
 spoken question gets a short spoken answer, with the details offered on screen
 ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)). Both are served by `agui-voice`, a Pipecat pipeline that uses the *existing*
 `assistant`/`rag-agent`/`form-agent` `/agui/{scenario_slug}` endpoint as its LLM stage — so a
-spoken turn lands in the same conversation, with the same server-side tools and data, as a typed
-one, for every scenario kind. The chat's screen actions (filling a form, drawing a chart, the
-guide opening a scenario) still need a typed turn. Defaults are fully self-hosted (faster-whisper STT + Piper TTS, no API key,
+spoken turn lands in the same conversation, with the same tools, screen context and data, as a
+typed one, for every scenario kind: by voice the agent also fills the form, draws a chart or has
+the guide open a scenario, and then says what it did. Defaults are fully self-hosted (faster-whisper STT + Piper TTS, no API key,
 model weights pre-warmed at container start); cloud engines are a `.env` key plus a pick in
 **Settings → Voice Mode Settings**.
 

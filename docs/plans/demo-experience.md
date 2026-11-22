@@ -182,10 +182,15 @@ questions are in the conversation's history; every insurance tab passes the idle
   the architecture tutorial 64 words in 22 s, the service request form 51 words in 13 s. On the way, the browser's
   30 s wait now applies only until the agent starts; one insurance answer took 60 s (two Gemini calls and a tool) and
   would otherwise have been dropped.
-- A spoken turn has none of the browser's tools: `AgentBridgeProcessor` sends `tools=[]` and `context=[]`, so by voice
-  the form is never filled, no chart is drawn and the guide cannot act (the README and v0.66.0's notes say so). Worse,
-  the form agent then says "I have started your request" with every field still empty. Either pass the chat's frontend tools and readable context over the voice socket and relay the tool
-  calls back to the browser to run, or tell the agent (in `ai_circus_shared.spoken`) it has no screen actions by voice.
+- Done: a spoken turn had none of the browser's tools (`tools=[]`, `context=[]`), so by voice the form was never
+  filled, no chart was drawn and the guide could not act, while the form agent said it had. Each press now sends a
+  `voice-turn` message with the chat's tools, readable context, forwarded props and transcript; agui-voice hands a
+  screen action back (`frontend-tool-call`), the chat carries it out as after a typed turn, and the agent runs once more
+  to say what it did ([ADR 0033](../adr/0033-push-to-talk-voice.md)). Found on the way: with Gemini, LangGraph's AG-UI
+  adapter never streams a call's arguments (start and end only), so they come from the run's closing
+  `MESSAGES_SNAPSHOT`. Measured on k3s with a fake microphone: the form gets 3 fields filled and says so (36 words);
+  insurance draws the SHAP chart and explains it (58 words); the guide opens the insurance scenario (14 words); two
+  agent runs each, the largest `voice-turn` message 26.5 KB.
 
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
   profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).
