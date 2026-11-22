@@ -99,22 +99,22 @@ def test_main_exits_on_validation_error(monkeypatch: pytest.MonkeyPatch) -> None
     assert fake_logger.error_messages
 
 
-async def test_prewarm_models_builds_vad_stt_and_tts(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_prewarm_models calls all three factories (populating providers.py's caches
-    as a side effect) once at startup, instead of waiting for the first real caller.
+async def test_prewarm_models_builds_stt_and_tts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_prewarm_models calls both factories (populating providers.py's caches as a
+    side effect) once at startup, instead of waiting for the first real caller. No
+    VAD model any more: push to talk ends each turn (docs/adr/0033).
     """
     calls: list[str] = []
     fake_logger = FakeLogger()
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app, "build_vad_analyzer", lambda: calls.append("vad") or object())
     monkeypatch.setattr(app, "build_stt_service", lambda _config: calls.append("stt") or object())
     monkeypatch.setattr(app, "build_tts_service", lambda _config: calls.append("tts") or (object(), {}))
     state = types.SimpleNamespace(models_warm=False)
 
     await app._prewarm_models(state)
 
-    assert calls == ["vad", "stt", "tts"]
+    assert calls == ["stt", "tts"]
     assert fake_logger.success_messages
     assert state.models_warm is True
 
@@ -127,7 +127,6 @@ async def test_prewarm_models_logs_and_swallows_errors(monkeypatch: pytest.Monke
     fake_logger = FakeLogger()
     monkeypatch.setattr(app, "logger", fake_logger)
     monkeypatch.setattr(app, "get_env_config", lambda: FakeEnvConfig())
-    monkeypatch.setattr(app, "build_vad_analyzer", lambda: object())
 
     def raise_value_error(_config: object) -> object:
         raise ValueError("ELEVENLABS_API_KEY must be set when TTS_PROVIDER=elevenlabs.")

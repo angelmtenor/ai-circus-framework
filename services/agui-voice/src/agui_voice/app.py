@@ -36,7 +36,7 @@ from agui_voice.api.providers import router as providers_router
 from agui_voice.api.tts import router as tts_router
 from agui_voice.api.ws import router as ws_router
 from agui_voice.core.logger import configure_logger, get_logger
-from agui_voice.core.providers import build_stt_service, build_tts_service, build_vad_analyzer
+from agui_voice.core.providers import build_stt_service, build_tts_service
 
 logger = get_logger(__name__)
 
@@ -56,7 +56,6 @@ async def _prewarm_models(state: Any) -> None:
     """
     try:
         config = get_env_config()
-        await run_in_threadpool(build_vad_analyzer)
         await run_in_threadpool(build_stt_service, config)
         await run_in_threadpool(build_tts_service, config)
         logger.success("agui-voice: STT/TTS models pre-warmed")

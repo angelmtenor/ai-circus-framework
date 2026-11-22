@@ -155,13 +155,29 @@ at phone width; `make k3s-idle-check` on Reservoirs and Insurance stays quiet.
 Not done yet: asking a scenario's own assistant from the guide, and the guide's answers about ADR 0032 itself (needs an
 `etl-vectorize` run after `make architecture`).
 
-### 6. F10 — voice, push to talk (separate session)
+### 6. F10 — voice, push to talk — done
 
-Voice mode exists (`agui-voice`, off in the lite profile). Change the interaction to the one of Claude's app: press to
-start talking, press again (or hold/release the space bar) to stop — **no automatic end-of-speech detection**. Look
-at `useVoiceSession.ts`, `MicButton.tsx` and agui-voice's VAD settings; keep the models warm at start-up.
+[ADR 0033](../adr/0033-push-to-talk-voice.md). Press the mic to start talking, press again (or hold and release the
+space bar) to send; no end-of-speech detection. agui-voice's pipeline swaps the Silero VAD for `PushToTalkProcessor`
+(`services/agui-voice/src/agui_voice/core/push_to_talk.py`), which turns the client's `push-to-talk` RTVI message into
+the frames that bound Whisper's segment, interrupts the bot on a press and caps a turn at 60 s; the `silero` extra is
+gone and start-up still warms STT and TTS. `useVoiceSession.ts` sends audio only while talking (plus a 320 ms tail),
+drops the queued reply on a barge-in, gives the button back after 30 s without an answer and hangs up after 3
+minutes unused; `MicButton.tsx`
+shows talking (red) / thinking / speaking, takes the space bar once voice is on (never inside a field), and has a ✕ to
+end voice mode. Fixed on the way: the voice bridge ran the agent on `thread_id=<slug>`, which every agent has refused
+with 404 since conversation history arrived (no spoken turn got an answer); the browser now passes the open
+conversation (`?thread_id=`), so spoken turns are answered and stored with the typed ones. Verified on k3s with a fake
+microphone (two questions with a 2 s pause, looped) in the insurance chat: one press gives one turn with both
+questions and one spoken answer; nothing is sent between turns; a connected idle session draws 0 frames/s; holding
+the space bar talks; a press while it answers is back to talking in 0.2 s; the ✕ hangs up; after a reload the spoken
+questions are in the conversation's history; every insurance tab passes the idle check.
 
 ### Smaller follow-ups
+
+- A spoken reply is as long as a typed one: the insurance chat's first voice answer (SHAP factors, then offers) took
+  about two minutes to say. Tell the agent the turn is spoken (a `forwarded_props` flag from `AgentBridgeProcessor`)
+  so it answers in a few sentences, without lists or tables, and offers the details on screen.
 
 - `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
   profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).
