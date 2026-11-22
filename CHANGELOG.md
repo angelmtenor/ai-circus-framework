@@ -4,6 +4,38 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.66.0 — 2026-11-22
+
+### Added
+- **The framework guide** ([ADR 0032](docs/adr/0032-the-apps-guide.md)): a **Guide** button in the top bar opens one
+  assistant for the whole framework on every page. It is the architecture tutorial's own chat (same documents,
+  citations, entitlement and history), and it can act in the app: rank the gallery for a need, open a scenario on a
+  tab, start its guided demo, or open the Architecture page on a component or a request flow. It only opens what the
+  user is entitled to, and says why a scenario is unavailable (its service is off or its model is not trained for the
+  tenant). On a wide screen the page makes room for it, and a scenario's own chat opens beside it.
+
+### Changed
+- **Voice mode is push to talk** ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)): press the mic to talk and press
+  again (or hold the space bar) to send; a pause no longer ends the turn. A press while it answers interrupts it, a
+  turn is capped at 60 s, the browser sends audio only while talking and hangs up after 3 idle minutes, and a ✕ ends
+  voice mode. agui-voice no longer needs the Silero VAD.
+- **A spoken question gets a short spoken answer**: agui-voice marks its runs `forwardedProps.spoken`, and the
+  assistant, rag-agent and form-agent then answer in two to four plain sentences and offer the detail on screen
+  (`ai_circus_shared.spoken`); tools and data are those of a typed turn. An insurance answer that took about two
+  minutes to say now takes about 20 s.
+
+### Fixed
+- Spoken questions got no answer: the voice bridge ran every agent on the scenario slug as the conversation, which
+  each agent has refused (404) since conversation history arrived. The browser now passes the open conversation, so
+  spoken turns are answered and stored with the typed ones.
+- The browser gave up on a spoken answer after 30 s even while the agent was working; it now waits up to 2 minutes
+  once the agent has started.
+- The browser's console no longer reports an "Unknown frame kind" when a spoken answer is interrupted.
+
+### Known limits
+- A spoken turn has none of the chat's screen actions yet: by voice the form is not filled, no chart is drawn and the
+  guide does not open anything ([plan](docs/plans/demo-experience.md#smaller-follow-ups)).
+
 ## v0.65.0 — 2026-11-21
 
 ### Added
