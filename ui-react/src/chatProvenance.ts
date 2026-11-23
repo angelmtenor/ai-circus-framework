@@ -46,6 +46,8 @@ const RETRIEVAL_TOOLS = new Set(["retrieve_docs", "read_document", "graph_search
 // A data product's governed tools (assistant's core/data_tools.py): metrics, health, records/SQL.
 const METRIC_TOOLS = new Set(["query_metric", "list_metrics"]);
 const RECORD_TOOLS = new Set(["get_record", "search_records", "run_sql", "get_dataset_sample"]);
+// The drought watch's tools (assistant's core/drought_tools.py) read the forecast model; the plan's articles are its rules.
+const DROUGHT_MODEL_TOOLS = new Set(["forecast", "what_if", "optimise_measures", "drought_state", "generate_bulletin"]);
 // The synthetic answer ChatPanel writes for a frontend tool call (render_chart…).
 export const FRONTEND_TOOL_ANSWER = "Displayed to the user.";
 
@@ -184,7 +186,9 @@ function provenanceOf(
     } else if (name === "predict_records") {
       if (result.includes('"rules"')) keys.add("rules");
       keys.add("model");
-    } else if (name === "get_forecast") keys.add("model");
+    } else if (name === "get_forecast" || DROUGHT_MODEL_TOOLS.has(name)) keys.add("model");
+    else if (name === "search_rulebook") keys.add("rules");
+    else if (name === "dq_report") keys.add("health");
     else if (name === "get_predictions_vs_actuals" || name === "get_forecast_backtest") keys.add("evaluation");
     else if (METRIC_TOOLS.has(name)) keys.add("metrics");
     else if (name === "data_health") keys.add("health");
