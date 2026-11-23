@@ -4,7 +4,7 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
-## Unreleased
+## v0.68.0 — 2026-11-23
 
 ### Added
 - **Dictation in every chat** ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)): the microphone listens, and a second press (or
