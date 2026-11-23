@@ -350,6 +350,9 @@ class ForecastSeriesOut(BaseModel):
     forecast: ForecastValuesOut
     exogenous: list[dict[str, float]]
     peak: ForecastPeakOut
+    # A direct quantile model's trained horizons (origin, current value, p10/p50/p90 and the median's drivers per
+    # horizon), as training stored them; the assistant's drought tools read them. None for every other model.
+    quantiles: dict[str, Any] | None = None
 
 
 class ForecastOut(BaseModel):

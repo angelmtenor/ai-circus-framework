@@ -46,6 +46,7 @@ from assistant.core.drought_tools import (
     build_drought_tools,
     drought_system_prompt,
     get_toolkit,
+    tenant_forecast,
 )
 from assistant.core.extraction import MAX_OCR_CHARS, build_extraction_prompt, parse_extraction
 from assistant.core.identity import resolve_identity
@@ -428,16 +429,33 @@ def _drought_toolkit(definition: ScenarioDefinition) -> DroughtToolkit:
         raise HTTPException(status_code=503, detail="The scenario's analysis artifacts are not available.") from exc
 
 
+def _caller_drought_toolkit(definition: ScenarioDefinition, identity: Identity, request: Request) -> DroughtToolkit:
+    """The drought toolkit over the forecast trained for the caller's organisation, when there is one (see
+    `DroughtToolkit.with_forecast`): prediction is asked with the caller's own token, so it checks them again.
+    """
+    toolkit = _drought_toolkit(definition)
+    assert identity.org_id is not None  # resolve_identity() guarantees it
+    client = PredictionServiceClient(base_url=get_env_config().PREDICTION_SERVICE_URL)
+    authorization = request.headers.get("authorization")
+    served = tenant_forecast(
+        identity.org_id,
+        definition.slug,
+        lambda: client.forecast(scenario_slug=definition.slug, authorization=authorization, series=None, shifts={}),
+    )
+    return toolkit.with_forecast(served)
+
+
 @router.get("/bulletin/{scenario_slug}")
 def bulletin_endpoint(
+    request: Request,
     lang: str = "en",
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
 ) -> Response:
     """This week's drought bulletin as a PDF. Same entitlement check as every route (the scenario must be one the
-    caller may use); the content is synthetic data and the same for every tenant.
+    caller may use); the readings are synthetic and the same for every tenant, the forecast the caller's own.
     """
-    toolkit = _drought_toolkit(definition)
+    toolkit = _caller_drought_toolkit(definition, identity, request)
     try:
         result = toolkit.bulletin(None, lang)
     except ToolError as exc:
@@ -451,8 +469,8 @@ def bulletin_endpoint(
 
 
 # ---- the drought control room (analysis_toolset: drought_watch) ------------------------------------------------
-# Read-only views of the same committed artifacts the chat's tools read, through the same toolkit, so the tab and the
-# assistant can never disagree. Plain `def` routes: FastAPI runs them in its threadpool.
+# Read-only views through the same toolkit the chat's tools read (over the caller's trained forecast when there is
+# one), so the tab and the assistant can never disagree. Plain `def` routes: FastAPI runs them in its threadpool.
 
 
 def _drought_call(fn: Any, *args: Any) -> dict[str, Any]:
@@ -464,11 +482,12 @@ def _drought_call(fn: Any, *args: Any) -> dict[str, Any]:
 
 @router.get("/drought/{scenario_slug}/control-room")
 def drought_control_room_endpoint(
+    request: Request,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
 ) -> dict[str, Any]:
     """The plan's states, each system's outlook and each reservoir's current state, flags and forecast drivers."""
-    return _drought_toolkit(definition).control_room()
+    return _caller_drought_toolkit(definition, identity, request).control_room()
 
 
 @router.get("/drought/{scenario_slug}/history")
@@ -508,22 +527,24 @@ def drought_quality_series_endpoint(
 @router.post("/drought/{scenario_slug}/what-if")
 def drought_what_if_endpoint(
     body: WhatIfArgs,
+    request: Request,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
 ) -> dict[str, Any]:
     """A system's storage under a rainfall scenario and demand savings, with the days to each threshold."""
-    toolkit = _drought_toolkit(definition)
+    toolkit = _caller_drought_toolkit(definition, identity, request)
     return _drought_call(toolkit.what_if, body.system, body.scenario, body.savings_pct, body.horizon)
 
 
 @router.post("/drought/{scenario_slug}/optimise")
 def drought_optimise_endpoint(
     body: OptimiseArgs,
+    request: Request,
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
 ) -> dict[str, Any]:
     """The least restrictive package of the plan keeping the chance of emergency at or below the target."""
-    toolkit = _drought_toolkit(definition)
+    toolkit = _caller_drought_toolkit(definition, identity, request)
     return _drought_call(
         toolkit.optimise_measures, body.system, body.target_probability_pct, body.horizon, body.scenario
     )
@@ -531,12 +552,13 @@ def drought_optimise_endpoint(
 
 @router.get("/drought/{scenario_slug}/bulletin")
 def drought_bulletin_endpoint(
+    request: Request,
     lang: str = Query("en", max_length=5),
     identity: Identity = Depends(resolve_identity),
     definition: ScenarioDefinition = Depends(_scenario_definition),
 ) -> dict[str, Any]:
     """This week's bulletin as markdown, for the tab's preview (`/bulletin/{slug}` serves the PDF)."""
-    return _drought_call(_drought_toolkit(definition).bulletin, None, lang)
+    return _drought_call(_caller_drought_toolkit(definition, identity, request).bulletin, None, lang)
 
 
 @router.get("/documents/{scenario_slug}", response_model=list[DocumentOut])
@@ -702,7 +724,7 @@ async def agui_endpoint(
         prediction_client = PredictionServiceClient(base_url=config.PREDICTION_SERVICE_URL)
         tools = build_model_tools(prediction_client, definition, authorization=request.headers.get("authorization"))
         if getattr(definition, "analysis_toolset", None) == "drought_watch":
-            toolkit = await run_in_threadpool(_drought_toolkit, definition)
+            toolkit = await run_in_threadpool(_caller_drought_toolkit, definition, identity, request)
             tools.extend(build_drought_tools(toolkit, scenario_slug=definition.slug))
             system_prompt += drought_system_prompt(toolkit)
     else:

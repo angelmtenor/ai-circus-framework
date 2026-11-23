@@ -155,6 +155,7 @@ def test_model_cache_loads_a_forecast_and_refuses_row_scoring() -> None:
 @pytest.fixture
 def client() -> Generator[TestClient]:
     forecast, forecaster, backtest = _documents()
+    forecast["series"][0]["quantiles"] = QUANTILES
     artifacts = ModelArtifacts(
         pipeline=None,
         explainer=None,
@@ -189,9 +190,13 @@ def client() -> Generator[TestClient]:
     yield TestClient(app)
 
 
+QUANTILES = {"origin": "2026-01-01", "current_pct": 50.0, "horizons": {"7": {"p10": 48.0, "p50": 50.5, "p90": 53.0}}}
+
+
 def test_forecast_endpoints(client: TestClient) -> None:
     body = client.get("/forecast/energy").json()
     assert body["what_if"] is True and body["series"][0]["label"] == "all"
+    assert body["series"][0]["quantiles"] == QUANTILES  # a quantile model's trained horizons pass through
     assert client.get("/forecast/energy", params={"series": "nope"}).status_code == 404
     backtest = client.get("/model/energy/backtest").json()
     assert backtest["selected"] == "lightgbm_lags" and len(backtest["windows"]) == 1

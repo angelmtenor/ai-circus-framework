@@ -316,6 +316,7 @@ export function DroughtControlRoom({ scenario, accessToken }: { scenario: Scenar
           <p className="panel-hint">
             Behind the line, the plan's states. A supply system's state also needs {room.hysteresis_days} days below a threshold before it
             changes; a reservoir is shown against the same thresholds for reference.
+            {room.forecast_source && view === "forecast" && <> Forecast: {room.forecast_source.text}</>}
           </p>
         </div>
       </div>

@@ -18,9 +18,13 @@ band with a weekly replay since 2000, the forecast with the plan's thresholds be
 optimiser, what drives the forecast, the data-quality flags (readings as published next to the cleaned series), the plan
 and the weekly bulletin. It reads the assistant's read-only `/drought/{slug}/…` routes, which call the very toolkit the
 chat's tools call, so the tab and the assistant cannot disagree. The Overview tab tells the story and runs a ten-minute
-guided demo (`story:`). Two limits remain: the assistant's tools read the **committed** artifacts in the
-scenario folder (`forecast.json`, `drought_outlook.json`), not the ones the pipeline trains for a tenant; and the forecast
-board has **no what-if re-forecast** for this model (it is served from the stored forecast, like a statistical winner).
+guided demo (`story:`). The tools, the control room and the bulletin use the forecast **trained for the caller's
+organisation** when `prediction` serves one from the same readings (same last day and current storage: the tools'
+history, flags and SQL are the scenario's committed data): they ask its org-scoped `/forecast` with the caller's own
+token, as the chart does, and recompute the outlook from it. Otherwise they use the committed `forecast.json` and
+`drought_outlook.json`; the room says which under the chart. Every quantile is clipped to 0-100 % of capacity in the
+tools, the bulletin and the chart alike. One limit remains: the forecast board has **no what-if re-forecast** for this
+model (it is served from the stored forecast, like a statistical winner).
 
 | Part | State | Where |
 |---|---|---|
@@ -90,9 +94,9 @@ behave like real storage, and it never lets a forecast see a year it is tested o
 
 ## What is left
 
-1. **Assistant on the tenant's artifacts.** Point the drought tools at the forecast the pipeline trained for the
-   caller's org (and recompute the outlook from it) instead of the committed files; and, if wanted, a what-if
-   re-forecast for the quantile model on the board.
+1. ~~**Assistant on the tenant's artifacts.**~~ Built: the drought tools, the control room and the bulletin use the
+   forecast trained for the caller's organisation and recompute the outlook from it (`DroughtToolkit.with_forecast`).
+   Still open, if wanted: a what-if re-forecast for the quantile model on the board.
 2. ~~**UI:** the data-quality view, the drought state on the map, and the forecast's drivers on the board.~~ Built in
    the drought control room.
 3. **A live evaluation** of the golden prompts against a real model, using `untraceable()` on the answers.

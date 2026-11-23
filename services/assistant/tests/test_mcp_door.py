@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
+import httpx
 import pytest
 from ai_circus_shared.auth import Identity, TokenValidationError
 from ai_circus_shared.entitlements import EntitlementDeniedError
@@ -48,6 +49,11 @@ class FakePrediction:
     def __init__(self, base_url: str) -> None:
         """Like the real client: one base URL."""
         self.base_url = base_url
+
+    def forecast(self, *, scenario_slug: str, authorization: str | None, **_: Any) -> dict[str, Any]:
+        """No model trained for the tenant yet (503): the drought tools use the committed reference."""
+        FakePrediction.calls.append({"forecast": scenario_slug, "authorization": authorization})
+        raise httpx.HTTPStatusError("503", request=httpx.Request("GET", "http://p"), response=httpx.Response(503))
 
     def model_card(self, *, scenario_slug: str, authorization: str | None) -> dict[str, Any]:
         """A small card."""
@@ -172,8 +178,13 @@ def test_score_record_takes_a_number_written_as_text(client: TestClient) -> None
 
 
 def test_drought_tools_read_the_same_toolkit_as_the_chat(client: TestClient) -> None:
+    from assistant.core import drought_tools
+
+    drought_tools._tenant_forecasts.clear()
     state = _call(client, "water_reservoirs_drought", "drought_state", {"system": "Central"})
     assert state["isError"] is False and state["structuredContent"]["system"] == "central"
+    # the tenant's trained forecast is asked for with the caller's own token (none here: the committed reference)
+    assert {"forecast": "water_reservoirs_drought", "authorization": "Bearer t1"} in FakePrediction.calls
     plan = _call(client, "water_reservoirs_drought", "search_drought_plan", {"query": "alert measures agriculture"})
     assert plan["structuredContent"]["results"]
     bad = _call(client, "water_reservoirs_drought", "what_if", {"system": "atlantis"})

@@ -2222,6 +2222,8 @@ export type DroughtControlRoom = {
   reservoirs: DroughtReservoir[];
   drivers: Record<string, Record<string, Record<string, number>>>;
   attribution: string[];
+  /** Which forecast the outlook, what-if and bulletin use: the caller's trained model, or the committed reference. */
+  forecast_source?: { kind: "tenant" | "reference"; text: string };
   note: string;
 };
 export type DroughtHistory = {

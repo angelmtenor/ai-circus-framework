@@ -190,7 +190,8 @@ A `tabular_ml` scenario opens its door on the **assistant** (docs/adr/0031): `mc
 token to prediction (`/model/{slug}/card`, `/predict/{slug}`), which checks it again. `score_record` fills the inputs the
 caller left out from `feature_schema` defaults, names what the number means, returns the eight largest SHAP drivers and,
 with business rules, the gate, the decision and the rules that fired. The drought tools are the chat's `DroughtToolkit`
-reads. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
+reads, over the forecast prediction serves the caller's organisation (asked with the same token) when it was trained
+from the same readings, and the committed one otherwise. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
 tab (analyst and engineer views) reuses `McpConnectView` with the assistant's URL and `localhost:8034`. Before a tabular
 YAML declares `mcp:`, rebuild every image that validates tabular files (registry, assistant, prediction, etl-tabular,
 training, etl-vectorize, data-transform, dl-training): an older image rejects the block.

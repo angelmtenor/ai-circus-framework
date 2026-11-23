@@ -2,10 +2,13 @@
 - Title:    Drought-watch toolset: the assistant's forecast, state, what-if, rulebook, data-quality and bulletin tools
 - Author:   Angel Martinez-Tenor
 
-A `tabular_ml` scenario with `analysis_toolset: drought_watch` gives its chat these tools, all reading the scenario's
-own committed artifacts (the synthetic snapshot, `forecast.json`, `drought_outlook.json`, the rulebook and a
-read-only SQLite file). The data is synthetic and identical for every tenant; what the tenant check guards is the chat
-itself, which is only reached through the entitled scenario route.
+A `tabular_ml` scenario with `analysis_toolset: drought_watch` gives its chat these tools, reading the scenario's own
+committed artifacts (the synthetic snapshot, `forecast.json`, `drought_outlook.json`, the rulebook and a read-only
+SQLite file) — except the forecast: when the caller's organisation has a model trained on these same readings,
+`with_forecast` swaps in its p10/p50/p90 (fetched from `prediction`'s org-scoped `GET /forecast/{slug}` with the
+caller's own token, `tenant_forecast`) and recomputes every outlook from it, so the tools and the control room's chart
+show the same forecast. The readings are synthetic and identical for every tenant; what the tenant check guards is
+the chat itself, which is only reached through the entitled scenario route.
 
 `DroughtToolkit` holds the logic as plain functions returning dicts, so tests, the golden-prompt checks and the bulletin
 route all use the same code the LangChain tools wrap. The model never names a path, a tenant or a table the toolkit has
@@ -14,20 +17,25 @@ not allowed. Every number a tool returns is read from an artifact or computed by
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 import sqlite3
 import tempfile
 import threading
+import time
 from collections import Counter
+from collections.abc import Callable
 from datetime import date, timedelta
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import yaml
 from ai_circus_shared.decision_support import Package, evaluate, optimise
 from ai_circus_shared.drought_bulletin import build as build_bulletin
+from ai_circus_shared.drought_outlook import outlook as compute_outlook
 from ai_circus_shared.readonly_sql import ReadOnlyDatabase, SqlRefusedError, unpack
 from ai_circus_shared.rulebook import Paragraph, Rulebook, load, paragraphs
 from ai_circus_shared.series_quality import DESCRIPTIONS
@@ -46,6 +54,15 @@ HISTORY_STEP_DAYS = 7  # the control room's replay: one point a week keeps 27 ye
 QUALITY_WINDOW_MAX_DAYS = 400
 RULEBOOK_TOP_K = 4
 QUANTILES = ("p10", "p50", "p90")
+SAME_READING_PP = 0.05  # a trained forecast is used only if it starts from the snapshot's own latest readings
+TENANT_FORECAST_TTL_SECONDS = 60.0
+TENANT_FORECAST_CACHE_MAX = 64  # (org, scenario) pairs
+VIEWS_MAX = 4  # toolkits over distinct trained forecasts kept per scenario (a retrain makes a new one)
+REFERENCE_SOURCE = {
+    "kind": "reference",
+    "text": "The reference forecast committed with the scenario (no model trained on these readings for your "
+    "organisation yet).",
+}
 _WORD = re.compile(r"[\wáéíóúüñç]+", re.IGNORECASE)
 _STOP = {
     "the", "a", "an", "of", "in", "to", "for", "and", "or", "is", "are", "what", "which", "does", "do", "apply",
@@ -83,6 +100,63 @@ class DroughtToolkit:
         self.db = ReadOnlyDatabase(unpack(scenario_dir / "sample_data" / "water.sqlite.gz", cache), TABLES)
         self.as_of = date.fromisoformat(next(iter(self.outlooks.values()))["as_of"])
         self._forecast_by_series = {s["series"]: s for s in self.forecast["series"]}
+        self.forecast_source: dict[str, str] = REFERENCE_SOURCE
+        self._views: dict[str, DroughtToolkit] = {}
+        self._views_lock = threading.Lock()
+
+    # ---- the caller's own trained forecast -------------------------------------------------------------------------
+    def with_forecast(self, served: dict[str, Any] | None) -> DroughtToolkit:
+        """This toolkit over a tenant's trained forecast (`tenant_forecast`): its p10/p50/p90 per series, with every
+        system's outlook (states ahead, days to each threshold, optimiser) recomputed from them by the same function
+        that wrote the committed outlook. Itself (the committed reference) when there is none, or when that model did
+        not start from this snapshot's latest readings (another day, or another tenant's own data): its forecast would
+        not belong with the readings, states and quality flags shown next to it.
+        """
+        quantiles = (served or {}).get("series") or {}
+        for sid, entry in self._forecast_by_series.items():
+            q = quantiles.get(sid)
+            if (
+                not isinstance(q, dict)
+                or q.get("origin") != self.as_of.isoformat()
+                or not isinstance(q.get("current_pct"), int | float)
+                or abs(q["current_pct"] - entry["current_pct"]) > SAME_READING_PP
+                or set(q.get("horizons") or {}) != set(entry["horizons"])
+            ):
+                return self
+        key = json.dumps(quantiles, sort_keys=True)
+        with self._views_lock:
+            view = self._views.get(key)
+            if view is None:
+                view = self._view(quantiles, str((served or {}).get("model_name") or "trained model"))
+                if len(self._views) >= VIEWS_MAX:
+                    self._views.pop(next(iter(self._views)))
+                self._views[key] = view
+        return view
+
+    def _view(self, quantiles: dict[str, Any], model_name: str) -> DroughtToolkit:
+        view = copy.copy(self)
+        series = [
+            {"series": sid, "origin": q["origin"], "current_pct": q["current_pct"], "horizons": q["horizons"]}
+            for sid, q in ((sid, quantiles[sid]) for sid in self._forecast_by_series)
+        ]
+        view.forecast = {**self.forecast, "origin": self.as_of.isoformat(), "series": series}
+        view._forecast_by_series = {s["series"]: s for s in series}
+        view.outlooks = {
+            sid: compute_outlook(self.book, sid, self._observed(sid), view._forecast_of(sid))
+            for sid in self.system_names
+        }
+        view.forecast_source = {
+            "kind": "tenant",
+            "text": f"Your organisation's trained model ({model_name}), the forecast the chart draws.",
+        }
+        return view
+
+    def _observed(self, sid: str) -> list[tuple[date, float | None]]:
+        """A series' cleaned storage per day up to the latest reading, None where nothing was published."""
+        rows = {date.fromisoformat(d): v for d, v in self._history(sid, self.as_of)}
+        first = min(rows)
+        days = (first + timedelta(days=i) for i in range((self.as_of - first).days + 1))
+        return [(d, rows.get(d)) for d in days]
 
     # ---- helpers -------------------------------------------------------------------------------------------------
     def resolve(self, name: str, *, systems_only: bool = False) -> str:
@@ -127,6 +201,7 @@ class DroughtToolkit:
             "current_pct": entry["current_pct"],
             "horizons_days": clipped,
             "typical_error_pp": {h: self._typical_error(sid, int(h)) for h in horizons},
+            "forecast_source": self.forecast_source["text"],
             "note": "p10-p90 is the central 80 % interval, within 0-100 % of capacity. typical_error_pp is the "
             "backtest mean absolute error of the median for that kind of series. Illustrative decision support.",
         }
@@ -355,6 +430,7 @@ class DroughtToolkit:
                 for s in self.forecast["series"]
             },
             "attribution": self.attribution,
+            "forecast_source": self.forecast_source,
             "note": "Illustrative decision support on synthetic data. A reservoir's state is its own storage against "
             "the plan's thresholds; the plan's state applies to a supply system. A person decides.",
         }
@@ -588,6 +664,42 @@ def get_toolkit(scenario_dir: str) -> DroughtToolkit:
 @lru_cache(maxsize=4)
 def _toolkit(scenario_dir: str) -> DroughtToolkit:
     return DroughtToolkit(Path(scenario_dir))
+
+
+_tenant_forecasts: dict[tuple[str, str], tuple[float, dict[str, Any] | None]] = {}
+_tenant_lock = threading.Lock()
+
+
+def tenant_forecast(org_id: str, scenario_slug: str, fetch: Callable[[], dict[str, Any]]) -> dict[str, Any] | None:
+    """The trained horizons of the caller's organisation's model for a scenario, as `with_forecast` takes them:
+    `{"model_name", "series": {label: quantiles}}`. `fetch` calls `prediction`'s `GET /forecast/{slug}` with the
+    caller's own token, so prediction checks the entitlement and picks the tenant's model (or the shared one) as it
+    does for the chart. None when there is no trained model (503) or prediction is unreachable: the committed reference
+    is used. Cached per organisation and scenario for a minute (a retrain shows within that), bounded in size.
+    """
+    key = (org_id, scenario_slug)
+    now = time.monotonic()
+    with _tenant_lock:
+        hit = _tenant_forecasts.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    summary: dict[str, Any] | None
+    try:
+        doc = fetch()
+        summary = {
+            "model_name": doc.get("model_name"),
+            "series": {s["label"]: s.get("quantiles") for s in doc.get("series", []) if isinstance(s, dict)},
+        }
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+        logger.info(
+            "No trained forecast for {} ({}): the committed reference is used.", scenario_slug, type(exc).__name__
+        )
+        summary = None
+    with _tenant_lock:
+        if key not in _tenant_forecasts and len(_tenant_forecasts) >= TENANT_FORECAST_CACHE_MAX:
+            _tenant_forecasts.pop(next(iter(_tenant_forecasts)))
+        _tenant_forecasts[key] = (now + TENANT_FORECAST_TTL_SECONDS, summary)
+    return summary
 
 
 def warm_toolkits(scenarios_dir: Path, slugs: list[str]) -> None:

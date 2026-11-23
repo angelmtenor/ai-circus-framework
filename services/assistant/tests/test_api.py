@@ -687,21 +687,36 @@ def test_the_drought_routes_serve_the_toolkit_and_refuse_other_scenarios(tmp_pat
     scenarios = Path(__file__).resolve().parents[3] / "scenarios"
     if not (scenarios / "water_reservoirs_drought" / "forecast.json").exists():
         pytest.skip("scenario artifacts not present")
+    from assistant.core import drought_tools
+
     water = ScenarioDefinition.load(scenarios / "water_reservoirs_drought" / "scenario.yaml")
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[resolve_identity] = lambda: Identity(subject="u", org_id="o", roles=frozenset())
     app.dependency_overrides[_scenario_definition] = lambda: water
-    original = api_module.get_env_config
+    original, original_client = api_module.get_env_config, api_module.PredictionServiceClient
+    forwarded: list[str | None] = []
 
     class _Env:
         SCENARIOS_DIR = str(scenarios)
+        PREDICTION_SERVICE_URL = "http://prediction"
+
+    class _Prediction:  # the caller's tenant has no trained model yet: the committed reference is used
+        def __init__(self, base_url: str) -> None:
+            self.base_url = base_url
+
+        def forecast(self, *, scenario_slug: str, authorization: str | None, **_: Any) -> dict[str, Any]:
+            forwarded.append(authorization)
+            raise httpx.HTTPStatusError("503", request=httpx.Request("GET", "http://p"), response=httpx.Response(503))
 
     api_module.get_env_config = lambda: _Env()  # type: ignore[assignment]
+    api_module.PredictionServiceClient = _Prediction  # type: ignore[assignment,misc]
+    drought_tools._tenant_forecasts.clear()
     try:
         client = TestClient(app)
-        room = client.get("/drought/water_reservoirs_drought/control-room")
+        room = client.get("/drought/water_reservoirs_drought/control-room", headers={"Authorization": "Bearer t"})
         assert room.status_code == 200 and len(room.json()["systems"]) == 4
+        assert room.json()["forecast_source"]["kind"] == "reference" and forwarded == ["Bearer t"]
         what_if = client.post(
             "/drought/water_reservoirs_drought/what-if",
             json={"system": "central", "scenario": "dry", "savings_pct": 10, "horizon": 90},
@@ -715,3 +730,5 @@ def test_the_drought_routes_serve_the_toolkit_and_refuse_other_scenarios(tmp_pat
         assert client.get("/drought/churn/control-room").status_code == 404
     finally:
         api_module.get_env_config = original  # type: ignore[assignment]
+        api_module.PredictionServiceClient = original_client  # type: ignore[misc]
+        drought_tools._tenant_forecasts.clear()
