@@ -237,6 +237,7 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   [APP_ACTIONS.search]: "Searching the gallery…",
   [APP_ACTIONS.open]: "Opening…",
   [APP_ACTIONS.demo]: "Starting the guided demo…",
+  [APP_ACTIONS.ask]: "Asking the scenario's own assistant…",
   [APP_ACTIONS.architecture]: "Opening the Architecture page…",
 };
 

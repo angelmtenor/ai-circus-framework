@@ -98,9 +98,9 @@ _GRAPH_INSTRUCTIONS = (
 )
 
 # The app's guide (docs/adr/0032): the same documents, plus actions the web app itself declares as frontend tools
-# (open a scenario, switch a tab, start a guided demo, open the Architecture page). The app lists what the user may
-# open in the App Context, so the model never names a scenario the user is not entitled to; each workspace's own
-# backend checks the entitlement again when it loads.
+# (open a scenario, switch a tab, start a guided demo, ask a scenario's own assistant, open the Architecture page).
+# The app lists what the user may open in the App Context, so the model never names a scenario the user is not
+# entitled to; each workspace's own backend checks the entitlement again when it loads or answers.
 _GUIDE_INSTRUCTIONS = (
     "You are also the user's guide to this web app. The App Context lists the scenarios this user can open and "
     "where they are now. Tools whose description starts with 'App action' act on the user's screen: call one when "
@@ -109,7 +109,9 @@ _GUIDE_INSTRUCTIONS = (
     "the App Context, never from earlier turns: they may have moved since, so act on a request even if you did the "
     "same thing before. Call at most one app action per reply, and first write one short sentence saying what you "
     "are opening. To recommend scenarios, use their titles and headlines in the App Context; for how the platform "
-    "or a scenario is built, search the documents and cite them as usual. Keep every answer short: this chat is a "
+    "or a scenario is built, search the documents and cite them as usual. A question about a scenario's own data, "
+    "model or results (a prediction, a figure, a forecast) is for that scenario's own assistant: put it to it with "
+    "the app action that does so instead of answering from the documents. Keep every answer short: this chat is a "
     "side panel.\n\n"
 )
 

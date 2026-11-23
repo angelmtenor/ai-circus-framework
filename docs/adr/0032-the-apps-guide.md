@@ -19,7 +19,9 @@ rag-agent.
 - **The actions are frontend tools**, declared by the guide's own `<CopilotKit>` provider with `useCopilotAction`, the
   same path as the chat's charts: `search_scenarios(query)` ranks the gallery by words and meaning,
   `open_scenario(slug, tab?)` opens a scenario or switches tab, `start_guided_demo(slug)` opens it on its Overview and
-  starts the demo, `open_architecture(component?, flow?)` opens the Architecture page on a component or a request flow.
+  starts the demo, `open_architecture(component?, flow?)` opens the Architecture page on a component or a request flow,
+  and `ask_scenario_assistant(slug, question)` opens a scenario and puts a question to its own assistant in its chat,
+  as the scenario's Ask buttons do (every kind but deep learning, whose workspace has no chat).
   CopilotKit's middleware ends the run at such a call; ChatPanel hands it to the guide, which hands it to App.
 - **What the model sees is the app's context, as data.** Three readables: the scenarios this user can open (slug,
   title, kind, domain, headline, whether it has a guided demo), where the user is (with the open workspace's tabs), and
@@ -30,7 +32,8 @@ rag-agent.
   document tools and the identity chain do not change.
 - **Bounded by the gallery, checked three times.** The tools' `enum`s carry only this user's slugs; App opens a slug
   only if it is in the user's entitled list and a workspace opens a tab only if it published it; each workspace's own
-  backend checks the entitlement again when it loads. A scenario the gallery shows but will not open (its service is
+  backend checks the entitlement again when it loads, and the scenario's own agent when it answers a question the
+  guide put to it (with the user's token, as for a typed question). A scenario the gallery shows but will not open (its service is
   off, or its model is not trained for the tenant: the same shared checks as the gallery) is marked unavailable in the
   context and refused, with the reason. The guide shows only to a tenant entitled to the tutorial.
 - **Its conversations are the tutorial's,** titled "🧭 Framework guide" (a set title is never replaced by the first
@@ -45,7 +48,10 @@ rag-agent.
   says what was opened, and the reply's provenance says "An action in the app").
 - The guide costs one context of about 2,000 tokens per question (the scenario list and the catalog ids), sent with
   every turn; it grows with the gallery, so a much larger catalogue would need a search tool instead of a list.
-- The guide cannot ask a scenario's own assistant, run a prediction or change data: actions only navigate. A tenant not
-  entitled to the tutorial has no guide; another `conversational_rag` scenario can back it at build time
-  (`VITE_GUIDE_SCENARIO`).
-- New documents (this ADR included) reach the guide's answers after `make architecture` and an `etl-vectorize` run.
+- The guide itself cannot run a prediction or change data: its actions navigate, and a question that needs a
+  scenario's data goes to that scenario's own assistant, which answers in the scenario's chat (with its own tools and
+  checks), not in the guide's. A tenant not entitled to the tutorial has no guide; another `conversational_rag`
+  scenario can back it at build time (`VITE_GUIDE_SCENARIO`).
+- New documents (this ADR included) reach the guide's answers after `make architecture` and
+  `make k3s-vectorize SCENARIOS=framework_architecture` (about 15 minutes on CPU); etl-vectorize refreshes the seed
+  documents that changed and leaves the ones a tenant edited.

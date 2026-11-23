@@ -121,6 +121,7 @@ export const APP_ACTIONS = {
   search: "search_scenarios",
   open: "open_scenario",
   demo: "start_guided_demo",
+  ask: "ask_scenario_assistant",
   architecture: "open_architecture",
 } as const;
 const APP_ACTION_NAMES = new Set<string>(Object.values(APP_ACTIONS));
