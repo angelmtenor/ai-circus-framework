@@ -225,6 +225,113 @@ def test_the_quality_views_count_every_flag_and_stay_neutral(toolkit: DroughtToo
     assert all(0 <= r["score_pct"] <= 100 for r in overview["reservoirs"] if r["score_pct"] is not None)
 
 
+# ---- the forecast: clipped, and the caller's own trained model -------------------------------------------------------
+
+
+def test_forecast_quantiles_stay_within_capacity(toolkit: DroughtToolkit) -> None:
+    """A quantile model can step past full (the committed lantern_lake p90 at 180 days is 105.2 %): no view shows it."""
+    raw = toolkit._forecast_by_series["lantern_lake"]["horizons"]["180"]
+    assert raw["p90"] > 100 and raw["p50"] > 100
+    q = toolkit.forecast_of("lantern_lake", 180)["horizons_days"]["180"]
+    assert q["p50"] == pytest.approx(100.0) and q["p90"] == pytest.approx(100.0)
+    assert q["p10"] == raw["p10"] and q["drivers_pp"] == raw["drivers_pp"]
+    for series in toolkit._forecast_by_series:
+        for v in toolkit.forecast_of(series)["horizons_days"].values():
+            assert 0 <= v["p10"] <= v["p50"] <= v["p90"] <= 100
+
+
+def _served(toolkit: DroughtToolkit, shift: float = 0.0) -> dict[str, Any]:
+    """What `tenant_forecast` returns for a model trained on the snapshot: the committed horizons, moved by `shift`."""
+    return {
+        "model_name": "lightgbm_quantile",
+        "series": {
+            sid: {
+                "origin": entry["origin"],
+                "current_pct": entry["current_pct"],
+                "horizons": {
+                    h: {**v, **{q: v[q] + shift for q in ("p10", "p50", "p90")}} for h, v in entry["horizons"].items()
+                },
+            }
+            for sid, entry in toolkit._forecast_by_series.items()
+        },
+    }
+
+
+def test_the_outlook_recomputed_from_a_forecast_matches_the_committed_one(toolkit: DroughtToolkit) -> None:
+    """The view recomputes each outlook from the readings and a forecast; fed the committed forecast, it gives back the
+    committed outlook, so a tenant's forecast changes only what follows from the forecast.
+    """
+    view = toolkit.with_forecast(_served(toolkit))
+    assert view is not toolkit and view.forecast_source["kind"] == "tenant"
+    for sid, committed in toolkit.outlooks.items():
+        mine = view.outlooks[sid]
+        for key in ("as_of", "current_pct", "state", "days_in_state", "change_7d_pp", "change_30d_pp"):
+            assert mine[key] == committed[key], (sid, key)
+        assert mine["forecast_states"] == committed["forecast_states"]
+        assert mine["crossings"] == committed["crossings"]
+        assert mine["recent_transitions"] == committed["recent_transitions"]
+
+
+def test_a_tenants_trained_forecast_reaches_every_tool_and_the_reference_stays(toolkit: DroughtToolkit) -> None:
+    served = _served(toolkit, shift=-6.0)
+    view = toolkit.with_forecast(served)
+    assert toolkit.with_forecast(served) is view  # one view per trained forecast, not one per request
+    base = toolkit.forecast_of("central", 90)["horizons_days"]["90"]["p50"]
+    assert view.forecast_of("central", 90)["horizons_days"]["90"]["p50"] == pytest.approx(base - 6.0, abs=0.01)
+    assert "trained model (lightgbm_quantile)" in view.forecast_of("central")["forecast_source"]
+    assert view.control_room()["forecast_source"]["kind"] == "tenant"
+    assert (
+        view.what_if("central", "normal", 0, 90)["end_of_horizon_pct"]["p50"]
+        < toolkit.what_if("central", "normal", 0, 90)["end_of_horizon_pct"]["p50"]
+    )
+    assert view.bulletin()["markdown"] != toolkit.bulletin()["markdown"]
+    assert toolkit.forecast_source["kind"] == "reference"  # the shared toolkit itself is never changed
+
+
+def test_a_forecast_from_other_readings_or_none_keeps_the_reference(toolkit: DroughtToolkit) -> None:
+    """A model that started from another day or other values (another tenant's own data) does not belong with the
+    snapshot's readings: the committed reference is used, as with no trained model at all.
+    """
+    assert toolkit.with_forecast(None) is toolkit
+    assert toolkit.with_forecast({"model_name": "x", "series": {}}) is toolkit
+    other_day = _served(toolkit)
+    other_day["series"]["central"]["origin"] = "2026-01-01"
+    assert toolkit.with_forecast(other_day) is toolkit
+    other_values = _served(toolkit)
+    other_values["series"]["highmoor"]["current_pct"] += 3
+    assert toolkit.with_forecast(other_values) is toolkit
+    no_quantiles = _served(toolkit)
+    no_quantiles["series"]["westfield"] = None  # a model trained before the forecast carried its quantiles
+    assert toolkit.with_forecast(no_quantiles) is toolkit
+
+
+def test_tenant_forecast_is_cached_per_org_and_falls_back_when_prediction_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    from assistant.core import drought_tools
+
+    monkeypatch.setattr(drought_tools, "_tenant_forecasts", {})
+    calls: list[str] = []
+
+    def served() -> dict[str, Any]:
+        calls.append("org-a")
+        return {"model_name": "m", "series": [{"label": "central", "quantiles": {"origin": "x"}}, {"label": "y"}]}
+
+    first = drought_tools.tenant_forecast("org-a", "water", served)
+    assert first == {"model_name": "m", "series": {"central": {"origin": "x"}, "y": None}}
+    assert drought_tools.tenant_forecast("org-a", "water", served) == first and calls == ["org-a"]
+
+    def untrained() -> dict[str, Any]:
+        raise httpx.HTTPStatusError("503", request=httpx.Request("GET", "http://p"), response=httpx.Response(503))
+
+    assert drought_tools.tenant_forecast("org-b", "water", untrained) is None
+    monkeypatch.setattr(drought_tools, "TENANT_FORECAST_CACHE_MAX", 2)
+    drought_tools.tenant_forecast("org-c", "water", served)
+    assert len(drought_tools._tenant_forecasts) == 2  # bounded: the oldest entry made room
+
+
 def test_first_requests_at_once_share_one_toolkit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The control room asks for several views together: concurrent first calls must build one toolkit, not race."""
     from concurrent.futures import ThreadPoolExecutor

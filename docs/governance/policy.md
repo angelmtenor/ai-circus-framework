@@ -122,7 +122,9 @@ Every LLM and embedding call goes through llm-gateway; `libs/shared/tests/test_s
 if a service imports a provider SDK, names a provider host, or builds an OpenAI-style client without the
 gateway's `base_url`. `EMBEDDING_PROVIDER=gemini|voyage` is routed through the gateway too
 (`gemini-embedding-001`, `voyage-3.5-lite`; the keys live on the gateway). **Out of scope:** the speech
-vendors agui-voice can use (Deepgram, ElevenLabs, Cartesia) — they are STT/TTS services, not LLM providers.
+vendors agui-voice can use (Groq's hosted Whisper, Deepgram, ElevenLabs, Cartesia) — they are STT/TTS services, not
+LLM providers, and all are off by default (local Whisper and Piper). With one of them on, a turn's audio (STT) or the
+reply's text (TTS) goes to that vendor without passing through the gateway's policies. Groq's LLMs do go through it.
 
 ## Events
 

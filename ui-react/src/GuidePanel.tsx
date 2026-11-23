@@ -15,17 +15,25 @@ import { useScenarioAgent } from "./useScenarioAgent";
  * The app's guide (docs/adr/0032): one chat for the whole framework, opened from the top bar and kept beside every
  * page. It is the architecture tutorial's own agent in rag-agent (`config.guideScenarioSlug`): it answers from the
  * same documents, citing them, and acts on the screen through frontend tools — rank the gallery for a topic, open a
- * scenario on a tab, start its guided demo, open the Architecture page on a component or a request flow.
+ * scenario on a tab, start its guided demo, put a question to a scenario's own assistant (in that scenario's chat, as
+ * its Ask buttons do), open the Architecture page on a component or a request flow.
  *
  * It is bounded by the gallery: the App Context lists only the scenarios this user is entitled to, the tools only
  * accept those slugs, App checks the slug again before it opens anything, and each workspace's backend checks the
- * entitlement once more when it loads. Every model call goes through rag-agent, so through llm-gateway.
+ * entitlement once more when it loads or answers. Every model call goes through rag-agent or the scenario's own
+ * agent, so through llm-gateway.
  */
 
 // The guide's conversations among the tutorial's own (the title a first message never replaces).
 const GUIDE_TITLE = "🧭 Framework guide";
 const HEADLINE_CHARS = 120;
 const QUERY_CHARS = 200;
+const QUESTION_CHARS = 500;
+
+/** A scenario whose workspace has its own assistant to ask (a deep-learning workspace has no chat), never the guide's. */
+function hasOwnAssistant(s: ScenarioSummary, guideSlug: string): boolean {
+  return s.kind !== "deep_learning" && s.slug !== guideSlug;
+}
 
 type LooseAction = Parameters<typeof useCopilotAction>[0];
 // See chatGenerativeUi.tsx: ChatPanel dispatches these itself, so the handler is never called.
@@ -107,6 +115,7 @@ function guideAction(
   args: unknown,
   scenarios: ScenarioSummary[],
   unavailable: ReadonlyMap<string, string>,
+  guideSlug: string,
 ): GuideAction | null {
   const a = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
   const scenario = (slug: string | null) =>
@@ -121,6 +130,11 @@ function guideAction(
     case APP_ACTIONS.demo: {
       const s = scenario(text(a.slug));
       return s?.story?.demo ? { kind: "open", slug: s.slug, tab: null, demo: true } : null;
+    }
+    case APP_ACTIONS.ask: {
+      const s = scenario(text(a.slug));
+      const question = text(a.question, QUESTION_CHARS);
+      return s && question && hasOwnAssistant(s, guideSlug) ? { kind: "ask", slug: s.slug, question } : null;
     }
     case APP_ACTIONS.architecture: {
       const component = text(a.component, 60);
@@ -146,9 +160,10 @@ function GuideChip({ icon, children, refused = false }: { icon: string; children
 }
 
 /** Registers the app actions with the guide's own <CopilotKit>; the enums keep the model to this user's gallery. */
-function useGuideActions(scenarios: ScenarioSummary[], unavailable: ReadonlyMap<string, string>): void {
+function useGuideActions(scenarios: ScenarioSummary[], unavailable: ReadonlyMap<string, string>, guideSlug: string): void {
   const slugs = scenarios.map((s) => s.slug);
   const demoSlugs = scenarios.filter((s) => s.story?.demo).map((s) => s.slug);
+  const askSlugs = scenarios.filter((s) => hasOwnAssistant(s, guideSlug)).map((s) => s.slug);
   const key = `${slugs.join(",")}/${[...unavailable.keys()].join(",")}`;
   const title = (slug: unknown) => {
     const s = scenarios.find((x) => x.slug === slug);
@@ -233,6 +248,42 @@ function useGuideActions(scenarios: ScenarioSummary[], unavailable: ReadonlyMap<
         const name = demoSlugs.includes(String(args.slug)) ? title(args.slug) : null;
         if (!name) return <GuideChip icon="⚠️" refused>No guided demo to start for {String(args.slug ?? "")}</GuideChip>;
         return unavailableChip(args.slug) ?? <GuideChip icon="▶">Guided demo of {name} started</GuideChip>;
+      }) as never,
+    } as LooseAction,
+    [key],
+  );
+
+  useCopilotAction(
+    {
+      name: APP_ACTIONS.ask,
+      description:
+        "App action: open one of the user's scenarios and put a question to that scenario's own assistant, in its chat, " +
+        "as its Ask buttons do. Use it when the answer needs the scenario's own data, model or tools (a prediction, a " +
+        "figure, a forecast, a case), which only its assistant has; how the platform is built stays in this chat. The " +
+        "answer appears in the scenario's chat, not here.",
+      parameters: [
+        { name: "slug", type: "string", required: true, ...oneOf(askSlugs), description: "The scenario's slug." },
+        {
+          name: "question",
+          type: "string",
+          required: true,
+          description:
+            "The question, in the user's own words and language, complete on its own: the scenario's assistant has not seen " +
+            "this conversation.",
+        },
+      ],
+      handler: noopHandler,
+      render: (({ args }: { args: { slug?: string; question?: string } }): ReactNode => {
+        const name = askSlugs.includes(String(args.slug)) ? title(args.slug) : null;
+        if (!name) return <GuideChip icon="⚠️" refused>No assistant to ask in {String(args.slug ?? "")}</GuideChip>;
+        return (
+          unavailableChip(args.slug) ?? (
+            <GuideChip icon="💬">
+              Asked {name}
+              {args.question?.trim() ? <em> · “{shorten(args.question, HEADLINE_CHARS)}”</em> : null}
+            </GuideChip>
+          )
+        );
       }) as never,
     } as LooseAction,
     [key],
@@ -327,7 +378,7 @@ function GuideContent({
   const [chatModel, setChatModel] = useState<ChatModel | null>(null);
   const [starting, setStarting] = useState(false);
   const unavailable = useUnavailableScenarios(scenarios, accessToken);
-  useGuideActions(scenarios, unavailable);
+  useGuideActions(scenarios, unavailable, scenario.slug);
   useCopilotReadable({
     description:
       "The scenarios this user can open, one per line: slug | title | kind | domain | headline | whether it has a " +
@@ -383,8 +434,8 @@ function GuideContent({
         </div>
       </div>
       <p className="guide-hint">
-        Ask how the platform is built, or ask it to find, open or demo a scenario: it answers from the framework's own documents and opens only
-        what your gallery shows.
+        Ask how the platform is built, or ask it to find, open or demo a scenario, or to put a question to a scenario's own assistant: it
+        answers from the framework's own documents and opens only what your gallery shows.
       </p>
       <ChatPanel
         agent={agent}
@@ -397,7 +448,7 @@ function GuideContent({
         initialMessages={conversation.initialMessages}
         conversationReady={conversation.ready}
         onFrontendToolCall={(name, args) => {
-          const action = guideAction(name, args, scenarios, unavailable);
+          const action = guideAction(name, args, scenarios, unavailable, scenario.slug);
           if (action) onAction(action);
         }}
         forwardedProps={forwardedProps}

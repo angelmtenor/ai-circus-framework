@@ -4,6 +4,62 @@ Notable changes per release, newest first. Versions follow SemVer and every rele
 tag (`git tag`); commits follow [Conventional Commits](styleguide.md). Releases before v0.31.0 are
 only recorded as tags and in `git log`.
 
+## v0.68.0 — 2026-11-23
+
+### Added
+- **Dictation in every chat** ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)): the microphone listens, and a second press (or
+  Enter) writes what was said in the input, to edit and send with Enter (agui-voice `POST /stt/{scenario_slug}`). The
+  conversation by voice has its own button beside it.
+- **The guide can ask a scenario's own assistant** ([ADR 0032](docs/adr/0032-the-apps-guide.md)): a fifth app action,
+  `ask_scenario_assistant(slug, question)`, opens the scenario and sends the question to its chat, as the scenario's
+  Ask buttons do (every kind but deep learning). The answer comes from that scenario's agent, with its own tools, data
+  and entitlement check; the guide's instructions send a question about a scenario's data, model or results there
+  instead of answering it from the documents.
+- **The drought tools, control room and bulletin use the tenant's trained forecast**
+  ([water guide](docs/scenarios/water_reservoirs_drought_guide.md)): training's quantile forecast now carries its
+  horizons (p10/p50/p90 and drivers) in the served `forecast.json`, and the assistant asks prediction's org-scoped
+  `/forecast` with the caller's own token (chat, `/drought/…` routes and the MCP door alike), recomputes the outlook
+  from it and falls back to the committed reference when the tenant has no model or it was trained from other
+  readings. The control room says which forecast it uses.
+- **Groq's hosted Whisper as a voice STT** ([ADR 0033](docs/adr/0033-push-to-talk-voice.md)), off by default: with
+  `GROQ_API_KEY` and a pick in Settings → Voice, `whisper-large-v3-turbo` transcribes each turn with its language
+  detected, and local Whisper takes any turn it cannot (no answer within 6 s included). The audio leaves the cluster.
+- agui-voice logs each voice turn in numbers (audio length, level, language, no-speech probability), never its words.
+- A spoken turn with no sound in it (a muted or wrong microphone) is said at once, naming the microphone in use,
+  instead of waiting 30 s at "…". Another one can be chosen there or in Settings → Microphone, which also tests it.
+- `make k3s-vectorize SCENARIOS=a,b` indexes only those scenarios (the tutorial alone takes about 15 minutes instead of
+  every scenario's 20+).
+
+### Fixed
+- A `SCENARIOS` env var never narrowed etl-vectorize: its `settings.yaml` profile default beat the environment, so
+  every run indexed every scenario. The default is gone (as for the governance flags).
+- etl-vectorize never refreshed a tenant's documents once its bucket existed, so a changed or new seed document (the
+  tutorial snapshot's newest ADRs) never reached the index. A seed manifest (SHA-256 per file) now updates the seed
+  documents that changed and adds new ones, and leaves the ones a tenant edited or deleted alone.
+- The tutorial snapshot dropped the tail of any paragraph longer than 4,000 characters (parts of ADR 0016, 0027 and
+  0033). `split_markdown` now cuts it at sentences, or between the lines of a table, list or code block; a test checks
+  no word of any source is lost.
+- A drought forecast could exceed 100 % of capacity (p50 101 % and p90 105 % at 180 days for one reservoir) in the chat's
+  tools and the control room's chart; quantiles are now clipped to 0-100 % everywhere, as the bulletin already did.
+- An `assisted_form` scenario without a story or case tracker dropped a question sent from outside its chat.
+- A drought answer was labelled "No tools: scenario context only" although it came from the drought tools; their
+  answers now show as Model, Rules (the plan's articles) or Data health.
+- The chat's mic said only "Voice connection failed" when agui-voice was not running (the lite profiles keep it at 0).
+  It now reads "Voice is off" with how to start it, and asks for no microphone until the service is back; a browser
+  that refuses the microphone gets its own message.
+- Local Whisper dropped quiet speech (pipecat's no-speech threshold of 0.4; now 0.6) and ran float32 on a CPU (now int8).
+- With voice on, the guide's text input shrank to 49 px behind the providers label; the engines are now in the voice
+  button's tooltip, and the input keeps at least 7rem.
+- Pressing the voice button to stop a slow answer opened another turn and cancelled the answer; it now only stops it, and
+  the waiting icon no longer spins.
+- A click or near-silence was transcribed as invented words ("Thank you.", Russian) and sent to the agent; a recording
+  with no speech in it (Silero, bundled with faster-whisper) is no longer transcribed.
+- With local Whisper a Spanish question was answered in the English voice: its detected language was not passed on.
+
+### Docs
+- Control-room screenshots in the [water guide](docs/scenarios/water_reservoirs_drought_guide.md) and the README's
+  showcase.
+
 ## v0.67.0 — 2026-11-22
 
 ### Added

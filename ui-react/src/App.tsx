@@ -243,7 +243,9 @@ export default function App() {
     const scenario = scenarios.find((s) => s.slug === action.slug);
     if (!scenario) return;
     setSelected(scenario);
-    if (action.tab || action.demo) requestWorkspace({ slug: scenario.slug, tab: action.tab, demo: action.demo });
+    // A question goes to the workspace's own chat: its agent checks the entitlement again before it answers.
+    if (action.kind === "ask") requestWorkspace({ slug: scenario.slug, question: action.question });
+    else if (action.tab || action.demo) requestWorkspace({ slug: scenario.slug, tab: action.tab, demo: action.demo });
   }
 
   return (

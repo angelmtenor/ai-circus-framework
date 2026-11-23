@@ -80,7 +80,7 @@ export function AssistedFormView({ scenario, accessToken }: { scenario: Scenario
     setPrompt({ id: Date.now(), text });
   };
   const { tabLabel, startDemo, demoBar, demoActive } = useStoryDemo(scenario, storyTabs, openStoryTab, ask);
-  if (!extras && !story) return <FormWorkspace scenario={scenario} accessToken={accessToken} />;
+  if (!extras && !story) return <FormWorkspace scenario={scenario} accessToken={accessToken} prompt={prompt} />;
   return (
     <div className={`workspace${demoActive ? " workspace--demo" : ""}`}>
       <div className="workspace-tabs">

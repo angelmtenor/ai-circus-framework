@@ -4,7 +4,9 @@
 
 Extract: bootstrap the tenant's documents into SeaweedFS on first run, from either the
 scenario's tracked sample_docs/ folder or a public GitHub repo folder (demo convenience
-— a real deployment would have each tenant upload their own documents instead).
+— a real deployment would have each tenant upload their own documents instead). Documents
+bootstrapped from a tracked folder follow it on later runs (`sync_seed_docs`), so a
+regenerated snapshot reaches the index without clearing the bucket by hand.
 Transform: chunk + embed. Load: upsert into the tenant's Qdrant collection for
 rag-agent to query.
 
@@ -17,6 +19,7 @@ both rag-agent's seed-linking index and its copy of the graph (see its graph_ret
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 import uuid
@@ -49,6 +52,7 @@ GITHUB_API_TIMEOUT_SECONDS = 15.0
 SYNONYM_THRESHOLD = 0.85  # cosine; measured on aml_regulation_kg, where 0.85+ same-class pairs are rewordings
 SYNONYM_MAX_PER_NODE = 2
 KNOWLEDGE_GRAPH_SEED_MARKER = "kg/seed.sha256"  # SHA-256 of the seed a tenant's graph was bootstrapped from
+SEED_MANIFEST_PREFIX = "seed/"  # per raw_prefix: the SHA-256 of every seed document a tenant was given
 
 
 def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
@@ -70,13 +74,91 @@ def fetch_github_docs(source: GithubDocsSource) -> dict[str, bytes]:
         return docs
 
 
-def _bootstrap_from_seed_dir(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
-    """Upload every file in the scenario's tracked local seed folder to SeaweedFS."""
+def seed_manifest_key(documents: DocumentsConfig) -> str:
+    """Where the SHA-256 of every seed file a tenant was given is kept: next to the raw
+    documents, never under `raw_prefix`, so it is never indexed itself.
+    """
+    return f"{SEED_MANIFEST_PREFIX}{documents.raw_prefix.strip('/')}.json"
+
+
+def _digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _seed_files(documents: DocumentsConfig, scenario_dir: Path) -> dict[str, bytes]:
+    """The scenario's tracked seed folder, as {object key under raw_prefix: bytes}."""
     assert documents.seed_prefix is not None  # only called when set
     seed_dir = scenario_dir / documents.seed_prefix
-    for path in sorted(seed_dir.glob("*")):
-        if path.is_file():
-            store.put(org_id, f"{documents.raw_prefix}{path.name}", path.read_bytes())
+    return {
+        f"{documents.raw_prefix}{path.name}": path.read_bytes() for path in sorted(seed_dir.glob("*")) if path.is_file()
+    }
+
+
+def _write_seed_manifest(store: ObjectStore, org_id: str, documents: DocumentsConfig, manifest: dict[str, str]) -> None:
+    store.put(org_id, seed_manifest_key(documents), json.dumps(manifest, sort_keys=True, indent=1).encode())
+
+
+def _bootstrap_from_seed_dir(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
+    """Upload every file in the scenario's tracked local seed folder to SeaweedFS, and
+    record what was uploaded so `sync_seed_docs` can keep it in step with the seed.
+    """
+    files = _seed_files(documents, scenario_dir)
+    for key, data in files.items():
+        store.put(org_id, key, data)
+    _write_seed_manifest(store, org_id, documents, {key: _digest(data) for key, data in files.items()})
+
+
+def sync_seed_docs(
+    store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path, existing: list[str]
+) -> None:
+    """Keep a tenant's seed-bootstrapped documents in step with the scenario's tracked seed
+    folder (a regenerated snapshot such as the architecture tutorial's), so a re-run indexes
+    the current text instead of the copy made on the first run.
+
+    Only what the seed itself wrote is touched: the manifest (`seed_manifest_key`) holds the
+    SHA-256 of every file the seed gave this tenant. A file that still has that content is
+    updated or removed with the seed; a file the tenant changed or deleted, and any file of
+    its own, is left alone. A tenant bootstrapped before manifests existed is adopted only
+    when every document it has carries a seed file's name (nothing of its own to lose).
+    """
+    seed = _seed_files(documents, scenario_dir)
+    key = seed_manifest_key(documents)
+    if store.exists(org_id, key):
+        manifest: dict[str, str] = json.loads(store.get(org_id, key))
+    elif set(existing) <= set(seed):
+        manifest = {name: _digest(store.get(org_id, name)) for name in existing}
+    else:
+        logger.warning(
+            "org={}'s documents under {} include files the seed never wrote — left as they are.",
+            org_id,
+            documents.raw_prefix,
+        )
+        return
+
+    present = set(existing)
+    updated: dict[str, str] = {}
+    changes = 0
+    for name, digest in manifest.items():
+        if name not in present or _digest(store.get(org_id, name)) != digest:
+            continue  # deleted or edited by the tenant: theirs now
+        if name not in seed:
+            store.delete(org_id, name)
+            changes += 1
+            continue
+        if _digest(seed[name]) != digest:
+            store.put(org_id, name, seed[name])
+            changes += 1
+        updated[name] = _digest(seed[name])
+    for name, data in seed.items():
+        if name not in manifest and name not in present:
+            store.put(org_id, name, data)
+            updated[name] = _digest(data)
+            changes += 1
+    # Keep what the tenant changed or deleted in the manifest, so it is never written back.
+    kept = {name: digest for name, digest in manifest.items() if name not in updated and name in seed}
+    _write_seed_manifest(store, org_id, documents, {**kept, **updated})
+    if changes:
+        logger.warning("The scenario's seed documents changed — {} file(s) updated for org={}.", changes, org_id)
 
 
 def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig, scenario_dir: Path) -> None:
@@ -86,8 +168,14 @@ def ensure_raw_docs(store: ObjectStore, org_id: str, documents: DocumentsConfig,
     at least one of the two is set. If both are set, `github_source` is tried first and
     a failure (rate limit, outage, no network) falls back to `seed_prefix` instead of
     leaving the tenant with zero documents — see `DocumentsConfig`'s docstring.
+
+    A tenant that already has documents from a local seed folder alone is kept in step
+    with it (`sync_seed_docs`); GitHub-sourced documents are fetched on the first run only.
     """
-    if store.list(org_id, documents.raw_prefix):
+    existing = store.list(org_id, documents.raw_prefix)
+    if existing:
+        if documents.seed_prefix is not None and documents.github_source is None and documents.raw_prefix:
+            sync_seed_docs(store, org_id, documents, scenario_dir, existing)
         return
 
     if documents.github_source is not None:
@@ -166,8 +254,8 @@ def ensure_knowledge_graph(store: ObjectStore, org_id: str, documents: Documents
     """Keep the tenant's knowledge graph in step with the scenario's tracked seed file —
     the same demo bootstrap as `ensure_raw_docs`, validated before it is stored.
 
-    Unlike the documents, a graph bootstrapped from the seed is *replaced* when the seed
-    changes (a re-extraction, a fix), recognised by the seed's SHA-256 stored next to it
+    Like the seed documents (`sync_seed_docs`), a graph bootstrapped from the seed is
+    *replaced* when the seed changes (a re-extraction, a fix), recognised by the seed's SHA-256 stored next to it
     (`KNOWLEDGE_GRAPH_SEED_MARKER`). A graph with no marker is the tenant's own and is
     never overwritten — unless it is byte-identical to the seed (bootstrapped before the
     marker existed), which is then adopted.

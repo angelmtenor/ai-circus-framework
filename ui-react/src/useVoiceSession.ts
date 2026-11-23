@@ -3,6 +3,8 @@ import { randomUUID, type HttpAgent } from "@ag-ui/client";
 import type { Context as AguiContext, InputContent, Message as AguiMessage, Tool as AguiTool } from "@ag-ui/core";
 import { RTVIMessage } from "@pipecat-ai/client-js";
 import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
+import { openMicrophone, subscribeMicrophone } from "./microphone";
+import { capturePcm, claimMicrophone, dropMicrophone, RELEASE_TAIL_MS } from "./pcmCapture";
 
 /**
  * Push-to-talk voice conversation for one scenario (docs/adr/0033), talking directly
@@ -15,9 +17,11 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * (`{talking: true|false}`) that agui-voice's `PushToTalkProcessor` turns into the
  * frames that bound Whisper's segment. Mic audio is streamed only while talking (plus a
  * short tail after the release, so the last word is not cut), so a pause mid-sentence
- * never ends the turn and nothing is heard between turns. Pressing while the bot speaks
- * is the barge-in: its queued audio stops here at once and the server interrupts the
- * reply. A connected session that nobody uses hangs up by itself.
+ * never ends the turn and nothing is heard between turns. Pressing while the answer is
+ * being prepared or said only stops it (`cancel`): the user is not asked to talk again.
+ * Holding the space bar then is the barge-in: its queued audio stops here at once, the
+ * server interrupts the reply and the next turn opens. A connected session that nobody
+ * uses hangs up by itself.
  *
  * This does NOT use `@pipecat-ai/client-js`'s `PipecatClient` — its bundled
  * `WavRecorder`/`WavMediaManager` audio-device layer was found to hang silently
@@ -44,15 +48,34 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * screen action) comes back as a `frontend-tool-call` server message for `turn.onToolCall`
  * to carry out exactly as after a typed turn.
  *
- * Only one live session is allowed app-wide at a time: `activeSession` is a
- * module-level singleton (not per-hook-instance state), so starting a session from
- * anywhere first tears down whatever was already running.
+ * Only one thing has the microphone app-wide (`claimMicrophone`): starting a session from
+ * anywhere first ends whatever had it, another chat's session or a dictation.
  */
-export type VoiceSessionState = "idle" | "connecting" | "ready" | "talking" | "thinking" | "speaking" | "error";
+// `no-mic`: the browser refused the microphone or has none — not a connection failure, so it says so apart.
+// `silent` and `no-speech`: still connected, but the last turn held no sound (a muted or wrong microphone) or no
+// words, so no answer is coming.
+export type VoiceSessionState =
+  | "idle"
+  | "connecting"
+  | "ready"
+  | "talking"
+  | "thinking"
+  | "speaking"
+  | "silent"
+  | "no-speech"
+  | "error"
+  | "no-mic";
 
 /** Connected states: the session is open and the space bar talks. */
 export function isVoiceConnected(state: VoiceSessionState): boolean {
-  return state === "ready" || state === "talking" || state === "thinking" || state === "speaking";
+  return (
+    state === "ready" ||
+    state === "talking" ||
+    state === "thinking" ||
+    state === "speaking" ||
+    state === "silent" ||
+    state === "no-speech"
+  );
 }
 
 // If the server never answers "ready" (a crashed pipeline, a network issue, a
@@ -64,14 +87,6 @@ const CONNECT_TIMEOUT_MS = 20_000;
 // — the wire protocol doesn't carry the playback sample rate (see
 // ProtobufFrameSerializer.deserialize upstream, which discards it the same way).
 const PLAYBACK_SAMPLE_RATE = 24_000;
-// Must match the server pipeline's fixed STT rate (Whisper expects 16kHz) — the
-// transport never resamples incoming audio, it trusts whatever rate each frame
-// claims (see BaseInputTransport.push_audio_frame in pipecat), so sending the mic's
-// native device rate (44.1/48kHz) here silently breaks STT without any error.
-// Requesting this rate on the AudioContext makes the browser resample the mic
-// stream itself before onaudioprocess ever sees it.
-const CAPTURE_SAMPLE_RATE = 16_000;
-const CAPTURE_BUFFER_SIZE = 4096;
 const RTVI_PROTOCOL_VERSION = "2.1.0";
 
 /** The RTVI `client-message` type agui-voice's core/push_to_talk.py listens for. */
@@ -127,9 +142,6 @@ export function transcriptForVoice(messages: readonly AguiMessage[]): AguiMessag
 }
 // The server ends a turn itself past 60 s of audio (DEFAULT_MAX_TURN_SECS); the client stops at the same point.
 const MAX_TURN_MS = 60_000;
-// Keep streaming this long after the release: the capture buffer (4096 samples at
-// 16 kHz = 256 ms) still holds the last word, and the stop must not overtake it.
-const RELEASE_TAIL_MS = 320;
 // No agent run after a turn (silence, nothing transcribed): give the button back.
 const THINKING_TIMEOUT_MS = 30_000;
 // The agent has started (bot-llm-started) but not answered yet: a cold prompt cache plus a slow model took 30 s once,
@@ -151,10 +163,9 @@ interface VoiceSession {
 interface TalkControls {
   begin: () => void;
   end: () => void;
+  stop: () => void;
   dispose: () => void;
 }
-
-let activeSession: VoiceSession | null = null;
 
 function stopSession(session: VoiceSession): void {
   session.mediaStream.getTracks().forEach((track) => track.stop());
@@ -166,13 +177,6 @@ function stopSession(session: VoiceSession): void {
   }
 }
 
-function disconnectActiveSession(): void {
-  if (activeSession) {
-    stopSession(activeSession);
-    activeSession = null;
-  }
-}
-
 export function useVoiceSession(
   agent: HttpAgent,
   voiceUrl: string,
@@ -181,6 +185,8 @@ export function useVoiceSession(
   turn?: VoiceTurnBridge,
 ) {
   const [state, setStateValue] = useState<VoiceSessionState>("idle");
+  // The microphone in use, named when a turn was silent: it is often not the one the user expects.
+  const [micName, setMicName] = useState("");
   // Read when a turn starts or a screen action arrives: the chat's latest tools, screen and handlers.
   const turnRef = useRef(turn);
   useEffect(() => {
@@ -190,7 +196,8 @@ export function useVoiceSession(
   const stateRef = useRef<VoiceSessionState>("idle");
   const sessionRef = useRef<VoiceSession | null>(null);
   const talkRef = useRef<TalkControls | null>(null);
-  // A press while connecting means "talk as soon as it is ready"; a second press takes that back.
+  // A press that connects means "talk as soon as it is ready".
+  const attemptRef = useRef(0); // a connection given up while the mic prompt was open must not go on when it is answered
   const talkOnReadyRef = useRef(false);
   const botTextRef = useRef("");
   const nextPlaybackTimeRef = useRef(0);
@@ -201,26 +208,33 @@ export function useVoiceSession(
     setStateValue(next);
   }, []);
 
+  // Stable, so it also names this hook's hold on the microphone.
+  const releaseRef = useRef<() => void>(() => {});
+
   /** End voice mode: close the socket, release the mic, forget the turn. */
   const hangUp = useCallback(
     (next: VoiceSessionState = "idle") => {
+      attemptRef.current++;
       talkRef.current?.dispose();
       talkRef.current = null;
       talkOnReadyRef.current = false;
       const session = sessionRef.current;
       sessionRef.current = null;
-      if (session) {
-        if (activeSession === session) activeSession = null;
-        stopSession(session);
-      }
+      if (session) stopSession(session);
+      dropMicrophone(releaseRef.current);
       setState(next);
     },
     [setState],
   );
+  const end = useCallback(() => hangUp(), [hangUp]);
+  useEffect(() => {
+    releaseRef.current = end;
+  }, [end]);
 
   const connect = useCallback(async () => {
     if (sessionRef.current) return;
-    disconnectActiveSession(); // only one live voice session app-wide
+    claimMicrophone(end); // only one user of the microphone app-wide
+    const attempt = ++attemptRef.current;
     setState("connecting");
 
     let readyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -234,33 +248,37 @@ export function useVoiceSession(
 
     let mediaStream: MediaStream;
     try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStream = await openMicrophone();
     } catch (err) {
       console.error("Voice session: microphone access denied or unavailable:", err);
-      talkOnReadyRef.current = false;
-      setState("error");
+      if (attempt !== attemptRef.current) return;
+      hangUp("no-mic");
       return;
     }
     // Hung up (or another chat took the voice session) while the mic prompt was open.
-    if (stateRef.current !== "connecting") {
+    if (attempt !== attemptRef.current) {
       mediaStream.getTracks().forEach((track) => track.stop());
       return;
     }
 
-    const audioContext = new AudioContext({ sampleRate: CAPTURE_SAMPLE_RATE });
+    setMicName(mediaStream.getAudioTracks()[0]?.label ?? "");
+
     const playbackContext = new AudioContext({ sampleRate: PLAYBACK_SAMPLE_RATE });
-    // Fire-and-forget: MicButton's synchronous unlockAudioPlayback() (run inside the
-    // click handler, before any of this async work) is what actually satisfies the
-    // browser's autoplay-gesture requirement — these calls are just a safety net,
-    // not awaited, so a slow/suspended resume can never block the rest of connect().
-    audioContext.resume().catch(() => {});
+    // Fire-and-forget: MicButton's synchronous unlockAudioPlayback() is what satisfies the browser's
+    // autoplay-gesture requirement — this is a safety net, so a slow resume can never block connect().
     playbackContext.resume().catch(() => {});
     const ws = new WebSocket(wsUrl.toString());
     ws.binaryType = "blob";
 
+    // Mic audio goes out only while this is true: between a press and the end of its release tail.
+    let sendingAudio = false;
+    const audioContext = capturePcm(mediaStream, (samples) => {
+      if (!sendingAudio || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(serializer.serializeAudio(samples.buffer, audioContext.sampleRate, 1) as unknown as ArrayBuffer);
+    });
+
     const session: VoiceSession = { ws, audioContext, playbackContext, mediaStream };
     sessionRef.current = session;
-    activeSession = session;
     nextPlaybackTimeRef.current = 0;
     scheduledSourcesRef.current = [];
 
@@ -293,34 +311,6 @@ export function useVoiceSession(
       };
     };
 
-    // Mic audio goes out only while this is true: between a press and the end of its release tail.
-    let sendingAudio = false;
-    const sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    // ScriptProcessorNode is deprecated in favor of AudioWorklet, but it needs no
-    // async module loading (no blob-URL step to hang on) and its synchronous
-    // callback model is simpler and sufficient here — deliberate tradeoff after the
-    // AudioWorklet-based SDK path above proved unreliable in this environment.
-    const processor = audioContext.createScriptProcessor(CAPTURE_BUFFER_SIZE, 1, 1);
-    processor.onaudioprocess = (event) => {
-      if (!sendingAudio || ws.readyState !== WebSocket.OPEN) return;
-      const float32 = event.inputBuffer.getChannelData(0);
-      const int16 = new Int16Array(float32.length);
-      for (let i = 0; i < float32.length; i++) {
-        const clamped = Math.max(-1, Math.min(1, float32[i]));
-        int16[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
-      }
-      ws.send(serializer.serializeAudio(int16.buffer, audioContext.sampleRate, 1) as unknown as ArrayBuffer);
-    };
-    sourceNode.connect(processor);
-    // ScriptProcessorNode only fires onaudioprocess while connected to a
-    // destination — route it through a zero-gain node instead of the real
-    // destination, or the user's own mic input would play back through their
-    // speakers (audible echo/feedback) instead of just being captured.
-    const silentSink = audioContext.createGain();
-    silentSink.gain.value = 0;
-    processor.connect(silentSink);
-    silentSink.connect(audioContext.destination);
-
     // ── The turn: press, release, and the timers that keep every state bounded ──
     const timers: Record<"tail" | "max" | "thinking" | "idle", ReturnType<typeof setTimeout> | null> = {
       tail: null,
@@ -333,9 +323,11 @@ export function useVoiceSession(
       if (timer) clearTimeout(timer);
       timers[name] = null;
     };
-    const sendTalking = (talking: boolean) => {
+    // After the user's stop: what is still on its way from that turn is dropped, until the next press.
+    let stopped = false;
+    const sendTalking = (talking: boolean, cancel = false) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      const message = new RTVIMessage("client-message", { t: PUSH_TO_TALK, d: { talking } });
+      const message = new RTVIMessage("client-message", { t: PUSH_TO_TALK, d: { talking, ...(cancel ? { cancel } : {}) } });
       ws.send(serializer.serializeMessage(message) as unknown as ArrayBuffer);
     };
     // What a typed run of this chat would send, taken as the user starts talking: the same tools, screen and transcript.
@@ -365,12 +357,12 @@ export function useVoiceSession(
         if (stateRef.current === "thinking") becomeReady();
       }, ms);
     };
-    const becomeReady = () => {
+    const becomeReady = (next: "ready" | "silent" | "no-speech" = "ready") => {
       clearTimer("thinking");
       clearTimer("idle");
-      setState("ready");
+      setState(next);
       timers.idle = setTimeout(() => {
-        if (stateRef.current === "ready") hangUp();
+        if (stateRef.current === next) hangUp();
       }, IDLE_HANGUP_MS);
     };
     const controls: TalkControls = {
@@ -379,6 +371,7 @@ export function useVoiceSession(
         clearTimer("thinking");
         clearTimer("idle");
         clearTimer("max");
+        stopped = false;
         clearScheduledPlayback(); // barge-in, heard at once; the server interrupts the reply too
         sendTalking(true);
         sendTurnInput();
@@ -396,6 +389,15 @@ export function useVoiceSession(
           sendTalking(false);
         }, RELEASE_TAIL_MS);
         waitForReply(THINKING_TIMEOUT_MS);
+      },
+      stop() {
+        clearTimer("tail");
+        clearTimer("max");
+        stopped = true;
+        sendingAudio = false;
+        clearScheduledPlayback();
+        sendTalking(false, true);
+        becomeReady();
       },
       dispose() {
         for (const name of Object.keys(timers) as (keyof typeof timers)[]) clearTimer(name);
@@ -420,9 +422,9 @@ export function useVoiceSession(
       if (readyTimer) clearTimeout(readyTimer);
       controls.dispose();
       const wasActive = sessionRef.current === session;
-      if (activeSession === session) activeSession = null;
       if (wasActive) {
         sessionRef.current = null;
+        dropMicrophone(end);
         talkRef.current = null;
         talkOnReadyRef.current = false;
         // The server closed it (or the network did): release the mic and the audio contexts too.
@@ -442,8 +444,8 @@ export function useVoiceSession(
         return;
       }
       if (parsed.type === "audio") {
-        // While the user talks, the old reply is over: drop its audio still in flight.
-        if (stateRef.current !== "talking") playAudioChunk(parsed.audio);
+        // While the user talks, or after their stop, the old reply is over: drop its audio still in flight.
+        if (stateRef.current !== "talking" && !stopped) playAudioChunk(parsed.audio);
         return;
       }
       const message = parsed.message as { type?: string; data?: Record<string, unknown> };
@@ -458,8 +460,13 @@ export function useVoiceSession(
           }
           break;
         case "server-message": {
-          const data = message.data as ({ type?: string; talking?: boolean } & Partial<VoiceToolCall>) | undefined;
-          if (data?.type === PUSH_TO_TALK && data.talking === false && stateRef.current === "talking") {
+          const data = message.data as
+            | ({ type?: string; talking?: boolean; reason?: string } & Partial<VoiceToolCall>)
+            | undefined;
+          if (data?.type === PUSH_TO_TALK && (data.reason === "silent" || data.reason === "no-speech")) {
+            // Only for the turn just sent: if the user is already talking again, it is about the previous one.
+            if (stateRef.current === "thinking") becomeReady(data.reason);
+          } else if (data?.type === PUSH_TO_TALK && data.talking === false && stateRef.current === "talking") {
             // The server ended an over-long turn itself (core/push_to_talk.py's limit).
             clearTimer("max");
             clearTimer("tail");
@@ -468,6 +475,7 @@ export function useVoiceSession(
             waitForReply(THINKING_TIMEOUT_MS);
           } else if (
             data?.type === FRONTEND_TOOL_CALL &&
+            !stopped &&
             typeof data.id === "string" &&
             typeof data.name === "string" &&
             typeof data.arguments === "string"
@@ -479,7 +487,7 @@ export function useVoiceSession(
         }
         case "user-transcription": {
           const data = message.data as { text?: string; final?: boolean } | undefined;
-          if (data?.final && data.text?.trim()) {
+          if (data?.final && data.text?.trim() && !stopped) {
             agent.addMessage({ id: randomUUID(), role: "user", content: data.text });
           }
           break;
@@ -491,11 +499,15 @@ export function useVoiceSession(
         case "bot-llm-started":
           botTextRef.current = "";
           // The turn was heard and the agent is working on it: wait for its answer, not for the 30 s first step.
+          if (!stopped && (stateRef.current === "silent" || stateRef.current === "no-speech")) {
+            clearTimer("idle"); // something was transcribed after all
+            setState("thinking");
+          }
           if (stateRef.current === "thinking") waitForReply(AGENT_RUN_TIMEOUT_MS);
           break;
         case "bot-llm-text": {
           const data = message.data as { text?: string } | undefined;
-          if (data?.text) botTextRef.current += data.text;
+          if (data?.text && !stopped) botTextRef.current += data.text;
           break;
         }
         case "bot-llm-stopped":
@@ -506,7 +518,7 @@ export function useVoiceSession(
           if (stateRef.current === "thinking") waitForReply(AFTER_REPLY_MS);
           break;
         case "bot-started-speaking":
-          if (stateRef.current === "thinking" || stateRef.current === "ready") {
+          if (!stopped && (stateRef.current === "thinking" || stateRef.current === "ready")) {
             clearTimer("thinking");
             clearTimer("idle");
             setState("speaking");
@@ -524,42 +536,59 @@ export function useVoiceSession(
     };
 
     readyTimer = setTimeout(() => {
+      if (sessionRef.current !== session) return;
       console.error(`Voice session: no "ready" response from the server within ${CONNECT_TIMEOUT_MS / 1000}s — giving up.`);
       hangUp("error");
     }, CONNECT_TIMEOUT_MS);
-  }, [agent, voiceUrl, scenarioSlug, accessToken, hangUp, setState]);
+  }, [agent, voiceUrl, scenarioSlug, accessToken, end, hangUp, setState]);
 
-  /** The mic button, or the space bar going down: connect and talk, send the turn, or interrupt and talk. */
+  /** The voice button: connect and talk, send the turn, or stop the answer. */
   const press = useCallback(() => {
     switch (stateRef.current) {
       case "idle":
       case "error":
+      case "no-mic":
         talkOnReadyRef.current = true;
         void connect();
         break;
       case "connecting":
-        talkOnReadyRef.current = !talkOnReadyRef.current;
+        hangUp();
         break;
       case "talking":
         talkRef.current?.end();
         break;
-      default: // ready, thinking, speaking
+      case "thinking":
+      case "speaking":
+        talkRef.current?.stop();
+        break;
+      default: // ready, silent, no-speech
         talkRef.current?.begin();
     }
-  }, [connect]);
+  }, [connect, hangUp]);
 
+  /** The space bar going down: talk, interrupting an answer if there is one. */
+  const talk = useCallback(() => {
+    if (stateRef.current !== "talking") talkRef.current?.begin();
+  }, []);
   /** The space bar coming up: send the turn it held open. */
   const release = useCallback(() => {
     if (stateRef.current === "talking") talkRef.current?.end();
     else if (stateRef.current === "connecting") talkOnReadyRef.current = false;
   }, []);
 
-  const end = useCallback(() => hangUp(), [hangUp]);
-
   // Leaving this conversation — switching scenarios (new scenarioSlug), opening another
   // conversation (new threadId: the session is bound to the old one) or unmounting
   // entirely — must stop any live mic/audio, not leave it running in the background.
   useEffect(() => () => hangUp(), [scenarioSlug, agent.threadId, hangUp]);
 
-  return { state, press, release, end };
+  // Another microphone was chosen: the open session listens to the old one, so the next press connects with the new.
+  useEffect(
+    () =>
+      subscribeMicrophone(() => {
+        if (sessionRef.current || stateRef.current === "connecting") hangUp();
+      }),
+    [hangUp],
+  );
+
+  return { state, micName, press, talk, release, end };
 }

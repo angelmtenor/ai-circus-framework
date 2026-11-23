@@ -7,7 +7,8 @@ import { StoryDemoBar } from "./StoryDemoBar";
  * A scenario's guided demo (`story.demo`) in any workspace: `tabs` names the story tabs this workspace has (story
  * tab name -> its label, see scenario_schema.ScenarioDefinition.story_tabs) and `open` switches to one. Returns
  * what the Overview needs (`tabLabel`, `startDemo`) and the demo bar to render. TabularView keeps its own wiring
- * (several models, sections); the other kinds use this. The same tabs and demo are offered to the app's guide.
+ * (several models, sections); the other kinds use this. The same tabs, demo and `ask` (the workspace's own chat) are
+ * offered to the app's guide.
  */
 export function useStoryDemo(
   scenario: ScenarioSummary,
@@ -31,6 +32,6 @@ export function useStoryDemo(
   const startDemo = demo ? () => go(0) : undefined;
   const hasStory = Boolean(scenario.story);
   const offered = useMemo(() => guideTabs(tabs, hasStory), [tabs, hasStory]);
-  useWorkspaceGuide(scenario.slug, offered, open, startDemo);
+  useWorkspaceGuide(scenario.slug, offered, open, startDemo, ask);
   return { tabLabel, startDemo, demoBar, demoActive: index !== null };
 }

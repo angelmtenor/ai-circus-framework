@@ -59,7 +59,7 @@ def main() -> None:
         sys.exit(1)
 
     scenarios_dir = Path(config.SCENARIOS_DIR)
-    definitions = documented_scenarios(scenarios_dir, config.SCENARIOS)
+    definitions = documented_scenarios(scenarios_dir, config.SCENARIOS or "")
     if not definitions:
         logger.error(
             "No conversational_rag or documents-configured assisted_form/tabular_ml scenario matched"

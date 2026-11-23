@@ -71,6 +71,16 @@ def test_a_run_has_the_shape_training_and_prediction_expect(definition: Scenario
         lo <= m <= hi + 1e-6 for lo, m, hi in zip(band["lower"], entry["forecast"]["mean"], band["upper"], strict=True)
     )
     assert entry["peak"]["ds"] in entry["forecast"]["ds"] and entry["forecast"]["ds"][0] > entry["history"]["ds"][-1]
+    # The trained horizons travel with the forecast (the drought tools read them through prediction): the daily path
+    # passes through each one, and the median's drivers are kept.
+    quantiles = entry["quantiles"]
+    assert quantiles["origin"] == entry["history"]["ds"][-1][:10] and quantiles["current_pct"] == pytest.approx(
+        entry["history"]["y"][-1], abs=0.01
+    )
+    assert set(quantiles["horizons"]) == {"7", "30"}
+    seven = quantiles["horizons"]["7"]
+    assert {"p10", "p50", "p90", "drivers_pp"} <= set(seven)
+    assert entry["forecast"]["mean"][6] == pytest.approx(max(seven["p50"], 0.0), abs=0.01)
 
     window = run.backtest["windows"][0]["series"][0]
     assert set(window["forecasts"]) == {"persistence", "seasonal_climatology", "lightgbm_quantile"}

@@ -13,7 +13,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from ai_circus_shared.architecture import Catalog, load_catalog, scenario_architecture
+from ai_circus_shared.architecture import Catalog, load_catalog, scenario_architecture, split_markdown
 from ai_circus_shared.scenario_schema import load_all
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -60,6 +60,42 @@ def test_the_generated_files_match_the_catalog() -> None:
     pieces = {p for p in generator.expected(ROOT) if p.parent == generator.TUTORIAL_DOCS}
     assert set(generator.TUTORIAL_DOCS.glob("*.md")) == pieces, "stale tutorial documents: rerun the generator"
     assert all(len(p.read_text(encoding="utf-8")) <= 4100 for p in pieces)  # small embedding calls to llm-gateway
+
+
+def test_split_markdown_cuts_a_long_paragraph_at_sentences_and_drops_nothing() -> None:
+    """A paragraph longer than a piece used to lose its tail silently; it is now cut between sentences."""
+    sentences = [f"Sentence {i} says why step {i} of the flow matters to the tenant." for i in range(150)]
+    long_paragraph = "\n".join(" ".join(sentences[i : i + 2]) for i in range(0, 150, 2))  # hard-wrapped, ~9.5k chars
+    table = "\n".join(["| Step | What |", "|---|---|"] + [f"| {i} | {'x' * 90} |" for i in range(60)])
+    items = "\n".join(["**Decision.**"] + [f"- Item {i}: {'y' * 80}\n  and its wrapped line." for i in range(40)])
+    text = f"# Guide\n\n## Flow\n\nShort intro.\n\n{long_paragraph}\n\n{table}\n\n{items}\n\nThe end.\n"
+
+    pieces = split_markdown("docs/guide.md", text, max_chars=2000)
+
+    assert len(pieces) > 5
+    assert all(len(p) <= 2000 for p in pieces)
+    assert all(p.startswith("# Guide - Flow\n\nSource: docs/guide.md (this repository)\n\n") for p in pieces)
+    body = " ".join(p.split("(this repository)\n\n", 1)[1] for p in pieces)
+    positions = [body.index(s) for s in sentences]  # every sentence whole, none cut in two
+    assert positions == sorted(positions)
+    assert all(f"| {i} | {'x' * 90} |" in body for i in range(60))  # table rows whole
+    lines = {line for p in pieces for line in p.splitlines()}
+    assert all(f"- Item {i}: {'y' * 80}" in lines for i in range(40))  # a list keeps its lines
+    assert body.rstrip().endswith("The end.")
+    assert "".join(split_markdown("x", "# T\n\n" + "word " * 3000, max_chars=500)).count("word") == 3000
+
+
+def test_the_tutorial_snapshot_keeps_every_word_of_its_sources() -> None:
+    """Every word of every source the tutorial indexes is in its pieces, in order (headings become each piece's
+    head)."""
+    generator = _generator()
+    sources = sorted({p for pattern in generator.TUTORIAL_SOURCES for p in ROOT.glob(pattern)})
+    assert len(sources) > 30
+    for path in sources:
+        text = path.read_text(encoding="utf-8")
+        expected = " ".join(line for line in text.splitlines() if not line.startswith(("# ", "## "))).split()
+        pieces = split_markdown(path.name, text)
+        assert " ".join(p.split("(this repository)\n\n", 1)[1] for p in pieces).split() == expected, path.name
 
 
 def test_the_catalog_rejects_a_link_or_flow_to_nowhere() -> None:
