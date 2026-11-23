@@ -225,6 +225,18 @@ def test_the_quality_views_count_every_flag_and_stay_neutral(toolkit: DroughtToo
     assert all(0 <= r["score_pct"] <= 100 for r in overview["reservoirs"] if r["score_pct"] is not None)
 
 
+def test_forecast_quantiles_stay_within_capacity(toolkit: DroughtToolkit) -> None:
+    """A quantile model can step past full (the committed lantern_lake p90 at 180 days is 105.2 %): no view shows it."""
+    raw = toolkit._forecast_by_series["lantern_lake"]["horizons"]["180"]
+    assert raw["p90"] > 100 and raw["p50"] > 100
+    q = toolkit.forecast_of("lantern_lake", 180)["horizons_days"]["180"]
+    assert q["p50"] == pytest.approx(100.0) and q["p90"] == pytest.approx(100.0)
+    assert q["p10"] == raw["p10"] and q["drivers_pp"] == raw["drivers_pp"]
+    for series in toolkit._forecast_by_series:
+        for v in toolkit.forecast_of(series)["horizons_days"].values():
+            assert 0 <= v["p10"] <= v["p50"] <= v["p90"] <= 100
+
+
 def test_first_requests_at_once_share_one_toolkit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The control room asks for several views together: concurrent first calls must build one toolkit, not race."""
     from concurrent.futures import ThreadPoolExecutor

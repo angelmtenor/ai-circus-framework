@@ -45,6 +45,7 @@ FULL = 100.0
 HISTORY_STEP_DAYS = 7  # the control room's replay: one point a week keeps 27 years of 13 series near 18,000 values
 QUALITY_WINDOW_MAX_DAYS = 400
 RULEBOOK_TOP_K = 4
+QUANTILES = ("p10", "p50", "p90")
 _WORD = re.compile(r"[\wáéíóúüñç]+", re.IGNORECASE)
 _STOP = {
     "the", "a", "an", "of", "in", "to", "for", "and", "or", "is", "are", "what", "which", "does", "do", "apply",
@@ -105,7 +106,9 @@ class DroughtToolkit:
 
     # ---- tools ---------------------------------------------------------------------------------------------------
     def forecast_of(self, series: str, horizon: int | None = None) -> dict[str, Any]:
-        """Storage forecast (p10/p50/p90) for a system or a reservoir, with what drives the median."""
+        """Storage forecast (p10/p50/p90) for a system or a reservoir, with what drives the median. Each quantile is
+        clipped to [0, 100] % of capacity (a quantile model can step past full), as the bulletin and the chart show it.
+        """
         sid = self.resolve(series)
         entry = self._forecast_by_series[sid]
         horizons = entry["horizons"]
@@ -113,16 +116,19 @@ class DroughtToolkit:
             if str(horizon) not in horizons:
                 raise ToolError(f"Forecast horizons are {sorted(int(h) for h in horizons)} days.")
             horizons = {str(horizon): horizons[str(horizon)]}
+        clipped = {
+            h: {**v, **{q: round(min(max(float(v[q]), 0.0), FULL), 2) for q in QUANTILES}} for h, v in horizons.items()
+        }
         return {
             "series": sid,
             "name": {**self.system_names, **self.reservoir_names}[sid],
             "kind": "system" if sid in self.system_names else "reservoir",
             "origin": entry["origin"],
             "current_pct": entry["current_pct"],
-            "horizons_days": horizons,
+            "horizons_days": clipped,
             "typical_error_pp": {h: self._typical_error(sid, int(h)) for h in horizons},
-            "note": "p10-p90 is the central 80 % interval. typical_error_pp is the backtest mean absolute error of the "
-            "median for that kind of series. Illustrative decision support.",
+            "note": "p10-p90 is the central 80 % interval, within 0-100 % of capacity. typical_error_pp is the "
+            "backtest mean absolute error of the median for that kind of series. Illustrative decision support.",
         }
 
     def what_if(
