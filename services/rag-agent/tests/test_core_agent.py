@@ -99,6 +99,8 @@ def test_the_guide_instructions_appear_only_for_the_guide() -> None:
     assert "never invent one" in guide
     # Where the user is comes from the live App Context, not from history (it said "already open" from the gallery).
     assert "never from earlier turns" in guide
+    # A question about a scenario's own data goes to that scenario's assistant, not to the framework's documents.
+    assert "scenario's own assistant" in guide
     shared_start = plain[: plain.index("If a render_chart")]
     assert guide.startswith(shared_start)
     assert guide.index("retrieve_docs") < guide.index("App action")

@@ -316,6 +316,7 @@ export function DroughtControlRoom({ scenario, accessToken }: { scenario: Scenar
           <p className="panel-hint">
             Behind the line, the plan's states. A supply system's state also needs {room.hysteresis_days} days below a threshold before it
             changes; a reservoir is shown against the same thresholds for reference.
+            {room.forecast_source && view === "forecast" && <> Forecast: {room.forecast_source.text}</>}
           </p>
         </div>
       </div>
@@ -367,10 +368,12 @@ function SeriesChart({
   const series = forecast.series[forecastIndex];
   if (!series) return <p className="panel-hint">No forecast for this series.</p>;
   const { lines, bands } = seriesLines(series, forecast.levels, "Forecast (median)");
+  // A reservoir holds between empty and full: a quantile model can step past 100 %, the tools and bulletin clip it too.
+  const capped = (values: number[]) => values.map((v) => Math.min(Math.max(v, 0), 100));
   return (
     <TimeChart
-      lines={lines}
-      bands={bands}
+      lines={lines.map((l) => ({ ...l, values: capped(l.values) }))}
+      bands={bands.map((b) => ({ ...b, lower: capped(b.lower), upper: capped(b.upper) }))}
       zones={zones}
       yDomain={[0, 110]}
       frequency={forecast.frequency}

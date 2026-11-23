@@ -2,6 +2,9 @@
 
 Source: docs/adr/0027-mcp-lite-profile.md (this repository)
 
+- **A standalone repository stays possible** and becomes mechanical: the profile's file list is its content, plus
+  the telemetry helpers. It is built when someone is to receive it.
+
 - **A gateway that survives its store.** Running without Valkey first showed that llm-gateway's budget hook failed
   every model call carrying the OpenAI `user` field (LibreChat sends it, as the framework's agents do) when Valkey was
   unreachable: a 500 instead of a skipped budget check. It now logs a warning and lets the call through, as the policy

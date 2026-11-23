@@ -8,7 +8,8 @@ Runs `quantile_forecast` on a forecast scenario's cleaned series (etl-tabular's 
 
 What it writes, in the existing documents:
 - forecast: per series, the p50 path (joined linearly between the trained horizons) with the p10-p90 band as the
-  80 % level, and the last observed history;
+  80 % level, the last observed history, and the trained horizons themselves (`quantiles`: p10/p50/p90 and the
+  median's drivers), which the assistant's drought tools read through prediction;
 - backtest: the persistence and seasonal-climatology baselines next to the model (MASE, sMAPE, RMSE over a rolling
   origin by year), and, for the last three years, the forecast made on 1 January against what happened;
 - metadata (`quantile_forecast`): MAE in percentage points and the band's coverage per horizon, and whether the median
@@ -124,6 +125,9 @@ def _forecast_doc(
             },
             "exogenous": [],
             "peak": {"ds": times[peak], "value": mean[peak]},
+            # The trained horizons themselves (p10/p50/p90 and what drives the median), so a decision-support toolset
+            # (the drought watch) reads the tenant's own model through prediction instead of a committed copy.
+            "quantiles": {k: entry[k] for k in ("origin", "current_pct", "horizons")},
         })
     doc = {
         "model_name": NAME,

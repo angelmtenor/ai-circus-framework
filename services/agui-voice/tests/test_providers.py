@@ -19,6 +19,12 @@ import agui_voice.core.providers as providers_module
 
 
 @pytest.fixture(autouse=True)
+def _tones_count_as_speech(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests transcribe tones; whether a recording holds speech is test_speech.py's business."""
+    monkeypatch.setattr(providers_module, "trim_to_speech", lambda samples: samples)
+
+
+@pytest.fixture(autouse=True)
 def _clear_model_caches() -> None:
     """Each test starts with cold model caches — otherwise an earlier test's cached
     (fake) model could leak into a later test's assertions.
@@ -38,6 +44,7 @@ def _base_config(**overrides: object) -> FakeConfig:
         "WHISPER_MODEL": "base",
         "PIPER_VOICE_ID": "en_US-lessac-medium",
         "PIPER_VOICE_ID_ES": "es_ES-davefx-medium",
+        "GROQ_API_KEY": None,
         "DEEPGRAM_API_KEY": None,
         "ELEVENLABS_API_KEY": None,
         "ELEVENLABS_VOICE_ID": None,
@@ -56,7 +63,7 @@ def test_build_stt_service_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
     default of forcing English (see providers.py's comment).
     """
     calls: list[dict[str, object]] = []
-    monkeypatch.setattr(providers_module, "WhisperSTTService", _FakeWhisperSTTService(calls))
+    monkeypatch.setattr(providers_module, "LocalWhisperSTTService", _FakeWhisperSTTService(calls))
 
     result = providers_module.build_stt_service(_base_config())
 
@@ -64,6 +71,194 @@ def test_build_stt_service_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(calls) == 1
     assert calls[0]["settings"].model == "base"
     assert calls[0]["settings"].language is None
+    # Quiet speech is kept (pipecat's 0.4 dropped it) and the model runs int8, not the float32 "default" gives on CPU.
+    assert calls[0]["settings"].no_speech_prob is providers_module.WHISPER_NO_SPEECH_PROB
+    assert pytest.approx(0.6) == providers_module.WHISPER_NO_SPEECH_PROB
+    assert calls[0]["compute_type"] == "int8"
+
+
+@pytest.mark.parametrize("key", [None, SecretStr("")])  # .env.example and docker-compose pass an unused key as ""
+def test_build_stt_service_groq_needs_its_key(key: SecretStr | None) -> None:
+    with pytest.raises(ValueError, match="GROQ_API_KEY"):
+        providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=key))
+
+
+@pytest.mark.parametrize("key", [None, SecretStr("")])
+def test_groq_is_offered_only_with_its_key(key: SecretStr | None) -> None:
+    without = {o.id: o for o in providers_module.list_stt_providers(_base_config(GROQ_API_KEY=key))}
+    assert without["groq"].available is False and without["groq"].reason == "GROQ_API_KEY not set"
+    with_key = {o.id: o for o in providers_module.list_stt_providers(_base_config(GROQ_API_KEY=SecretStr("gsk")))}
+    assert with_key["groq"].available is True
+
+
+def _wav(seconds: float = 0.5, amplitude: int = 3277) -> bytes:
+    """A square wave at `amplitude` (3277 is -20 dBFS) as a 16-bit WAV."""
+    import io
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        pair = amplitude.to_bytes(2, "little", signed=True) + (-amplitude).to_bytes(2, "little", signed=True)
+        wav.writeframes(pair * int(8000 * seconds))
+    return buffer.getvalue()
+
+
+class _Segment:
+    def __init__(self, text: str, no_speech_prob: float) -> None:
+        self.text, self.no_speech_prob = text, no_speech_prob
+
+
+class _LocalModel:
+    """Stands in for the cached local Whisper model the Groq service falls back to."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def transcribe(self, audio: object, **kwargs: object) -> tuple[object, object]:
+        self.calls += 1
+        return iter([_Segment(" Hola desde aquí", 0.1), _Segment(" ruido", 0.9)]), SimpleNamespace(language="es")
+
+
+async def _frames(service: object, audio: bytes) -> list[object]:
+    return [frame async for frame in service.run_stt(audio)]  # type: ignore[attr-defined]
+
+
+async def test_groq_transcribes_with_the_detected_language_and_sends_none() -> None:
+    """GroqSTTService always sent a language (English by default); now Groq detects it, and the transcript carries
+    it so the Spanish Piper voice answers a Spanish question.
+    """
+    from pipecat.frames.frames import TranscriptionFrame
+    from pipecat.transcriptions.language import Language
+
+    sent: list[dict[str, object]] = []
+
+    async def create(**kwargs: object) -> object:  # ruff: ignore[unused-async] (stands in for the async client call)
+        sent.append(kwargs)
+        return SimpleNamespace(text=" ¿Qué escenario me recomiendas? ", language="spanish")
+
+    local = _LocalModel()
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._local_model = lambda: local
+    service._client = SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create)))
+
+    frames = await _frames(service, _wav())
+
+    assert sent[0]["model"] == "whisper-large-v3-turbo" and sent[0]["response_format"] == "verbose_json"
+    assert "language" not in sent[0]
+    assert len(frames) == 1 and isinstance(frames[0], TranscriptionFrame)
+    assert frames[0].text == "¿Qué escenario me recomiendas?" and frames[0].language == Language.ES
+    assert local.calls == 0
+
+
+async def test_a_turn_groq_fails_is_transcribed_by_local_whisper() -> None:
+    """No network, a bad key or the free tier's limit must not leave the user with nothing."""
+    from pipecat.transcriptions.language import Language
+
+    async def create(**kwargs: object) -> object:  # ruff: ignore[unused-async]
+        raise RuntimeError("rate limited")
+
+    local = _LocalModel()
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._local_model = lambda: local
+    service._client = SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create)))
+
+    frames = await _frames(service, _wav())
+
+    assert local.calls == 1
+    assert [(f.text, f.language) for f in frames] == [("Hola desde aquí", Language.ES)]  # the noise segment dropped
+
+
+@pytest.mark.parametrize(("amplitude", "sent"), [(0, False), (8, False), (520, True)])  # silent, -72, -36 dBFS
+async def test_a_silent_turn_is_never_sent_to_groq(amplitude: int, sent: bool) -> None:
+    """Hosted Whisper transcribes a muted microphone as "Thank you.", which reached the agent as a question; quiet
+    speech (-36 dBFS) still goes.
+    """
+    calls: list[object] = []
+
+    async def create(**kwargs: object) -> object:  # ruff: ignore[unused-async]
+        calls.append(kwargs)
+        return SimpleNamespace(text="Thank you.", language="english")
+
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._local_model = lambda: pytest.fail("a silent turn needs no transcription at all")
+    service._client = SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create)))
+
+    frames = await _frames(service, _wav(amplitude=amplitude))
+
+    assert bool(calls) is sent and bool(frames) is sent
+
+
+async def test_a_turn_without_words_is_not_transcribed_and_is_told(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A click or a breath: hosted Whisper answered "Thank you." or a Russian subtitle credit, as the user's words."""
+    from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
+
+    monkeypatch.setattr(providers_module, "trim_to_speech", lambda _samples: None)
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._local_model = lambda: pytest.fail("nothing to transcribe")
+    service._client = SimpleNamespace()  # calling it would fail
+
+    frames = await _frames(service, _wav())
+
+    assert len(frames) == 1 and isinstance(frames[0], RTVIServerMessageFrame)
+    assert frames[0].data == {"type": "push-to-talk", "talking": False, "reason": "no-speech"}
+
+
+async def test_local_whisper_transcribes_with_the_detected_language() -> None:
+    """Pipecat's own transcript carried none, so a Spanish question was answered in the English voice."""
+    from pipecat.frames.frames import TranscriptionFrame
+    from pipecat.transcriptions.language import Language
+
+    local = _LocalModel()
+    providers_module._whisper_model_cache["base", "auto", "int8"] = local
+    service = providers_module.build_stt_service(_base_config())
+
+    frames = await _frames(service, b"\x00\x20" * 8000)  # raw PCM, as pipecat hands it to a local model
+
+    assert len(frames) == 1 and isinstance(frames[0], TranscriptionFrame)
+    assert (frames[0].text, frames[0].language) == ("Hola desde aquí", Language.ES)
+
+
+async def test_speech_that_comes_out_empty_is_told() -> None:
+    from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
+
+    async def create(**kwargs: object) -> object:  # ruff: ignore[unused-async]
+        return SimpleNamespace(text=" ", language="english")
+
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._client = SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create)))
+
+    frames = await _frames(service, _wav())
+
+    assert [type(f) for f in frames] == [RTVIServerMessageFrame]
+
+
+async def test_a_turn_groq_never_answers_goes_to_local_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The client would wait 10 minutes and retry; the turn waits `GROQ_TIMEOUT_SECONDS`, then local Whisper has it."""
+    import asyncio
+
+    async def create(**kwargs: object) -> object:
+        await asyncio.sleep(60)
+        raise AssertionError("not reached")
+
+    monkeypatch.setattr(providers_module, "GROQ_TIMEOUT_SECONDS", 0.01)
+    local = _LocalModel()
+    service = providers_module.build_stt_service(_base_config(STT_PROVIDER="groq", GROQ_API_KEY=SecretStr("gsk")))
+    service._local_model = lambda: local
+    service._client = SimpleNamespace(audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create)))
+
+    frames = await asyncio.wait_for(_frames(service, _wav()), timeout=5)
+
+    assert [f.text for f in frames] == ["Hola desde aquí"] and local.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"), [("spanish", "es"), ("English", "en"), ("es", "es"), (None, None), ("klingon", None)]
+)
+def test_whisper_language_code(given: str | None, expected: str | None) -> None:
+    assert providers_module.whisper_language_code(given) == expected
 
 
 class _FakeWhisperSTTService:
@@ -338,6 +533,44 @@ def test_cached_whisper_model_loads_once_for_the_same_params(monkeypatch: pytest
 
     assert first is second
     assert len(calls) == 1
+
+
+def test_the_cached_whisper_model_logs_each_turn_in_numbers_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A turn that "transcribed nothing" leaves a line telling silence, a quiet mic and a dropped segment apart,
+    without the words; the segments reach pipecat unchanged.
+    """
+    import numpy as np
+
+    class Segment:
+        def __init__(self, text: str, no_speech_prob: float) -> None:
+            self.text, self.no_speech_prob = text, no_speech_prob
+
+    class Info:
+        language, language_probability = "es", 0.93
+
+    segments = [Segment(" Hola, ¿qué tal?", 0.05), Segment(" ruido", 0.75)]
+
+    class RealModel:
+        def transcribe(self, audio: object, **kwargs: object) -> tuple[object, object]:
+            return (s for s in segments), Info()
+
+    monkeypatch.setattr(providers_module, "_RealWhisperModel", lambda *a, **kw: RealModel())
+    lines: list[str] = []
+    sink = providers_module.logger.add(lambda message: lines.append(message.record["message"]), level="INFO")
+    try:
+        model = providers_module._cached_whisper_model("base-logging", "cpu", "int8")
+        audio = np.full(32000, 0.1, dtype=np.float32)  # 2 s at 16 kHz, -20 dBFS
+        got, info = model.transcribe(audio, language=None)
+    finally:
+        providers_module.logger.remove(sink)
+
+    assert list(got) == segments and info.language == "es"
+    assert len(lines) == 1
+    assert lines[0].startswith(
+        "whisper turn: 2.0 s (peak -20 dBFS), language es (0.93), no-speech [0.05, 0.75], "
+        "15 of 20 character(s) kept, in "
+    )
+    assert "Hola" not in lines[0] and "ruido" not in lines[0]
 
 
 def test_cached_whisper_model_loads_separately_per_param_set(monkeypatch: pytest.MonkeyPatch) -> None:

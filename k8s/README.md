@@ -77,7 +77,9 @@ model artifacts for scenario='<slug>' (org='<org>', fallback org='demo' also has
 `conversational_rag` counterpart — plus every `assisted_form`/`tabular_ml` scenario with `documents` — seeding
 each scenario's document catalog into Qdrant and the tenant's bucket). A fresh cluster needs it too, or
 RAG answers find nothing and the case desk's reading room lists no documents. It takes ~20 min on CPU
-(`local-embed`), so run it detached.
+(`local-embed`), so run it detached. To re-index only what changed, name the scenarios:
+`make k3s-vectorize SCENARIOS=framework_architecture` (a comma-separated list; it sets `SCENARIOS` on the
+Job, which the service's settings no longer override with a profile default).
 
 ### Deep learning (optional) and GPUs
 

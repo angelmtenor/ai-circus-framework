@@ -312,7 +312,7 @@ components:
     layer: consumption
     kind: service
     tech: "FastAPI · Pipecat · Whisper, Piper"
-    role: "Voice mode: speech to text and text to speech around the same agents, over a WebSocket."
+    role: "Dictation and voice mode: speech to text and text to speech around the same agents."
     profile: core
     enable: "On with make k3s-all; the lite profile scales it to zero (make k3s-full brings it back)"
     workloads: [agui-voice]

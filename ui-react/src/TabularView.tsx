@@ -311,7 +311,7 @@ function TabularViewContent({
       }),
     );
   }, [views, tabLabel]);
-  useWorkspaceGuide(scenario.slug, guideTabMap, openStoryTab, demo ? () => goToDemoStep(0) : undefined);
+  useWorkspaceGuide(scenario.slug, guideTabMap, openStoryTab, demo ? () => goToDemoStep(0) : undefined, ask);
 
   return (
     <div className={`workspace${demoIndex !== null ? " workspace--demo" : ""}`}>

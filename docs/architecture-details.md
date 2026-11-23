@@ -40,13 +40,15 @@ time (served as `ScenarioSummary.architecture`); the catalog behind it is `archi
 
 The **architecture tutorial** (`framework_architecture`, a `conversational_rag` with
 `ui_extras: architecture_map`) answers from a snapshot of this repository's docs that `scripts/generate_architecture.py`
-cuts into pieces of at most 4,000 characters (each embedding call to llm-gateway stays small) together with a generated
-document of which components each scenario uses; a test fails when the snapshot is stale. The **app's guide**
+cuts into pieces of at most 4,000 characters (each embedding call to llm-gateway stays small; a longer paragraph is cut
+at sentences, a table, list or code block between its lines, and a test checks no word of a source is lost) together
+with a generated document of which components each scenario uses; a test fails when the snapshot is stale. The **app's guide**
 (`GuidePanel.tsx`, ADR 0032: the top bar's Guide, a side panel on every page) is that tutorial's own rag-agent chat with
-`forwardedProps.guide` (extra instructions only) and four frontend tools that act on the screen (`search_scenarios`,
-`open_scenario`, `start_guided_demo`, `open_architecture`); its context is the user's own gallery, so it opens nothing the
-gallery does not show. App carries the actions out; a workspace's tab or demo is reached through `guideBridge.ts`, where
-every workspace publishes its story tabs (`useStoryDemo`, and TabularView directly). `industry` is the
+`forwardedProps.guide` (extra instructions only) and five frontend tools that act on the screen (`search_scenarios`,
+`open_scenario`, `start_guided_demo`, `ask_scenario_assistant`, `open_architecture`); its context is the user's own
+gallery, so it opens nothing the gallery does not show. App carries the actions out; a workspace's tab, demo or own chat
+(the same `ask` as its Ask buttons) is reached through `guideBridge.ts`, where every workspace publishes its story tabs
+(`useStoryDemo`, and TabularView directly). `industry` is the
 scenario's *domain* (industries, `insurance` included, plus `tutorial`/`society_ethics`), shown as the picker's Domain filter. `scenario.yaml` is otherwise read only by `platform-registry` and, as
 build-time config, `etl-tabular`/`training`/`prediction`.
 
@@ -189,7 +191,8 @@ A `tabular_ml` scenario opens its door on the **assistant** (docs/adr/0031): `mc
 token to prediction (`/model/{slug}/card`, `/predict/{slug}`), which checks it again. `score_record` fills the inputs the
 caller left out from `feature_schema` defaults, names what the number means, returns the eight largest SHAP drivers and,
 with business rules, the gate, the decision and the rules that fired. The drought tools are the chat's `DroughtToolkit`
-reads. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
+reads, over the forecast prediction serves the caller's organisation (asked with the same token) when it was trained
+from the same readings, and the committed one otherwise. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
 tab (analyst and engineer views) reuses `McpConnectView` with the assistant's URL and `localhost:8034`. Before a tabular
 YAML declares `mcp:`, rebuild every image that validates tabular files (registry, assistant, prediction, etl-tabular,
 training, etl-vectorize, data-transform, dl-training): an older image rejects the block.

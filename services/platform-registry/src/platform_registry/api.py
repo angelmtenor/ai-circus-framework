@@ -446,7 +446,7 @@ def set_active_llm_model(body: ActiveLlmModelIn, session: Session = Depends(get_
 # catch a typo. Whether a given provider is actually *usable* (a cloud one needs its
 # own API key configured in agui-voice's `.env`, which platform-registry has no
 # visibility into) is agui-voice's own call, made when it reads this setting.
-_VALID_STT_PROVIDERS = frozenset({"whisper", "deepgram"})
+_VALID_STT_PROVIDERS = frozenset({"whisper", "groq", "deepgram"})
 _VALID_TTS_PROVIDERS = frozenset({"piper", "elevenlabs", "cartesia"})
 
 

@@ -7,6 +7,7 @@ the bottom exercises the real SentenceTransformer model.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import httpx
@@ -26,6 +27,7 @@ from etl_vectorize.core.vectorize import (
     fetch_github_docs,
     load_raw_docs,
     run_vectorize,
+    seed_manifest_key,
 )
 
 DOCUMENTS = DocumentsConfig(
@@ -76,6 +78,10 @@ class FakeObjectStore:
     def list(self, org_id: str, prefix: str = "") -> list[str]:
         """List keys under a tenant/prefix."""
         return [k for k in self._objects.get(org_id, {}) if k.startswith(prefix)]
+
+    def delete(self, org_id: str, path: str) -> None:
+        """Remove a tenant-scoped object."""
+        del self._objects[org_id][path]
 
 
 class FakeEmbeddingModel:
@@ -135,14 +141,82 @@ def test_ensure_raw_docs_bootstraps_from_seed_folder_when_missing(scenario_dir: 
     assert set(keys) == {"raw/doc1.md", "raw/doc2.md"}
 
 
-def test_ensure_raw_docs_leaves_existing_docs_untouched(scenario_dir: Path) -> None:
-    """Already-uploaded documents for the tenant are never re-bootstrapped."""
+def test_ensure_raw_docs_leaves_a_tenants_own_docs_untouched(scenario_dir: Path) -> None:
+    """A tenant with documents the seed never wrote is neither re-bootstrapped nor synced."""
     store = FakeObjectStore()
     store.put("org-1", "raw/existing.md", b"already here")
 
     ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)
 
     assert store.list("org-1", DOCUMENTS.raw_prefix) == ["raw/existing.md"]
+    assert not store.exists("org-1", seed_manifest_key(DOCUMENTS))
+
+
+def test_seed_documents_follow_a_changed_seed_but_keep_what_the_tenant_changed(scenario_dir: Path) -> None:
+    """A regenerated seed folder reaches a bootstrapped tenant: changed files are updated,
+    new ones added, dropped ones removed — except a file the tenant edited or deleted.
+    """
+    store = FakeObjectStore()
+    seed = scenario_dir / "sample_docs"
+    (seed / "doc3.md").write_text("Third. " * 30)
+    (seed / "doc4.md").write_text("Fourth. " * 30)
+    ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)
+    assert set(json.loads(store.get("org-1", seed_manifest_key(DOCUMENTS)))) == {
+        "raw/doc1.md",
+        "raw/doc2.md",
+        "raw/doc3.md",
+        "raw/doc4.md",
+    }
+    store.put("org-1", "raw/doc2.md", b"the tenant's own edit")
+    store.delete("org-1", "raw/doc4.md")
+    store.put("org-1", "raw/notes.md", b"the tenant's own file")
+
+    (seed / "doc1.md").write_text("Hello again. " * 30)
+    (seed / "doc2.md").write_text("Another, rewritten. " * 30)
+    (seed / "doc3.md").unlink()
+    (seed / "doc4.md").write_text("Fourth, rewritten. " * 30)
+    (seed / "doc5.md").write_text("Fifth. " * 30)
+    ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)
+
+    assert store.get("org-1", "raw/doc1.md") == (seed / "doc1.md").read_bytes()
+    assert store.get("org-1", "raw/doc2.md") == b"the tenant's own edit"
+    assert store.get("org-1", "raw/doc5.md") == (seed / "doc5.md").read_bytes()
+    assert store.get("org-1", "raw/notes.md") == b"the tenant's own file"
+    assert set(store.list("org-1", DOCUMENTS.raw_prefix)) == {
+        "raw/doc1.md",
+        "raw/doc2.md",
+        "raw/doc5.md",
+        "raw/notes.md",
+    }
+
+    ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)  # a re-run changes nothing more
+    assert store.get("org-1", "raw/doc2.md") == b"the tenant's own edit"
+    assert not store.exists("org-1", "raw/doc4.md")
+
+
+def test_seed_documents_bootstrapped_before_the_manifest_are_adopted(scenario_dir: Path) -> None:
+    """An older bootstrap whose every file carries a seed file's name is brought up to date."""
+    store = FakeObjectStore()
+    store.put("org-1", "raw/doc1.md", b"an older snapshot")
+
+    ensure_raw_docs(store, "org-1", DOCUMENTS, scenario_dir)
+
+    seed = scenario_dir / "sample_docs"
+    assert store.get("org-1", "raw/doc1.md") == (seed / "doc1.md").read_bytes()
+    assert store.get("org-1", "raw/doc2.md") == (seed / "doc2.md").read_bytes()
+    assert store.exists("org-1", seed_manifest_key(DOCUMENTS))
+    assert not seed_manifest_key(DOCUMENTS).startswith(DOCUMENTS.raw_prefix)  # never indexed itself
+
+
+def test_github_sourced_documents_are_not_synced(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GitHub documents are fetched on the first run only: a re-run makes no network call."""
+    store = FakeObjectStore()
+    store.put("org-1", "raw/a.md", b"content a")
+    monkeypatch.setattr(vectorize, "fetch_github_docs", lambda source: pytest.fail("fetched again"))
+
+    ensure_raw_docs(store, "org-1", DOCUMENTS_FROM_GITHUB_WITH_LOCAL_FALLBACK, Path("/does/not/exist"))
+
+    assert store.list("org-1", "raw/") == ["raw/a.md"]
 
 
 def test_fetch_github_docs_downloads_every_file_in_the_folder(monkeypatch: pytest.MonkeyPatch) -> None:

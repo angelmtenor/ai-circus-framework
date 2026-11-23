@@ -18,10 +18,13 @@ env_variables:
     mandatory: true
     secret: false
 
+  # No profile default on purpose: a profile value beats the environment
+  # (`EnvConfig(**profile)`), so a default here would make a Job's SCENARIOS env var a
+  # no-op and every run would index every scenario (`make k3s-vectorize SCENARIOS=…`).
   - name: SCENARIOS
     description: "Comma-separated document-backed scenario slugs this run processes; empty/unset = every scenario"
     type: string
-    mandatory: true
+    mandatory: false
     secret: false
 
   # Must match ai_circus_shared.auth.ADMIN_ORG_ID (base default: "admin") for the demo
@@ -118,9 +121,6 @@ environments:
     LOG_LEVEL: "INFO"
     ORG_ID: "admin"
     OBJECT_STORE_ACCESS_KEY: "ai_circus"
-    # Empty = every document-backed scenario under SCENARIOS_DIR — see
-    # etl-tabular/settings.yaml for the same default and its residual-limitation caveat.
-    SCENARIOS: ""
 
   # Running with `uv run` on the host, against infra started via `make up-infra`.
   local:

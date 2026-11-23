@@ -17,6 +17,7 @@ Pure Python and content-free: names, roles and links, never data.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from html import escape
 from pathlib import Path
@@ -397,11 +398,45 @@ def render_markdown(catalog: Catalog, adr_files: dict[int, str]) -> str:
 # ---- the architecture tutorial's documents ----------------------------------------------------------------------
 
 TUTORIAL_MAX_CHARS = 4000  # one document of the snapshot: a handful of chunks per embedding call to llm-gateway
+_SENTENCE_END = re.compile(r"(?<=[.!?:;])\s+")
+_LINE_BLOCK = re.compile(r"\s*(\||[-*+] |\d+\. |```)")  # a table, a list or code: cut between its lines
+
+
+def _pack(units: list[str], budget: int, sep: str) -> list[str]:
+    """Consecutive units joined by `sep` into parts of at most `budget` characters (a longer unit stays alone)."""
+    parts: list[str] = []
+    for unit in units:
+        if parts and len(parts[-1]) + len(sep) + len(unit) <= budget:
+            parts[-1] += sep + unit
+        else:
+            parts.append(unit)
+    return parts
+
+
+def _split_paragraph(paragraph: str, budget: int) -> list[str]:
+    """A paragraph longer than `budget` as consecutive parts of at most `budget` characters, cut between sentences
+    (between lines for a table, a list or code), then between words for a part still too long: nothing is dropped."""
+    if len(paragraph) <= budget:
+        return [paragraph]
+    lines = paragraph.splitlines()
+    if any(_LINE_BLOCK.match(line) for line in lines):
+        units, sep = lines, "\n"
+    else:
+        units, sep = _SENTENCE_END.split(" ".join(line.strip() for line in lines)), " "
+    parts: list[str] = []
+    for part in _pack(units, budget, sep):
+        if len(part) <= budget:
+            parts.append(part)
+            continue
+        for words in _pack(part.split(), budget, " "):
+            parts += [words[i : i + budget] for i in range(0, len(words), budget)]
+    return parts
 
 
 def split_markdown(source: str, text: str, max_chars: int = TUTORIAL_MAX_CHARS) -> list[str]:
-    """A markdown document as pieces of at most `max_chars`, cut at `## ` sections and then at paragraphs, each
-    headed by the document's title and section and the path it came from (so a cited passage says where it is)."""
+    """A markdown document as pieces of at most `max_chars`, cut at `## ` sections and then at paragraphs (a paragraph
+    longer than a piece at sentences, `_split_paragraph`), each headed by the document's title and section and the
+    path it came from (so a cited passage says where it is)."""
     lines = text.splitlines()
     title = next((line[2:].strip() for line in lines if line.startswith("# ")), source)
     sections: list[tuple[str, list[str]]] = [("", [])]
@@ -416,12 +451,13 @@ def split_markdown(source: str, text: str, max_chars: int = TUTORIAL_MAX_CHARS) 
         if not paragraphs:
             continue
         head = f"# {title}{' - ' + heading if heading else ''}\n\nSource: {source} (this repository)\n\n"
+        budget = max(max_chars - len(head) - 2, 1)
         current = ""
-        for paragraph in paragraphs:
-            if current and len(head) + len(current) + len(paragraph) + 2 > max_chars:
+        for part in (p for paragraph in paragraphs for p in _split_paragraph(paragraph, budget)):
+            if current and len(head) + len(current) + len(part) + 2 > max_chars:
                 pieces.append(head + current.rstrip() + "\n")
                 current = ""
-            current += paragraph[: max_chars - len(head)] + "\n\n"
+            current += part + "\n\n"
         if current:
             pieces.append(head + current.rstrip() + "\n")
     return pieces

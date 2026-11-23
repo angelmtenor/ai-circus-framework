@@ -1550,6 +1550,26 @@ export async function speakText(
   return response.blob();
 }
 
+/** What agui-voice heard in a recording; `reason` says why there is no text (`silent`, `no-speech`). */
+export type HeardSpeech = { text: string; language: string | null; reason: "silent" | "no-speech" | null };
+
+/** The chat's dictation mic: a recording (16 kHz mono WAV) as text, via agui-voice's `POST /stt/{scenario_slug}`. */
+export async function transcribeSpeech(
+  voiceUrl: string,
+  scenarioSlug: string,
+  recording: Blob,
+  accessToken: string | null,
+  signal?: AbortSignal,
+): Promise<HeardSpeech> {
+  const response = await fetch(`${voiceUrl}/stt/${scenarioSlug}`, {
+    method: "POST",
+    headers: { ...headers(accessToken), "Content-Type": "audio/wav" },
+    body: recording,
+    signal,
+  });
+  return asJson<HeardSpeech>(response);
+}
+
 export type VoiceProviderOption = {
   id: string;
   label: string;
@@ -1571,7 +1591,7 @@ export type VoiceProviders = {
  * Which STT/TTS provider agui-voice would actually use for this scenario's next
  * voice turn, plus every provider it knows how to construct (self-hosted always
  * available; a cloud one only if its API key is configured on this instance) —
- * powers both the assistant UI's "STT: ... / TTS: ..." label (MicButton.tsx) and
+ * powers both the voice button's tooltip (MicButton.tsx) and
  * the admin Settings page's voice-mode picker.
  */
 export async function voiceProviders(
@@ -2222,6 +2242,8 @@ export type DroughtControlRoom = {
   reservoirs: DroughtReservoir[];
   drivers: Record<string, Record<string, Record<string, number>>>;
   attribution: string[];
+  /** Which forecast the outlook, what-if and bulletin use: the caller's trained model, or the committed reference. */
+  forecast_source?: { kind: "tenant" | "reference"; text: string };
   note: string;
 };
 export type DroughtHistory = {

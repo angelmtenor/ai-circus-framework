@@ -171,6 +171,18 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 <sub>Solar Cell EL Inspection — a fine-tuned ConvNeXt V2 grades electroluminescence images; expert labels include "possibly defective", so the manual lane earns its keep.</sub>
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/water_reservoirs_drought_guide.md"><img src="docs/screenshots/water_reservoirs_drought/control-room.webp" alt="Drought control room: four supply systems against the drought plan, a schematic basin map and a 180-day storage forecast with its band and the plan's thresholds"></a>
+<b>💧 Drought control room</b> · <code>forecast_board</code><br>
+<sub>Reservoirs & Drought Watch (fictional basin) — where the water is heading, 180 days ahead with a 10th-90th percentile band, against the drought plan's thresholds; a weekly replay since 2000, data-quality flags and the weekly bulletin.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/water_reservoirs_drought_guide.md"><img src="docs/screenshots/water_reservoirs_drought/outlook.webp" alt="Outlook and measures: the chance of falling below each threshold in a dry 180 days, and the least restrictive package of measures"></a>
+<b>💧 Outlook and measures</b> · <code>analysis_toolset: drought_watch</code><br>
+<sub>What if it stays dry? The chance of each threshold and the least restrictive package of measures that keeps emergency unlikely — the same tools the assistant answers with. A person decides.</sub>
+</td>
+</tr>
 </table>
 
 ### 🏄 Retail & data platform
@@ -471,18 +483,23 @@ prose — using the exact same Plotly/table components as the Data tab.
 
 ### Voice mode
 
-Every chat panel has a **mic** button (a live voice conversation, push to talk: press to
-start talking, press again — or hold and release the space bar — to send; pressing while the
-assistant speaks cuts it off) and a **speaker** icon on each reply (one-shot text-to-speech).
+Every chat panel has a **mic** button that dictates (press to listen, press again or Enter to stop: what you said is text
+in the input, to edit and send with Enter), a **voice** button (a live conversation, push to talk: press to
+start talking, press again — or hold and release the space bar — to send; pressing while the assistant
+prepares or says its answer stops it) and a **speaker** icon on each reply (one-shot text-to-speech).
 There is no automatic end-of-speech detection: a pause to think never ends your turn, and a
-spoken question gets a short spoken answer, with the details offered on screen
-([ADR 0033](docs/adr/0033-push-to-talk-voice.md)). Both are served by `agui-voice`, a Pipecat pipeline that uses the *existing*
+spoken question gets a short spoken answer, with the details shown (or offered) on screen
+([ADR 0033](docs/adr/0033-push-to-talk-voice.md)). All are served by `agui-voice`, a Pipecat pipeline that uses the *existing*
 `assistant`/`rag-agent`/`form-agent` `/agui/{scenario_slug}` endpoint as its LLM stage — so a
 spoken turn lands in the same conversation, with the same tools, screen context and data, as a
 typed one, for every scenario kind: by voice the agent also fills the form, draws a chart or has
 the guide open a scenario, and then says what it did. Defaults are fully self-hosted (faster-whisper STT + Piper TTS, no API key,
 model weights pre-warmed at container start); cloud engines are a `.env` key plus a pick in
-**Settings → Voice Mode Settings**.
+**Settings → Voice Mode Settings**. With `GROQ_API_KEY`, Groq's hosted Whisper large-v3-turbo replaces the CPU Whisper
+for speech to text (the turn's audio then leaves the cluster; local Whisper takes any turn it fails). Each turn logs its
+audio length and level, never its words, so a silent microphone can be told from speech nobody could transcribe.
+A recording with no speech in it (a click, a breath) is never transcribed: Whisper would invent words for it.
+**Settings → Microphone** picks the one voice mode listens to, and tests it.
 
 ### Assisted forms
 

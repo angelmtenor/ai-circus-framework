@@ -73,8 +73,19 @@ class McpCaller:
         return tuple(self.definition.mcp.expose) if self.definition.mcp is not None else ()
 
     def toolkit(self) -> drought_tools.DroughtToolkit:
-        """The scenario's drought toolkit (the schema only lets a drought_watch scenario expose these tools)."""
-        return drought_tools.get_toolkit(str(Path(get_env_config().SCENARIOS_DIR) / self.definition.slug))
+        """The scenario's drought toolkit (the schema only lets a drought_watch scenario expose these tools), over the
+        forecast trained for the caller's organisation when there is one, as in the chat and the control room.
+        """
+        slug = self.definition.slug
+        toolkit = drought_tools.get_toolkit(str(Path(get_env_config().SCENARIOS_DIR) / slug))
+        served = drought_tools.tenant_forecast(
+            self.org_id,
+            slug,
+            lambda: self.prediction.forecast(
+                scenario_slug=slug, authorization=self.authorization, series=None, shifts={}
+            ),
+        )
+        return toolkit.with_forecast(served)
 
 
 def _caller() -> McpCaller:
