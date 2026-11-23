@@ -48,7 +48,8 @@ import { ProtobufFrameSerializer } from "@pipecat-ai/websocket-transport";
  * module-level singleton (not per-hook-instance state), so starting a session from
  * anywhere first tears down whatever was already running.
  */
-export type VoiceSessionState = "idle" | "connecting" | "ready" | "talking" | "thinking" | "speaking" | "error";
+// `no-mic`: the browser refused the microphone or has none — not a connection failure, so it says so apart.
+export type VoiceSessionState = "idle" | "connecting" | "ready" | "talking" | "thinking" | "speaking" | "error" | "no-mic";
 
 /** Connected states: the session is open and the space bar talks. */
 export function isVoiceConnected(state: VoiceSessionState): boolean {
@@ -238,7 +239,7 @@ export function useVoiceSession(
     } catch (err) {
       console.error("Voice session: microphone access denied or unavailable:", err);
       talkOnReadyRef.current = false;
-      setState("error");
+      setState("no-mic");
       return;
     }
     // Hung up (or another chat took the voice session) while the mic prompt was open.
@@ -534,6 +535,7 @@ export function useVoiceSession(
     switch (stateRef.current) {
       case "idle":
       case "error":
+      case "no-mic":
         talkOnReadyRef.current = true;
         void connect();
         break;

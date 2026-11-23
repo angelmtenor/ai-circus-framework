@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HttpAgent } from "@ag-ui/client";
 import { voiceProviders, type VoiceProviderGroup, type VoiceProviders } from "./apiClient";
+import { refreshServiceAvailability, SERVICES, useServiceAvailability, type ServiceKey } from "./serviceAvailability";
 import { isVoiceConnected, useVoiceSession, type VoiceSessionState, type VoiceTurnBridge } from "./useVoiceSession";
 
 const LABELS: Record<VoiceSessionState, string> = {
@@ -11,6 +12,8 @@ const LABELS: Record<VoiceSessionState, string> = {
   thinking: "Sent — waiting for the answer (press to talk again)",
   speaking: "Answering — press, or hold the space bar, to interrupt and talk",
   error: "Voice connection failed — press to retry",
+  "no-mic":
+    "No microphone: the browser blocked it or found none. Allow the microphone for this site (the icon at the left of the address bar), then press to retry",
 };
 
 const ICONS: Record<VoiceSessionState, string> = {
@@ -21,7 +24,12 @@ const ICONS: Record<VoiceSessionState, string> = {
   thinking: "…",
   speaking: "🔊",
   error: "🎤",
+  "no-mic": "🎤",
 };
+
+// The shared /healthz poll (serviceAvailability.ts): agui-voice is off in the lite profiles.
+const VOICE_SERVICE: readonly ServiceKey[] = ["agui-voice"];
+const VOICE_OFF_LABEL = `Voice is off: the voice service (agui-voice) is not running. To start it: ${SERVICES["agui-voice"].startHint}. Then press to check again`;
 
 /**
  * Chrome (and other browsers) only allow an AudioContext to auto-resume when the
@@ -98,14 +106,23 @@ export function MicButton({
   const { state, press, release, end } = useVoiceSession(agent, voiceUrl, scenarioSlug, accessToken, turn);
   const connected = isVoiceConnected(state);
   const active = connected || state === "connecting";
+  const voiceService = useServiceAvailability(VOICE_SERVICE).get("agui-voice");
+  // Known to be down: say so, rather than ask for the microphone and fail to connect.
+  const voiceOff = voiceService === "down" && !active;
   const [providers, setProviders] = useState<VoiceProviders | null>(null);
   const micRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    if (voiceService !== "up") return; // nothing to ask a stopped service (and no CORS error in the console)
     voiceProviders(voiceUrl, scenarioSlug, accessToken)
       .then(setProviders)
       .catch(() => {}); // best-effort label — a fetch failure just leaves it unshown
-  }, [voiceUrl, scenarioSlug, accessToken]);
+  }, [voiceUrl, scenarioSlug, accessToken, voiceService]);
+
+  // A failed connection: check at once whether the service is down, so the button says why.
+  useEffect(() => {
+    if (state === "error") refreshServiceAvailability();
+  }, [state]);
 
   // Hold the space bar to talk, only while this chat's voice session is on (one at a time app-wide), and never
   // while typing or on another control. Letting go — or leaving the window mid-hold — sends the turn.
@@ -146,13 +163,17 @@ export function MicButton({
       <button
         ref={micRef}
         type="button"
-        className={`chat-mic chat-mic--${state}`}
+        className={`chat-mic chat-mic--${voiceOff ? "off" : state}`}
         onClick={() => {
+          if (voiceOff) {
+            refreshServiceAvailability(); // started meanwhile? the next press connects
+            return;
+          }
           if (!active) unlockAudioPlayback(); // must run synchronously in this click handler — see comment above
           press();
         }}
-        title={LABELS[state]}
-        aria-label={LABELS[state]}
+        title={voiceOff ? VOICE_OFF_LABEL : LABELS[state]}
+        aria-label={voiceOff ? VOICE_OFF_LABEL : LABELS[state]}
         aria-pressed={state === "talking"}
         disabled={disabled && !active}
       >

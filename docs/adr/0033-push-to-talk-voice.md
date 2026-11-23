@@ -24,7 +24,9 @@ bar) to stop, with no automatic end-of-speech detection.
   heard by the server.
 - **The space bar is a hold-to-talk key once voice is on** for a chat (`MicButton.tsx`): never while typing in a field
   or with another control focused, and leaving the window mid-hold sends the turn. A first press of the mic button
-  connects and starts talking as soon as the pipeline is ready (the button turns red).
+  connects and starts talking as soon as the pipeline is ready (the button turns red). While agui-voice is not running
+  (`serviceAvailability.ts`'s shared `/healthz` poll; the lite profiles keep it at 0) the button says voice is off and
+  how to start it, and a press only checks again; a refused microphone has its own message.
 - **Everything is bounded.** One turn is at most 60 s of audio: the server ends it itself and tells the client
   (`server-message` `{"type": "push-to-talk", "talking": false, "reason": "limit"}`), so a stuck key or a client that
   never sends the stop cannot grow the STT buffer; the client stops at the same point. A turn the agent never starts

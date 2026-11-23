@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { modelsStatus, type ScenarioSummary } from "./apiClient";
 import { config } from "./config";
 
-export type ServiceKey = "prediction" | "assistant" | "rag-agent" | "form-agent" | "dl-inference" | "data-api";
+export type ServiceKey = "prediction" | "assistant" | "rag-agent" | "form-agent" | "dl-inference" | "data-api" | "agui-voice";
 export type Availability = "up" | "down" | "checking";
 
 // `control`: its name in data-platform-manager's OPTIONAL_SERVICES (core/workloads.py), when
@@ -34,6 +34,13 @@ export const SERVICES: Record<ServiceKey, ServiceInfo> = {
     control: "dl-inference",
   },
   "data-api": { label: "Data API", url: () => config.dataApiUrl, startHint: "make k3s-data-core-up" },
+  // Off in the lite profiles (`make k3s-all-lite`): the chat's mic says so instead of failing to connect.
+  "agui-voice": {
+    label: "Voice service",
+    url: () => config.voiceUrl,
+    startHint: `Platform → Health → Start agui-voice (admin), or ${scaleUp("agui-voice")}`,
+    control: "agui-voice",
+  },
 };
 
 /** `required`: the scenario cannot open without it. `optional`: one part (the chat) degrades. */

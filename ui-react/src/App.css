@@ -1858,9 +1858,16 @@ select:focus {
   }
 }
 
-.chat-mic--error {
+.chat-mic--error,
+.chat-mic--no-mic {
   border-color: #e05a5a;
   color: #e05a5a;
+}
+
+/* The voice service is not running (MicButton's tooltip says how to start it). */
+.chat-mic--off {
+  opacity: 0.45;
+  cursor: help;
 }
 
 .chat-speaker {
