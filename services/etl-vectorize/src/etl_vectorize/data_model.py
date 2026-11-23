@@ -30,8 +30,9 @@ class EnvConfig(BaseSettings):
         case_sensitive=True,
     )
     LOG_LEVEL: str = Field(description="Application log level (TRACE, DEBUG, INFO, WARNING, ERROR, CRITICAL)")
-    SCENARIOS: str = Field(
-        description="Comma-separated document-backed scenario slugs this run processes; empty/unset = every scenario"
+    SCENARIOS: str | None = Field(
+        description="Comma-separated document-backed scenario slugs this run processes; empty/unset = every scenario",
+        default=None,
     )
     ORG_ID: str = Field(
         description="Tenant (Keycloak Organization id) whose documents this run processes — base default: ADMIN_ORG_ID"
@@ -84,7 +85,7 @@ class EnvConfig(BaseSettings):
         return v
 
 
-_SOURCE_YAML_HASH = "989ce50bc7f69f11d4c6463a4095ffbfe8f5e07a379039677748ade418e58776"
+_SOURCE_YAML_HASH = "667addca50a91fbdcdcd2c284af5e9bf26a38e475b30df2da81e9431006eaedd"
 
 
 EnvConfig.model_rebuild()

@@ -348,11 +348,8 @@ k3s-pipeline: ## Run the one-shot ETL -> training pipeline (every tabular_ml sce
 	@kubectl -n ai-circus rollout restart deployment/prediction
 	@echo "✓ tabular_ml pipeline complete (every scenario in SCENARIOS, empty/unset = all) — documents are separate: make k3s-vectorize"
 
-k3s-vectorize: ## Index every scenario's documents into Qdrant and the tenant's bucket (RAG, forms, the case desk's reading room) — REQUIRED on a fresh cluster for those; ~20 min on CPU, so run it detached
-	@kubectl -n ai-circus delete job etl-vectorize --ignore-not-found
-	@kubectl apply -f k8s/jobs/etl-vectorize-job.yaml
-	@kubectl -n ai-circus wait --for=condition=complete job/etl-vectorize --timeout=1800s
-	@echo "✓ documents indexed (every scenario with documents)"
+k3s-vectorize: ## Index every scenario's documents into Qdrant and the tenant's bucket (RAG, forms, the case desk's reading room) — REQUIRED on a fresh cluster for those; ~20 min on CPU, so run it detached; SCENARIOS=a,b indexes only those
+	@./scripts/k3s_vectorize.sh "$(SCENARIOS)"
 
 k3s-verify: ## Port-forward platform-registry, then reuse `make verify`'s curl checks unchanged (same *.localhost + localhost:$${PLATFORM_REGISTRY_PORT:-8010} assertions, now against k3d's Traefik)
 	@kubectl -n ai-circus port-forward svc/platform-registry "$${PLATFORM_REGISTRY_PORT:-8010}:8000" >/tmp/k3s-verify-port-forward.log 2>&1 & \
