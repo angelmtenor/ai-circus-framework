@@ -24,10 +24,12 @@ import {
 } from "./chatProvenance";
 import { sameOrder, toolResultsAfterTheirCalls } from "./messageOrder";
 import { config } from "./config";
+import { DictateButton } from "./DictateButton";
 import { MicButton } from "./MicButton";
 import { renderMarkdown } from "./markdown";
 import { SpeakerButton } from "./SpeakerButton";
-import { transcriptForVoice, type VoiceTurnBridge } from "./useVoiceSession";
+import { useDictation } from "./useDictation";
+import { transcriptForVoice, type VoiceSessionState, type VoiceTurnBridge } from "./useVoiceSession";
 
 /** Read `file` as base64 (no `data:...;base64,` prefix) — the shape AG-UI's
  * `InputContentDataSource.value` expects (see ag_ui_langgraph.utils._media_source_to_url,
@@ -492,6 +494,34 @@ export function ChatPanel({
     },
   };
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Dictation writes into the input, after whatever is there; Enter then sends it as any typed message.
+  const dictation = useDictation(config.voiceUrl, scenarioSlug, accessToken, (text) => {
+    setMessage((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+    inputRef.current?.focus();
+  });
+  const [voiceState, setVoiceState] = useState<VoiceSessionState>("idle");
+  const placeholder = !conversationReady
+    ? "Starting conversation…"
+    : dictation.state === "listening"
+      ? "Listening… Enter to stop, Esc to discard"
+      : dictation.state === "transcribing"
+        ? "Writing what you said…"
+        : voiceState === "talking"
+          ? "Listening… press again to send"
+          : voiceState === "thinking"
+            ? "Waiting for the answer… press ⏹ to stop"
+            : voiceState === "speaking"
+              ? "Answering… press ⏹ to stop"
+              : "Ask a question...";
+
+  function onInputKey(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    // While dictating, Enter ends it: the text comes first, and the next Enter sends it.
+    if (dictation.state === "listening") void dictation.finish();
+    else if (dictation.state !== "starting" && dictation.state !== "transcribing") void send(message);
+  }
+
   async function send(text: string) {
     const trimmed = text.trim();
     if ((!trimmed && pendingFiles.length === 0) || sending || !conversationReady) return;
@@ -625,7 +655,7 @@ export function ChatPanel({
             </div>
           );
         })}
-        {sending && (
+        {(sending || voiceState === "thinking") && (
           <div className="chat-turn chat-turn--assistant">
             <div className="chat-avatar">🤖</div>
             <div className="chat-bubble chat-bubble--typing">
@@ -740,6 +770,15 @@ export function ChatPanel({
         </div>
       )}
       <div className="chat-input-row">
+        <AttachButton onAttach={handleAttach} disabled={sending || pendingFiles.length >= MAX_ATTACHMENTS} />
+        <input
+          ref={inputRef}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={onInputKey}
+          placeholder={placeholder}
+          disabled={sending || !conversationReady}
+        />
         <MicButton
           agent={agent}
           voiceUrl={config.voiceUrl}
@@ -747,14 +786,10 @@ export function ChatPanel({
           accessToken={accessToken}
           disabled={!conversationReady}
           turn={voiceTurn}
-        />
-        <AttachButton onAttach={handleAttach} disabled={sending || pendingFiles.length >= MAX_ATTACHMENTS} />
-        <input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send(message)}
-          placeholder={conversationReady ? "Ask a question..." : "Starting conversation…"}
-          disabled={sending || !conversationReady}
+          onState={setVoiceState}
+          dictation={
+            <DictateButton state={dictation.state} micName={dictation.micName} press={dictation.press} disabled={!conversationReady} />
+          }
         />
         <button
           className="chat-send"

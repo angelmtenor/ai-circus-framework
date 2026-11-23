@@ -14,6 +14,7 @@ import {
 import { config } from "./config";
 import type { Theme } from "./themes";
 import { Icon } from "./Icon";
+import { MicrophoneSection } from "./MicrophonePicker";
 
 function AppearanceSection({
   theme,
@@ -220,6 +221,7 @@ export function Settings({
       </h2>
 
       <AppearanceSection theme={theme} themes={themes} onThemeChange={onThemeChange} />
+      <MicrophoneSection />
 
       {isAdmin && (
         <>

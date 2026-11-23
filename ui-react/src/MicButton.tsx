@@ -1,60 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { HttpAgent } from "@ag-ui/client";
 import { voiceProviders, type VoiceProviderGroup, type VoiceProviders } from "./apiClient";
-import { refreshServiceAvailability, SERVICES, useServiceAvailability, type ServiceKey } from "./serviceAvailability";
+import { SilentMicrophoneNotice } from "./MicrophonePicker";
+import { unlockAudioPlayback } from "./pcmCapture";
+import { refreshServiceAvailability, useServiceAvailability } from "./serviceAvailability";
 import { isVoiceConnected, useVoiceSession, type VoiceSessionState, type VoiceTurnBridge } from "./useVoiceSession";
+import { NO_MIC_LABEL, VOICE_OFF_LABEL, VOICE_SERVICE } from "./voiceLabels";
 
 const LABELS: Record<VoiceSessionState, string> = {
-  idle: "Talk: press to start, press again to send. Once voice is on, you can also hold the space bar",
-  connecting: "Connecting… talk when the button turns red (press again to connect without talking)",
+  idle: "Talk with the assistant: press to start talking, press again to send. It answers aloud",
+  connecting: "Connecting… talk when the button turns red (press to cancel)",
   ready: "Press to talk, or hold the space bar",
-  talking: "Talking — press again, or let go of the space bar, to send",
-  thinking: "Sent — waiting for the answer (press to talk again)",
-  speaking: "Answering — press, or hold the space bar, to interrupt and talk",
+  talking: "Listening — press again, or let go of the space bar, to send",
+  thinking: "Waiting for the answer — press to stop it",
+  speaking: "Answering — press to stop it, or hold the space bar to interrupt and talk",
+  silent: "No sound came from the microphone — press to try again",
+  "no-speech": "No words heard — press to try again",
   error: "Voice connection failed — press to retry",
-  "no-mic":
-    "No microphone: the browser blocked it or found none. Allow the microphone for this site (the icon at the left of the address bar), then press to retry",
+  "no-mic": NO_MIC_LABEL,
 };
 
-const ICONS: Record<VoiceSessionState, string> = {
-  idle: "🎤",
-  connecting: "…",
-  ready: "🎤",
-  talking: "⏹",
-  thinking: "…",
-  speaking: "🔊",
-  error: "🎤",
-  "no-mic": "🎤",
-};
+/** The glyph of a conversation by voice, as against dictation's microphone. */
+function VoiceBars() {
+  return (
+    <svg className="chat-voice-bars" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path d="M2 6.5v3M5 4v8M8 2v12M11 4v8M14 6.5v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
 
-// The shared /healthz poll (serviceAvailability.ts): agui-voice is off in the lite profiles.
-const VOICE_SERVICE: readonly ServiceKey[] = ["agui-voice"];
-const VOICE_OFF_LABEL = `Voice is off: the voice service (agui-voice) is not running. To start it: ${SERVICES["agui-voice"].startHint}. Then press to check again`;
-
-/**
- * Chrome (and other browsers) only allow an AudioContext to auto-resume when the
- * resume() call happens close enough to a real user gesture — cross a few `await`s
- * (as `connect()` in useVoiceSession.ts does: tearing down any prior session, opening
- * the WebSocket, requesting the mic) and the browser can decide the gesture no
- * longer counts, leaving an AudioContext stuck "suspended". Creating and resuming a
- * throwaway context *synchronously*, inside the click handler itself, "unlocks"
- * audio for the page so the capture/playback contexts created moments later
- * (asynchronously) resume immediately instead of risking staying suspended.
- */
-function unlockAudioPlayback(): void {
-  try {
-    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return;
-    const ctx = new Ctor();
-    if (ctx.state === "suspended") void ctx.resume();
-    const buffer = ctx.createBuffer(1, 1, 22050);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
-  } catch {
-    // Best-effort — if this fails, the SDK's own resume() still gets its normal chance.
-  }
+function icon(state: VoiceSessionState): ReactNode {
+  if (state === "connecting") return "…";
+  if (state === "talking") return "↑"; // a press sends
+  if (state === "thinking" || state === "speaking") return "⏹"; // a press stops
+  return <VoiceBars />;
 }
 
 /** The human-readable label for whichever provider `group.active` names, e.g.
@@ -72,19 +51,15 @@ function spaceBelongsElsewhere(target: EventTarget | null, mic: HTMLElement | nu
 }
 
 /**
- * Push-to-talk mic for ChatPanel's input row (docs/adr/0033): press to start
- * talking, press again to send — or, once voice is on, hold the space bar and let
- * go to send. Nothing ends a turn on silence. The button shows each state (ready,
- * talking with pulsing rings, waiting, answering); only talking animates, so a
- * connected but idle session leaves the page still. A small ✕ ends voice mode (it
- * also hangs up by itself after a few idle minutes). A voice turn renders in the
- * same transcript as a typed one, and acts on the screen as one does (`turn`), so no
- * separate UI is needed for it here.
+ * The conversation by voice in ChatPanel's input row (docs/adr/0033), beside the dictation mic (`dictation`), whose
+ * place its ✕ takes while a session is on. Press to start talking, press again to send — or, once voice is on, hold
+ * the space bar and let go to send. Nothing ends a turn on silence, and a press while the answer is being prepared or
+ * said only stops it: the next press talks. Only talking animates, so a connected but idle session leaves the page
+ * still (it hangs up by itself after a few idle minutes). A voice turn renders in the same transcript as a typed one,
+ * and acts on the screen as one does (`turn`), so no separate UI is needed for it here.
  *
- * Also fetches and shows which STT/TTS provider is actually in effect (the admin
- * Settings page's live choice, resolved server-side — see api/providers.py) as a
- * small label next to the button, so which engine answered a voice turn is never
- * a mystery the way it was during this feature's own development.
+ * The tooltip says which STT/TTS provider is actually in effect (the admin Settings page's live choice, resolved
+ * server-side — see api/providers.py), so which engine answered a voice turn is never a mystery.
  */
 export function MicButton({
   agent,
@@ -93,6 +68,8 @@ export function MicButton({
   accessToken,
   disabled = false,
   turn,
+  onState,
+  dictation,
 }: {
   agent: HttpAgent;
   voiceUrl: string;
@@ -102,8 +79,12 @@ export function MicButton({
   disabled?: boolean;
   /** The chat's tools, screen and transcript for each spoken turn, and who runs its screen actions. */
   turn?: VoiceTurnBridge;
+  /** Told each change, so the chat can say what the conversation is doing. */
+  onState?: (state: VoiceSessionState) => void;
+  /** The dictation mic, shown while no conversation by voice is on. */
+  dictation?: ReactNode;
 }) {
-  const { state, press, release, end } = useVoiceSession(agent, voiceUrl, scenarioSlug, accessToken, turn);
+  const { state, micName, press, talk, release, end } = useVoiceSession(agent, voiceUrl, scenarioSlug, accessToken, turn);
   const connected = isVoiceConnected(state);
   const active = connected || state === "connecting";
   const voiceService = useServiceAvailability(VOICE_SERVICE).get("agui-voice");
@@ -124,6 +105,12 @@ export function MicButton({
     if (state === "error") refreshServiceAvailability();
   }, [state]);
 
+  const onStateRef = useRef(onState);
+  useEffect(() => {
+    onStateRef.current = onState;
+  });
+  useEffect(() => onStateRef.current?.(state), [state]);
+
   // Hold the space bar to talk, only while this chat's voice session is on (one at a time app-wide), and never
   // while typing or on another control. Letting go — or leaving the window mid-hold — sends the turn.
   useEffect(() => {
@@ -135,7 +122,7 @@ export function MicButton({
       event.preventDefault(); // no page scroll, and no "click" on the focused mic button
       if (event.repeat || holding) return;
       holding = true;
-      press();
+      talk();
     };
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== "Space" || !holding) return;
@@ -156,10 +143,19 @@ export function MicButton({
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [connected, press, release]);
+  }, [connected, talk, release]);
 
+  const label = voiceOff ? VOICE_OFF_LABEL : LABELS[state];
+  const engines = providers ? ` (speech to text ${providerLabel(providers.stt)}, text to speech ${providerLabel(providers.tts)})` : "";
   return (
     <span className="chat-mic-wrap">
+      {active ? (
+        <button type="button" className="chat-mic chat-mic-end" onClick={end} title="End voice mode" aria-label="End voice mode">
+          ✕
+        </button>
+      ) : (
+        dictation
+      )}
       <button
         ref={micRef}
         type="button"
@@ -169,15 +165,15 @@ export function MicButton({
             refreshServiceAvailability(); // started meanwhile? the next press connects
             return;
           }
-          if (!active) unlockAudioPlayback(); // must run synchronously in this click handler — see comment above
+          if (!active) unlockAudioPlayback(); // must run synchronously in this click handler
           press();
         }}
-        title={voiceOff ? VOICE_OFF_LABEL : LABELS[state]}
-        aria-label={voiceOff ? VOICE_OFF_LABEL : LABELS[state]}
+        title={label + (voiceOff ? "" : engines)}
+        aria-label={label}
         aria-pressed={state === "talking"}
         disabled={disabled && !active}
       >
-        <span className="chat-mic-icon">{ICONS[state]}</span>
+        <span className="chat-mic-icon">{icon(state)}</span>
         {state === "talking" && (
           <span className="chat-mic-rings" aria-hidden="true">
             <span />
@@ -186,25 +182,10 @@ export function MicButton({
           </span>
         )}
       </button>
-      {/* Always laid out (hidden while off), so turning voice on never shifts the input row. */}
-      <button
-        type="button"
-        className={`chat-mic-end${active ? "" : " chat-mic-end--hidden"}`}
-        onClick={end}
-        title="End voice mode"
-        aria-label="End voice mode"
-        aria-hidden={!active}
-        tabIndex={active ? 0 : -1}
-      >
-        ✕
-      </button>
-      {providers && (
-        <span
-          className={`chat-voice-providers${active ? "" : " chat-voice-providers--hidden"}`}
-          title="Voice mode's current speech-to-text/text-to-speech engine"
-          aria-hidden={!active}
-        >
-          🎙️ {providerLabel(providers.stt)} · 🔊 {providerLabel(providers.tts)}
+      {state === "silent" && <SilentMicrophoneNotice micName={micName} />}
+      {(state === "no-speech" || state === "no-mic" || state === "error") && (
+        <span className="chat-mic-notice" role="status">
+          {LABELS[state]}.
         </span>
       )}
     </span>
