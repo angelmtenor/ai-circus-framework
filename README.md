@@ -171,6 +171,18 @@ honest out-of-fold scores wherever the tab reveals real outcomes.
 <sub>Solar Cell EL Inspection — a fine-tuned ConvNeXt V2 grades electroluminescence images; expert labels include "possibly defective", so the manual lane earns its keep.</sub>
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/scenarios/water_reservoirs_drought_guide.md"><img src="docs/screenshots/water_reservoirs_drought/control-room.webp" alt="Drought control room: four supply systems against the drought plan, a schematic basin map and a 180-day storage forecast with its band and the plan's thresholds"></a>
+<b>💧 Drought control room</b> · <code>forecast_board</code><br>
+<sub>Reservoirs & Drought Watch (fictional basin) — where the water is heading, 180 days ahead with a 10th-90th percentile band, against the drought plan's thresholds; a weekly replay since 2000, data-quality flags and the weekly bulletin.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/scenarios/water_reservoirs_drought_guide.md"><img src="docs/screenshots/water_reservoirs_drought/outlook.webp" alt="Outlook and measures: the chance of falling below each threshold in a dry 180 days, and the least restrictive package of measures"></a>
+<b>💧 Outlook and measures</b> · <code>analysis_toolset: drought_watch</code><br>
+<sub>What if it stays dry? The chance of each threshold and the least restrictive package of measures that keeps emergency unlikely — the same tools the assistant answers with. A person decides.</sub>
+</td>
+</tr>
 </table>
 
 ### 🏄 Retail & data platform

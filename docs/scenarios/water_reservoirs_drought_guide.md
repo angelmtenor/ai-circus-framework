@@ -2,6 +2,10 @@
 
 > **Reference implementation on synthetic data. Not an operational tool.**
 
+<p align="center">
+  <img src="../screenshots/water_reservoirs_drought/control-room.webp" alt="Drought control room: the four supply systems against the drought plan, the fictional basin's schematic map coloured by storage band, and the South Valley system's 180-day forecast with its 10th-90th percentile band and the plan's thresholds behind it" width="900">
+</p>
+
 The scenario's files are in [`scenarios/water_reservoirs_drought/`](../../scenarios/water_reservoirs_drought/README.md),
 with how the synthetic basin is generated. This page says what exists, how the pieces fit, the simplifications made, and
 what is left.
@@ -25,6 +29,10 @@ token, as the chart does, and recompute the outlook from it. Otherwise they use 
 `drought_outlook.json`; the room says which under the chart. Every quantile is clipped to 0-100 % of capacity in the
 tools, the bulletin and the chart alike. One limit remains: the forecast board has **no what-if re-forecast** for this
 model (it is served from the stored forecast, like a statistical winner).
+
+<p align="center">
+  <img src="../screenshots/water_reservoirs_drought/outlook.webp" alt="Outlook and measures for the South Valley system: with a dry 180 days, the bad, most likely and good cases, the chance of falling below each threshold, and the least restrictive package of measures that keeps the chance of emergency at or below 10 %" width="900">
+</p>
 
 | Part | State | Where |
 |---|---|---|
