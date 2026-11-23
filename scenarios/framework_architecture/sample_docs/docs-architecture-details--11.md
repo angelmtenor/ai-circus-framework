@@ -28,14 +28,3 @@ X-Data-View-As for platform keys) before MCP runs, and each tool is a REST route
 may run SQL. DataProductView's "Connect via MCP" tab reuses `McpConnectView` with data-api's URL, `localhost:8032` and the
 View-as headers. OAuth for external clients,
 `data-api`, models as tools and tool policy are later steps of the ADR.
-
-A `tabular_ml` scenario opens its door on the **assistant** (docs/adr/0031): `mcp.expose` from `MCP_MODEL_TOOLS`
-(`describe_model`, `score_record`: a classifier or a regressor only) and, with `analysis_toolset: drought_watch`,
-`MCP_DROUGHT_TOOLS`. The assistant's `core/mcp_door.py` has the same `McpDoor` shape and forwards the caller's own bearer
-token to prediction (`/model/{slug}/card`, `/predict/{slug}`), which checks it again. `score_record` fills the inputs the
-caller left out from `feature_schema` defaults, names what the number means, returns the eight largest SHAP drivers and,
-with business rules, the gate, the decision and the rules that fired. The drought tools are the chat's `DroughtToolkit`
-reads. `model_views` drops the door (it is the scenario's, and scores the main model). TabularView's "Connect via MCP"
-tab (analyst and engineer views) reuses `McpConnectView` with the assistant's URL and `localhost:8034`. Before a tabular
-YAML declares `mcp:`, rebuild every image that validates tabular files (registry, assistant, prediction, etl-tabular,
-training, etl-vectorize, data-transform, dl-training): an older image rejects the block.

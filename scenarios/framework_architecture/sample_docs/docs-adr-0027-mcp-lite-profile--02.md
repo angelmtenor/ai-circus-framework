@@ -39,4 +39,3 @@ Source: docs/adr/0027-mcp-lite-profile.md (this repository)
   denied; each kit server's audit lines; its traces) and that no log line of the cluster carries a token, the
   blueprint's test for observability ("a search for tokens or personal data in all signals finds nothing", here
   for tokens).
-- **A standalone repository stays possible** and becomes mechanical: the profile's file

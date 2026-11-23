@@ -153,8 +153,16 @@ sources, search, open + guided demo, tab switch, Architecture flow, the same req
 scenario dock beside the guide, close/reopen keeps the conversation, idle 0 frames/s with the guide open, no overflow
 at phone width; `make k3s-idle-check` on Reservoirs and Insurance stays quiet.
 
-Not done yet: asking a scenario's own assistant from the guide, and the guide's answers about ADR 0032 itself (needs an
-`etl-vectorize` run after `make architecture`).
+Done since: the guide asks a scenario's own assistant. A fifth app action, `ask_scenario_assistant(slug, question)`,
+goes through `guideBridge.ts` to the workspace's own `ask` (the one its Ask buttons use): the scenario opens, its chat
+opens and the question is sent there, so the answer comes from that scenario's agent with its tools, data and its own
+entitlement check (every kind but deep learning; never the guide's own tutorial). rag-agent's guide instructions send a
+question about a scenario's data, model or results there instead of answering from the documents. On the way, an
+`assisted_form` without a story or case tracker dropped such a question (the bare form got no `prompt`). And the guide
+now answers about ADR 0032 and 0033 (the index had missed them: see the etl-vectorize follow-up below). Verified on k3s
+with gemini-flash: "How does voice fill a form?" is answered from three pieces of ADR 0033; "Ask the reservoirs scenario:
+at the current trend, when does the Central system enter alert?" opens Reservoirs with its chat beside the guide, and
+that chat answers from the tenant's trained model (provenance: Model).
 
 ### 6. F10 — voice, push to talk — done
 
@@ -192,21 +200,70 @@ questions are in the conversation's history; every insurance tab passes the idle
   insurance draws the SHAP chart and explains it (58 words); the guide opens the insurance scenario (14 words); two
   agent runs each, the largest `voice-turn` message 26.5 KB.
 
-- `SCENARIOS` in a Job's env does not narrow etl-vectorize: its `settings.yaml` profile sets `SCENARIOS: ""`, and the
-  profile beats the environment (`EnvConfig(**profile)`), so a vectorize run always indexes every scenario (~20 min).
-  Drop that profile default (as for the governance flags) to index one scenario at a time.
-- `split_markdown` (`ai_circus_shared/architecture.py`, the tutorial's snapshot) cuts a paragraph longer than 4,000
-  characters and drops its tail without a warning (found in F9: the first section of `architecture-details.md` lost
-  its last sentences until it was split). Chunk long paragraphs at sentence boundaries instead, or fail the check.
+- Done: `SCENARIOS` in a Job's env did not narrow etl-vectorize (its `settings.yaml` profile default beat the
+  environment). The default is gone (`mandatory: false`, as for etl-tabular), and `make k3s-vectorize SCENARIOS=a,b`
+  (`scripts/k3s_vectorize.sh`, same `^[a-z0-9_,]+$` check as `k3s_ml_train.sh`) sets it on the Job with
+  `kubectl set env --local`; the manifest itself stays equal to data-platform-manager's Job (its test). On k3s the
+  tutorial alone indexes in about 15 minutes (240 documents, 792 chunks).
+- Done, found on the way: once a tenant's bucket existed, etl-vectorize never refreshed its documents, so ADR 0031-0033
+  and the snapshot's newer pieces never reached the guide (232 files in the bucket against 240 in the seed, 24 of them
+  stale). A seed manifest (`seed/<raw_prefix>.json`, SHA-256 per file) now updates the seed documents that changed, adds
+  new ones and removes deleted ones, and leaves alone what the tenant edited or deleted; a bucket from before the
+  manifest is adopted when all its files are seed names. GitHub-sourced documents are not touched. On k3s: "32 file(s)
+  updated for org=admin", then 6 after the snapshot fix below.
+- Done: `split_markdown` dropped the tail of a paragraph longer than 4,000 characters; it lost text in ADR 0016, 0027
+  and 0033 (pieces 02/03). It now cuts such a paragraph at sentences, or between lines when it is a table, a list or
+  code, then at words; a test checks that every word of every tutorial source is in the snapshot.
 
-- The drought assistant tools and the control room read the committed artifacts, not the forecast trained for the
-  caller's tenant (water guide, "What is left" 1).
-- The guided demo's "Ask" buttons were not tried against a live LLM.
-- `storage_forecast` (and the chat's forecast tool) can return a p90 above 100 % of capacity straight from the
-  committed forecast file; the bulletin caps it at 100 %. Clip p10/p50/p90 to [0, 100] in `DroughtToolkit.forecast_of`
-  (and check the control room's chart) so every view agrees.
-- `docs/scenarios/water_reservoirs_drought_guide.md` and the README's scenario tour could show control-room
-  screenshots (capture with the Playwright scripts, as in `reference-demo-decks`).
+- Done: the drought tools and the control room read the committed artifacts, not the forecast trained for the
+  caller's tenant (they differed by up to 3.75 pp). Training's quantile forecast now writes each series' horizons
+  (`quantiles`: origin, current storage, p10/p50/p90 and drivers per horizon) into the served `forecast.json`, and
+  prediction's `/forecast` passes them through. The assistant asks it with the caller's own token (chat, `/drought/…`
+  routes and the MCP door alike; cached per organisation and scenario for 60 s, at most 64 entries) and
+  `DroughtToolkit.with_forecast` returns a view over that forecast with the outlook recomputed by the same
+  `drought_outlook` code (a test shows the recompute reproduces the committed outlook exactly). It falls back to the
+  committed reference when the tenant has no model, prediction is down, or the forecast was trained from other readings
+  (another last day or current storage than the tools' data). `forecast_source` tells which, and the room shows it
+  under the chart. Verified on k3s after a retrain: the room says "Your organisation's trained model
+  (lightgbm_quantile)", and the what-if's median at 30/90/180 days equals the served one for every system (Central at
+  90 days: 93.6 against 95.4 in the committed file).
+- Done: the guided demo's "Ask" buttons, tried against the live model (gemini-3.1-flash-lite) on Reservoirs ("when does
+  the Central system enter alert? And with a dry quarter?") and Insurance ("does a big price increase at renewal drive
+  customers away?"): both send the step's question to the scenario's chat and get an answer from its tools (Central
+  stays above alert at 90 days, 1 % chance either way; the premium change is the model's strongest driver). Found on
+  the way: a drought answer said "No tools: scenario context only", because `chatProvenance.ts` knew none of the drought
+  tools; they now show as Model, Rules (the plan's articles) and Data health.
+- Done: quantiles are clipped to [0, 100] % in `DroughtToolkit.forecast_of` (served p90 reached 106 % for Westfield
+  and the committed p50 101 % for Lantern Lake), and the control room's chart caps its lines and bands the same way.
+  Checked in the browser for all 13 series: no point above the 100 % line.
+- Done: control-room screenshots (`docs/screenshots/water_reservoirs_drought/`: the room and the outlook with
+  measures, captured with the Playwright image and stored as webp like the others) in the water guide and in the
+  README's showcase (Industry & energy).
+- Done: README, voice mode: "with the details shown (or offered) on screen".
+- Done, reported by the user: the mic only said "Voice connection failed — press to retry" while agui-voice was scaled
+  to 0 (the lite profiles keep it there), so nothing told voice was off from a fault. The mic now asks the gallery's
+  shared `/healthz` poll (`serviceAvailability.ts`, which gains `agui-voice`): while the service is down it reads "Voice
+  is off" with how to start it (Platform → Health → Start, or `kubectl scale`), and a press only checks again instead of
+  asking for the microphone; a failed connection re-checks at once. A browser that refuses the microphone gets its own
+  message (`no-mic`). The providers label is no longer fetched from a stopped service (it logged CORS errors). Checked
+  in the browser on k3s: off (no microphone request), back on (one press re-checks, the next connects and talks),
+  microphone refused, and a full spoken turn in the Reservoirs chat (answer after 4.9 s); every Reservoirs tab still
+  idles at 0 frames/s.
+- Done, reported by the user: with a real microphone the turn stayed at "…" and nothing was transcribed (a fake
+  microphone worked). Deployed on k3s (`make check-all` green): each turn logs its audio and its
+  transcription in numbers, local Whisper runs int8 with a no-speech threshold of 0.6, and STT `groq` (hosted
+  `whisper-large-v3-turbo`, local fallback) can be picked in Settings. On k3s with a fake microphone Groq transcribed
+  Spanish and English (0.4-0.5 s a turn, language detected) and the guide's input is 163 px wide with voice on. The real
+  turns logged before that were silence (five at -inf dBFS, one at -72), so the fault is in the capture (the browser's or
+  the system's microphone), not in the transcription; a silent turn is now said on screen, and is not sent to Groq, which
+  answered "Thank you.". The notice named the cause: Chrome used a VR headset's virtual input, not Windows' default
+  microphone, so Settings and the notice now choose the microphone. With the laptop's microphone chosen, the
+  user's turns were transcribed in English and Spanish (peak -14 dBFS, 0.4 s). Then, also reported by the user: a press
+  to stop a slow answer (up to 36 s) opened another turn, and its near-silence came out as "Thank you." and Russian. Now
+  two buttons, as in Claude's app: the mic dictates into the input (Enter sends) and the voice button converses, where
+  a press only stops; recordings without speech are not transcribed. Driven in Chromium with a fake microphone and a
+  stand-in server; the user confirmed dictation with their own. Not verified yet: the conversation button with a real
+  microphone, the Spanish voice by ear, and the idle check.
 
 ## How to verify a step
 

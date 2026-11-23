@@ -44,4 +44,3 @@ Source: docs/adr/0016-time-series-forecasting.md (this repository)
   **`forecast_board`** tab shows history + forecast + 80/95 % bands, the backtest, the peak and
   levers that shift exogenous features. Static SVG — no canvas, so no frame loop. Its second tile
   is the window's total for a flow (`summary: total`, the default) or, for a level such as storage
-  %, the change from the las

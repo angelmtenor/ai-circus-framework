@@ -1,13 +1,16 @@
-# Reservoirs & Drought Watch: what is built, how it works, what is not - Simplifications, and why
+# Reservoirs & Drought Watch: what is built, how it works, what is not - Forecast and backtest
 
 Source: docs/scenarios/water_reservoirs_drought_guide.md (this repository)
 
-- **Scenarios use the model's own quantiles.** A direct model cannot take future rain as a feature, so "dry/normal/wet"
-  moves the forecast distribution by the p10 or p90 distance from the median. The dry stress is conservative. A milder
-  definition is a one-function change.
-- **Savings come from the rulebook's illustrative demand split**, not estimated from historical dry-period rates.
-- **Rulebook search is lexical and in-process**, not a vector search: the plan has about 40 paragraphs.
-- **The fictional tenant is content, not a Keycloak organisation:** the scenario is seeded for the `admin` tenant like
-  every scenario; a Riverbend organisation with its own entitlement is a deployment step, not code.
-- **Other languages** are answered by the assistant (it translates); the plan and bulletin exist in English and Spanish.
-- **The map is schematic:** a plain x/y grid of a fictional basin, drawn as SVG, not a projected map of a real place.
+LightGBM quantile regression, one model per horizon and quantile, pooled over the 13 series (9 reservoirs, 4 systems),
+predicting the change from today. Features are past-only; a test proves altering the future leaves them unchanged. The
+p10-p90 band is widened by a split-conformal step calibrated one year out of sample. The rolling-origin backtest runs
+by test year (2010 to 2026) and compares with persistence and seasonal climatology; seasonal drift is shown as a
+stronger reference. The committed [backtest report](../../scenarios/water_reservoirs_drought/backtest_report.md) is the
+source of the numbers; read its list of weak spots before trusting a single system or a drought-year 180-day
+forecast. The pooled acceptance checks (median beats both baselines at 30 and 90 days; coverage within 10 points of
+nominal at 7, 30 and 90) pass; per system in the 2022-2024 drought they do not all hold, and the report says where.
+
+The data is synthetic, so these numbers show the method, not accuracy on a real basin: the model learns the
+generator's water balance. The generator is calibrated (climate, mean storage, turnover, drought depth) so the series
+behave like real storage, and it never lets a forecast see a year it is tested on.
