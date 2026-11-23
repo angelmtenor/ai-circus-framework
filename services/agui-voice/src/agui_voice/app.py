@@ -4,7 +4,8 @@ app.py
 
 Entry point for agui-voice: a long-running FastAPI service hosting a Pipecat
 real-time voice pipeline (`POST /ws/{scenario_slug}`, one per active call) and a
-one-shot `POST /tts/{scenario_slug}` endpoint, serving every scenario kind — see
+one-shot `POST /tts/{scenario_slug}` and `POST /stt/{scenario_slug}` (dictation) endpoints, serving every
+scenario kind — see
 `api/ws.py`'s module docstring for why it calls the existing assistant/rag-agent/
 form-agent `/agui/{scenario_slug}` endpoint as its "LLM stage" instead of running an
 LLM itself.
@@ -33,8 +34,10 @@ from pydantic import ValidationError
 
 from agui_voice import get_env_config
 from agui_voice.api.providers import router as providers_router
+from agui_voice.api.stt import router as stt_router
 from agui_voice.api.tts import router as tts_router
 from agui_voice.api.ws import router as ws_router
+from agui_voice.core import speech
 from agui_voice.core.logger import configure_logger, get_logger
 from agui_voice.core.providers import build_stt_service, build_tts_service
 
@@ -58,6 +61,7 @@ async def _prewarm_models(state: Any) -> None:
         config = get_env_config()
         await run_in_threadpool(build_stt_service, config)
         await run_in_threadpool(build_tts_service, config)
+        await run_in_threadpool(speech.warm)
         logger.success("agui-voice: STT/TTS models pre-warmed")
     except Exception:
         logger.exception("agui-voice: pre-warming STT/TTS models failed — the first real connection will load them")
@@ -89,6 +93,7 @@ app = FastAPI(
 )
 app.include_router(ws_router)
 app.include_router(tts_router)
+app.include_router(stt_router)
 app.include_router(providers_router)
 configure_metrics(app)
 configure_tracing(app, service="agui-voice")

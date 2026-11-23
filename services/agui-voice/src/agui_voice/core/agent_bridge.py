@@ -58,6 +58,8 @@ from pipecat.processors.frameworks.rtvi.frames import RTVIClientMessageFrame, RT
 from pipecat.utils.asyncio.task_manager import BaseTaskManager
 from pydantic import TypeAdapter, ValidationError
 
+from agui_voice.core.push_to_talk import PUSH_TO_TALK_MESSAGE, requested_cancel, requested_talking
+
 TURN_MESSAGE = "voice-turn"
 """The RTVI `client-message` type (`t`) carrying the chat's tools, context, props and transcript; ui-react's
 useVoiceSession.ts sends it on each press."""
@@ -197,12 +199,17 @@ class AgentBridgeProcessor(FrameProcessor):
         self._messages: list[Message] = []
         self._turn = TurnInput()
         self._inflight: asyncio.Task | None = None
+        # After the user's stop: a transcript still being prepared (off the pipeline) is not answered.
+        self._stopped = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Route STT transcripts to `_run_agent`, keep the chat's turn input, forward the rest, cancel on barge-in."""
         await super().process_frame(frame, direction)
 
         if isinstance(frame, TranscriptionFrame) and frame.text.strip():
+            if self._stopped:
+                return
+            await self._cancel_run()  # one answer at a time: a late transcript of an earlier turn gives way
             await self._maybe_switch_tts_language(frame)
             if self._turn.messages is not None:
                 # The chat's transcript replaces this session's own, once: a second utterance goes on from here.
@@ -220,14 +227,23 @@ class AgentBridgeProcessor(FrameProcessor):
                 )
             self._turn = turn or TurnInput()
             await self.push_frame(frame, direction)
+        elif isinstance(frame, RTVIClientMessageFrame) and frame.type == PUSH_TO_TALK_MESSAGE:
+            if requested_cancel(frame):
+                self._stopped = True
+            elif requested_talking(frame):
+                self._stopped = False
+            await self.push_frame(frame, direction)
         elif isinstance(frame, InterruptionFrame):
-            if self._inflight is not None:
-                task_manager: BaseTaskManager = self.task_manager
-                await task_manager.cancel_task(self._inflight)
-                self._inflight = None
+            await self._cancel_run()
             await self.push_frame(frame, direction)
         else:
             await self.push_frame(frame, direction)
+
+    async def _cancel_run(self) -> None:
+        if self._inflight is not None:
+            task_manager: BaseTaskManager = self.task_manager
+            await task_manager.cancel_task(self._inflight)
+            self._inflight = None
 
     async def _maybe_switch_tts_language(self, frame: TranscriptionFrame) -> None:
         """Switch the downstream TTS `ServiceSwitcher` to match this utterance's

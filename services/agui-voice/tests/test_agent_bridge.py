@@ -263,6 +263,58 @@ async def test_process_frame_cancels_inflight_run_on_interruption(
     assert pushed_frames == [(frame, FrameDirection.DOWNSTREAM)]
 
 
+def _press(**data: object) -> RTVIClientMessageFrame:
+    return RTVIClientMessageFrame(msg_id="p-1", type="push-to-talk", data=data)
+
+
+async def test_a_transcript_after_the_users_stop_is_not_answered(
+    bridge: AgentBridgeProcessor, pushed_frames: list[PushedFrame], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Transcription runs off the pipeline, so an interruption does not cancel it: its transcript can come late. The
+    next press answers again.
+    """
+    runs: list[str] = []
+
+    async def fake_run() -> None:  # ruff: ignore[unused-async]
+        runs.append("run")
+
+    monkeypatch.setattr(bridge, "_run_agent", fake_run)
+    monkeypatch.setattr(type(bridge), "task_manager", property(lambda _self: _FakeTaskManager()))
+    said = TranscriptionFrame(text="hello", user_id="u", timestamp="t")
+
+    await bridge.process_frame(_press(talking=False, cancel=True), FrameDirection.DOWNSTREAM)
+    await bridge.process_frame(said, FrameDirection.DOWNSTREAM)
+    await asyncio.sleep(0)
+    assert runs == [] and bridge._messages == []
+
+    await bridge.process_frame(_press(talking=True), FrameDirection.DOWNSTREAM)
+    await bridge.process_frame(said, FrameDirection.DOWNSTREAM)
+    await asyncio.sleep(0)
+    assert runs == ["run"]
+
+
+async def test_a_second_transcript_replaces_the_answer_in_progress(
+    bridge: AgentBridgeProcessor, pushed_frames: list[PushedFrame], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One answer at a time: two runs at once would say both, interleaved."""
+
+    async def fake_run() -> None:
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(bridge, "_run_agent", fake_run)
+    monkeypatch.setattr(type(bridge), "task_manager", property(lambda _self: _FakeTaskManager()))
+
+    await bridge.process_frame(TranscriptionFrame(text="one", user_id="u", timestamp="t"), FrameDirection.DOWNSTREAM)
+    first = bridge._inflight
+    assert first is not None
+    await bridge.process_frame(TranscriptionFrame(text="two", user_id="u", timestamp="t"), FrameDirection.DOWNSTREAM)
+
+    await asyncio.sleep(0)
+    assert first.cancelled()
+    assert bridge._inflight is not None and bridge._inflight is not first
+    bridge._inflight.cancel()
+
+
 class _FakeTaskManager:
     """Runs coroutines as real asyncio tasks without pipecat's own task bookkeeping."""
 

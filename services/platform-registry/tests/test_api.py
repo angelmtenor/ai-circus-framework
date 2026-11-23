@@ -274,6 +274,13 @@ def test_set_then_get_active_voice_settings(client: TestClient) -> None:
     assert client.get("/voice-settings/active").json() == {"stt_provider": "deepgram", "tts_provider": "elevenlabs"}
 
 
+def test_groq_is_a_valid_stt_provider(client: TestClient) -> None:
+    """agui-voice's hosted Whisper (Groq) can be chosen on the Settings page like the others."""
+    response = client.put("/voice-settings/active", json={"stt_provider": "groq", "tts_provider": "piper"})
+    assert response.status_code == 200
+    assert client.get("/voice-settings/active").json() == {"stt_provider": "groq", "tts_provider": "piper"}
+
+
 def test_set_active_voice_settings_rejects_unknown_stt_provider(client: TestClient) -> None:
     """An stt_provider outside agui-voice's known set is rejected."""
     response = client.put(

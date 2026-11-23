@@ -63,7 +63,7 @@ spec:
             - secretRef: {name: agui-voice-secrets}
           env:
             # Renamed from .env's VOICE_* vars — local, self-hosted defaults
-            # (faster-whisper/Piper, no API key). DEEPGRAM_API_KEY/ELEVENLABS_*/
+            # (faster-whisper/Piper, no API key). GROQ_API_KEY/DEEPGRAM_API_KEY/ELEVENLABS_*/
             # CARTESIA_* keep their .env names, so they flow through envFrom above
             # unchanged when overriding to a hosted provider.
             - {name: STT_PROVIDER, valueFrom: {secretKeyRef: {name: agui-voice-secrets, key: VOICE_STT_PROVIDER}}}

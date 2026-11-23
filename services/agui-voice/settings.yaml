@@ -49,7 +49,7 @@ env_variables:
     secret: false
 
   - name: STT_PROVIDER
-    description: "Speech-to-text backend: 'whisper' (local, default) or 'deepgram' (cloud)"
+    description: "Speech-to-text backend: 'whisper' (local, default), 'groq' or 'deepgram' (cloud)"
     type: string
     mandatory: true
     secret: false
@@ -77,6 +77,12 @@ env_variables:
     type: string
     mandatory: true
     secret: false
+
+  - name: GROQ_API_KEY
+    description: "API key for Groq's hosted Whisper STT (llm-gateway's same key), required only for STT 'groq'"
+    type: string
+    mandatory: false
+    secret: true
 
   - name: DEEPGRAM_API_KEY
     description: "API key for Deepgram STT, required only when STT_PROVIDER=deepgram"

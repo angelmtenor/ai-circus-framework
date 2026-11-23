@@ -40,7 +40,9 @@ class EnvConfig(BaseSettings):
         description="Base URL of the form-agent service (backs assisted_form voice scenarios)"
     )
     PLATFORM_REGISTRY_URL: str = Field(description="Base URL of the platform-registry service's entitlement-check API")
-    STT_PROVIDER: str = Field(description="Speech-to-text backend: 'whisper' (local, default) or 'deepgram' (cloud)")
+    STT_PROVIDER: str = Field(
+        description="Speech-to-text backend: 'whisper' (local, default), 'groq' or 'deepgram' (cloud)"
+    )
     TTS_PROVIDER: str = Field(
         description="Text-to-speech backend: 'piper' (local, default), 'elevenlabs', or 'cartesia'"
     )
@@ -52,6 +54,10 @@ class EnvConfig(BaseSettings):
     )
     PIPER_VOICE_ID_ES: str = Field(
         description="Piper voice id for Spanish, used when TTS_PROVIDER=piper (e.g. es_ES-davefx-medium)"
+    )
+    GROQ_API_KEY: SecretStr | None = Field(
+        description="API key for Groq's hosted Whisper STT (llm-gateway's same key), required only for STT 'groq'",
+        default=None,
     )
     DEEPGRAM_API_KEY: SecretStr | None = Field(
         description="API key for Deepgram STT, required only when STT_PROVIDER=deepgram", default=None
@@ -93,7 +99,7 @@ class EnvConfig(BaseSettings):
     )
 
 
-_SOURCE_YAML_HASH = "53c9cf04d32b44c42234496cc7b5db2c6b981ce98b2aafdfe3ed6da6f6362ccb"
+_SOURCE_YAML_HASH = "e65a529aa1cf2be43c84aeeee3a2ce700dffb30cd2ec32b919cca2ccbe764535"
 
 
 EnvConfig.model_rebuild()
